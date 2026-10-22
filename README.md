@@ -1,6 +1,12 @@
 # Apollo · painel da TV
 
-Prévia nativa em português para Windows x64, com piloto experimental explícito. Abra `Iniciar-previa.cmd` ou `artifacts/publish/ApolloOverlay.exe`. A execução padrão é sempre **prévia segura**: janelas fictícias, ações simuladas, sem atalhos globais, Guide, envio de teclas ou inicialização de programas.
+A interface Fluent usa uma barra lateral compacta, cartão da sessão e ferramentas em grade 2×2. Setas/D-pad/analógico movem o foco em quatro sentidos; esquerda/direita só trocam a coluna na grade. LB/RB ou PageUp/PageDown trocam Sessão, Aplicativos e Sistema; Tab/Shift+Tab percorrem os itens. Itens indisponíveis continuam selecionáveis para mostrar o motivo, sem executar ações. X abre detalhes da janela e Sistema mantém ajustes e saída acessíveis.
+
+As aparências clara e escura seguem automaticamente o modo de aplicativos do Windows, inclusive durante a execução, usando o tema Fluent nativo do WPF. Não há seletor manual nem alteração das preferências do sistema. Foco verde, fechamento vermelho e motivos de indisponibilidade acompanham o tema; o suporte nativo de alto contraste é preservado. Os testes alternam somente o tema interno da aplicação e não comprovam uma notificação real do Windows.
+
+No piloto, a janela ocupa apenas a lateral da tela escolhida; o jogo permanece visível no restante. Isso não isola as entradas do controle. A paisagem da prévia é vetorial e ilustrativa; nenhuma arte real do jogo é buscada ou inventada. Áudio é apenas informativo e permanece indisponível. Os pacotes novos ficam em `artifacts/fluent-vN/publish`, preservando as entregas anteriores.
+
+Prévia nativa em português para Windows x64, com piloto experimental explícito. Abra `Iniciar-previa.cmd` ou `artifacts/fluent-vN/publish/ApolloOverlay.exe`. A execução padrão é sempre **prévia segura**: janelas fictícias, ações simuladas, sem atalhos globais, Guide, envio de teclas ou inicialização de programas.
 
 Requer .NET Desktop Runtime 10 x64 (não incluído). O ZIP portátil contém o executável, DLL, arquivos de runtime, documentação e atalhos. Extraia todos os arquivos juntos. Nenhuma instalação, inicialização automática ou elevação é feita.
 
@@ -26,4 +32,4 @@ Ajustes são gravados **somente** ao selecionar Salvar ajustes no piloto, em `da
 
 ## Verificação local
 
-Com PowerShell 7 e SDK .NET 10.0.402: `pwsh -NoProfile -File scripts/verify.ps1 -OutputVersion v1`. O script restaura apenas da pasta local (sem pacotes externos), compila Release, executa o harness determinístico, consulta inicialização v2 sem callback, renderiza quatro estados reais WPF sem mostrar janela e publica sem recompilar. Relatórios e capturas ficam em `artifacts/check-v1`. A validação não inicia o piloto nem opera aplicativos externos. A suíte não substitui o teste real com TV, controle, Apollo e Aurora.
+Com PowerShell 7 e SDK .NET 10.0.402: `pwsh -NoProfile -File scripts/verify.ps1 -OutputVersion fluent-local`. O script restaura apenas da pasta local (sem pacotes externos), compila Release, executa o harness determinístico, consulta inicialização v2 sem callback, renderiza 28 estados reais WPF nas duas aparências sem mostrar janela e publica sem recompilar. Relatórios e capturas ficam em `artifacts/check-fluent-local`. A validação não inicia o piloto nem opera aplicativos externos. A suíte não substitui o teste real com TV, controle, Apollo e Aurora.

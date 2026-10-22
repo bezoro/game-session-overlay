@@ -63,6 +63,7 @@ static class Program
         Case("guide native vtable callback ABI and successful lifetime",GuideAbiTests.Success);
         Case("guide native registration failure releases safely",GuideAbiTests.RegistrationFailure);
         Case("guide native failed unregister retains callback context",GuideAbiTests.UnregisterFailure);
+        NavigationTests.Run(Case);
         var report=new TestReport(results.Count,results.Count-failed,failed,results.ToArray());
         File.WriteAllText(args[0],JsonSerializer.Serialize(report,TestJson.Default.TestReport));Console.WriteLine($"RESULT {results.Count-failed}/{results.Count} passed; failed={failed}");return failed==0 ? 0 : 1;
     }

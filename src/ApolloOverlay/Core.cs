@@ -68,8 +68,12 @@ public sealed class PadInterpreter
     public PadEvents Update(PadFrame frame, long now)
     {
         if (!frame.Connected) { Reset(); return new(0,0,false,true); }
-        var direction = (frame.Buttons.HasFlag(PadButtons.Up) || frame.Y > 18000) ? -1 : (frame.Buttons.HasFlag(PadButtons.Down) || frame.Y < -18000) ? 1 : 0;
-        if (!armed) { if (frame.Buttons == 0 && direction == 0 && Math.Abs((int)frame.X)<12000) armed=true; previous=frame.Buttons; return default; }
+        var vertical=frame.Buttons.HasFlag(PadButtons.Up) ? -1 : frame.Buttons.HasFlag(PadButtons.Down) ? 1 : 0;
+        var horizontal=frame.Buttons.HasFlag(PadButtons.Left) ? -2 : frame.Buttons.HasFlag(PadButtons.Right) ? 2 : 0;
+        var direction=vertical!=0 ? vertical : horizontal;
+        if(direction==0 && Math.Max(Math.Abs((int)frame.X),Math.Abs((int)frame.Y))>18000)
+            direction=Math.Abs((int)frame.X)>Math.Abs((int)frame.Y) ? frame.X<0 ? -2 : 2 : frame.Y>0 ? -1 : 1; // Vertical wins exact diagonal ties.
+        if (!armed) { if (frame.Buttons == 0 && Math.Abs((int)frame.Y)<12000 && Math.Abs((int)frame.X)<12000) armed=true; previous=frame.Buttons; return default; }
         var pressed=frame.Buttons & ~previous; previous=frame.Buttons;
         var move=0;
         if (direction == 0) lastDirection=0;
