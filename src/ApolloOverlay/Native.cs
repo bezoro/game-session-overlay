@@ -16,6 +16,7 @@ internal static class Native
     // INPUT is 40 bytes on x64: union starts at offset 8 and is 32 bytes.
     [StructLayout(LayoutKind.Explicit,Size=40)] internal struct Input { [FieldOffset(0)] public uint Type; [FieldOffset(8)] public ushort Key; [FieldOffset(12)] public uint Flags; }
     [DllImport("user32.dll")] internal static extern nint GetForegroundWindow();
+    [DllImport("user32.dll")] internal static extern short GetAsyncKeyState(int key);
     [DllImport("user32.dll")] internal static extern bool EnumWindows(EnumWindow callback,nint parameter);
     [DllImport("user32.dll")] internal static extern bool IsWindow(nint hwnd);
     [DllImport("user32.dll")] internal static extern bool IsWindowVisible(nint hwnd);
@@ -42,7 +43,13 @@ internal static class Native
     [DllImport("user32.dll")] internal static extern nint SetWinEventHook(uint min,uint max,nint module,WinEvent callback,uint pid,uint thread,uint flags);
     [DllImport("user32.dll")] internal static extern bool UnhookWinEvent(nint hook);
     [DllImport("xinput1_4.dll")] internal static extern uint XInputGetState(uint slot,out XState state);
-    internal static PadFrame ReadPad(uint slot) => XInputGetState(slot,out var state)==0 ? new(true,(PadButtons)state.Pad.Buttons,state.Pad.LX,state.Pad.LY) : default;
+    internal static PadFrame ReadPad(uint slot){var result=XInputGetState(slot,out var state);return result==0?new(true,(PadButtons)state.Pad.Buttons,state.Pad.LX,state.Pad.LY,state.Pad.RX,state.Pad.RY,state.Pad.LeftTrigger,state.Pad.RightTrigger):new(false,0,ReadFailed:result!=1167);}
+    internal static Input[] KeyInputs(string keys)
+    {
+        if(keys=="F1")return [new(){Type=1,Key=0x70},new(){Type=1,Key=0x70,Flags=2}];
+        var pair=keys switch{"Win+Tab"=>(0x5B,0x09),"Win+G"=>(0x5B,0x47),"Ctrl+Tab"=>(0x11,0x09),"Shift+Tab"=>(0x10,0x09),_=>(0,0)};
+        if(pair.Item1==0)return [];return [new(){Type=1,Key=(ushort)pair.Item1},new(){Type=1,Key=(ushort)pair.Item2},new(){Type=1,Key=(ushort)pair.Item2,Flags=2},new(){Type=1,Key=(ushort)pair.Item1,Flags=2}];
+    }
 }
 
 internal sealed class NativeTray : IDisposable

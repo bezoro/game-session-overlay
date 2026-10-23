@@ -21,6 +21,9 @@ public interface IPlatform : IDisposable
     Task<ActionResult> Switch(WindowRef window);
     Task<ActionResult> Close(WindowRef window,CancellationToken cancellation);
     Task<ActionResult> Shortcut(WindowRef window,string keys);
+    Task<ActionResult> TaskView()=>Task.FromResult(new ActionResult(ResultKind.Unavailable,"Visão de tarefas indisponível nesta plataforma."));
+    bool CanSteamMenu(WindowRef? window)=>false;
+    Task<ActionResult> SteamMenu(WindowRef window)=>Task.FromResult(new ActionResult(ResultKind.Unavailable,"Menu Big Picture não confirmado."));
     ActionResult Launch(bool playnite,string? path);
 }
 
@@ -46,6 +49,8 @@ public sealed class PreviewPlatform : IPlatform
 
 public sealed class WindowsPlatform : IPlatform,IWindowEffects
 {
+    private bool disposed;
+    private readonly Func<Native.Input[],uint> keySender;
     public bool IsPreview=>false;
     private readonly Dictionary<nint,long> generations=[];
     private long sequence;
@@ -53,8 +58,10 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
     private readonly nint hook;
     private readonly bool allowOwnedFixture;
     private static readonly HashSet<string> ProtectedProcesses=new(StringComparer.OrdinalIgnoreCase) { "explorer","dwm","ShellExperienceHost","StartMenuExperienceHost","SearchHost","ApplicationFrameHost","GameBar","GameBarFTServer","GameBarPresenceWriter","gameoverlayui","XboxGameBarWidgets","steamwebhelper","winlogon","csrss" };
-    public WindowsPlatform(bool allowOwnedFixture=false)
+    public WindowsPlatform(bool allowOwnedFixture=false):this(allowOwnedFixture,inputs=>Native.SendInput((uint)inputs.Length,inputs,40)) { }
+    internal WindowsPlatform(bool allowOwnedFixture,Func<Native.Input[],uint> keySender)
     {
+        this.keySender=keySender;
         this.allowOwnedFixture=allowOwnedFixture;
         destroyCallback=(_,_,hwnd,obj,child,_,_)=> {lock(generations){if (hwnd!=0 && obj==0 && child==0 && generations.ContainsKey(hwnd)) generations[hwnd]=++sequence;} };
         hook=Native.SetWinEventHook(0x8001,0x8001,0,destroyCallback,0,0,0); // EVENT_OBJECT_DESTROY, OUTOFCONTEXT on this dispatcher.
@@ -86,7 +93,7 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
         return windows;
     }
     private bool Relevant(nint hwnd){if(!Native.IsWindowVisible(hwnd)||Native.GetWindow(hwnd,4)!=0||(Native.GetWindowLongPtr(hwnd,-20).ToInt64()&0x80)!=0)return false;Native.GetWindowThreadProcessId(hwnd,out var pid);if(pid==Environment.ProcessId&&!allowOwnedFixture)return false;var type=new StringBuilder(128);Native.GetClassName(hwnd,type,type.Capacity);if(type.ToString() is "Progman" or "WorkerW" or "Shell_TrayWnd" or "Shell_SecondaryTrayWnd")return false;return Native.DwmGetWindowAttribute(hwnd,14,out var cloaked,4)!=0||cloaked==0;}
-    public bool Valid(WindowRef window){var current=Read(window.Handle);return current is not null&&window.Same(current)&&Relevant(window.Handle)&&(!current.Protected||current.ProcessName.Equals("explorer",StringComparison.OrdinalIgnoreCase))&&hook!=0;}
+    public bool Valid(WindowRef window){if(disposed)return false;var current=Read(window.Handle);return current is not null&&window.Same(current)&&Relevant(window.Handle)&&(!current.Protected||current.ProcessName.Equals("explorer",StringComparison.OrdinalIgnoreCase))&&hook!=0;}
     public IReadOnlyList<DisplayRef> Displays()
     {
         var displays=new List<DisplayRef>();
@@ -111,7 +118,7 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
         if(!Valid(window))return null;try{Native.SendMessageTimeout(window.Handle,0x7F,2,0,2,100,out var icon);var handle=icon==0?Native.GetClassLongPtr(window.Handle,-14):(nint)icon;if(handle==0)return null;var image=Imaging.CreateBitmapSourceFromHIcon(handle,System.Windows.Int32Rect.Empty,BitmapSizeOptions.FromWidthAndHeight(48,48));image.Freeze();return image;}catch(Exception e)when(e is Win32Exception or ArgumentException or InvalidOperationException){return null;}
     }
     public Task<ActionResult> Close(WindowRef window,CancellationToken cancellation)=>new GuardedActions(this).Close(window,cancellation);
-    public Task<ActionResult> Shortcut(WindowRef window,string keys)=>new GuardedActions(this).Shortcut(window,keys);
+    public Task<ActionResult> Shortcut(WindowRef window,string keys)=>keys is "Win+G" or "Shift+Tab" or "Ctrl+Tab"?new GuardedActions(this).Shortcut(window,keys):Task.FromResult(new ActionResult(ResultKind.Unavailable,"Atalho não permitido neste caminho."));
     public WindowObservation ObserveWindow(WindowRef window)=>ClosureObservation.Classify(window,Probe(window.Handle));
     private WindowProbe Probe(nint hwnd)
     {
@@ -126,21 +133,36 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
             return new(Native.IsWindow(hwnd),pid==0 ? null : (int)pid,null,generation,caption.ToString());
         }
     }
-    public bool IsForeground(WindowRef window)=>Native.GetForegroundWindow()==window.Handle;
-    public bool RequestFocus(WindowRef window) { if(Native.IsIconic(window.Handle))Native.ShowWindow(window.Handle,9);return Native.SetForegroundWindow(window.Handle); }
-    public bool PostClose(WindowRef window){var current=Read(window.Handle);return current is not null&&current.CanClose&&window.Same(current)&&Valid(current)&&Native.PostMessage(window.Handle,0x10,0,0);}
+    public bool IsForeground(WindowRef window)=>!disposed&&Native.GetForegroundWindow()==window.Handle;
+    public bool RequestFocus(WindowRef window) { if(disposed)return false;if(Native.IsIconic(window.Handle))Native.ShowWindow(window.Handle,9);return !disposed&&Native.SetForegroundWindow(window.Handle); }
+    public bool PostClose(WindowRef window){if(disposed)return false;var current=Read(window.Handle);return current is not null&&current.CanClose&&window.Same(current)&&Valid(current)&&Native.PostMessage(window.Handle,0x10,0,0);}
     public Task Wait(int milliseconds)=>Task.Delay(milliseconds);
     public uint SendKeys(string keys)
     {
-        ushort modifier=keys switch { "Win+Tab" or "Win+G" => 0x5B, "Ctrl+Tab" => 0x11, _=>0x10 };
-        ushort key=keys=="Win+G" ? (ushort)0x47 : (ushort)0x09;
-        Native.Input[] inputs=[new(){Type=1,Key=modifier},new(){Type=1,Key=key},new(){Type=1,Key=key,Flags=2},new(){Type=1,Key=modifier,Flags=2}];
-        var sent=Native.SendInput(4,inputs,40);
-        if (sent!=4) Native.SendInput(2,[new(){Type=1,Key=key,Flags=2},new(){Type=1,Key=modifier,Flags=2}],40);
+        if(disposed)return 0;var inputs=Native.KeyInputs(keys);if(inputs.Length==0)return 0;var sent=keySender(inputs);
+        // Cleanup only key-up events after a partial insertion; never retry the action/key-down.
+        if(sent!=inputs.Length&&!disposed){var release=inputs.Where(i=>i.Flags==2).ToArray();keySender(release);}
         return sent;
+    }
+    public Task<ActionResult> TaskView()=>Task.FromResult(disposed?new ActionResult(ResultKind.Cancelled,"Overlay encerrada; nenhum atalho enviado."):Outcome.Keys(SendKeys("Win+Tab"),4));
+    internal static bool BigPictureIdentity(WindowRef window)=>window.Started>0&&window.ProcessName.Equals("steamwebhelper",StringComparison.OrdinalIgnoreCase)&&window.Title.Equals("Steam Big Picture Mode",StringComparison.OrdinalIgnoreCase);
+    public bool CanSteamMenu(WindowRef? window)
+    {
+        if(disposed||window is null||hook==0||!BigPictureIdentity(window))return false;var current=Read(window.Handle);if(current is null||!window.Same(current)||!BigPictureIdentity(current)||!Relevant(window.Handle))return false;
+        try{using var process=Process.GetProcessById(window.Pid);var path=process.MainModule?.FileName;if(path is null||!Path.GetFileName(path).Equals("steamwebhelper.exe",StringComparison.OrdinalIgnoreCase))return false;
+            var folder=Directory.GetParent(path);while(folder is not null){if(File.Exists(Path.Combine(folder.FullName,"steam.exe"))){var relative=Path.GetRelativePath(folder.FullName,path);return relative.StartsWith("bin"+Path.DirectorySeparatorChar+"cef"+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase);}folder=folder.Parent;}return false;
+        }catch(Exception e)when(e is Win32Exception or InvalidOperationException or ArgumentException or IOException or UnauthorizedAccessException){return false;}
+    }
+    public async Task<ActionResult> SteamMenu(WindowRef window)
+    {
+        if(!CanSteamMenu(window))return new(ResultKind.Unavailable,"Janela Big Picture não confirmada; nenhum F1 enviado.");
+        if(Native.IsIconic(window.Handle))Native.ShowWindow(window.Handle,9);if(disposed||!Native.SetForegroundWindow(window.Handle))return new(ResultKind.Failed,"O Windows recusou o foco do Big Picture.");
+        for(var i=0;i<6;i++){if(!CanSteamMenu(window))return new(ResultKind.Cancelled,"Big Picture mudou ou overlay encerrou; nenhum F1 enviado.");if(IsForeground(window)){if(!CanSteamMenu(window))return new(ResultKind.Cancelled,"Alvo mudou antes do F1.");return Outcome.Keys(SendKeys("F1"),2);}await Wait(50);}
+        return new(ResultKind.Unknown,"Foco Big Picture não confirmado; nenhum F1 enviado.");
     }
     public ActionResult Launch(bool playnite,string? path)
     {
+        if(disposed)return new(ResultKind.Cancelled,"Overlay encerrada; nenhuma inicialização enviada.");
         try {
             ProcessStartInfo info;
             if (playnite) {
@@ -151,5 +173,5 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
             return new(ResultKind.Requested,playnite ? "Inicialização do Playnite solicitada; modo e foco ainda não confirmados." : "URI do Steam enviada; Big Picture ainda não confirmado.");
         } catch (Exception e) when (e is Win32Exception or InvalidOperationException or IOException) { return new(ResultKind.Failed,"O Windows não aceitou a inicialização. Verifique a instalação em Ajustes."); }
     }
-    public void Dispose() { if (hook!=0) Native.UnhookWinEvent(hook); GC.KeepAlive(destroyCallback); }
+    public void Dispose() { if(disposed)return;disposed=true;if (hook!=0) Native.UnhookWinEvent(hook); GC.KeepAlive(destroyCallback); }
 }

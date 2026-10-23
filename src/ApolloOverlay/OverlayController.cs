@@ -37,9 +37,10 @@ public sealed class OverlayController : IDisposable
     public void Save(){if(Platform.IsPreview){Status="Prévia · nada foi salvo.";return;}Diagnostics.Save(Settings);Status="Ajustes salvos em AppData.";}
     public async Task<ActionResult> Launch(bool playnite)
     {
+        if(disposed)return new(ResultKind.Cancelled,"Overlay encerrada; nenhuma inicialização enviada.");
         var existing=Apps.FirstOrDefault(w=>playnite?w.ProcessName.Equals("Playnite.FullscreenApp",StringComparison.OrdinalIgnoreCase):w.ProcessName.Equals("steam",StringComparison.OrdinalIgnoreCase));
         if(playnite&&existing is not null&&Platform.Valid(existing))return await Platform.Switch(existing);
-        if(!playnite&&existing is not null&&Platform.Valid(existing)){var focused=await Platform.Switch(existing);if(focused.Kind!=ResultKind.Completed&&focused.Kind!=ResultKind.Simulated)return focused;}
+        if(!playnite&&existing is not null&&Platform.Valid(existing)){var focused=await Platform.Switch(existing);if(disposed)return new(ResultKind.Cancelled,"Overlay encerrada durante a ativação; nenhuma inicialização enviada.");if(focused.Kind!=ResultKind.Completed&&focused.Kind!=ResultKind.Simulated)return focused;}
         if(!playnite&&!SteamAvailable&&!Platform.IsPreview)return new(ResultKind.Unavailable,"Steam não instalada ou protocolo indisponível.");
         return Platform.Launch(playnite,Settings.PlaynitePath);
     }

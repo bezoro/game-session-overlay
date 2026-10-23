@@ -12,6 +12,24 @@ public sealed class OpeningChord(PadButtons mask,int holdMs)
     }
 }
 public readonly record struct OverlayInput(bool Toggle,int? Slot,PadEvents Events,bool Connected);
+internal readonly record struct ReleaseSample(IReadOnlyList<PadFrame> Pads,long Timestamp,bool KeysNeutral=true,bool GuideHeld=false,bool GuideValid=true,int GuideConnections=0);
+internal enum ReleaseState { Waiting,Ready,Cancelled }
+internal sealed class ReleaseGate
+{
+    private long? neutralSince;private int? connections,guideConnections;
+    internal void Reset(){neutralSince=null;connections=null;guideConnections=null;}
+    internal void Prime(ReleaseSample sample){connections=0;for(var i=0;i<sample.Pads.Count;i++)if(sample.Pads[i].Connected)connections|=1<<i;guideConnections=sample.GuideConnections;neutralSince=null;}
+    internal ReleaseState Update(ReleaseSample sample,long now,bool focused,int deadzone)
+    {
+        if(!focused||!sample.GuideValid||sample.Pads.Count!=4||sample.Pads.Any(p=>p.ReadFailed)||sample.Timestamp>now||now-sample.Timestamp>80){Reset();return ReleaseState.Cancelled;}
+        var mask=0;for(var i=0;i<4;i++)if(sample.Pads[i].Connected)mask|=1<<i;
+        if(connections is {} previous&&((previous&~mask)!=0||(guideConnections!.Value&~sample.GuideConnections)!=0)){Reset();return ReleaseState.Cancelled;}
+        if(connections!=mask||guideConnections!=sample.GuideConnections)neutralSince=null;connections=mask;guideConnections=sample.GuideConnections;
+        var neutral=sample.KeysNeutral&&!sample.GuideHeld&&sample.Pads.All(p=>!p.Connected||(p.Buttons==0&&Math.Abs((int)p.X)<deadzone*2/3&&Math.Abs((int)p.Y)<deadzone*2/3&&Math.Abs((int)p.RX)<deadzone*2/3&&Math.Abs((int)p.RY)<deadzone*2/3&&p.LT<30&&p.RT<30));
+        if(!neutral){neutralSince=null;return ReleaseState.Waiting;}neutralSince??=now;
+        return now-neutralSince.Value>=100?ReleaseState.Ready:ReleaseState.Waiting;
+    }
+}
 public sealed class InputCoordinator
 {
     private readonly OpeningChord chord;private readonly int deadzone;private PadInterpreter[] pads;private int? owner;private bool suppress;

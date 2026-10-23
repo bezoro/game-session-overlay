@@ -128,6 +128,7 @@ public unsafe sealed class XInputGuideBackend : IGuideBackend
     private readonly bool[] armed=new bool[4];
     private nint module,address;private Action? pressed;private bool active,disposed;
     public bool Active=>active&&address!=0;
+    internal bool Held{get;private set;}internal bool SnapshotValid{get;private set;}internal int Connections{get;private set;}
     public string Status{get;private set;}="Guide legado desligado. Atalho e combinação disponíveis.";
     public XInputGuideBackend():this(Load,NativeLibrary.Free) { }
     internal XInputGuideBackend(Func<(nint Module,nint Address)> load,Action<nint> unload){this.load=load;this.unload=unload;}
@@ -151,17 +152,17 @@ public unsafe sealed class XInputGuideBackend : IGuideBackend
     }
     public void Poll()
     {
-        if(!Active||disposed)return;var edge=false;var connected=false;var read=(delegate* unmanaged[Stdcall]<uint,State*,uint>)address;
+        if(!Active||disposed)return;var edge=false;var connected=false;Held=false;SnapshotValid=true;Connections=0;var read=(delegate* unmanaged[Stdcall]<uint,State*,uint>)address;
         for(uint slot=0;slot<4;slot++){
             State state=default;var result=read(slot,&state);
-            if(result!=0){armed[slot]=false;continue;}connected=true;
+            if(result!=0){armed[slot]=false;if(result!=1167)SnapshotValid=false;continue;}connected=true;Connections|=1<<(int)slot;Held|=(state.Buttons&0x0400)!=0;
             if((state.Buttons&0x0400)==0)armed[slot]=true;
             else if(armed[slot]){armed[slot]=false;edge=true;}
         }
         Status=connected?"Guide legado experimental ativo · toque para abrir ou fechar.":"Nenhum controle lido pelo Guide legado. Atalho e combinação disponíveis.";
         if(edge&&active)pressed?.Invoke();
     }
-    public void Stop(){active=false;pressed=null;Array.Clear(armed);}
+    public void Stop(){active=false;pressed=null;Held=false;SnapshotValid=false;Connections=0;Array.Clear(armed);}
     public bool Unregister(){Stop();return true;}
     public void Release(){if(disposed)return;Stop();disposed=true;address=0;var owned=module;module=0;if(owned!=0)unload(owned);}
 }

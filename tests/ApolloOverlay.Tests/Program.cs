@@ -15,6 +15,10 @@ static class Program
     [STAThread] public static int Main(string[] args)
     {
         if(args.Length is not (1 or 2)) {Console.Error.WriteLine("Expected report path");return 2;}
+        if(args.Length==2&&args[1]=="--system-key-baseline"){Case("System AltY holds handoff after AltUp until YUp plus100ms",GuideAbiTests.SystemKeyBaseline);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--disposed-platform-baseline"){Case("Disposed platform refuses owned target validation and activation",GuideAbiTests.DisposedPlatformBaseline);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--late-launch-baseline"){Case("Cleanup prevents late Steam launch after pending focus completes",GuideAbiTests.LateLaunchBaseline);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--release-baseline"){GuideAbiTests.ReleaseBaseline(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--focus-dismiss"){GuideAbiTests.FocusDismiss(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--guide-status"){Case("G3-01 Guide subtitle follows actual poll without rebuilding or hidden UI work",GuideAbiTests.LegacyStatusView);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--corrections"){CorrectionTests.Run(Case,Path.GetDirectoryName(Path.GetFullPath(args[0]))!);return Finish(args[0]);}
@@ -74,6 +78,10 @@ static class Program
         Case("legacy Guide timer hidden active and simultaneous chord consumed once",GuideAbiTests.LegacyTick);
         Case("G3-01 Guide subtitle follows actual poll without rebuilding or hidden UI work",GuideAbiTests.LegacyStatusView);
         GuideAbiTests.FocusDismiss(Case);
+        GuideAbiTests.ReleaseBaseline(Case);
+        Case("Cleanup prevents late Steam launch after pending focus completes",GuideAbiTests.LateLaunchBaseline);
+        Case("Disposed platform refuses owned target validation and activation",GuideAbiTests.DisposedPlatformBaseline);
+        GuideAbiTests.HandoffTests(Case);
         Case("legacy Guide settings absent off on save preserves default and backup",()=>{True(!UserSettings.Parse("{}").GuideXInputEnabled);True(!UserSettings.Parse("{\"GuideXInputEnabled\":false}").GuideXInputEnabled);True(UserSettings.Parse("{\"GuideXInputEnabled\":true}").GuideXInputEnabled);var path=Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[0]))!,"guide-settings.json");UserSettings.Save(path,new());UserSettings.Save(path,new(GuideXInputEnabled:true));True(UserSettings.Load(path,out _).GuideXInputEnabled);True(!UserSettings.Parse(File.ReadAllText(path+".previous")).GuideXInputEnabled);});
         NavigationTests.Run(Case);
         CorrectionTests.Run(Case,Path.GetDirectoryName(Path.GetFullPath(args[0]))!);
