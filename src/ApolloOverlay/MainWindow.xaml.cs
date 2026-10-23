@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Automation;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -101,11 +102,25 @@ public partial class MainWindow : Window
     private bool ownedDialog,placing;
     private void AudioChanged()
     {
-        if(!IsVisible)return;var state=audio.Current;
-        if(subpage=="audio"){var volume=entries.FirstOrDefault(e=>e.Id=="volume");if(volume is not null&&volume.Available!=state.Available){RefreshRows();return;}SetEntryText("volume","Volume · "+(state.Available?state.Volume.ToString("P0"):"indisponível"));SetEntryText("mute",state.Muted?"Ativar som":"Silenciar");}
-        else if(page==0){var entry=entries.FirstOrDefault(e=>e.Id=="audio");if(entry?.Button.Content is Grid grid&&grid.Children[1] is StackPanel texts&&texts.Children.Count>1)((TextBlock)texts.Children[1]).Text=state.Available?(state.Muted?"Sem som":state.Volume.ToString("P0")):"Saída indisponível";}
+        if(!IsVisible)return;UpdateAudioEntries(audio.Current);
     }
-    private void SetEntryText(string id,string title){if(entries.FirstOrDefault(e=>e.Id==id)?.Button.Content is Grid grid&&grid.Children[1] is StackPanel texts)((TextBlock)texts.Children[0]).Text=title;}
+    internal void UpdateAudioEntries(AudioSnapshot state)
+    {
+        if(subpage=="audio"){var volume=entries.FirstOrDefault(e=>e.Id=="volume");if(volume is not null&&volume.Available!=state.Available){RefreshRows();return;}SetEntryText("volume","Volume · "+(state.Available?state.Volume.ToString("P0"):"indisponível"));SetEntryText("mute",state.Muted?"Ativar som":"Silenciar");}
+        else if(page==0)SetEntryDescription("audio",state.Available?(state.Muted?"Sem som":state.Volume.ToString("P0")):"Saída indisponível");
+    }
+    private void SetEntryText(string id,string title)
+    {
+        if(entries.FirstOrDefault(e=>e.Id==id)?.Button is not {} button)return;
+        if(button.Content is Grid grid&&grid.Children[1] is StackPanel texts)((TextBlock)texts.Children[0]).Text=title;
+        AutomationProperties.SetName(button,title);
+    }
+    private void SetEntryDescription(string id,string description)
+    {
+        var index=entries.FindIndex(e=>e.Id==id);if(index<0)return;var entry=entries[index];
+        if(entry.Button.Content is Grid grid&&grid.Children[1] is StackPanel texts&&texts.Children.Count>1&&texts.Children[1] is TextBlock subtitle)subtitle.Text=description;
+        AutomationProperties.SetHelpText(entry.Button,description);entries[index]=entry with{Reason=description};
+    }
     private nint WindowMessage(nint hwnd,int message,nint w,nint l,ref bool handled)
     {
         if(message==0x8002){OpenPanel();handled=true;}
@@ -183,7 +198,7 @@ public partial class MainWindow : Window
         entries.Add(new("settings",SettingsGear,()=>Page(2),true,"Abrir Sistema"));ContextCard.Visibility=page==0&&subpage==""?Visibility.Visible:Visibility.Collapsed;
         TargetLabel.Text=(Controller.Session.Anchor??Controller.ReturnTarget)?.Title??"Nenhuma janela selecionada";SessionEvidence.Text=Controller.Platform.IsPreview?"Janela própria":(Controller.Session.Anchor??Controller.ReturnTarget)?.ProcessName.Equals("steam",StringComparison.OrdinalIgnoreCase)==true?"Steam":"Windows";ContextStatus.Text=Controller.Session.Anchor is not null||Controller.ReturnTarget is not null?"Disponível":"Sem sessão";ContextStatusDot.Opacity=Controller.Session.Anchor is not null||Controller.ReturnTarget is not null?1:.3;
         var context=Controller.Session.Anchor??Controller.ReturnTarget;ContextIcon.Source=context is null?null:Controller.Platform.Icon(context);ContextIcon.Visibility=ContextIcon.Source is null?Visibility.Collapsed:Visibility.Visible;ContextGlyph.Visibility=ContextIcon.Source is null?Visibility.Visible:Visibility.Collapsed;
-        ModeLabel.Text=diagnostic?"Diagnóstico · ações de janela simuladas":"Guide · duplo clique na bandeja";
+        ModeLabel.Text="LB/RB / PgUp/PgDn · Abas   ↑↓←→ / Tab · Mover\n"+(diagnostic?"Diagnóstico · ações de janela simuladas":"Guide · duplo clique na bandeja");
         foreach(var pair in new[]{(HomeTab,0),(AppsTab,1),(SettingsTab,2)}){pair.Item1.BorderThickness=new(0,0,0,pair.Item2==page?2:0);pair.Item1.SetResourceReference(BorderBrushProperty,ThemeSupport.Success);pair.Item1.SetResourceReference(ForegroundProperty,pair.Item2==page?ThemeSupport.Text:ThemeSupport.SecondaryText);}
         PageTitle.Text=subpage switch{"audio"=>"Áudio do Windows","details"=>"Detalhes da janela","integrations"=>"Integrações",_=>page switch{0=>"Controle da sessão",1=>"Aplicativos",_=>"Sistema"}};
         void Add(string id,string title,string description,Action run,bool available=true,string icon="\uE8A7",bool danger=false,int? gridRow=null,int column=0){var row=gridRow??Rows.RowDefinitions.Count;if(row>=Rows.RowDefinitions.Count)Rows.RowDefinitions.Add(new(){Height=GridLength.Auto});var button=MakeButton(id,title,description,run,available,icon,danger);Grid.SetRow(button,row);Grid.SetColumn(button,column);Grid.SetColumnSpan(button,gridRow is null?2:1);if(gridRow is not null)button.Margin=new(column==0?0:4,4,column==0?4:0,4);Rows.Children.Add(button);}
@@ -229,6 +244,7 @@ public partial class MainWindow : Window
         if(id=="apps"){var count=new Border{CornerRadius=new(15),Padding=new(9,4,9,4),Margin=new(8,0,0,0),VerticalAlignment=VerticalAlignment.Center,Child=new TextBlock{Text=Controller.Apps.Count.ToString(),FontSize=17}};count.SetResourceReference(BackgroundProperty,ThemeSupport.Card);Grid.SetColumn(count,2);grid.Children.Add(count);grid.Resources["CountBadge"]=count;}
         ((TextBlock)badge.Child).SetResourceReference(TextBlock.ForegroundProperty,SystemParameters.HighContrast?SystemColors.HighlightTextBrushKey:ThemeSupport.Surface);
         var button=new Button{Content=grid,Tag=id,MinHeight=64,Opacity=available?1:.6};if(danger)button.SetResourceReference(ForegroundProperty,ThemeSupport.Critical);
+        AutomationProperties.SetName(button,title);AutomationProperties.SetHelpText(button,description);
         button.Resources["ABadge"]=badge;button.Click+=(_,_)=>{navigation=new(id);SetSelection();dispatchSource=0;ActivateEntry();dispatchSource=null;};entries.Add(new(id,button,action,available,description));return button;
     }
     private FrameworkElement ActionIcon(string id,string fallback)
@@ -256,8 +272,9 @@ public partial class MainWindow : Window
     internal void PollGuideStatus(XInputGuideBackend backend)
     {
         backend.PollForOverlay(IsVisible,focusCycle,Environment.TickCount64,Controller.Settings.GuideOpenMaxHoldMs);if(!IsVisible||subpage!="integrations")return;
-        if(entries.FirstOrDefault(e=>e.Id=="guide")?.Button.Content is Grid grid&&grid.Children[1] is StackPanel texts&&texts.Children.Count>1&&texts.Children[1] is TextBlock subtitle&&subtitle.Text!=backend.Status)subtitle.Text=backend.Status;
+        UpdateGuideStatus(backend.Status);
     }
+    internal void UpdateGuideStatus(string status)=>SetEntryDescription("guide",status);
     private void Tick(object? sender,EventArgs args)
     {
         if(exiting)return;if(guideBackend is not null)PollGuideStatus(guideBackend);var frames=Enumerable.Range(0,4).Select(i=>Native.ReadPad((uint)i)).ToArray();var now=Environment.TickCount64;lastInputSample=new(frames,now,GuideHeld:guideBackend?.Held==true,GuideValid:guideBackend is null||!guideBackend.Active||guideBackend.SnapshotValid,GuideConnections:guideBackend?.Connections??0);UpdatePolling(frames.Any(f=>f.Connected));var current=input.Update(frames,IsVisible,now);

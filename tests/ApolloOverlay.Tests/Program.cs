@@ -15,6 +15,7 @@ static class Program
     [STAThread] public static int Main(string[] args)
     {
         if(args.Length is not (1 or 2)) {Console.Error.WriteLine("Expected report path");return 2;}
+        if(args.Length==2&&args[1]=="--review-captures"){ReviewFixTests.Capture(args[0]);return 0;}
         if(args.Length==2&&args[1]=="--review-fixes"){ReviewFixTests.Run(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--guide-release-red"){GuideAbiTests.GuideReleaseRed(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--focus-open-red"){GuideAbiTests.FocusOpenRed(Case);return Finish(args[0]);}
