@@ -15,6 +15,9 @@ static class Program
     [STAThread] public static int Main(string[] args)
     {
         if(args.Length is not (1 or 2)) {Console.Error.WriteLine("Expected report path");return 2;}
+        if(args.Length==2&&args[1]=="--dismiss-known-held"){GuideAbiTests.KnownHeldDismiss(Case);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--dismiss-cancel"){GuideAbiTests.DismissCancellation(Case);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--dismiss-cancel-suite"){GuideAbiTests.HandoffTests(Case);GuideAbiTests.FocusDismiss(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--system-key-baseline"){Case("System AltY holds handoff after AltUp until YUp plus100ms",GuideAbiTests.SystemKeyBaseline);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--disposed-platform-baseline"){Case("Disposed platform refuses owned target validation and activation",GuideAbiTests.DisposedPlatformBaseline);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--late-launch-baseline"){Case("Cleanup prevents late Steam launch after pending focus completes",GuideAbiTests.LateLaunchBaseline);return Finish(args[0]);}

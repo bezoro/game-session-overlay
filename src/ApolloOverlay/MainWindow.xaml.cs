@@ -18,24 +18,45 @@ public partial class MainWindow : Window
     private readonly WindowsAudio audio=new();private InputCoordinator input;private readonly CloseHold closeHold=new();private readonly DispatcherTimer timer;
     private readonly bool diagnostic;private HwndSource? source;private NativeTray? tray;private bool hotkey,busy,exiting,opening,keyboardDown;private int? closeSource,dispatchSource;private CancellationTokenSource? pending;
     private XInputGuideBackend? guideBackend;private GuideConnection? guideConnection;private bool guideToggleRequested;
-    private readonly ReleaseGate releaseGate=new();private readonly HashSet<Key> heldKeys=[];private Action? handoff;private Func<bool>? handoffValid;private bool committing;private ReleaseSample? lastInputSample;
+    private readonly ReleaseGate releaseGate=new();private readonly HashSet<Key> heldKeys=[];private readonly bool[] handoffPadsHeld=new bool[4],handoffPadsKnown=new bool[4];private Action? handoff;private Func<bool>? handoffValid;private bool handoffDismiss,handoffDegraded,degradedExplicit,handoffGuideHeld,handoffGuideKnown,committing;private long? degradedSince;private ReleaseSample? lastInputSample;
     internal bool TransitionPending=>handoff is not null;
     internal static Key NormalizeKey(Key key,Key system,Key ime,Key dead)
     {
         var actual=key switch{Key.System=>system,Key.ImeProcessed=>ime,Key.DeadCharProcessed=>dead,_=>key};
         return actual is Key.None or Key.System or Key.ImeProcessed or Key.DeadCharProcessed?Key.None:actual;
     }
-    private void QueueHandoff(Action action,Func<bool>? valid=null)
+    private void QueueHandoff(Action action,Func<bool>? valid=null,bool dismiss=false)
     {
-        if(exiting||busy||handoff is not null)return;handoff=action;handoffValid=valid;releaseGate.Reset();if(lastInputSample is {} sample&&Environment.TickCount64-sample.Timestamp<=80)releaseGate.Prime(sample);CancelHold();input.Cancel();FeedbackText("Solte os controles para continuar · B / Esc cancela.");
+        if(exiting||busy)return;if(handoff is not null){if(!dismiss||handoffDismiss)return;CancelHandoff();}handoff=action;handoffValid=valid;handoffDismiss=dismiss;releaseGate.Reset();if(lastInputSample is {} sample&&Environment.TickCount64-sample.Timestamp<=80){releaseGate.Prime(sample);ObserveHandoffInputs(sample,Environment.TickCount64);}CancelHold();input.Cancel();FeedbackText(dismiss?"Solte os controles para ocultar o painel.":"Solte os controles para continuar · B / Esc cancela.");
     }
-    private void CancelHandoff(){handoff=null;handoffValid=null;releaseGate.Reset();}
+    private void CancelHandoff(){handoff=null;handoffValid=null;handoffDismiss=false;handoffDegraded=false;degradedExplicit=false;degradedSince=null;handoffGuideHeld=false;handoffGuideKnown=false;Array.Clear(handoffPadsHeld);Array.Clear(handoffPadsKnown);releaseGate.Reset();}
+    private void RejectHandoff(string message)
+    {
+        if(!handoffDismiss){CancelHandoff();input.Cancel();FeedbackText(message);return;}if(handoffDegraded)return;
+        handoffDegraded=true;handoffValid=null;handoff=CompleteDegradedDismiss;degradedSince=null;releaseGate.Reset();input.Cancel();FeedbackText("Leitura ou contexto incerto. Solte os controles para ocultar sem retornar ao aplicativo.");
+    }
+    private void CompleteDegradedDismiss(){HideNow(false);FeedbackText("Painel ocultado sem solicitar retorno ao aplicativo.");if(!Controller.Platform.IsPreview)Controller.Diagnostics.Log("dismiss-without-focus-return",ResultKind.Cancelled);}
+    private void ObserveHandoffInputs(ReleaseSample sample,long now)
+    {
+        Array.Clear(handoffPadsKnown);handoffGuideKnown=false;if(sample.Timestamp>now||now-sample.Timestamp>80)return;
+        for(var i=0;i<Math.Min(4,sample.Pads.Count);i++){var pad=sample.Pads[i];if(pad.ReadFailed)continue;handoffPadsKnown[i]=true;handoffPadsHeld[i]=pad.Connected&&(pad.Buttons!=0||Math.Abs((int)pad.X)>=Controller.Settings.Deadzone*2/3||Math.Abs((int)pad.Y)>=Controller.Settings.Deadzone*2/3||Math.Abs((int)pad.RX)>=Controller.Settings.Deadzone*2/3||Math.Abs((int)pad.RY)>=Controller.Settings.Deadzone*2/3||pad.LT>=30||pad.RT>=30);}
+        if(sample.GuideValid||sample.GuideHeld){handoffGuideKnown=true;handoffGuideHeld=sample.GuideHeld;}
+    }
+    private void AdvanceDegradedDismiss(ReleaseSample sample,long now)
+    {
+        var knownActive=handoffGuideKnown&&handoffGuideHeld;var unknownHeld=!handoffGuideKnown&&handoffGuideHeld;
+        for(var i=0;i<4;i++){knownActive|=handoffPadsKnown[i]&&handoffPadsHeld[i];unknownHeld|=!handoffPadsKnown[i]&&handoffPadsHeld[i];}
+        if(!sample.KeysNeutral||heldKeys.Count!=0||knownActive){degradedSince=null;return;}
+        if(unknownHeld&&!degradedExplicit){degradedSince=null;FeedbackText("Leitura indisponível. Pressione e solte Esc para ocultar sem retornar ao aplicativo.");return;}
+        if(degradedSince is null||now<degradedSince)degradedSince=now;if(now-degradedSince.Value>=100)CommitHandoff();
+    }
+    private void ReaffirmDismiss(bool trusted){if(!trusted||!handoffDegraded)return;degradedExplicit=true;degradedSince=null;FeedbackText("Solte as entradas disponíveis para ocultar sem retornar ao aplicativo.");}
+    private void CommitHandoff(){var action=handoff;CancelHandoff();committing=true;try{action?.Invoke();}finally{committing=false;}}
     internal void AdvanceHandoff(ReleaseSample sample,long now)
     {
-        if(handoff is null)return;sample=sample with{KeysNeutral=sample.KeysNeutral&&heldKeys.Count==0};
+        if(handoff is null)return;sample=sample with{KeysNeutral=sample.KeysNeutral&&heldKeys.Count==0};ObserveHandoffInputs(sample,now);if(handoffDegraded){AdvanceDegradedDismiss(sample,now);return;}
         var state=releaseGate.Update(sample,now,IsVisible&&IsActive&&Native.GetForegroundWindow()==new WindowInteropHelper(this).Handle&&!exiting,Controller.Settings.Deadzone);
-        if(state==ReleaseState.Waiting)return;if(state==ReleaseState.Cancelled||handoffValid?.Invoke()==false){CancelHandoff();input.Cancel();FeedbackText("Transição cancelada; foco, controle ou alvo mudou.");return;}
-        var action=handoff;CancelHandoff();committing=true;try{action();}finally{committing=false;}
+        if(state==ReleaseState.Cancelled||handoffValid?.Invoke()==false){RejectHandoff("Transição cancelada; foco, controle ou alvo mudou.");if(handoffDegraded)AdvanceDegradedDismiss(sample,now);return;}if(state==ReleaseState.Waiting)return;CommitHandoff();
     }
     private bool PhysicalKeysNeutral()
     {
@@ -58,7 +79,7 @@ public partial class MainWindow : Window
         diagnostic=renderOnly;InitializeComponent();Controller=new(platform??(renderOnly?new PreviewPlatform():null),diagnostics);input=new(Controller.Settings);
         timer=new DispatcherTimer(DispatcherPriority.Input){Interval=TimeSpan.FromMilliseconds(120)};timer.Tick+=Tick;
         HomeTab.Click+=(_,_)=>Page(0);AppsTab.Click+=(_,_)=>Page(1);SettingsTab.Click+=(_,_)=>Page(2);SettingsGear.Click+=(_,_)=>Page(2);
-        PreviewKeyDown+=OnKeyDown;PreviewKeyUp+=(_,e)=>{var key=NormalizeKey(e.Key,e.SystemKey,e.ImeProcessedKey,e.DeadCharProcessedKey);if(key!=Key.None)heldKeys.Remove(key);else if(TransitionPending){CancelHandoff();input.Cancel();FeedbackText("Transição cancelada; tecla não identificada.");}if(e.Key is Key.Enter or Key.Space){keyboardDown=false;e.Handled=true;}};
+        PreviewKeyDown+=OnKeyDown;PreviewKeyUp+=(_,e)=>{var key=NormalizeKey(e.Key,e.SystemKey,e.ImeProcessedKey,e.DeadCharProcessedKey);if(key!=Key.None)heldKeys.Remove(key);else if(TransitionPending)RejectHandoff("Transição cancelada; tecla não identificada.");if(e.Key is Key.Enter or Key.Space){keyboardDown=false;e.Handled=true;}};
         Deactivated+=(_,_)=>{if(opening||exiting||committing)return;CancelHandoff();heldKeys.Clear();CancelHold();input.Cancel();if(IsVisible&&!ownedDialog){HideNow(false);}};
         SourceInitialized+=(_,_)=>{source=HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);source.CompositionTarget.BackgroundColor=Colors.Transparent;source.AddHook(WindowMessage);if(!diagnostic){ApplyHotkey();tray=new(source.Handle);}};
         Closing+=(_,_)=>Cleanup();audio.Changed+=AudioChanged;
@@ -81,12 +102,13 @@ public partial class MainWindow : Window
     }
     private nint WindowMessage(nint hwnd,int message,nint w,nint l,ref bool handled)
     {
-        if(message==0x312&&w==1){Toggle();handled=true;}
+        if(message==0x312&&w==1){Toggle(trustedDismiss:true);handled=true;}
         if(message==NativeTray.Callback){var action=(int)l;if(action is 0x202 or 0x203){OpenPanel();handled=true;}else if(action==0x205){var item=tray?.Menu();if(item==1)OpenPanel();if(item==2){OpenPanel();Page(2);}if(item==3){OpenPanel();QueueHandoff(Close);}handled=true;}}
         if(message==0x8002){OpenPanel();handled=true;}
         if(message is 0x7E or 0x2E0 && IsVisible&&!placing)Dispatcher.BeginInvoke(()=>Place());return 0;
     }
-    internal void Toggle(){if(busy||TransitionPending)return;if(IsVisible)HidePanel(true);else OpenPanel();}
+    internal void Toggle()=>Toggle(false);
+    private void Toggle(bool trustedDismiss){if(busy)return;if(IsVisible)HidePanel(true,trustedDismiss);else if(!TransitionPending)OpenPanel();}
     internal async void OpenPanel()
     {
         if(exiting||busy)return;if(IsVisible){Activate();return;}Controller.CaptureReturn();opening=true;input.Cancel();CancelHold();
@@ -111,11 +133,15 @@ public partial class MainWindow : Window
         if(hwnd!=0)Native.SetWindowPos(hwnd,(nint)(-1),placement.X,placement.Y,placement.Width,placement.Height,0x10);
         }finally{placing=false;}
     }
-    private void HidePanel(bool restore)=>QueueHandoff(()=>HideNow(restore));
-    private async void HideNow(bool restore)
+    private void HidePanel(bool restore,bool trustedDismiss=false)
     {
-        if(!IsVisible)return;var wasForeground=Native.GetForegroundWindow()==new WindowInteropHelper(this).Handle;CancelHold();pending?.Cancel();input.Cancel();Sidebar.BeginAnimation(OpacityProperty,null);Hide();audio.SetVisible(false);UpdatePolling();
-        if(restore&&wasForeground&&Controller.ReturnTarget is {} target){var result=await Controller.Platform.Switch(target);if(result.Kind!=ResultKind.Completed&&result.Kind!=ResultKind.Simulated&&!exiting){if(!Controller.Platform.IsPreview)Controller.Diagnostics.Log("focus-return",result.Kind);FeedbackText(result.Message);}}
+        if(handoffDismiss)ReaffirmDismiss(trustedDismiss);
+        var target=Controller.ReturnTarget;QueueHandoff(()=>HideNow(restore,target),()=>target is null?Controller.ReturnTarget is null:Controller.ReturnTarget?.Same(target)==true&&Controller.Platform.Valid(target),dismiss:true);
+    }
+    private async void HideNow(bool restore,WindowRef? returnTarget=null)
+    {
+        if(!IsVisible)return;var wasForeground=Native.GetForegroundWindow()==new WindowInteropHelper(this).Handle;CancelHandoff();heldKeys.Clear();CancelHold();pending?.Cancel();input.Cancel();Sidebar.BeginAnimation(OpacityProperty,null);Hide();audio.SetVisible(false);UpdatePolling();
+        if(restore&&wasForeground&&returnTarget is {} target&&Controller.Platform.Valid(target)){var result=await Controller.Platform.Switch(target);if(result.Kind!=ResultKind.Completed&&result.Kind!=ResultKind.Simulated&&!exiting){if(!Controller.Platform.IsPreview)Controller.Diagnostics.Log("focus-return",result.Kind);FeedbackText(result.Message);}}
     }
     private void Cleanup(){if(exiting)return;exiting=true;CancelHandoff();heldKeys.Clear();SystemParameters.StaticPropertyChanged-=OnSystemParametersChanged;timer.Stop();timer.Tick-=Tick;guideConnection?.Dispose();guideConnection=null;guideBackend=null;guideToggleRequested=false;pending?.Cancel();audio.Dispose();if(hotkey&&source is not null)Native.UnregisterHotKey(source.Handle,1);source?.RemoveHook(WindowMessage);tray?.Dispose();Controller.Dispose();}
     private void FeedbackText(string text)=>StatusLabel.Text=text;
@@ -187,10 +213,11 @@ public partial class MainWindow : Window
     internal void Sequential(int step){if(Confirming)return;navigation=Navigation.Sequential(navigation,entries.Select(e=>e.Id).ToArray(),step);SetSelection();}
     internal void ActivateEntry(){if(TransitionPending)return;var entry=entries.FirstOrDefault(e=>e.Id==navigation.Id);if(entry is null)return;if(Navigation.CanActivate(busy,Confirming,entry.Available))entry.Run();else if(!entry.Available)FeedbackText("Indisponível · "+entry.Reason);}
     internal void Details(){var target=Controller.Apps.FirstOrDefault(w=>WindowId(w)==navigation.Id)??Controller.Session.Anchor;if(target is null){FeedbackText("Escolha uma janela em Apps.");return;}detail=target;Subpage("details","switch-detail");}
-    internal void Back(){if(TransitionPending){CancelHandoff();input.Cancel();FeedbackText("Transição cancelada.");return;}if(Confirming){CancelHold();FeedbackText("Fechamento cancelado antes do envio.");return;}if(busy){pending?.Cancel();return;}if(subpage!=""){subpage="";detail=null;navigation=new(subSelection);RefreshRows();return;}if(page!=0){Page(0);return;}HidePanel(true);}
+    internal void Back()=>Back(false);
+    private void Back(bool trustedDismiss){if(TransitionPending){if(handoffDismiss){ReaffirmDismiss(trustedDismiss);return;}CancelHandoff();input.Cancel();if(page==0&&subpage=="")HidePanel(true);else FeedbackText("Transição cancelada.");return;}if(Confirming){CancelHold();FeedbackText("Fechamento cancelado antes do envio.");return;}if(busy){pending?.Cancel();return;}if(subpage!=""){subpage="";detail=null;navigation=new(subSelection);RefreshRows();return;}if(page!=0){Page(0);return;}HidePanel(true);}
     private void OnKeyDown(object sender,KeyEventArgs e)
     {
-        var key=NormalizeKey(e.Key,e.SystemKey,e.ImeProcessedKey,e.DeadCharProcessedKey);if(key!=Key.None)heldKeys.Add(key);else if(TransitionPending){CancelHandoff();input.Cancel();FeedbackText("Transição cancelada; tecla não identificada.");e.Handled=true;return;}if(TransitionPending){if(e.Key==Key.Escape&&!e.IsRepeat)Back();e.Handled=true;return;}
+        var key=NormalizeKey(e.Key,e.SystemKey,e.ImeProcessedKey,e.DeadCharProcessedKey);var firstPress=key!=Key.None&&heldKeys.Add(key);if(key==Key.None&&TransitionPending){RejectHandoff("Transição cancelada; tecla não identificada.");e.Handled=true;return;}if(TransitionPending){if(e.Key==Key.Escape&&firstPress&&!e.IsRepeat)Back(trustedDismiss:true);e.Handled=true;return;}
         if(e.Key is Key.Enter or Key.Space){keyboardDown=true;if(Confirming&&closeSource!=0){CancelHold();FeedbackText("Origem da pressão mudou; fechamento cancelado.");}else if(!e.IsRepeat&&!Confirming){dispatchSource=0;ActivateEntry();dispatchSource=null;}e.Handled=true;return;}
         if(e.Key==Key.Escape){Back();e.Handled=true;return;}if(Confirming){e.Handled=true;return;}switch(e.Key){case Key.Up:Move(NavDirection.Up);break;case Key.Down:Move(NavDirection.Down);break;case Key.Left:Move(NavDirection.Left);break;case Key.Right:Move(NavDirection.Right);break;case Key.Tab:Sequential(Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)?-1:1);break;case Key.PageUp:Page(page-1);break;case Key.PageDown:Page(page+1);break;case Key.X:Details();break;default:return;}e.Handled=true;
     }
@@ -202,7 +229,7 @@ public partial class MainWindow : Window
     private void Tick(object? sender,EventArgs args)
     {
         if(exiting)return;if(guideBackend is not null)PollGuideStatus(guideBackend);var frames=Enumerable.Range(0,4).Select(i=>Native.ReadPad((uint)i)).ToArray();var now=Environment.TickCount64;lastInputSample=new(frames,now,GuideHeld:guideBackend?.Held==true,GuideValid:guideBackend is null||!guideBackend.Active||guideBackend.SnapshotValid,GuideConnections:guideBackend?.Connections??0);UpdatePolling(frames.Any(f=>f.Connected));var current=input.Update(frames,IsVisible&&IsActive,now);
-        if(TransitionPending){guideToggleRequested=false;if(current.Events.Pressed.HasFlag(PadButtons.B))Back();else AdvanceHandoff(lastInputSample.Value with{KeysNeutral=PhysicalKeysNeutral()},now);return;}
+        if(TransitionPending){if(GuidePolling.Consume(ref guideToggleRequested,current.Toggle)){Toggle(trustedDismiss:current.Toggle||guideBackend?.SnapshotValid==true);return;}if(current.Events.Pressed.HasFlag(PadButtons.B))Back(trustedDismiss:current.Slot is {} slot&&frames[slot].Connected&&!frames[slot].ReadFailed);else AdvanceHandoff(lastInputSample.Value with{KeysNeutral=PhysicalKeysNeutral()},now);return;}
         if(GuidePolling.Consume(ref guideToggleRequested,current.Toggle)){Toggle();return;}if(!IsVisible||!IsActive)return;var events=current.Events;
         if(Confirming&&closeHold.Target is {} target){var sourceValid=closeSource==0||current.Slot is {} slot&&closeSource==slot+1&&current.Connected;var down=closeSource==0?keyboardDown:sourceValid&&events.ADown;if((closeSource!=0&&keyboardDown)||(closeSource==0&&events.Pressed.HasFlag(PadButtons.A)))sourceValid=false;var valid=Controller.Platform.Valid(target)?target:null;if(closeHold.Tick(down,events.Pressed.HasFlag(PadButtons.B),IsActive,sourceValid,valid,Environment.TickCount64)){CancelHold();RunClose(target);}else if(!Confirming)CancelHold();HoldProgress.Value=closeHold.Progress;ConfirmHint.Text=closeHold.Progress>0?$"Mantenha pressionado… {closeHold.Progress:P0}":"Solte e pressione novamente por 1,5 s.";return;}
         if(busy)return;if(events.Direction!=0)Move((NavDirection)events.Direction);dispatchSource=current.Slot+1;if(events.Pressed.HasFlag(PadButtons.B))Back();else if(events.Pressed.HasFlag(PadButtons.A))ActivateEntry();else if(events.Pressed.HasFlag(PadButtons.X))Details();else if(events.Pressed.HasFlag(PadButtons.LB))Page(page-1);else if(events.Pressed.HasFlag(PadButtons.RB))Page(page+1);dispatchSource=null;
