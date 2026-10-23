@@ -11,9 +11,14 @@ using Microsoft.Win32;
 
 namespace ApolloOverlay;
 
+internal readonly record struct OverlayInputContext(bool Confirmed,bool Visible,bool Active,bool OwnForeground,bool OwnedDialog=false,bool Exiting=false);
+
 public partial class MainWindow : Window
 {
     internal readonly OverlayController Controller;
+    internal Func<OverlayInputContext>? InputContextReader {private get;set;}
+    private OverlayInputContext InputContext=>InputContextReader?.Invoke()??new(focusConfirmed,IsVisible,IsActive,OwnForeground,ownedDialog,exiting);
+    internal Func<int,short> PhysicalKeyReader {private get;set;}=Native.GetAsyncKeyState;
     internal Func<nint,uint> DpiReader {private get;set;}=Native.GetDpiForWindow;
     internal Func<nint> FocusForeground {private get;set;}=Native.GetForegroundWindow;
     internal Func<nint,bool> FocusRequest {private get;set;}=Native.SetForegroundWindow;
@@ -61,14 +66,15 @@ public partial class MainWindow : Window
     private void CommitHandoff(){var action=handoff;CancelHandoff();committing=true;try{action?.Invoke();}finally{committing=false;}}
     internal void AdvanceHandoff(ReleaseSample sample,long now)
     {
-        if(handoff is null)return;sample=sample with{KeysNeutral=sample.KeysNeutral&&heldKeys.Count==0};ObserveHandoffInputs(sample,now);if(handoffDegraded){AdvanceDegradedDismiss(sample,now);return;}
-        var state=releaseGate.Update(sample,now,IsVisible&&IsActive&&Native.GetForegroundWindow()==new WindowInteropHelper(this).Handle&&!exiting,Controller.Settings.Deadzone);
+        if(handoff is null)return;sample=sample with{KeysNeutral=sample.KeysNeutral&&heldKeys.Count==0&&PhysicalKeysNeutral()};ObserveHandoffInputs(sample,now);if(handoffDegraded){AdvanceDegradedDismiss(sample,now);return;}
+        var context=InputContext;var state=releaseGate.Update(sample,now,context.Visible&&context.Active&&context.OwnForeground&&!context.Exiting,Controller.Settings.Deadzone);
         if(state==ReleaseState.Cancelled||handoffValid?.Invoke()==false){RejectHandoff("Transição cancelada; foco, controle ou alvo mudou.");if(handoffDegraded)AdvanceDegradedDismiss(sample,now);return;}if(state==ReleaseState.Waiting)return;CommitHandoff();
     }
-    private bool PhysicalKeysNeutral()
+    internal bool PhysicalKeysNeutral()
     {
-        int[] keys=[8,9,13,16,17,18,27,32,33,34,35,36,37,38,39,40,79,88,91,92];
-        return keys.All(k=>(Native.GetAsyncKeyState(k)&0x8000)==0)&&heldKeys.All(k=>(Native.GetAsyncKeyState(KeyInterop.VirtualKeyFromKey(k))&0x8000)==0);
+        if((PhysicalKeyReader(0x03)&0x8000)!=0)return false;
+        for(var key=0x08;key<=0xFE;key++)if((PhysicalKeyReader(key)&0x8000)!=0)return false;
+        return heldKeys.All(k=>(PhysicalKeyReader(KeyInterop.VirtualKeyFromKey(k))&0x8000)==0);
     }
     private void UpdatePolling(bool connected=true)=>timer.Interval=TimeSpan.FromMilliseconds(GuidePolling.Interval(guideBackend?.Active==true,IsVisible,connected));
     private void ConfigureGuide()
@@ -122,7 +128,7 @@ public partial class MainWindow : Window
     private void RevokeFocus(string reason,bool supersede=true){CancelOpenAnimation();if(supersede)focusCycle++;focusConfirmed=false;navigationKeysArmed=false;input.Cancel();CancelHold();TraceFocus(reason,ResultKind.Cancelled);}
     private bool NavigationAllowed
     {
-        get{if(!focusConfirmed||!IsVisible||ownedDialog||exiting)return false;if(IsActive&&OwnForeground)return true;RevokeFocus("lost");FeedbackText("Foco perdido. Abra novamente com duplo clique na bandeja; B ou Esc dispensa o painel.");return false;}
+        get{var context=InputContext;if(!context.Confirmed||!context.Visible||context.OwnedDialog||context.Exiting)return false;if(context.Active&&context.OwnForeground)return true;RevokeFocus("lost");FeedbackText("Foco perdido. Abra novamente com duplo clique na bandeja; B ou Esc dispensa o painel.");return false;}
     }
     private async Task<bool> AcquireFocus(long cycle)
     {
@@ -255,7 +261,7 @@ public partial class MainWindow : Window
     private void Tick(object? sender,EventArgs args)
     {
         if(exiting)return;if(guideBackend is not null)PollGuideStatus(guideBackend);var frames=Enumerable.Range(0,4).Select(i=>Native.ReadPad((uint)i)).ToArray();var now=Environment.TickCount64;lastInputSample=new(frames,now,GuideHeld:guideBackend?.Held==true,GuideValid:guideBackend is null||!guideBackend.Active||guideBackend.SnapshotValid,GuideConnections:guideBackend?.Connections??0);UpdatePolling(frames.Any(f=>f.Connected));var current=input.Update(frames,IsVisible,now);
-        if(TransitionPending){if(GuidePolling.Consume(ref guideToggleRequested,current.Toggle)){Toggle(trustedDismiss:current.Toggle||guideBackend?.SnapshotValid==true);return;}if(current.Events.Pressed.HasFlag(PadButtons.B))Back(trustedDismiss:current.Slot is {} slot&&frames[slot].Connected&&!frames[slot].ReadFailed);else AdvanceHandoff(lastInputSample.Value with{KeysNeutral=PhysicalKeysNeutral()},now);return;}
+        if(TransitionPending){if(GuidePolling.Consume(ref guideToggleRequested,current.Toggle)){Toggle(trustedDismiss:current.Toggle||guideBackend?.SnapshotValid==true);return;}if(current.Events.Pressed.HasFlag(PadButtons.B))Back(trustedDismiss:current.Slot is {} slot&&frames[slot].Connected&&!frames[slot].ReadFailed);else AdvanceHandoff(lastInputSample.Value,now);return;}
         if(GuidePolling.Consume(ref guideToggleRequested,current.Toggle)){Toggle();return;}if(!IsVisible)return;var events=current.Events;if(!NavigationAllowed){if(!ownedDialog&&events.Pressed.HasFlag(PadButtons.B))Back();return;}if(!navigationKeysArmed&&heldKeys.Count==0&&PhysicalKeysNeutral())navigationKeysArmed=true;
         if(Confirming&&closeHold.Target is {} target){var sourceValid=closeSource==0||current.Slot is {} slot&&closeSource==slot+1&&current.Connected;var down=closeSource==0?keyboardDown:sourceValid&&events.ADown;if((closeSource!=0&&keyboardDown)||(closeSource==0&&events.Pressed.HasFlag(PadButtons.A)))sourceValid=false;var valid=Controller.Platform.Valid(target)?target:null;if(closeHold.Tick(down,events.Pressed.HasFlag(PadButtons.B),IsActive,sourceValid,valid,Environment.TickCount64)){CancelHold();RunClose(target);}else if(!Confirming)CancelHold();HoldProgress.Value=closeHold.Progress;ConfirmHint.Text=closeHold.Progress>0?$"Mantenha pressionado… {closeHold.Progress:P0}":"Solte e pressione novamente por 1,5 s.";return;}
         if(busy)return;if(events.Direction!=0)Move((NavDirection)events.Direction);dispatchSource=current.Slot+1;if(events.Pressed.HasFlag(PadButtons.B))Back();else if(events.Pressed.HasFlag(PadButtons.A))ActivateEntry();else if(events.Pressed.HasFlag(PadButtons.X))Details();else if(events.Pressed.HasFlag(PadButtons.LB))Page(page-1);else if(events.Pressed.HasFlag(PadButtons.RB))Page(page+1);dispatchSource=null;

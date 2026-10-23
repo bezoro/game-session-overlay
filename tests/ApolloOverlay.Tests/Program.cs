@@ -15,6 +15,7 @@ static class Program
     [STAThread] public static int Main(string[] args)
     {
         if(args.Length is not (1 or 2)) {Console.Error.WriteLine("Expected report path");return 2;}
+        if(args.Length==2&&args[1]=="--review-fixes"){ReviewFixTests.Run(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--guide-release-red"){GuideAbiTests.GuideReleaseRed(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--focus-open-red"){GuideAbiTests.FocusOpenRed(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--focus-suite"){GuideAbiTests.HandoffTests(Case);GuideAbiTests.FocusDismiss(Case);GuideAbiTests.FocusChecks(Case);GuideAbiTests.GuideOpeningChecks(Case,Path.GetDirectoryName(Path.GetFullPath(args[0]))!);Case("Guide status actual row",GuideAbiTests.LegacyStatusView);Case("legacy Guide ABI lifetime",GuideAbiTests.LegacyAbi);Case("legacy Guide failures",GuideAbiTests.LegacyFailures);return Finish(args[0]);}
@@ -89,6 +90,7 @@ static class Program
         Case("Disposed platform refuses owned target validation and activation",GuideAbiTests.DisposedPlatformBaseline);
         GuideAbiTests.HandoffTests(Case);
         Case("legacy Guide settings absent off on save preserves default and backup",()=>{True(!UserSettings.Parse("{}").GuideXInputEnabled);True(!UserSettings.Parse("{\"GuideXInputEnabled\":false}").GuideXInputEnabled);True(UserSettings.Parse("{\"GuideXInputEnabled\":true}").GuideXInputEnabled);var path=Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[0]))!,"guide-settings.json");UserSettings.Save(path,new());UserSettings.Save(path,new(GuideXInputEnabled:true));True(UserSettings.Load(path,out _).GuideXInputEnabled);True(!UserSettings.Parse(File.ReadAllText(path+".previous")).GuideXInputEnabled);});
+        ReviewFixTests.Run(Case);
         NavigationTests.Run(Case);
         CorrectionTests.Run(Case,Path.GetDirectoryName(Path.GetFullPath(args[0]))!);
         return Finish(args[0]);
