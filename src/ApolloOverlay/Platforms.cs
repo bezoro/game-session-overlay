@@ -3,6 +3,9 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Windows.Media;
+using System.Windows.Interop;
+using System.Windows.Media.Imaging;
 
 namespace ApolloOverlay;
 
@@ -12,6 +15,7 @@ public interface IPlatform : IDisposable
     WindowRef? Foreground();
     IReadOnlyList<WindowRef> Windows();
     bool Valid(WindowRef window);
+    ImageSource? Icon(WindowRef window)=>null;
     IReadOnlyList<DisplayRef> Displays();
     ModuleEvidence SteamEvidence(WindowRef? window);
     Task<ActionResult> Switch(WindowRef window);
@@ -23,7 +27,8 @@ public interface IPlatform : IDisposable
 public sealed class PreviewPlatform : IPlatform
 {
     public bool IsPreview=>true;
-    private readonly List<WindowRef> windows=[new(101,41,100,"Jornada entre estrelas · sessão de exemplo","sample"),new(102,42,200,"Navegador · exemplo","sample-browser"),new(103,43,300,"Música · exemplo","sample-music")];
+    private readonly List<WindowRef> windows=[];
+    public PreviewPlatform(WindowRef? ownedFixture=null){if(ownedFixture is not null)windows.Add(ownedFixture);}
     public WindowRef? Foreground()=>windows.FirstOrDefault();
     public IReadOnlyList<WindowRef> Windows()=>windows.ToArray();
     public bool Valid(WindowRef window)=>windows.Any(window.Same);
@@ -43,15 +48,22 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
 {
     public bool IsPreview=>false;
     private readonly Dictionary<nint,long> generations=[];
+    private long sequence;
     private readonly Native.WinEvent destroyCallback;
     private readonly nint hook;
+    private readonly bool allowOwnedFixture;
     private static readonly HashSet<string> ProtectedProcesses=new(StringComparer.OrdinalIgnoreCase) { "explorer","dwm","ShellExperienceHost","StartMenuExperienceHost","SearchHost","ApplicationFrameHost","GameBar","GameBarFTServer","GameBarPresenceWriter","gameoverlayui","XboxGameBarWidgets","steamwebhelper","winlogon","csrss" };
-    public WindowsPlatform()
+    public WindowsPlatform(bool allowOwnedFixture=false)
     {
-        destroyCallback=(_,_,hwnd,obj,child,_,_)=> { if (hwnd!=0 && obj==0 && child==0) generations[hwnd]=generations.GetValueOrDefault(hwnd)+1; };
+        this.allowOwnedFixture=allowOwnedFixture;
+        destroyCallback=(_,_,hwnd,obj,child,_,_)=> {lock(generations){if (hwnd!=0 && obj==0 && child==0 && generations.ContainsKey(hwnd)) generations[hwnd]=++sequence;} };
         hook=Native.SetWinEventHook(0x8001,0x8001,0,destroyCallback,0,0,0); // EVENT_OBJECT_DESTROY, OUTOFCONTEXT on this dispatcher.
     }
     private WindowRef? Read(nint hwnd)
+    {
+        lock(generations)return ReadCore(hwnd);
+    }
+    private WindowRef? ReadCore(nint hwnd)
     {
         if (hwnd==0 || !Native.IsWindow(hwnd)) return null;
         Native.GetWindowThreadProcessId(hwnd,out var pid);
@@ -61,7 +73,8 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
         try {
             using var process=Process.GetProcessById((int)pid);
             var name=process.ProcessName;
-            var protectedTarget=pid==Environment.ProcessId || ProtectedProcesses.Contains(name) || className.ToString() is "Progman" or "WorkerW" or "Shell_TrayWnd";
+            var protectedTarget=pid==Environment.ProcessId&&!allowOwnedFixture || ProtectedProcesses.Contains(name) || className.ToString() is "Progman" or "WorkerW" or "Shell_TrayWnd";
+            if(!generations.ContainsKey(hwnd)){if(generations.Count>=256){foreach(var stale in generations.Keys.Where(h=>!Native.IsWindow(h)).ToArray())generations.Remove(stale);if(generations.Count>=256)return null;}generations[hwnd]=++sequence;}
             return new(hwnd,(int)pid,process.StartTime.ToUniversalTime().Ticks,title.ToString(),name,protectedTarget,generations.GetValueOrDefault(hwnd));
         } catch (Exception e) when (e is Win32Exception or InvalidOperationException or ArgumentException) { return new(hwnd,(int)pid,0,title.ToString(),"identidade indisponível",true); }
     }
@@ -69,10 +82,11 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
     public IReadOnlyList<WindowRef> Windows()
     {
         var windows=new List<WindowRef>();
-        Native.EnumWindows((hwnd,_)=> { if (Native.IsWindowVisible(hwnd) && Native.GetWindow(hwnd,4)==0 && Read(hwnd) is { Protected:false } window) windows.Add(window); return true; },0);
+        Native.EnumWindows((hwnd,_)=> { if (Relevant(hwnd) && Read(hwnd) is {} window && (window.ProcessName.Equals("explorer",StringComparison.OrdinalIgnoreCase)||!window.Protected)) windows.Add(window); return true; },0);
         return windows;
     }
-    public bool Valid(WindowRef window)=>window.Same(Read(window.Handle)) && !window.Protected && hook!=0;
+    private bool Relevant(nint hwnd){if(!Native.IsWindowVisible(hwnd)||Native.GetWindow(hwnd,4)!=0||(Native.GetWindowLongPtr(hwnd,-20).ToInt64()&0x80)!=0)return false;Native.GetWindowThreadProcessId(hwnd,out var pid);if(pid==Environment.ProcessId&&!allowOwnedFixture)return false;var type=new StringBuilder(128);Native.GetClassName(hwnd,type,type.Capacity);if(type.ToString() is "Progman" or "WorkerW" or "Shell_TrayWnd" or "Shell_SecondaryTrayWnd")return false;return Native.DwmGetWindowAttribute(hwnd,14,out var cloaked,4)!=0||cloaked==0;}
+    public bool Valid(WindowRef window){var current=Read(window.Handle);return current is not null&&window.Same(current)&&Relevant(window.Handle)&&(!current.Protected||current.ProcessName.Equals("explorer",StringComparison.OrdinalIgnoreCase))&&hook!=0;}
     public IReadOnlyList<DisplayRef> Displays()
     {
         var displays=new List<DisplayRef>();
@@ -92,12 +106,16 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
         } catch (Exception e) when (e is Win32Exception or InvalidOperationException or ArgumentException) { return ModuleEvidence.Denied; }
     }
     public Task<ActionResult> Switch(WindowRef window)=>new GuardedActions(this).Switch(window);
+    public ImageSource? Icon(WindowRef window)
+    {
+        if(!Valid(window))return null;try{Native.SendMessageTimeout(window.Handle,0x7F,2,0,2,100,out var icon);var handle=icon==0?Native.GetClassLongPtr(window.Handle,-14):(nint)icon;if(handle==0)return null;var image=Imaging.CreateBitmapSourceFromHIcon(handle,System.Windows.Int32Rect.Empty,BitmapSizeOptions.FromWidthAndHeight(48,48));image.Freeze();return image;}catch(Exception e)when(e is Win32Exception or ArgumentException or InvalidOperationException){return null;}
+    }
     public Task<ActionResult> Close(WindowRef window,CancellationToken cancellation)=>new GuardedActions(this).Close(window,cancellation);
     public Task<ActionResult> Shortcut(WindowRef window,string keys)=>new GuardedActions(this).Shortcut(window,keys);
     public WindowObservation ObserveWindow(WindowRef window)=>ClosureObservation.Classify(window,Probe(window.Handle));
     private WindowProbe Probe(nint hwnd)
     {
-        var generation=generations.GetValueOrDefault(hwnd);
+        long generation;lock(generations)generation=generations.GetValueOrDefault(hwnd);
         if(!Native.IsWindow(hwnd)) return new(false,null,null,generation,"");
         Native.GetWindowThreadProcessId(hwnd,out var pid);
         var caption=new StringBuilder(513);Native.GetWindowText(hwnd,caption,caption.Capacity);
@@ -109,8 +127,8 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
         }
     }
     public bool IsForeground(WindowRef window)=>Native.GetForegroundWindow()==window.Handle;
-    public bool RequestFocus(WindowRef window) { Native.ShowWindow(window.Handle,9);return Native.SetForegroundWindow(window.Handle); }
-    public bool PostClose(WindowRef window)=>Native.PostMessage(window.Handle,0x10,0,0);
+    public bool RequestFocus(WindowRef window) { if(Native.IsIconic(window.Handle))Native.ShowWindow(window.Handle,9);return Native.SetForegroundWindow(window.Handle); }
+    public bool PostClose(WindowRef window){var current=Read(window.Handle);return current is not null&&current.CanClose&&window.Same(current)&&Valid(current)&&Native.PostMessage(window.Handle,0x10,0,0);}
     public Task Wait(int milliseconds)=>Task.Delay(milliseconds);
     public uint SendKeys(string keys)
     {

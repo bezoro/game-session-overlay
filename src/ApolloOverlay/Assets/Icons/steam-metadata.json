@@ -1,0 +1,12 @@
+{
+  "upstream_entry": {
+    "title": "Steam",
+    "hex": "000000",
+    "source": "https://partner.steamgames.com/doc/marketing/branding",
+    "guidelines": "https://partner.steamgames.com/doc/marketing/branding"
+  },
+  "upstream_url": "https://raw.githubusercontent.com/simple-icons/simple-icons/c71c69e3a27e4436936b831c72643e6513b9f49b/data/simple-icons.json",
+  "upstream_lines": "16358-16362",
+  "individual_license_override": null,
+  "note": "No individual license override declared in upstream entry; upstream project CC0 license retained; Steam trademark remains Valve property."
+}

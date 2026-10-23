@@ -1,3 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWPF>true</UseWPF><AllowUnsafeBlocks>true</AllowUnsafeBlocks><ApplicationManifest>app.manifest</ApplicationManifest><StartupObject>ApolloOverlay.Program</StartupObject></PropertyGroup>
+  <ItemGroup><RuntimeHostConfigurationOption Include="Switch.System.Windows.Appearance.DisableFluentThemeWindowBackdrop" Value="true"/></ItemGroup>
+  <ItemGroup><None Update="Assets/Icons/*.svg;Assets/Icons/*.txt;Assets/Icons/*.json" CopyToPublishDirectory="PreserveNewest"/></ItemGroup>
 </Project>

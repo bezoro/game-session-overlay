@@ -14,7 +14,8 @@ static class Program
     private static ActionResult Run(Task<ActionResult> task)=>task.GetAwaiter().GetResult();
     [STAThread] public static int Main(string[] args)
     {
-        if(args.Length!=1) {Console.Error.WriteLine("Expected report path");return 2;}
+        if(args.Length is not (1 or 2)) {Console.Error.WriteLine("Expected report path");return 2;}
+        if(args.Length==2&&args[1]=="--corrections"){CorrectionTests.Run(Case,Path.GetDirectoryName(Path.GetFullPath(args[0]))!);return Finish(args[0]);}
         Case("session survives our focus and launcher chain",()=>{var s=new SessionTracker();s.Observe(Game);s.Observe(Game with{Handle=2,ProcessName="Playnite.FullscreenApp"});s.Observe(Game with{Handle=3,ProcessName="steam"});s.Observe(Game with{Handle=4,Protected=true});True(Game.Same(s.Anchor));s.Observe(Game with{Handle=5,Pid=50});Equal((nint)5,s.Anchor!.Handle);});
         Case("launcher alone does not become game",()=>{var s=new SessionTracker();s.Observe(Game with{ProcessName="steam"});Equal<WindowRef?>(null,s.Anchor);});
         Case("session anchor immutable across panel observation",()=>{var s=new SessionTracker();s.Observe(Game);var held=s.Anchor;s.Observe(Game with{Handle=8,Protected=true});True(Game.Same(held));Equal(2L,s.Sequence);});
@@ -22,6 +23,7 @@ static class Program
         Case("reused PID or HWND start identity rejected",()=>{True(!Game.Same(Game with{Started=200}));True(!Game.Same(Game with{Pid=43}));True(!Game.Same(Game with{Handle=102}));});
         Case("same-process HWND replacement uses destruction generation",()=>{True(!Game.Same(Game with{Generation=1}));var f=new FakeEffects{IsValid=false};Equal(ResultKind.Failed,Run(new GuardedActions(f).Close(Game,CancellationToken.None)).Kind);Equal(0,f.Closes);});
         Case("system and unknown identities cannot close",()=>{True(!(Game with{Protected=true}).CanClose);True(!(Game with{Started=0}).CanClose);});
+        Case("launchers cannot close even with valid native identity",()=>{foreach(var name in new[]{"steam","Playnite.FullscreenApp","Playnite.DesktopApp"}){var f=new FakeEffects();Equal(ResultKind.Failed,Run(new GuardedActions(f).Close(Game with{ProcessName=name},CancellationToken.None)).Kind);Equal(0,f.Closes);}});
         Case("steam running alone stays unknown",()=>{var s=new SteamPermission();True(!s.ToggleAllowed(Game,ModuleEvidence.Unknown,"Shift+Tab"));});
         Case("steam missing and access denied stay disabled",()=>{var s=new SteamPermission();s.Verify(Game,"Shift+Tab");True(!s.ToggleAllowed(Game,ModuleEvidence.Absent,"Shift+Tab"));True(!s.ToggleAllowed(Game,ModuleEvidence.Denied,"Shift+Tab"));});
         Case("loaded non-steam shortcut requires manual verification",()=>{var s=new SteamPermission();True(!s.ToggleAllowed(Game,ModuleEvidence.Loaded,"Shift+Tab"));s.Verify(Game,"Shift+Tab");True(s.ToggleAllowed(Game,ModuleEvidence.Loaded,"Shift+Tab"));});
@@ -55,7 +57,7 @@ static class Program
         Case("invalid settings rejected",()=>{foreach(var text in new[]{"{", "null", "{\"SteamShortcut\":\"Alt+F4\"}","{\"PlaynitePath\":\"relative.exe\"}"}){var rejected=false;try{UserSettings.Parse(text);}catch(Exception e) when(e is JsonException or InvalidDataException){rejected=true;}True(rejected);}});
         Case("valid settings source-generated roundtrip",()=>{var s=UserSettings.Parse("{\"SteamShortcut\":\"Ctrl+Tab\",\"DisplayId\":\"left\"}");Equal("Ctrl+Tab",s.SteamShortcut);Equal("left",s.DisplayId);});
         Case("saving recovered settings preserves previous-good backup",()=>{var folder=Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[0]))!,"settings-fixtures");Directory.CreateDirectory(folder);var path=Path.Combine(folder,"recovery.json");UserSettings.Save(path,new(DisplayId:"first"));UserSettings.Save(path,new(DisplayId:"second"));File.WriteAllText(path,"{");var recovered=UserSettings.Load(path,out var message);Equal("first",recovered.DisplayId);True(message.Contains("recuperada"));UserSettings.Save(path,recovered);Equal("first",UserSettings.Parse(File.ReadAllText(path+".previous")).DisplayId);});
-        Case("preview actions remain simulated",()=>{using var p=new PreviewPlatform();var target=p.Foreground()!;Equal(ResultKind.Simulated,p.Launch(true,"missing.exe").Kind);Equal(ResultKind.Simulated,Run(p.Shortcut(target,"Win+G")).Kind);Equal(ResultKind.Simulated,Run(p.Switch(target)).Kind);Equal(ResultKind.Simulated,Run(p.Close(target,CancellationToken.None)).Kind);True(!p.Valid(target));});
+        Case("preview actions remain simulated",()=>{using var p=new PreviewPlatform(Game);var target=p.Foreground()!;Equal(ResultKind.Simulated,p.Launch(true,"missing.exe").Kind);Equal(ResultKind.Simulated,Run(p.Shortcut(target,"Win+G")).Kind);Equal(ResultKind.Simulated,Run(p.Switch(target)).Kind);Equal(ResultKind.Simulated,Run(p.Close(target,CancellationToken.None)).Kind);True(!p.Valid(target));});
         Case("guide initialization failure releases without registration",()=>{var f=new FakeGuide{Init=false};using(var c=new GuideConnection(f)){True(!c.Start(()=>{}));}Equal("initialize,release",string.Join(',',f.Calls));});
         Case("guide registration failure releases initialized instance",()=>{var f=new FakeGuide{Registration=false};using(var c=new GuideConnection(f)){True(!c.Start(()=>{}));}Equal("initialize,register,release",string.Join(',',f.Calls));});
         Case("guide stops and unregisters before release",()=>{var f=new FakeGuide();using(var c=new GuideConnection(f)){True(c.Start(()=>{}));True(!c.Observed);f.Press!();True(c.Observed);}Equal("initialize,register,stop,unregister,release",string.Join(',',f.Calls));});
@@ -64,8 +66,13 @@ static class Program
         Case("guide native registration failure releases safely",GuideAbiTests.RegistrationFailure);
         Case("guide native failed unregister retains callback context",GuideAbiTests.UnregisterFailure);
         NavigationTests.Run(Case);
+        CorrectionTests.Run(Case,Path.GetDirectoryName(Path.GetFullPath(args[0]))!);
+        return Finish(args[0]);
+    }
+    private static int Finish(string path)
+    {
         var report=new TestReport(results.Count,results.Count-failed,failed,results.ToArray());
-        File.WriteAllText(args[0],JsonSerializer.Serialize(report,TestJson.Default.TestReport));Console.WriteLine($"RESULT {results.Count-failed}/{results.Count} passed; failed={failed}");return failed==0 ? 0 : 1;
+        File.WriteAllText(path,JsonSerializer.Serialize(report,TestJson.Default.TestReport));Console.WriteLine($"RESULT {results.Count-failed}/{results.Count} passed; failed={failed}");return failed==0 ? 0 : 1;
     }
     private sealed class FakeEffects : IWindowEffects
     {

@@ -49,9 +49,12 @@ public readonly record struct SidebarBounds(int X,int Y,int Width,int Height);
 public static class SidebarLayout
 {
     public const double DesignWidth=440,DesignHeight=684;
-    public static SidebarBounds Place(DisplayRef display)
+    public static double Density(DisplayRef display,double dpi=96)=>Math.Clamp(display.Height/(1080d*(dpi/96)),1,1.5);
+    public static SidebarBounds Place(DisplayRef display,double dpi=96)
     {
-        var scale=Math.Min(display.Width/1280d,display.Height/720d);
-        return new(display.X+(int)Math.Round(24*scale),display.Y+(int)Math.Round(18*scale),Math.Max(1,(int)Math.Round(DesignWidth*scale)),Math.Max(1,(int)Math.Round(DesignHeight*scale)));
+        var scale=dpi/96;var density=Density(display,dpi);var margin=(int)Math.Round(16*scale);
+        var availableWidth=display.Width-2*margin;
+        var widthLimit=display.Width/scale<1000?availableWidth:display.Width*.38;
+        return new(display.X+margin,display.Y+margin,Math.Max(1,(int)Math.Min(572*scale*density,widthLimit)),Math.Max(1,(int)Math.Min(980*scale*density,display.Height-2*margin)));
     }
 }

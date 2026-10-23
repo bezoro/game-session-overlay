@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Windows;
 
 namespace ApolloOverlay;
 
@@ -18,6 +19,13 @@ internal static class Native
     [DllImport("user32.dll")] internal static extern bool EnumWindows(EnumWindow callback,nint parameter);
     [DllImport("user32.dll")] internal static extern bool IsWindow(nint hwnd);
     [DllImport("user32.dll")] internal static extern bool IsWindowVisible(nint hwnd);
+    [DllImport("user32.dll")] internal static extern bool IsIconic(nint hwnd);
+    [DllImport("user32.dll")] internal static extern nint MonitorFromWindow(nint hwnd,uint flags);
+    [DllImport("user32.dll")] internal static extern uint GetDpiForWindow(nint hwnd);
+    [DllImport("dwmapi.dll")] internal static extern int DwmGetWindowAttribute(nint hwnd,uint attribute,out int value,int bytes);
+    [DllImport("user32.dll",EntryPoint="GetWindowLongPtrW")] internal static extern nint GetWindowLongPtr(nint hwnd,int index);
+    [DllImport("user32.dll",EntryPoint="GetClassLongPtrW")] internal static extern nint GetClassLongPtr(nint hwnd,int index);
+    [DllImport("user32.dll")] internal static extern nint SendMessageTimeout(nint hwnd,uint message,nuint wparam,nint lparam,uint flags,uint timeout,out nuint result);
     [DllImport("user32.dll")] internal static extern nint GetWindow(nint hwnd,uint command);
     [DllImport("user32.dll")] internal static extern uint GetWindowThreadProcessId(nint hwnd,out uint pid);
     [DllImport("user32.dll",CharSet=CharSet.Unicode)] internal static extern int GetWindowText(nint hwnd,StringBuilder text,int count);
@@ -35,4 +43,21 @@ internal static class Native
     [DllImport("user32.dll")] internal static extern bool UnhookWinEvent(nint hook);
     [DllImport("xinput1_4.dll")] internal static extern uint XInputGetState(uint slot,out XState state);
     internal static PadFrame ReadPad(uint slot) => XInputGetState(slot,out var state)==0 ? new(true,(PadButtons)state.Pad.Buttons,state.Pad.LX,state.Pad.LY) : default;
+}
+
+internal sealed class NativeTray : IDisposable
+{
+    internal const int Callback=0x8001;private NotifyData data;
+    [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]private struct NotifyData{internal uint Size;internal nint Hwnd;internal uint Id,Flags,Message;internal nint Icon;[MarshalAs(UnmanagedType.ByValTStr,SizeConst=128)]internal string Tip;internal uint State,StateMask;[MarshalAs(UnmanagedType.ByValTStr,SizeConst=256)]internal string Info;internal uint Timeout;[MarshalAs(UnmanagedType.ByValTStr,SizeConst=64)]internal string InfoTitle;internal uint InfoFlags;internal Guid Guid;internal nint BalloonIcon;}
+    [StructLayout(LayoutKind.Sequential)]private struct Point{internal int X,Y;}
+    [DllImport("shell32.dll",CharSet=CharSet.Unicode)]private static extern bool Shell_NotifyIcon(uint operation,ref NotifyData data);
+    [DllImport("user32.dll")]private static extern nint LoadIcon(nint instance,nint resource);
+    [DllImport("user32.dll")]private static extern nint CreatePopupMenu();
+    [DllImport("user32.dll",CharSet=CharSet.Unicode)]private static extern bool AppendMenu(nint menu,uint flags,nuint id,string text);
+    [DllImport("user32.dll")]private static extern uint TrackPopupMenu(nint menu,uint flags,int x,int y,int reserved,nint owner,nint exclude);
+    [DllImport("user32.dll")]private static extern bool DestroyMenu(nint menu);
+    [DllImport("user32.dll")]private static extern bool GetCursorPos(out Point point);
+    internal NativeTray(nint hwnd){data=new(){Size=(uint)Marshal.SizeOf<NotifyData>(),Hwnd=hwnd,Id=1,Flags=7,Message=Callback,Icon=LoadIcon(0,(nint)32512),Tip="Bezoro · Controle da sessão · Ctrl+Alt+Espaço",Info="",InfoTitle=""};if(!Shell_NotifyIcon(0,ref data))MessageBox.Show("Ícone da bandeja indisponível. Use Ctrl+Alt+Espaço para abrir a overlay.","Bezoro");}
+    internal uint Menu(){var menu=CreatePopupMenu();try{AppendMenu(menu,0,1,"Abrir overlay");AppendMenu(menu,0,2,"Sistema / ajustes");AppendMenu(menu,0,3,"Encerrar overlay");GetCursorPos(out var point);Native.SetForegroundWindow(data.Hwnd);return TrackPopupMenu(menu,0x102,point.X,point.Y,0,data.Hwnd,0);}finally{DestroyMenu(menu);}}
+    public void Dispose()=>Shell_NotifyIcon(2,ref data);
 }

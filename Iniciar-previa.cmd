@@ -1,2 +1,3 @@
 @echo off
-if exist "%~dp0ApolloOverlay.exe" (start "" "%~dp0ApolloOverlay.exe") else (start "" "%~dp0artifacts\publish\ApolloOverlay.exe")
+cd /d "%~dp0"
+start "" "%~dp0ApolloOverlay.exe" --preview

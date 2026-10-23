@@ -1,0 +1,80 @@
+[
+  {
+    "name": "controller",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Games/SVG/ic_fluent_games_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "d200b4e0ee14963d6ee9223960796b7c53ac926415d5a8c6724242916e0a0a86"
+  },
+  {
+    "name": "settings",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Settings/SVG/ic_fluent_settings_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "5ac05e6e11c9ec9f24703091c42ca1f5c91f4032cb0eee35c892d1872a38871b"
+  },
+  {
+    "name": "back",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Arrow%20Left/SVG/ic_fluent_arrow_left_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "746b500d735b5f6ab075151ba0588600c7bb88d43102c03b2284fd064f5080ab"
+  },
+  {
+    "name": "play",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Play/SVG/ic_fluent_play_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "5345128c168b3d238d40f90a185e7d47ac6f226db48898c3a938af11eb7e65e0"
+  },
+  {
+    "name": "apps",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Apps/SVG/ic_fluent_apps_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "49acd3ca4b7fffce746312a729ebc007ec82d3d7372be9830577f50b541fa6df"
+  },
+  {
+    "name": "taskview",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Window%20Multiple/SVG/ic_fluent_window_multiple_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "f761eecc7e527ddd571a86918ac10f303ce91e7daea1406ca4fd70c6752be99d"
+  },
+  {
+    "name": "speaker",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Speaker%202/SVG/ic_fluent_speaker_2_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "7e8c26c6b8283df8b41e786b0684fb37355bbafd626ea6567ae103f286b6c0e3"
+  },
+  {
+    "name": "mute",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Speaker%20Mute/SVG/ic_fluent_speaker_mute_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "81ec1f94fe5f2bb9d677b37bd920a2dc7f1bcffac073f0d5f799340a75501170"
+  },
+  {
+    "name": "close",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Dismiss/SVG/ic_fluent_dismiss_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "f23a501be08e93ad334f1705be0c9e8224a8e7457bd884fe59263db1c6a4f3dc"
+  },
+  {
+    "name": "gamebar",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Xbox%20Controller/SVG/ic_fluent_xbox_controller_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "276c04ab0053474d17950279071fda3c08e75c3d9f45a83d6d69dd0c15ff4575"
+  },
+  {
+    "name": "steam",
+    "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/c71c69e3a27e4436936b831c72643e6513b9f49b/icons/steam.svg",
+    "commit": "c71c69e3a27e4436936b831c72643e6513b9f49b",
+    "sha256": "5eef8f31106b81956ed908490bcf8c73abe476aa58bb9041acdf70b0d42ebcae"
+  },
+  {
+    "name": "fluent-license",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/LICENSE",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "69bc45dc42b9acb96a69823adbc6ae538374e3c0bde169b855b32c48eaaef52f"
+  },
+  {
+    "name": "simple-license",
+    "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/c71c69e3a27e4436936b831c72643e6513b9f49b/LICENSE.md",
+    "commit": "c71c69e3a27e4436936b831c72643e6513b9f49b",
+    "sha256": "9046848b63a5c92bff14e4accca80bd987e0623b74adf9226ce5198d312b79d5"
+  }
+]

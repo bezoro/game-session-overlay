@@ -1,35 +1,33 @@
-# Apollo · painel da TV
+# Bezoro · Controle da sessão
 
-A interface Fluent usa uma barra lateral compacta, cartão da sessão e ferramentas em grade 2×2. Setas/D-pad/analógico movem o foco em quatro sentidos; esquerda/direita só trocam a coluna na grade. LB/RB ou PageUp/PageDown trocam Sessão, Aplicativos e Sistema; Tab/Shift+Tab percorrem os itens. Itens indisponíveis continuam selecionáveis para mostrar o motivo, sem executar ações. X abre detalhes da janela e Sistema mantém ajustes e saída acessíveis.
+Overlay nativa WPF/.NET 10 para Windows 11. Não requer administrador, SDK nem instalação no Windows quando executada pelo pacote self-contained.
 
-As aparências clara e escura seguem automaticamente o modo de aplicativos do Windows, inclusive durante a execução, usando o tema Fluent nativo do WPF. Não há seletor manual nem alteração das preferências do sistema. Foco verde, fechamento vermelho e motivos de indisponibilidade acompanham o tema; o suporte nativo de alto contraste é preservado. Os testes alternam somente o tema interno da aplicação e não comprovam uma notificação real do Windows.
+No pacote, dê duplo clique em **Abrir overlay.cmd**. `ApolloOverlay.exe` inicia na bandeja; clique no ícone para abrir ou use **Ctrl+Alt+Espaço**. Botão direito na bandeja oferece Abrir, Sistema e Encerrar. `ApolloOverlay.exe --show` abre imediatamente. Nenhuma inicialização automática é registrada.
 
-No piloto, a janela ocupa apenas a lateral da tela escolhida; o jogo permanece visível no restante. Isso não isola as entradas do controle. A paisagem da prévia é vetorial e ilustrativa; nenhuma arte real do jogo é buscada ou inventada. Áudio é apenas informativo e permanece indisponível. Os pacotes novos ficam em `artifacts/fluent-vN/publish`, preservando as entregas anteriores.
+- Controle: segure **LB+RB+Start por650ms** para abrir/ocultar; solte a combinação antes de selecionar. Direcional/analógico navega, A seleciona, B retorna, X mostra detalhes, LB/RB trocam abas.
+- Teclado: setas, Tab/Shift+Tab, Enter/Espaço, Esc, X e PageUp/PageDown. O teclado consegue alcançar todas as opções.
+- Fechar janela: solte e mantenha uma nova pressão de A/Enter por1,5s. Soltar, B, desconectar ou perder foco cancela. Steam, Playnite, Explorer e janelas técnicas são protegidos. Não há encerramento forçado.
+- Áudio: controla a saída padrão do Windows, incluindo volume e mudo; não garante volume físico da TV nem endpoint do streaming.
+- Playnite: descoberta local ou caminho pelo Sistema. Steam: protocolo público Big Picture. Atalhos de Game Bar/Steam/Visão de tarefas são solicitações; visibilidade e controle externo não são presumidos.
 
-Prévia nativa em português para Windows x64, com piloto experimental explícito. Abra `Iniciar-previa.cmd` ou `artifacts/fluent-vN/publish/ApolloOverlay.exe`. A execução padrão é sempre **prévia segura**: janelas fictícias, ações simuladas, sem atalhos globais, Guide, envio de teclas ou inicialização de programas.
+A interface acompanha automaticamente claro/escuro e alto contraste do Windows por recursos Fluent dinâmicos. Há animações breves e opção de redução. Sem capas inventadas, captura contínua, injeção em jogos, driver ou telemetria.
 
-Requer .NET Desktop Runtime 10 x64 (não incluído). O ZIP portátil contém o executável, DLL, arquivos de runtime, documentação e atalhos. Extraia todos os arquivos juntos. Nenhuma instalação, inicialização automática ou elevação é feita.
+**Guide/Xbox permanece indisponível:** pressão longa e preservação do toque curto na Steam precisam de validação real. Os atalhos alternativos funcionam independentemente. Foco da janela não isola XInput: o jogo pode receber os mesmos botões. Prefira uma combinação que não conflite com o jogo.
 
-Use D-pad / analógico esquerdo / setas para navegar, A / Enter para escolher, B / Esc para voltar, LB/RB / PageUp/PageDown para trocar de página e X para detalhes da janela selecionada. Tab e Shift+Tab também navegam. Há três páginas: Início, Aplicativos e Ajustes. Para fechar uma janela, solte A/Enter e pressione novamente por 1,5 s; B/Esc cancela. Somente WM_CLOSE é solicitado, sem matar processos. Diálogos de salvar e recusas podem deixar o fechamento não confirmado.
+Ajustes são explicitamente salvos em `%LOCALAPPDATA%\Bezoro\GameSessionOverlay\settings.json`; configuração anterior e fonte corrompida são preservadas. Sistema permite mudar atalho, combinação, deadzone, monitor, animações e caminhos. JSON avançado aceita `Version:1`, `Hotkey` com modificadores+letra/Space, `Chord` com pelo menos dois botões comuns, `ChordHoldMs`300–2000 e `Deadzone`8000–28000. Não use Guide na combinação. Logs locais rotativos limitam-se a três arquivos de aproximadamente512KiB, sem títulos/caminhos privados.
 
-## Piloto controlado
+`--preview` é diagnóstico com ações de janelas simuladas e contexto vazio; não representa um jogo. A operação normal usa contexto e ações reais. `--capture-native DIRETÓRIO`, `--capture-alpha DIRETÓRIO` e `--native-check DIRETÓRIO` são verificações limitadas a janelas próprias; a última inclui teste reversível de áudio.
 
-Após a revisão do candidato, execute `Iniciar-teste.cmd` ou `ApolloOverlay.exe --pilot`. Leia a advertência e selecione **Iniciar teste controlado**. O jogo pode continuar recebendo o controle: foco e topmost não isolam XInput. Use ambiente sem trabalho não salvo e mantenha um teclado disponível. Siga [o checklist](docs/pilot-checklist.md) (no ZIP, `pilot-checklist.md`). Não use ainda como controle exclusivo de um jogo arbitrário.
+## Compilar e testar
 
-Guide usa somente GameInput v2 já existente em System32. Não instala runtime e não usa bits/ordinais XInput não documentados. Runtime ausente, interface incompatível ou falha de inscrição aparecem como indisponível. Inscrição não significa que o Guide chegou pelo Apollo/Aurora; só um evento real muda essa evidência. Ctrl+Alt+Espaço é a alternativa registrada apenas após iniciar o piloto; colisão é informada. É possível que outro aplicativo consuma Guide ou tenha exclusividade. Reabra o painel com Guide/atalho; para sair, vá a Ajustes → Encerrar painel, ou Alt+F4 com o próprio painel focado.
+Com .NET SDK10 instalado:
 
-O primeiro comando real captura a janela externa revelada antes de o painel retornar. Launchers Playnite/Steam e o próprio painel não substituem a janela da sessão. Aplicativos → X permite selecionar explicitamente o alvo. Confira o título sempre. A identidade inclui HWND, PID, início do processo e geração de destruição observada. EVENT_OBJECT_DESTROY invalida substituições observadas dentro do mesmo processo; há uma corrida inevitável entre observação assíncrona, verificação e envio ao HWND. Se o hook não for criado, as ações de janela são bloqueadas. Não há garantia absoluta contra reutilização instantânea antes da entrega do evento.
+```powershell
+dotnet build ApolloOverlay.sln -c Release
+dotnet tests/ApolloOverlay.Tests/bin/Release/net10.0-windows/ApolloOverlay.Tests.dll artifacts/behavior-report.json
+dotnet publish src/ApolloOverlay/ApolloOverlay.csproj -c Release -r win-x64 --self-contained true -o artifacts/minha-publicacao-nova/publish
+```
 
-Playnite exige `Playnite.FullscreenApp.exe`; a descoberta é limitada à instalação padrão em LocalAppData. Ajustes permite escolher outro caminho com teclado. O argumento é `--startfullscreen`. Steam usa `steam://open/bigpicture`; o cliente pode atualizar/reiniciar, e o envio da URI não comprova abertura em tela cheia. Não é necessário percorrer a árvore de processos para reconhecer a janela real.
+`./scripts/verify.ps1 -OutputVersion native-vN` automatiza os checks e publica em diretório novo. O produtor e seus arquivos são revisados antes da cópia para entrega; não sobrescreva uma publicação revisada.
 
-A tela principal do Windows é o ponto de partida; Ajustes percorre as telas e mudanças de topologia atualizam a posição com DPI por monitor. O painel não sabe qual tela Apollo está transmitindo e não configura monitor virtual. Jogos em tela cheia exclusiva podem cobri-lo. Apenas modo desktop/sem bordas está no escopo do piloto.
-
-Visão de tarefas e Game Bar solicitam Win+Tab e Win+G sobre o alvo revalidado. Não comprovam abertura. Ao sair para uma interface externa, o painel para de navegar por A/B/D-pad até ser reaberto. **Navegação e fechamento externos de Game Bar/Steam pelo controle não estão implementados/verificados.** Os respectivos comandos de fechar ficam indisponíveis. Não há conversão silenciosa de controle em teclas externas.
-
-O teste do overlay Steam só é habilitado quando o módulo conhecido está carregado no processo alvo. Steam aberto, origem do jogo ou encadeamento Playnite → Steam não bastam. Acesso negado ou módulo ausente deixam o recurso indisponível. Atalhos de jogos não Steam também podem funcionar quando o módulo existe. Em Ajustes → Integrações, teste, observe a resposta e reabra o painel; só então confirme manualmente. A confirmação é específica ao processo/janela/atalho e é invalidada quando mudam. Alternar não significa Fechar: visibilidade continua desconhecida.
-
-Ajustes são gravados **somente** ao selecionar Salvar ajustes no piloto, em `data/settings.json` ao lado do executável. Há substituição atômica e recuperação pela cópia `.previous`. Nenhuma fila de ações ou estado externo é persistido; reiniciar sem argumentos sempre volta à prévia. Títulos/caminhos privados não são registrados por padrão. Não há volume, force kill, suspensão/injeção de jogos ou mudanças em configurações de Apollo/Aurora/Steam/Game Bar nesta versão.
-
-## Verificação local
-
-Com PowerShell 7 e SDK .NET 10.0.402: `pwsh -NoProfile -File scripts/verify.ps1 -OutputVersion fluent-local`. O script restaura apenas da pasta local (sem pacotes externos), compila Release, executa o harness determinístico, consulta inicialização v2 sem callback, renderiza 28 estados reais WPF nas duas aparências sem mostrar janela e publica sem recompilar. Relatórios e capturas ficam em `artifacts/check-fluent-local`. A validação não inicia o piloto nem opera aplicativos externos. A suíte não substitui o teste real com TV, controle, Apollo e Aurora.
+Compatibilidade com borderless depende do Windows. Fullscreen exclusivo, DX11/12/Vulkan específicos, Bluetooth/controle virtual, HDR, DPI misto, monitores virtuais, Game Bar/Steam Overlay e streaming Apollo/Aurora exigem os testes listados em `docs/pilot-checklist.md`. Ausência de hardware não equivale a aprovação física.

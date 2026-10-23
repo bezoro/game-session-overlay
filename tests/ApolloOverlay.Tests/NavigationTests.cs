@@ -20,32 +20,7 @@ internal static class NavigationTests
         test("stable refresh preserves ID and nearby fallback",()=>{string[] before=["settings","a","b","c"];Require(Navigation.Preserve("b",before,["settings","b","a"])=="b");Require(Navigation.Preserve("b",before,["settings","a","c"])=="c");});
         test("apps pagination returns to first page without overlap",()=>{Require(Navigation.NextAppPage(0,7)==4);Require(Navigation.NextAppPage(4,7)==0);Require(Navigation.NextAppPage(0,0)==0);});
         test("unavailable busy and confirming actions cannot dispatch",()=>{Require(!Navigation.CanActivate(false,false,false));Require(!Navigation.CanActivate(true,false,true));Require(!Navigation.CanActivate(false,true,true));Require(Navigation.CanActivate(false,false,true));});
-        test("sidebar physical placement leaves game visible at three scales",()=>{foreach(var d in new[]{new DisplayRef("720",0,0,1280,720,true),new("1080",-1920,0,1920,1080,false),new("4k",0,-2160,3840,2160,false)}){var b=SidebarLayout.Place(d);Require(b.X>=d.X && b.Y>=d.Y && b.X+b.Width<=d.X+d.Width && b.Y+b.Height<=d.Y+d.Height && b.Width<d.Width*.4);}var expected=SidebarLayout.Place(new("dpi",0,0,1920,1080,true));Require(expected==new SidebarBounds(36,27,660,1026));});
-        var application=Application.Current ?? new Application {ShutdownMode=ShutdownMode.OnExplicitShutdown};ThemeSupport.FollowSystem(application);
-        test("native UI preserves app focus through refresh and tabs",()=>{var w=new MainWindow(renderOnly:true);w.Page(1);w.Move(NavDirection.Down);var selected=w.SelectedAction;Require(selected.StartsWith("window:"));w.RefreshRows();Require(w.SelectedAction==selected);w.Page(0);w.Page(1);Require(w.SelectedAction==selected);w.Close();});
-        test("native UI spatial audio remains selectable and unavailable",()=>{var w=new MainWindow(renderOnly:true);w.Move(NavDirection.Down);w.Move(NavDirection.Down);w.Move(NavDirection.Down);w.Move(NavDirection.Down);w.Move(NavDirection.Right);w.Move(NavDirection.Down);Require(w.SelectedAction=="audio");w.ActivateEntry();Require(w.Feedback.Contains("indisponível"));w.Close();});
-        test("native UI details confirmation and B cancellation stay reachable",()=>{var w=new MainWindow(renderOnly:true);w.Page(1);w.Details();Require(w.SelectedAction=="switch-detail");w.Move(NavDirection.Down);w.Move(NavDirection.Down);Require(w.SelectedAction=="close-detail");w.ActivateEntry();Require(w.Confirming);w.Back();Require(!w.Confirming);w.Close();});
-        test("native UI system exit reachable and empty Apps recoverable",()=>{var w=new MainWindow(renderOnly:true);w.Page(2);for(var i=0;i<5;i++)w.Move(NavDirection.Down);Require(w.SelectedAction=="exit");w.SetRenderState("empty-apps");Require(w.ActionIds.Contains("apps-more"));w.Close();});
-        test("native Fluent startup follows Windows app theme",()=>{ThemeSupport.FollowSystem(application);Require(ThemeSupport.FollowsSystem(application));});
-        test("native Fluent refresh preserves existing focus session and hold",()=>{
-            ThemeSupport.ForceForValidation(application,true);var w=new MainWindow(renderOnly:true);
-            try {
-                w.SetRenderState("confirmation");var selected=w.SelectedAction;var target=w.HeldCloseTarget!;var progress=w.CloseProgress;var lightSurface=w.SurfaceColor;var lightSelection=w.SelectionColor;
-                ThemeSupport.ForceForValidation(application,false);w.UpdateLayout();Require(w.Confirming && w.HeldCloseTarget!.Same(target) && w.CloseProgress==progress && w.SelectedAction==selected);
-                Require(SystemParameters.HighContrast || (w.SurfaceColor!=lightSurface && w.SelectionColor!=lightSelection));
-                ThemeSupport.ForceForValidation(application,true);w.UpdateLayout();Require(w.SurfaceColor==lightSurface && w.SelectionColor==lightSelection && w.CloseProgress==progress && w.HeldCloseTarget!.Same(target) && w.SelectedAction==selected);
-            } finally {w.Close();ThemeSupport.FollowSystem(application);}
-            Require(ThemeSupport.FollowsSystem(application));
-        });
-        foreach(var light in new[]{false,true})test($"native confirmation fully occludes actions in {(light ? "Light" : "Dark")}",()=>{
-            ThemeSupport.ForceForValidation(application,light);var window=new MainWindow(renderOnly:true);
-            try {
-                window.SetRenderState("confirmation");var dialog=(System.Windows.Controls.Border)window.FindName("ConfirmPanel");
-                var surface=(System.Windows.Media.SolidColorBrush)dialog.Background;
-                var coverage=surface.Color.A/255d*surface.Opacity*dialog.Opacity;
-                if(coverage!=1)throw new Exception($"Dialog coverage is {coverage:P1}; underlying action rows remain visible.");
-                Require(window.Confirming && window.CloseProgress>0 && window.HeldCloseTarget is not null);
-            } finally {window.Close();ThemeSupport.FollowSystem(application);}
-        });
+        test("sidebar physical placement leaves game visible at three scales",()=>{foreach(var d in new[]{new DisplayRef("720",0,0,1280,720,true),new("1080",-1920,0,1920,1080,false),new("4k",0,-2160,3840,2160,false)}){var b=SidebarLayout.Place(d);Require(b.X>=d.X && b.Y>=d.Y && b.X+b.Width<=d.X+d.Width && b.Y+b.Height<=d.Y+d.Height && b.Width<d.Width*.4);}});
+        ProductTests.Run(test);
     }
 }
