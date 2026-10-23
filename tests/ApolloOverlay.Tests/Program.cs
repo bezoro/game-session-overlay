@@ -15,6 +15,8 @@ static class Program
     [STAThread] public static int Main(string[] args)
     {
         if(args.Length is not (1 or 2)) {Console.Error.WriteLine("Expected report path");return 2;}
+        if(args.Length==2&&args[1]=="--focus-dismiss"){GuideAbiTests.FocusDismiss(Case);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--guide-status"){Case("G3-01 Guide subtitle follows actual poll without rebuilding or hidden UI work",GuideAbiTests.LegacyStatusView);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--corrections"){CorrectionTests.Run(Case,Path.GetDirectoryName(Path.GetFullPath(args[0]))!);return Finish(args[0]);}
         Case("session survives our focus and launcher chain",()=>{var s=new SessionTracker();s.Observe(Game);s.Observe(Game with{Handle=2,ProcessName="Playnite.FullscreenApp"});s.Observe(Game with{Handle=3,ProcessName="steam"});s.Observe(Game with{Handle=4,Protected=true});True(Game.Same(s.Anchor));s.Observe(Game with{Handle=5,Pid=50});Equal((nint)5,s.Anchor!.Handle);});
         Case("launcher alone does not become game",()=>{var s=new SessionTracker();s.Observe(Game with{ProcessName="steam"});Equal<WindowRef?>(null,s.Anchor);});
@@ -65,6 +67,14 @@ static class Program
         Case("guide native vtable callback ABI and successful lifetime",GuideAbiTests.Success);
         Case("guide native registration failure releases safely",GuideAbiTests.RegistrationFailure);
         Case("guide native failed unregister retains callback context",GuideAbiTests.UnregisterFailure);
+        Case("legacy Guide ABI16 offset4 and held startup never toggles",GuideAbiTests.LegacyAbi);
+        Case("legacy Guide repress error disconnect reconnect latch",GuideAbiTests.LegacyCycles);
+        Case("legacy Guide four independent slots coalesce one toggle",GuideAbiTests.LegacySlots);
+        Case("legacy Guide DLL export failure and disposed late poll unload once",GuideAbiTests.LegacyFailures);
+        Case("legacy Guide timer hidden active and simultaneous chord consumed once",GuideAbiTests.LegacyTick);
+        Case("G3-01 Guide subtitle follows actual poll without rebuilding or hidden UI work",GuideAbiTests.LegacyStatusView);
+        GuideAbiTests.FocusDismiss(Case);
+        Case("legacy Guide settings absent off on save preserves default and backup",()=>{True(!UserSettings.Parse("{}").GuideXInputEnabled);True(!UserSettings.Parse("{\"GuideXInputEnabled\":false}").GuideXInputEnabled);True(UserSettings.Parse("{\"GuideXInputEnabled\":true}").GuideXInputEnabled);var path=Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[0]))!,"guide-settings.json");UserSettings.Save(path,new());UserSettings.Save(path,new(GuideXInputEnabled:true));True(UserSettings.Load(path,out _).GuideXInputEnabled);True(!UserSettings.Parse(File.ReadAllText(path+".previous")).GuideXInputEnabled);});
         NavigationTests.Run(Case);
         CorrectionTests.Run(Case,Path.GetDirectoryName(Path.GetFullPath(args[0]))!);
         return Finish(args[0]);

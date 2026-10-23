@@ -123,7 +123,7 @@ public sealed record DisplayRef(string Id, int X, int Y, int Width, int Height, 
     public (double X,double Y,double Width,double Height) Dips(double dpi) => (X*96/dpi,Y*96/dpi,Width*96/dpi,Height*96/dpi);
 }
 
-public sealed record UserSettings(string? PlaynitePath=null, string? DisplayId=null, string SteamShortcut="Shift+Tab",int Version=1,string Hotkey="Ctrl+Alt+Space",string Chord="LB+RB+Start",int ChordHoldMs=650,int Deadzone=18000,bool ReducedMotion=false)
+public sealed record UserSettings(string? PlaynitePath=null, string? DisplayId=null, string SteamShortcut="Shift+Tab",int Version=1,string Hotkey="Ctrl+Alt+Space",string Chord="LB+RB+Start",int ChordHoldMs=650,int Deadzone=18000,bool ReducedMotion=false,bool GuideXInputEnabled=false)
 {
     public static UserSettings Parse(string text)
     {

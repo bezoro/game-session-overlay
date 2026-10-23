@@ -116,3 +116,59 @@ public unsafe sealed class GameInputBackend : IGuideBackend
         if (library!=0) { NativeLibrary.Free(library); library=0; }
     }
 }
+
+// Explicit opt-in compatibility route authorized by the user. This ordinal is undocumented;
+// compatibility remains empirical. Only Guide/status are consumed; ordinary input stays public.
+public unsafe sealed class XInputGuideBackend : IGuideBackend
+{
+    [StructLayout(LayoutKind.Explicit,Size=16)]
+    internal struct State { [FieldOffset(0)] internal uint Packet; [FieldOffset(4)] internal ushort Buttons; }
+    private readonly Func<(nint Module,nint Address)> load;
+    private readonly Action<nint> unload;
+    private readonly bool[] armed=new bool[4];
+    private nint module,address;private Action? pressed;private bool active,disposed;
+    public bool Active=>active&&address!=0;
+    public string Status{get;private set;}="Guide legado desligado. Atalho e combinação disponíveis.";
+    public XInputGuideBackend():this(Load,NativeLibrary.Free) { }
+    internal XInputGuideBackend(Func<(nint Module,nint Address)> load,Action<nint> unload){this.load=load;this.unload=unload;}
+    private static (nint Module,nint Address) Load()
+    {
+        if(!NativeLibrary.TryLoad(Path.Combine(Environment.SystemDirectory,"XInput1_4.dll"),out var library))return default;
+        return(library,GetProcAddress(library,(nint)100));
+    }
+    [DllImport("kernel32.dll",ExactSpelling=true)]private static extern nint GetProcAddress(nint module,nint ordinal);
+    public bool Initialize(out string reason)
+    {
+        reason="Leitura Guide legada indisponível. Use atalho ou combinação.";
+        if(disposed)return false;if(address!=0)return true;
+        (module,address)=load();if(module!=0&&address!=0){reason="Leitura Guide legada disponível; entrega ainda não observada.";return true;}
+        Status=reason;return false;
+    }
+    public bool Register(Action callback,out string reason)
+    {
+        reason="Guide legado indisponível.";if(disposed||address==0||active)return false;
+        pressed=callback;Array.Clear(armed);active=true;Status=reason="Guide legado experimental ativo; aguardando soltar e pressionar.";return true;
+    }
+    public void Poll()
+    {
+        if(!Active||disposed)return;var edge=false;var connected=false;var read=(delegate* unmanaged[Stdcall]<uint,State*,uint>)address;
+        for(uint slot=0;slot<4;slot++){
+            State state=default;var result=read(slot,&state);
+            if(result!=0){armed[slot]=false;continue;}connected=true;
+            if((state.Buttons&0x0400)==0)armed[slot]=true;
+            else if(armed[slot]){armed[slot]=false;edge=true;}
+        }
+        Status=connected?"Guide legado experimental ativo · toque para abrir ou fechar.":"Nenhum controle lido pelo Guide legado. Atalho e combinação disponíveis.";
+        if(edge&&active)pressed?.Invoke();
+    }
+    public void Stop(){active=false;pressed=null;Array.Clear(armed);}
+    public bool Unregister(){Stop();return true;}
+    public void Release(){if(disposed)return;Stop();disposed=true;address=0;var owned=module;module=0;if(owned!=0)unload(owned);}
+}
+
+internal static class GuidePolling
+{
+    internal static bool Allowed(bool enabled,bool diagnostic,bool preview)=>enabled&&!diagnostic&&!preview;
+    internal static int Interval(bool active,bool visible,bool connected)=>active?20:visible?30:connected?120:500;
+    internal static bool Consume(ref bool guideRequest,bool chordRequest){var toggle=guideRequest||chordRequest;guideRequest=false;return toggle;}
+}
