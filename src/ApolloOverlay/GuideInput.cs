@@ -126,10 +126,14 @@ public unsafe sealed class XInputGuideBackend : IGuideBackend
     private readonly Func<(nint Module,nint Address)> load;
     private readonly Action<nint> unload;
     private readonly bool[] armed=new bool[4];
+    private readonly bool[] openingPress=new bool[4];
+    private readonly long[] pressedAt=new long[4];
+    private readonly int[] pressLimit=new int[4];
+    private bool overlayContext,overlayVisible;private long overlayGeneration;
     private nint module,address;private Action? pressed;private bool active,disposed;
     public bool Active=>active&&address!=0;
     internal bool Held{get;private set;}internal bool SnapshotValid{get;private set;}internal int Connections{get;private set;}
-    public string Status{get;private set;}="Guide legado desligado. Atalho e combinação disponíveis.";
+    public string Status{get;private set;}="Guide legado desligado. Use a bandeja para abrir.";
     public XInputGuideBackend():this(Load,NativeLibrary.Free) { }
     internal XInputGuideBackend(Func<(nint Module,nint Address)> load,Action<nint> unload){this.load=load;this.unload=unload;}
     private static (nint Module,nint Address) Load()
@@ -140,7 +144,7 @@ public unsafe sealed class XInputGuideBackend : IGuideBackend
     [DllImport("kernel32.dll",ExactSpelling=true)]private static extern nint GetProcAddress(nint module,nint ordinal);
     public bool Initialize(out string reason)
     {
-        reason="Leitura Guide legada indisponível. Use atalho ou combinação.";
+        reason="Leitura Guide legada indisponível. Use a bandeja para abrir.";
         if(disposed)return false;if(address!=0)return true;
         (module,address)=load();if(module!=0&&address!=0){reason="Leitura Guide legada disponível; entrega ainda não observada.";return true;}
         Status=reason;return false;
@@ -159,10 +163,27 @@ public unsafe sealed class XInputGuideBackend : IGuideBackend
             if((state.Buttons&0x0400)==0)armed[slot]=true;
             else if(armed[slot]){armed[slot]=false;edge=true;}
         }
-        Status=connected?"Guide legado experimental ativo · toque para abrir ou fechar.":"Nenhum controle lido pelo Guide legado. Atalho e combinação disponíveis.";
+        Status=connected?"Guide legado experimental ativo · toque para abrir ou fechar.":"Nenhum controle lido pelo Guide legado. Use a bandeja para abrir.";
         if(edge&&active)pressed?.Invoke();
     }
-    public void Stop(){active=false;pressed=null;Held=false;SnapshotValid=false;Connections=0;Array.Clear(armed);}
+    internal void PollForOverlay(bool visible,long generation,long now,int maximumHoldMs)
+    {
+        if(!Active||disposed)return;
+        if(!overlayContext||overlayVisible!=visible||overlayGeneration!=generation){Array.Clear(armed);Array.Clear(openingPress);overlayContext=true;overlayVisible=visible;overlayGeneration=generation;}
+        var edge=false;Held=false;SnapshotValid=true;Connections=0;var read=(delegate* unmanaged[Stdcall]<uint,State*,uint>)address;
+        for(uint slot=0;slot<4;slot++){
+            State state=default;var result=read(slot,&state);
+            if(result!=0){armed[slot]=false;openingPress[slot]=false;if(result!=1167)SnapshotValid=false;continue;}
+            Connections|=1<<(int)slot;var down=(state.Buttons&0x0400)!=0;Held|=down;
+            if(!down){if(!visible&&openingPress[slot]&&now>=pressedAt[slot]&&now-pressedAt[slot]<=pressLimit[slot])edge=true;openingPress[slot]=false;armed[slot]=true;}
+            else if(armed[slot]){armed[slot]=false;if(visible)edge=true;else{openingPress[slot]=true;pressedAt[slot]=now;pressLimit[slot]=maximumHoldMs;}}
+            else if(openingPress[slot]&&(now<pressedAt[slot]||now-pressedAt[slot]>pressLimit[slot]))openingPress[slot]=false;
+        }
+        if(!SnapshotValid){Array.Clear(openingPress);edge=false;}
+        Status=Connections!=0?"Guide experimental ativo · solte para abrir; toque para fechar.":"Nenhum controle lido pelo Guide. Use a bandeja para abrir.";
+        if(edge&&active)pressed?.Invoke();
+    }
+    public void Stop(){active=false;pressed=null;Held=false;SnapshotValid=false;Connections=0;overlayContext=false;Array.Clear(armed);Array.Clear(openingPress);}
     public bool Unregister(){Stop();return true;}
     public void Release(){if(disposed)return;Stop();disposed=true;address=0;var owned=module;module=0;if(owned!=0)unload(owned);}
 }

@@ -1,0 +1,28 @@
+{
+  "state": "proposal; not integrated or raster-QA-approved",
+  "dimensions": {
+    "width": 32,
+    "height": 32,
+    "viewBox": "0 0 32 32"
+  },
+  "alpha": "no full-canvas background; outside shapes transparent",
+  "source": {
+    "path": "C:\\Users\\Bezor\\Documents\\Codex\\2026-10-22\\crie-uma-overlay-que-ative-quando\\src\\ApolloOverlay\\Assets\\Icons\\controller.svg",
+    "sha256": "d200b4e0ee14963d6ee9223960796b7c53ac926415d5a8c6724242916e0a0a86",
+    "library": "Microsoft Fluent UI System Icons Games Regular24",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Games/SVG/ic_fluent_games_24_regular.svg",
+    "license": "MIT; existing Assets/Icons/fluent-license.txt",
+    "license_sha256": "69bc45dc42b9acb96a69823adbc6ae538374e3c0bde169b855b32c48eaaef52f"
+  },
+  "derived": {
+    "path": "C:\\Users\\Bezor\\Documents\\Codex\\2026-10-22\\crie-uma-overlay-que-ative-quando\\.codex\\evidence\\return-reopen-v1\\icon-design\\overlay-controller-v1.svg",
+    "sha256": "9021754b3fc3540681ecc04b212ac7bcd40bdf8b39493d6c0d8f59dc48f5944b",
+    "changes": "official controller path unchanged; recolored light; translated; code-native layered green panel added"
+  },
+  "qa_pending": [
+    "16/20/24/32 px raster on light and dark",
+    "ICO multiframe alpha and executable/tray placement",
+    "actual DPI selection after approved integration"
+  ]
+}

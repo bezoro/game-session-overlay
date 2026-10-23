@@ -35,8 +35,6 @@ internal static class Native
     [DllImport("user32.dll")] internal static extern bool ShowWindow(nint hwnd,int command);
     [DllImport("user32.dll",SetLastError=true)] internal static extern bool PostMessage(nint hwnd,uint message,nint wparam,nint lparam);
     [DllImport("user32.dll",SetLastError=true)] internal static extern uint SendInput(uint count,Input[] inputs,int size);
-    [DllImport("user32.dll",SetLastError=true)] internal static extern bool RegisterHotKey(nint hwnd,int id,uint modifiers,uint key);
-    [DllImport("user32.dll")] internal static extern bool UnregisterHotKey(nint hwnd,int id);
     [DllImport("user32.dll")] internal static extern bool EnumDisplayMonitors(nint dc,nint rect,EnumMonitor callback,nint data);
     [DllImport("user32.dll",CharSet=CharSet.Unicode)] internal static extern bool GetMonitorInfo(nint monitor,ref MonitorInfo info);
     [DllImport("user32.dll")] internal static extern bool SetWindowPos(nint hwnd,nint after,int x,int y,int width,int height,uint flags);
@@ -52,19 +50,3 @@ internal static class Native
     }
 }
 
-internal sealed class NativeTray : IDisposable
-{
-    internal const int Callback=0x8001;private NotifyData data;
-    [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]private struct NotifyData{internal uint Size;internal nint Hwnd;internal uint Id,Flags,Message;internal nint Icon;[MarshalAs(UnmanagedType.ByValTStr,SizeConst=128)]internal string Tip;internal uint State,StateMask;[MarshalAs(UnmanagedType.ByValTStr,SizeConst=256)]internal string Info;internal uint Timeout;[MarshalAs(UnmanagedType.ByValTStr,SizeConst=64)]internal string InfoTitle;internal uint InfoFlags;internal Guid Guid;internal nint BalloonIcon;}
-    [StructLayout(LayoutKind.Sequential)]private struct Point{internal int X,Y;}
-    [DllImport("shell32.dll",CharSet=CharSet.Unicode)]private static extern bool Shell_NotifyIcon(uint operation,ref NotifyData data);
-    [DllImport("user32.dll")]private static extern nint LoadIcon(nint instance,nint resource);
-    [DllImport("user32.dll")]private static extern nint CreatePopupMenu();
-    [DllImport("user32.dll",CharSet=CharSet.Unicode)]private static extern bool AppendMenu(nint menu,uint flags,nuint id,string text);
-    [DllImport("user32.dll")]private static extern uint TrackPopupMenu(nint menu,uint flags,int x,int y,int reserved,nint owner,nint exclude);
-    [DllImport("user32.dll")]private static extern bool DestroyMenu(nint menu);
-    [DllImport("user32.dll")]private static extern bool GetCursorPos(out Point point);
-    internal NativeTray(nint hwnd){data=new(){Size=(uint)Marshal.SizeOf<NotifyData>(),Hwnd=hwnd,Id=1,Flags=7,Message=Callback,Icon=LoadIcon(0,(nint)32512),Tip="Bezoro · Controle da sessão · Ctrl+Alt+Espaço",Info="",InfoTitle=""};if(!Shell_NotifyIcon(0,ref data))MessageBox.Show("Ícone da bandeja indisponível. Use Ctrl+Alt+Espaço para abrir a overlay.","Bezoro");}
-    internal uint Menu(){var menu=CreatePopupMenu();try{AppendMenu(menu,0,1,"Abrir overlay");AppendMenu(menu,0,2,"Sistema / ajustes");AppendMenu(menu,0,3,"Encerrar overlay");GetCursorPos(out var point);Native.SetForegroundWindow(data.Hwnd);return TrackPopupMenu(menu,0x102,point.X,point.Y,0,data.Hwnd,0);}finally{DestroyMenu(menu);}}
-    public void Dispose()=>Shell_NotifyIcon(2,ref data);
-}

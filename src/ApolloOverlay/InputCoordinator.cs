@@ -32,12 +32,11 @@ internal sealed class ReleaseGate
 }
 public sealed class InputCoordinator
 {
-    private readonly OpeningChord chord;private readonly int deadzone;private PadInterpreter[] pads;private int? owner;private bool suppress;
-    public InputCoordinator(UserSettings settings){var config=OpeningConfig.Parse(settings.Hotkey,settings.Chord,settings.ChordHoldMs);chord=new(config.Buttons,config.HoldMs);deadzone=settings.Deadzone;pads=Enumerable.Range(0,4).Select(_=>new PadInterpreter(deadzone)).ToArray();}
-    public void Cancel(){chord.Reset();owner=null;suppress=true;pads=Enumerable.Range(0,4).Select(_=>new PadInterpreter(deadzone)).ToArray();}
+    private readonly int deadzone;private PadInterpreter[] pads;private int? owner;private bool suppress;
+    public InputCoordinator(UserSettings settings){deadzone=settings.Deadzone;pads=Enumerable.Range(0,4).Select(_=>new PadInterpreter(deadzone)).ToArray();}
+    public void Cancel(){owner=null;suppress=true;pads=Enumerable.Range(0,4).Select(_=>new PadInterpreter(deadzone)).ToArray();}
     public OverlayInput Update(IReadOnlyList<PadFrame> frames,bool visible,long now)
     {
-        var toggle=chord.Update(frames,now);if(toggle){owner=null;suppress=true;pads=Enumerable.Range(0,4).Select(_=>new PadInterpreter(deadzone)).ToArray();return new(true,null,default,false);}
         if(!visible)return default;
         if(suppress){if(frames.All(f=>!f.Connected||(f.Buttons==0&&Math.Abs((int)f.X)<deadzone*2/3&&Math.Abs((int)f.Y)<deadzone*2/3)))suppress=false;else return default;}
         if(owner is {} old&&!frames[old].Connected){Cancel();return new(false,old,new(0,0,false,true),false);}

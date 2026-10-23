@@ -15,6 +15,9 @@ static class Program
     [STAThread] public static int Main(string[] args)
     {
         if(args.Length is not (1 or 2)) {Console.Error.WriteLine("Expected report path");return 2;}
+        if(args.Length==2&&args[1]=="--guide-release-red"){GuideAbiTests.GuideReleaseRed(Case);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--focus-open-red"){GuideAbiTests.FocusOpenRed(Case);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--focus-suite"){GuideAbiTests.HandoffTests(Case);GuideAbiTests.FocusDismiss(Case);GuideAbiTests.FocusChecks(Case);GuideAbiTests.GuideOpeningChecks(Case,Path.GetDirectoryName(Path.GetFullPath(args[0]))!);Case("Guide status actual row",GuideAbiTests.LegacyStatusView);Case("legacy Guide ABI lifetime",GuideAbiTests.LegacyAbi);Case("legacy Guide failures",GuideAbiTests.LegacyFailures);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--dismiss-known-held"){GuideAbiTests.KnownHeldDismiss(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--dismiss-cancel"){GuideAbiTests.DismissCancellation(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--dismiss-cancel-suite"){GuideAbiTests.HandoffTests(Case);GuideAbiTests.FocusDismiss(Case);return Finish(args[0]);}

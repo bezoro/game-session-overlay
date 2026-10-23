@@ -123,13 +123,26 @@ public sealed record DisplayRef(string Id, int X, int Y, int Width, int Height, 
     public (double X,double Y,double Width,double Height) Dips(double dpi) => (X*96/dpi,Y*96/dpi,Width*96/dpi,Height*96/dpi);
 }
 
-public sealed record UserSettings(string? PlaynitePath=null, string? DisplayId=null, string SteamShortcut="Shift+Tab",int Version=1,string Hotkey="Ctrl+Alt+Space",string Chord="LB+RB+Start",int ChordHoldMs=650,int Deadzone=18000,bool ReducedMotion=false,bool GuideXInputEnabled=false)
+public sealed record UserSettings(string? PlaynitePath=null, string? DisplayId=null, string SteamShortcut="Shift+Tab",int Version=2,string Hotkey="Ctrl+Alt+Space",string Chord="LB+RB+Start",int ChordHoldMs=650,int Deadzone=18000,bool ReducedMotion=false,bool GuideXInputEnabled=false,int GuideOpenMaxHoldMs=2000)
 {
     public static UserSettings Parse(string text)
     {
-        var parsed=JsonSerializer.Deserialize(text, SettingsJson.Default.UserSettings) ?? throw new InvalidDataException("Configuração vazia.");
+        using var document=JsonDocument.Parse(text);
+        if(document.RootElement.ValueKind!=JsonValueKind.Object)throw new InvalidDataException("Configuração vazia.");
+        // Normalize only this optional field before typed deserialization: a wrong JSON type
+        // must not discard unrelated valid settings or the explicit Guide opt-in.
+        using var normalized=new MemoryStream();
+        using(var writer=new Utf8JsonWriter(normalized)){
+            writer.WriteStartObject();var limit=2000;
+            foreach(var property in document.RootElement.EnumerateObject()){
+                if(property.NameEquals(nameof(GuideOpenMaxHoldMs))){if(property.Value.ValueKind==JsonValueKind.Number&&property.Value.TryGetInt32(out var value)&&ValidGuideLimit(value))limit=value;else limit=2000;}
+                else property.WriteTo(writer);
+            }
+            writer.WriteNumber(nameof(GuideOpenMaxHoldMs),limit);writer.WriteEndObject();
+        }
+        var parsed=JsonSerializer.Deserialize(normalized.ToArray(), SettingsJson.Default.UserSettings) ?? throw new InvalidDataException("Configuração vazia.");
         if (parsed.SteamShortcut is not ("Shift+Tab" or "Ctrl+Tab") || (parsed.PlaynitePath is not null && (!Path.IsPathFullyQualified(parsed.PlaynitePath) || !parsed.PlaynitePath.EndsWith(".exe",StringComparison.OrdinalIgnoreCase)))) throw new InvalidDataException("Configuração inválida.");
-        if(parsed.Version!=1 || parsed.Deadzone<8000 || parsed.Deadzone>28000)throw new InvalidDataException("Versão ou deadzone inválida.");
+        if(parsed.Version is not (1 or 2) || parsed.Deadzone<8000 || parsed.Deadzone>28000)throw new InvalidDataException("Versão ou deadzone inválida.");
         try{_=OpeningConfig.Parse(parsed.Hotkey,parsed.Chord,parsed.ChordHoldMs);}catch(ArgumentException e){throw new InvalidDataException("Atalho ou combinação inválida.",e);}
         return parsed;
     }
@@ -145,6 +158,7 @@ public sealed record UserSettings(string? PlaynitePath=null, string? DisplayId=n
     }
     public static void Save(string path, UserSettings settings)
     {
+        settings=settings with{Version=2};
         _=Parse(JsonSerializer.Serialize(settings,SettingsJson.Default.UserSettings));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var pending=path+".pending";
@@ -157,5 +171,6 @@ public sealed record UserSettings(string? PlaynitePath=null, string? DisplayId=n
             File.Replace(pending,path,currentIsGood ? path+".previous" : null);
         } else File.Move(pending,path);
     }
+    internal static bool ValidGuideLimit(int value)=>value is >=500 and <=3000&&value%100==0;
 }
 [JsonSerializable(typeof(UserSettings))] internal partial class SettingsJson : JsonSerializerContext;

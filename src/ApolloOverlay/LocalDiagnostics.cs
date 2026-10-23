@@ -12,7 +12,7 @@ public sealed class LocalDiagnostics
         if(File.Exists(SettingsPath))return UserSettings.Load(SettingsPath,out status);
         var legacy=Path.Combine(AppContext.BaseDirectory,"data","settings.json");
         if(File.Exists(legacy)){var settings=UserSettings.Load(legacy,out status);status="Ajustes locais importados em memória; Salvar migra para AppData e preserva o original.";return settings;}
-        status="Pronto · "+new UserSettings().Hotkey;return new();
+        status="Pronto · Guide ou duplo clique na bandeja";return new();
     }
     public void Save(UserSettings settings)=>UserSettings.Save(SettingsPath,settings);
     public void Log(string category,ResultKind outcome)
