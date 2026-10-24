@@ -20,6 +20,7 @@ public interface IPlatform : IDisposable
     ModuleEvidence SteamEvidence(WindowRef? window);
     Task<ActionResult> Switch(WindowRef window);
     Task<ActionResult> Close(WindowRef window,CancellationToken cancellation);
+    Task<ActionResult> Minimize(WindowRef window,CancellationToken cancellation)=>Task.FromResult(new ActionResult(ResultKind.Unavailable,"Minimização indisponível nesta plataforma."));
     Task<ActionResult> Shortcut(WindowRef window,string keys);
     Task<ActionResult> TaskView()=>Task.FromResult(new ActionResult(ResultKind.Unavailable,"Visão de tarefas indisponível nesta plataforma."));
     bool CanSteamMenu(WindowRef? window)=>false;
@@ -43,6 +44,7 @@ public sealed class PreviewPlatform : IPlatform
         windows.RemoveAll(window.Same); return Task.FromResult(new ActionResult(ResultKind.Simulated,$"Fecharia somente {window.Title}."));
     }
     public Task<ActionResult> Shortcut(WindowRef window,string keys)=>Task.FromResult(new ActionResult(ResultKind.Simulated,$"Solicitaria {keys}; nenhum comando externo foi enviado."));
+    public Task<ActionResult> Minimize(WindowRef window,CancellationToken cancellation)=>Task.FromResult(cancellation.IsCancellationRequested?new ActionResult(ResultKind.Cancelled,"Nada foi enviado."):!Valid(window)||window.Protected?new ActionResult(ResultKind.Unavailable,"Janela indisponível para minimizar."):new ActionResult(ResultKind.Simulated,$"Minimizaria {window.Title}; nenhum comando externo foi enviado."));
     public ActionResult Launch(bool playnite,string? path)=>new(ResultKind.Simulated,playnite ? "Solicitaria o Playnite em tela cheia." : "Solicitaria Steam Big Picture.");
     public void Dispose() { }
 }
@@ -97,7 +99,7 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
     public IReadOnlyList<DisplayRef> Displays()
     {
         var displays=new List<DisplayRef>();
-        Native.EnumDisplayMonitors(0,0,(monitor,_,_,_)=> { var info=new Native.MonitorInfo { Size=Marshal.SizeOf<Native.MonitorInfo>(),Device="" }; if (Native.GetMonitorInfo(monitor,ref info)) displays.Add(new(info.Device,info.Monitor.Left,info.Monitor.Top,info.Monitor.Right-info.Monitor.Left,info.Monitor.Bottom-info.Monitor.Top,(info.Flags&1)!=0)); return true; },0);
+        Native.EnumDisplayMonitors(0,0,(monitor,_,_,_)=> { var info=new Native.MonitorInfo { Size=Marshal.SizeOf<Native.MonitorInfo>(),Device="" }; if (Native.GetMonitorInfo(monitor,ref info)) displays.Add(new(info.Device,info.Work.Left,info.Work.Top,info.Work.Right-info.Work.Left,info.Work.Bottom-info.Work.Top,(info.Flags&1)!=0)); return true; },0);
         return displays;
     }
     public ModuleEvidence SteamEvidence(WindowRef? window)
@@ -118,6 +120,10 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
         if(!Valid(window))return null;try{Native.SendMessageTimeout(window.Handle,0x7F,2,0,2,100,out var icon);var handle=icon==0?Native.GetClassLongPtr(window.Handle,-14):(nint)icon;if(handle==0)return null;var image=Imaging.CreateBitmapSourceFromHIcon(handle,System.Windows.Int32Rect.Empty,BitmapSizeOptions.FromWidthAndHeight(48,48));image.Freeze();return image;}catch(Exception e)when(e is Win32Exception or ArgumentException or InvalidOperationException){return null;}
     }
     public Task<ActionResult> Close(WindowRef window,CancellationToken cancellation)=>new GuardedActions(this).Close(window,cancellation);
+    public Task<ActionResult> Minimize(WindowRef window,CancellationToken cancellation)=>new GuardedActions(this).Minimize(window,cancellation);
+    public bool SupportsMinimize=>true;
+    public bool IsMinimized(WindowRef window)=>Valid(window)&&Native.IsIconic(window.Handle);
+    public bool RequestMinimize(WindowRef window)=>!disposed&&!window.Protected&&Valid(window)&&Native.ShowWindowAsync(window.Handle,6);
     public Task<ActionResult> Shortcut(WindowRef window,string keys)=>keys is "Win+G" or "Shift+Tab" or "Ctrl+Tab"?new GuardedActions(this).Shortcut(window,keys):Task.FromResult(new ActionResult(ResultKind.Unavailable,"Atalho não permitido neste caminho."));
     public WindowObservation ObserveWindow(WindowRef window)=>ClosureObservation.Classify(window,Probe(window.Handle));
     private WindowProbe Probe(nint hwnd)

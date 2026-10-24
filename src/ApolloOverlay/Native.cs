@@ -13,6 +13,9 @@ internal static class Native
     [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)] internal struct MonitorInfo { public int Size; public Rect Monitor,Work; public uint Flags; [MarshalAs(UnmanagedType.ByValTStr,SizeConst=32)] public string Device; }
     [StructLayout(LayoutKind.Sequential)] internal struct Gamepad { public ushort Buttons; public byte LeftTrigger,RightTrigger; public short LX,LY,RX,RY; }
     [StructLayout(LayoutKind.Sequential)] internal struct XState { public uint Packet; public Gamepad Pad; }
+    [StructLayout(LayoutKind.Sequential)] internal struct XBattery { public byte Type,Level; }
+    [StructLayout(LayoutKind.Sequential)] internal struct XVibration { public ushort Left,Right; }
+    [StructLayout(LayoutKind.Sequential)] internal struct XCapabilities { public byte Type,SubType; public ushort Flags; public Gamepad Pad; public XVibration Vibration; }
     // INPUT is 40 bytes on x64: union starts at offset 8 and is 32 bytes.
     [StructLayout(LayoutKind.Explicit,Size=40)] internal struct Input { [FieldOffset(0)] public uint Type; [FieldOffset(8)] public ushort Key; [FieldOffset(12)] public uint Flags; }
     [DllImport("user32.dll")] internal static extern nint GetForegroundWindow();
@@ -33,6 +36,7 @@ internal static class Native
     [DllImport("user32.dll",CharSet=CharSet.Unicode)] internal static extern int GetClassName(nint hwnd,StringBuilder text,int count);
     [DllImport("user32.dll")] internal static extern bool SetForegroundWindow(nint hwnd);
     [DllImport("user32.dll")] internal static extern bool ShowWindow(nint hwnd,int command);
+    [DllImport("user32.dll")] internal static extern bool ShowWindowAsync(nint hwnd,int command);
     [DllImport("user32.dll",SetLastError=true)] internal static extern bool PostMessage(nint hwnd,uint message,nint wparam,nint lparam);
     [DllImport("user32.dll",SetLastError=true)] internal static extern uint SendInput(uint count,Input[] inputs,int size);
     [DllImport("user32.dll")] internal static extern bool EnumDisplayMonitors(nint dc,nint rect,EnumMonitor callback,nint data);
@@ -41,6 +45,9 @@ internal static class Native
     [DllImport("user32.dll")] internal static extern nint SetWinEventHook(uint min,uint max,nint module,WinEvent callback,uint pid,uint thread,uint flags);
     [DllImport("user32.dll")] internal static extern bool UnhookWinEvent(nint hook);
     [DllImport("xinput1_4.dll")] internal static extern uint XInputGetState(uint slot,out XState state);
+    [DllImport("xinput1_4.dll")] internal static extern uint XInputGetBatteryInformation(uint slot,byte deviceType,out XBattery battery);
+    [DllImport("xinput1_4.dll")] internal static extern uint XInputGetCapabilities(uint slot,uint flags,out XCapabilities capabilities);
+    [DllImport("xinput1_4.dll")] internal static extern uint XInputSetState(uint slot,ref XVibration vibration);
     internal static PadFrame ReadPad(uint slot){var result=XInputGetState(slot,out var state);return result==0?new(true,(PadButtons)state.Pad.Buttons,state.Pad.LX,state.Pad.LY,state.Pad.RX,state.Pad.RY,state.Pad.LeftTrigger,state.Pad.RightTrigger):new(false,0,ReadFailed:result!=1167);}
     internal static Input[] KeyInputs(string keys)
     {
