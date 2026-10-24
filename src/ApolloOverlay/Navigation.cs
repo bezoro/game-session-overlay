@@ -34,6 +34,13 @@ public static class Navigation
         return ids.Count==0 ? state : state with {Id=ids[index]};
     }
     public static NavState Sequential(NavState state,IReadOnlyList<string> ids,int step) => ids.Count==0 ? state : state with {Id=ids[(Index(ids,state.Id)+step+ids.Count)%ids.Count]};
+    public static string Spatial(string selected,IReadOnlyList<(string Id,double X,double Y)> visible,NavDirection direction)
+    {
+        if(visible.Count==0)return selected;var origin=visible.FirstOrDefault(p=>p.Id==selected);if(origin.Id is null)return visible[0].Id;
+        var vertical=direction is NavDirection.Up or NavDirection.Down;var sign=direction is NavDirection.Up or NavDirection.Left?-1:1;
+        return visible.Where(p=>p.Id!=selected&&(vertical?p.Y-origin.Y:p.X-origin.X)*sign>1&&(vertical||Math.Abs(p.Y-origin.Y)<=20))
+            .OrderBy(p=>Math.Abs(vertical?p.Y-origin.Y:p.X-origin.X)+Math.Abs(vertical?p.X-origin.X:p.Y-origin.Y)*2).Select(p=>p.Id).FirstOrDefault()??selected;
+    }
     public static string Preserve(string selected,IReadOnlyList<string> previous,IReadOnlyList<string> current)
     {
         if(current.Count==0)return "";
@@ -50,11 +57,13 @@ public static class SidebarLayout
 {
     public const double DesignWidth=440,DesignHeight=684;
     public static double Density(DisplayRef display,double dpi=96)=>Math.Clamp(display.Height/(1080d*(dpi/96)),1,1.5);
-    public static SidebarBounds Place(DisplayRef display,double dpi=96)
+    public static double EffectiveScale(DisplayRef display,double dpi,int userPercent)=>Density(display,dpi)*(userPercent is 100 or 115 or 130 or 150?userPercent:100)/100d;
+    public static SidebarBounds Place(DisplayRef display,double dpi=96,int userPercent=100,string side="Left")
     {
-        var scale=dpi/96;var density=Density(display,dpi);var margin=(int)Math.Round(16*scale);
+        var scale=dpi/96;var density=EffectiveScale(display,dpi,userPercent);var margin=(int)Math.Round(16*scale);
         var availableWidth=display.Width-2*margin;
         var widthLimit=display.Width/scale<1000?availableWidth:display.Width*.38;
-        return new(display.X+margin,display.Y+margin,Math.Max(1,(int)Math.Min(572*scale*density,widthLimit)),Math.Max(1,(int)Math.Min(980*scale*density,display.Height-2*margin)));
+        var width=Math.Max(1,(int)Math.Min(572*scale*density,widthLimit));
+        return new(side=="Right"?display.X+display.Width-margin-width:display.X+margin,display.Y+margin,width,Math.Max(1,(int)Math.Min(980*scale*density,display.Height-2*margin)));
     }
 }

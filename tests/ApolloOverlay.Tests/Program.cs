@@ -16,6 +16,11 @@ static class Program
     {
         if(args.Length is not (1 or 2)) {Console.Error.WriteLine("Expected report path");return 2;}
         if(args.Length==2&&args[1]=="--review-captures"){ReviewFixTests.Capture(args[0]);return 0;}
+        if(args.Length==2&&args[1]=="--session-hub-services"){SessionHubServiceTests.Run(Case);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--session-hub-captures"){SessionHubTests.Capture(args[0]);return 0;}
+        if(args.Length==2&&args[1]=="--session-hub-focus-captures"){SessionHubTests.Capture(args[0],true);return 0;}
+        if(args.Length==2&&args[1]=="--session-hub"){SessionHubTests.Run(Case);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--session-hub-telemetry"){SessionHubTests.TelemetryFailures(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--premium"){PremiumInterfaceTests.Run(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--premium-safety"){PremiumInterfaceTests.RunSafety(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--premium-local-dismiss"){PremiumInterfaceTests.LocalDismissalRegression(Case);return Finish(args[0]);}
@@ -98,6 +103,7 @@ static class Program
         GuideAbiTests.HandoffTests(Case);
         Case("legacy Guide settings absent off on save preserves default and backup",()=>{True(!UserSettings.Parse("{}").GuideXInputEnabled);True(!UserSettings.Parse("{\"GuideXInputEnabled\":false}").GuideXInputEnabled);True(UserSettings.Parse("{\"GuideXInputEnabled\":true}").GuideXInputEnabled);var path=Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[0]))!,"guide-settings.json");UserSettings.Save(path,new());UserSettings.Save(path,new(GuideXInputEnabled:true));True(UserSettings.Load(path,out _).GuideXInputEnabled);True(!UserSettings.Parse(File.ReadAllText(path+".previous")).GuideXInputEnabled);});
         PremiumInterfaceTests.Run(Case);
+        SessionHubTests.Run(Case);
         SessionHubServiceTests.Run(Case);
         ReviewFixTests.Run(Case);
         NavigationTests.Run(Case);

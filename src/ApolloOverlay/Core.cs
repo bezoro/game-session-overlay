@@ -22,6 +22,7 @@ public sealed class SessionTracker
         Anchor = window;
     }
     public void Select(WindowRef window) { if (!window.Protected && !window.Launcher) Anchor = window; }
+    public void Clear()=>Anchor=null;
     public void ClearIfStale(Func<WindowRef, bool> valid) { if (Anchor is not null && !valid(Anchor)) Anchor = null; }
 }
 
@@ -123,12 +124,14 @@ public sealed record DisplayRef(string Id, int X, int Y, int Width, int Height, 
     public (double X,double Y,double Width,double Height) Dips(double dpi) => (X*96/dpi,Y*96/dpi,Width*96/dpi,Height*96/dpi);
 }
 
-public sealed record UserSettings(string? PlaynitePath=null, string? DisplayId=null, string SteamShortcut="Shift+Tab",int Version=2,string Hotkey="Ctrl+Alt+Space",string Chord="LB+RB+Start",int ChordHoldMs=650,int Deadzone=18000,bool ReducedMotion=false,bool GuideXInputEnabled=false,int GuideOpenMaxHoldMs=2000)
+public sealed record UserSettings(string? PlaynitePath=null, string? DisplayId=null, string SteamShortcut="Shift+Tab",int Version=3,string Hotkey="Ctrl+Alt+Space",string Chord="LB+RB+Start",int ChordHoldMs=650,int Deadzone=18000,bool ReducedMotion=false,bool GuideXInputEnabled=false,int GuideOpenMaxHoldMs=2000,string[]? FavoriteQuickActions=null,int UiScalePercent=100,string PanelSide="Left",bool SoundFeedbackEnabled=false,bool HapticFeedbackEnabled=false,bool SetupSeen=false)
 {
-    public static UserSettings Parse(string text)
+    public static UserSettings Parse(string text)=>Parse(text,out _);
+    private static UserSettings Parse(string text,out bool recovered)
     {
-        using var document=JsonDocument.Parse(text);
-        if(document.RootElement.ValueKind!=JsonValueKind.Object)throw new InvalidDataException("Configuração vazia.");
+        using var original=JsonDocument.Parse(text);
+        if(original.RootElement.ValueKind!=JsonValueKind.Object)throw new InvalidDataException("Configuração vazia.");
+        using var document=JsonDocument.Parse(SessionHubSettings.NormalizeJson(original.RootElement,out recovered));
         // Normalize only this optional field before typed deserialization: a wrong JSON type
         // must not discard unrelated valid settings or the explicit Guide opt-in.
         using var normalized=new MemoryStream();
@@ -142,15 +145,15 @@ public sealed record UserSettings(string? PlaynitePath=null, string? DisplayId=n
         }
         var parsed=JsonSerializer.Deserialize(normalized.ToArray(), SettingsJson.Default.UserSettings) ?? throw new InvalidDataException("Configuração vazia.");
         if (parsed.SteamShortcut is not ("Shift+Tab" or "Ctrl+Tab") || (parsed.PlaynitePath is not null && (!Path.IsPathFullyQualified(parsed.PlaynitePath) || !parsed.PlaynitePath.EndsWith(".exe",StringComparison.OrdinalIgnoreCase)))) throw new InvalidDataException("Configuração inválida.");
-        if(parsed.Version is not (1 or 2) || parsed.Deadzone<8000 || parsed.Deadzone>28000)throw new InvalidDataException("Versão ou deadzone inválida.");
+        if(parsed.Version is not (1 or 2 or 3) || parsed.Deadzone<8000 || parsed.Deadzone>28000)throw new InvalidDataException("Versão ou deadzone inválida.");
         try{_=OpeningConfig.Parse(parsed.Hotkey,parsed.Chord,parsed.ChordHoldMs);}catch(ArgumentException e){throw new InvalidDataException("Atalho ou combinação inválida.",e);}
-        return parsed;
+        return SessionHubSettings.Copy(parsed);
     }
     public static UserSettings Load(string path, out string message)
     {
         message="Configuração padrão; nada será salvo automaticamente.";
         if (!File.Exists(path)) return new();
-        try { return Parse(File.ReadAllText(path)); }
+        try { var value=Parse(File.ReadAllText(path),out var recovered);if(recovered)message="Alguns ajustes opcionais foram recuperados; outros valores foram preservados.";return value; }
         catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException or InvalidDataException) {
             try { var restored=Parse(File.ReadAllText(path+".previous")); message="Configuração anterior recuperada em memória; salve para restaurar."; return restored; }
             catch (Exception back) when (back is JsonException or IOException or UnauthorizedAccessException or InvalidDataException) { message="Configuração inválida; usando padrão seguro."; return new(); }
@@ -158,7 +161,7 @@ public sealed record UserSettings(string? PlaynitePath=null, string? DisplayId=n
     }
     public static void Save(string path, UserSettings settings)
     {
-        settings=settings with{Version=2};
+        settings=SessionHubSettings.Copy(settings);
         _=Parse(JsonSerializer.Serialize(settings,SettingsJson.Default.UserSettings));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var pending=path+".pending";

@@ -19,7 +19,12 @@ public partial class MainWindow : Window
     internal readonly OverlayController Controller;
     internal Action<string>? ResultNotificationRequest {private get;set;}
     private TextBox? operationText;
-    private (string Subpage,NavState Navigation,string ParentSelection,WindowRef? Detail,double ScrollOffset)? operationOrigin;
+    private readonly OverlayViewState view=new();
+    private readonly IApplicationAudio applicationAudio;
+    private readonly IControllerDevices controllerDevices;
+    private readonly IFeedbackService feedbackService;
+    private ApplicationAudioSnapshot appAudio=new(null,0,0,ApplicationAudioAvailability.Unavailable,ApplicationMuteState.Unknown,0,0,"Áudio indisponível");
+    private WindowRef? audioTarget;private long audioGeneration,audioRevision,operationGeneration,nextBatteryRead;private uint? activeSlot;private long activeEpoch;private int connectedControllers;private string controllerStatus="Aguardando leitura do controle";
     internal Func<OverlayInputContext>? InputContextReader {private get;set;}
     private OverlayInputContext InputContext=>InputContextReader?.Invoke()??new(focusConfirmed,IsVisible,IsActive,OwnForeground,ownedDialog,exiting);
     internal Func<int,short> PhysicalKeyReader {private get;set;}=Native.GetAsyncKeyState;
@@ -32,6 +37,7 @@ public partial class MainWindow : Window
     internal Task DialogTask {get;private set;}=Task.CompletedTask;
     private long focusCycle;private bool focusConfirmed,navigationKeysArmed=true;
     private readonly WindowsAudio audio=new();private InputCoordinator input;private readonly CloseHold closeHold=new();private readonly DispatcherTimer timer;
+    private bool revealPending,compactChrome;
     private bool pointerDown,pointerCaptured,narrow;private string inputMethod="keyboard";
     private readonly bool diagnostic;private HwndSource? source;private TrayHost? tray;private bool busy,exiting,opening,keyboardDown;private int? closeSource,dispatchSource;private CancellationTokenSource? pending;
     private XInputGuideBackend? guideBackend;private GuideConnection? guideConnection;private bool guideToggleRequested;
@@ -93,24 +99,32 @@ public partial class MainWindow : Window
         UpdatePolling();
     }
     private sealed record Entry(string Id,Button Button,Action Run,bool Available,string Reason);
-    private readonly List<Entry> entries=[];private NavState navigation=new("return");private int page;private string subpage="";private WindowRef? detail;private string subSelection="return";private readonly string[] tabSelection=["return","refresh-apps","display"];
-    public MainWindow(bool pilotRequested=false,bool renderOnly=false,IPlatform? platform=null,LocalDiagnostics? diagnostics=null)
+    private readonly List<Entry> entries=[];private NavState navigation=new("session-card");private int page;private string subpage="";private WindowRef? detail;
+    public MainWindow(bool pilotRequested=false,bool renderOnly=false,IPlatform? platform=null,LocalDiagnostics? diagnostics=null,IApplicationAudio? appAudioService=null,IControllerDevices? devices=null,IFeedbackService? feedback=null)
     {
         diagnostic=renderOnly;InitializeComponent();Controller=new(platform??(renderOnly?new PreviewPlatform():null),diagnostics);input=new(Controller.Settings);
+        controllerDevices=devices??(diagnostic||Controller.Platform.IsPreview?new PreviewControllerDevices():new ControllerDevices());
+        applicationAudio=appAudioService??(diagnostic||Controller.Platform.IsPreview?new PreviewApplicationAudio():new ApplicationAudio(Controller.Platform.Valid));
+        feedbackService=feedback??(diagnostic||Controller.Platform.IsPreview?new PreviewFeedbackService():new FeedbackService(controllerDevices));applicationAudio.Changed+=ApplicationAudioChanged;feedbackService.Changed+=FeedbackStatusChanged;feedbackService.Configure(Controller.Settings.SoundFeedbackEnabled,Controller.Settings.HapticFeedbackEnabled);
         timer=new DispatcherTimer(DispatcherPriority.Input){Interval=TimeSpan.FromMilliseconds(120)};timer.Tick+=Tick;
         HomeTab.Click+=(_,_)=>{if(NavigationAllowed)Page(0);};AppsTab.Click+=(_,_)=>{if(NavigationAllowed)Page(1);};SettingsTab.Click+=(_,_)=>{if(NavigationAllowed)Page(2);};SettingsGear.Click+=(_,_)=>{if(NavigationAllowed)Page(2);};
         BackButton.Click+=(_,_)=>{if(NavigationAllowed)Back();};
+        foreach(var fixedButton in new[]{SessionCardButton,SessionOptionsButton}){fixedButton.Click+=(_,_)=>{navigation=new((string)fixedButton.Tag);dispatchSource=-1;ActivateEntry();dispatchSource=null;};fixedButton.GotKeyboardFocus+=(_,_)=>{if(fixedButton.Tag is string id&&navigation.Id!=id){navigation=new(id);SetSelection(false);}};}
+        ContextCard.Focusable=true;SessionCardButton.Resources["DescriptionTarget"]=ContextCard;
         CancelCloseButton.Click+=(_,_)=>{if(NavigationAllowed)Back();};
         SaveSettingsButton.Click+=(_,_)=>{if(NavigationAllowed&&!busy&&!TransitionPending)Save();};
         DiscardSettingsButton.Click+=(_,_)=>{if(NavigationAllowed&&!busy&&!TransitionPending){Controller.Discard();ApplySettings();RefreshRows();FeedbackText("Alterações descartadas.");}};
         DismissOperationButton.Click+=(_,_)=>DismissOperation();
         OperationDetailsButton.Click+=(_,_)=>OpenOperation();
+        foreach(var fixedEntry in new[]{(OperationDetailsButton,"operation-details"),(DismissOperationButton,"dismiss-operation"),(SaveSettingsButton,"save-pending"),(DiscardSettingsButton,"discard-pending"),(HoldCloseButton,"confirm-hold"),(CancelCloseButton,"confirm-cancel")}){fixedEntry.Item1.Tag=fixedEntry.Item2;fixedEntry.Item1.GotKeyboardFocus+=(_,_)=>{navigation=new(fixedEntry.Item2);SaveView();};}
         HoldCloseButton.PreviewMouseLeftButtonDown+=(_,e)=>{if(!NavigationAllowed||!Confirming)return;e.Handled=true;if(closeSource!=-1){CancelHold();FeedbackText("Origem da pressão mudou; fechamento cancelado.");return;}pointerDown=true;pointerCaptured=HoldCloseButton.CaptureMouse();if(!pointerCaptured)CancelHold();};
         HoldCloseButton.PreviewMouseLeftButtonUp+=(_,e)=>{e.Handled=true;pointerDown=false;if(Confirming&&closeSource==-1)AdvancePointerHold(false,true,true,Environment.TickCount64);ReleasePointer();};
         HoldCloseButton.MouseLeave+=(_,_)=>{if(pointerDown){CancelHold();FeedbackText("Pressão cancelada: o ponteiro saiu do botão.");}};
         HoldCloseButton.LostMouseCapture+=(_,_)=>{if(pointerDown){CancelHold();FeedbackText("Pressão cancelada: captura do mouse perdida.");}};
         PreviewMouseDown+=(_,_)=>{inputMethod="mouse";UpdateHints();};
-        Rows.SizeChanged+=(_,e)=>{var compact=e.NewSize.Width<390;if(compact!=narrow){narrow=compact;if(!Confirming){var offset=ContentScroll.VerticalOffset;RefreshRows();ContentScroll.ScrollToVerticalOffset(offset);}}};
+        ((FrameworkElement)Content).SizeChanged+=(_,e)=>UpdateCompactChrome(e.NewSize.Height);
+        Rows.LayoutUpdated+=(_,_)=>{if(revealPending&&Rows.IsArrangeValid&&ContentScroll.ViewportHeight>0){revealPending=false;if(Keyboard.FocusedElement is FrameworkElement editor&&editor is TextBox or Slider&&Rows.IsAncestorOf(editor))editor.BringIntoView();else SetSelection(false);}};
+        Rows.SizeChanged+=(_,e)=>{var compact=e.NewSize.Width<390;if(compact!=narrow){narrow=compact;if(!Confirming&&view.Current.Route==OverlayRoute.Hub){var offset=ContentScroll.VerticalOffset;RefreshRows();ContentScroll.ScrollToVerticalOffset(offset);}}};
         PreviewKeyDown+=OnKeyDown;PreviewKeyUp+=(_,e)=>{var key=NormalizeKey(e.Key,e.SystemKey,e.ImeProcessedKey,e.DeadCharProcessedKey);if(key!=Key.None)heldKeys.Remove(key);else if(TransitionPending)RejectHandoff("Transição cancelada; tecla não identificada.");if(!navigationKeysArmed&&heldKeys.Count==0&&PhysicalKeysNeutral())navigationKeysArmed=true;if(e.Key is Key.Enter or Key.Space){keyboardDown=false;e.Handled=true;}};
         Deactivated+=(_,_)=>{if(opening||exiting||(committing&&!busy))return;RevokeFocus("deactivated",!ownedDialog);CancelHandoff();heldKeys.Clear();CancelHold();input.Cancel();if(IsVisible&&!ownedDialog){HideNow(false);}};
         SourceInitialized+=(_,_)=>{source=HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);source.CompositionTarget.BackgroundColor=Colors.Transparent;source.AddHook(WindowMessage);if(!diagnostic)tray=new(Dispatcher,OpenPanel,ExitFromTray);};
@@ -159,7 +173,7 @@ public partial class MainWindow : Window
     private bool CurrentCycle(long cycle)=>cycle==focusCycle&&!exiting&&IsVisible;
     private bool OwnForeground=>FocusForeground()==new WindowInteropHelper(this).Handle;
     private void TraceFocus(string checkpoint,ResultKind kind,string detail=""){if(!Controller.Platform.IsPreview)Controller.Diagnostics.Log($"focus/{focusCycle}/{checkpoint}/foreground={OwnForeground}{detail}",kind);}
-    private void RevokeFocus(string reason,bool supersede=true){CancelOpenAnimation();if(supersede)focusCycle++;focusConfirmed=false;navigationKeysArmed=false;input.Cancel();CancelHold();TraceFocus(reason,ResultKind.Cancelled);}
+    private void RevokeFocus(string reason,bool supersede=true){feedbackService.Suspend();applicationAudio.Suspend();audioGeneration++;audioTarget=null;nextBatteryRead=0;CancelOpenAnimation();if(supersede)focusCycle++;focusConfirmed=false;navigationKeysArmed=false;input.Cancel();CancelHold();TraceFocus(reason,ResultKind.Cancelled);}
     private bool NavigationAllowed
     {
         get{var context=InputContext;if(!context.Confirmed||!context.Visible||context.OwnedDialog||context.Exiting)return false;if(context.Active&&context.OwnForeground)return true;RevokeFocus("lost");FeedbackText("Foco perdido. Abra novamente com duplo clique na bandeja; B ou Esc dispensa o painel.");return false;}
@@ -170,7 +184,7 @@ public partial class MainWindow : Window
         TraceFocus("request-native",ResultKind.Requested,$"/activate={activated}/request={requested}");
         for(var attempt=0;attempt<=6;attempt++){
             if(!CurrentCycle(cycle)||ownedDialog)return false;
-            if(IsActive&&OwnForeground){focusConfirmed=true;navigationKeysArmed=heldKeys.Count==0&&PhysicalKeysNeutral();input.Cancel();TraceFocus("confirmed",ResultKind.Completed);return true;}
+            if(IsActive&&OwnForeground){focusConfirmed=true;navigationKeysArmed=heldKeys.Count==0&&PhysicalKeysNeutral();input.Cancel();TrackApplicationAudio();TraceFocus("confirmed",ResultKind.Completed);return true;}
             if(!requested||attempt==6){TraceFocus("unconfirmed",requested?ResultKind.Unknown:ResultKind.Failed);FeedbackText("O Windows não confirmou o foco. Tente duplo clique na bandeja; B ou Esc dispensa o painel.");return false;}
             await Task.Delay(50);
         }return false;
@@ -192,7 +206,7 @@ public partial class MainWindow : Window
         var chosen=screens.FirstOrDefault(d=>d.Id==Controller.Settings.DisplayId)??active??screens.FirstOrDefault(d=>d.Primary)??screens[0];var hwnd=new WindowInteropHelper(this).Handle;
         if(hwnd!=0)Native.SetWindowPos(hwnd,0,chosen.X+16,chosen.Y+16,0,0,0x15);
         var dpi=DpiReader(hwnd);if(dpi==0)dpi=96;var scale=dpi/96d;
-        var density=SidebarLayout.Density(chosen,dpi);((FrameworkElement)Content).LayoutTransform=new ScaleTransform(density,density);var placement=SidebarLayout.Place(chosen,dpi);Width=placement.Width/scale;Height=placement.Height/scale;
+        if(pointerDown)CancelHold();var density=SidebarLayout.EffectiveScale(chosen,dpi,Controller.Settings.UiScalePercent);((FrameworkElement)Content).LayoutTransform=new ScaleTransform(density,density);var placement=SidebarLayout.Place(chosen,dpi,Controller.Settings.UiScalePercent,Controller.Settings.PanelSide);Width=placement.Width/scale;Height=placement.Height/scale;
         if(hwnd!=0)Native.SetWindowPos(hwnd,(nint)(-1),placement.X,placement.Y,placement.Width,placement.Height,0x10);
         }finally{placing=false;}
     }
@@ -206,12 +220,12 @@ public partial class MainWindow : Window
         if(!IsVisible)return;var wasForeground=Native.GetForegroundWindow()==new WindowInteropHelper(this).Handle;RevokeFocus("hide");CancelHandoff();heldKeys.Clear();CancelHold();pending?.Cancel();input.Cancel();Sidebar.BeginAnimation(OpacityProperty,null);Hide();audio.SetVisible(false);UpdatePolling();
         if(restore&&wasForeground&&returnTarget is {} target&&Controller.Platform.Valid(target)){var result=await Controller.Platform.Switch(target);if(result.Kind!=ResultKind.Completed&&result.Kind!=ResultKind.Simulated&&!exiting){if(!Controller.Platform.IsPreview)Controller.Diagnostics.Log("focus-return",result.Kind);FeedbackText(result.Message);}}
     }
-    private void Cleanup(){if(exiting)return;exiting=true;RevokeFocus("cleanup");CancelHandoff();heldKeys.Clear();SystemParameters.StaticPropertyChanged-=OnSystemParametersChanged;timer.Stop();timer.Tick-=Tick;guideConnection?.Dispose();guideConnection=null;guideBackend=null;guideToggleRequested=false;pending?.Cancel();ResultNotificationRequest=null;audio.Dispose();source?.RemoveHook(WindowMessage);tray?.Dispose();Controller.Dispose();}
+    private void Cleanup(){if(exiting)return;exiting=true;operationGeneration++;RevokeFocus("cleanup");CancelHandoff();heldKeys.Clear();SystemParameters.StaticPropertyChanged-=OnSystemParametersChanged;timer.Stop();timer.Tick-=Tick;guideConnection?.Dispose();guideConnection=null;guideBackend=null;guideToggleRequested=false;pending?.Cancel();ResultNotificationRequest=null;applicationAudio.Changed-=ApplicationAudioChanged;feedbackService.Changed-=FeedbackStatusChanged;applicationAudio.Dispose();feedbackService.Dispose();controllerDevices.Dispose();audio.Dispose();source?.RemoveHook(WindowMessage);tray?.Dispose();Controller.Dispose();}
     private void FeedbackText(string text)=>StatusLabel.Text=text;
     private void RetainOperation(string state,string message,string action="",WindowRef? target=null,bool dispatched=false){Controller.SetOperation(state,message,action,target,dispatched);UpdatePersistentState();}
     private void UpdatePersistentState()
     {
-        if(Rows.Children.Count>0){
+        if(Rows.Children.Count>0&&!Confirming){
             var previous=entries.Select(e=>e.Id).ToArray();
             var selectedFooter=IsFooterAction(navigation.Id)&&previous.Contains(navigation.Id);
             entries.RemoveAll(e=>e.Id is "save-pending" or "discard-pending" or "operation-details"||(e.Id=="dismiss-operation"&&subpage!="operation"));
@@ -229,90 +243,62 @@ public partial class MainWindow : Window
         if(OperationLabel.Text!=text){OperationLabel.Text=text;System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(OperationLabel)?.RaiseAutomationEvent(System.Windows.Automation.Peers.AutomationEvents.LiveRegionChanged);}
         OperationDetailsButton.IsEnabled=!busy&&!TransitionPending;OperationLabel.ToolTip=text;SaveSettingsButton.IsEnabled=!busy&&!TransitionPending;DiscardSettingsButton.IsEnabled=!busy&&!TransitionPending;DismissOperationButton.IsEnabled=!busy&&!TransitionPending;
     }
-    private void OpenOperation(){if(!NavigationAllowed||busy||TransitionPending||Confirming||Controller.Operation is null)return;operationOrigin=(subpage,navigation,subSelection,detail,ContentScroll.VerticalOffset);Subpage("operation","operation-text");}
+    private void OpenOperation(){if(!NavigationAllowed||busy||TransitionPending||Confirming||Controller.Operation is null)return;OpenView(new(OverlayRoute.OperationResult,view.Current.Target,"operation-text"));}
     private void DismissOperation(){if(!NavigationAllowed||busy||TransitionPending||Confirming)return;Controller.DismissOperation();if(subpage=="operation")Back();else{UpdatePersistentState();SetSelection(false);}}
     private void UpdateHints()
     {
         if(Confirming){ModeLabel.Text=inputMethod=="controller"?"A segurar · B cancelar":inputMethod=="mouse"?"Segure para confirmar · Cancelar interrompe":"Enter / Espaço segurar · Esc cancelar";return;}
+        SessionHint.Text=inputMethod switch{"controller"=>"A · Retomar   X · Opções","mouse"=>"Clique para retomar · ·· Opções",_=>"Enter · Retomar   X · Opções"};
         var details=page==1||subpage=="details";
         ModeLabel.Text=inputMethod switch{
             "mouse"=>"Clique para selecionar · bandeja: duplo clique para abrir",
-            "controller"=>"A selecionar · B voltar"+(details?" · X detalhes":"")+"\nLB/RB abas · direcional mover"+(Controller.Settings.GuideXInputEnabled&&guideBackend?.Active==true?" · Guide abrir":"")+" · bandeja: abrir",
-            _=>"Enter selecionar · Esc voltar"+(details?" · X detalhes":"")+"\nPgUp/PgDn abas · Setas / Tab mover · bandeja: abrir"};
+            "controller"=>"A selecionar · B voltar"+(details?" · X opções":"")+"\nLB/RB abas · direcional mover"+(Controller.Settings.GuideXInputEnabled&&guideBackend?.Active==true?" · Guide abrir":"")+" · bandeja: abrir",
+            _=>"Enter selecionar · Esc voltar"+(details?" · X opções":"")+"\nPgUp/PgDn abas · Setas / Tab mover · bandeja: abrir"};
+        if(compactChrome)ModeLabel.Text=inputMethod switch{"mouse"=>"Clique selecionar · bandeja: abrir","controller"=>"A selecionar · B voltar · X opções\nLB/RB abas · direcional mover",_=>"Enter selecionar · Esc voltar\nTab / Setas mover · PgUp/PgDn abas"};
+    }
+    private void UpdateCompactChrome(double height)
+    {
+        var compact=height>0&&height<650;if(compact==compactChrome)return;compactChrome=compact;
+        if(pointerDown)CancelHold();HeaderIdentity.Visibility=compact?Visibility.Collapsed:Visibility.Visible;ControllerStatusLabel.Visibility=compact?Visibility.Collapsed:Visibility.Visible;DirtyLabel.Visibility=compact?Visibility.Collapsed:Visibility.Visible;HeaderArea.Margin=new(0,0,0,compact?8:12);DirtyStrip.Margin=new(0,compact?8:12,0,0);
+        if(compact&&OperationPanel.Parent is Grid grid){grid.Children.Remove(OperationPanel);ContentStack.Children.Add(OperationPanel);}
+        else if(!compact&&OperationPanel.Parent is StackPanel stack){stack.Children.Remove(OperationPanel);((Grid)Sidebar.Child).Children.Add(OperationPanel);}
+        revealPending=true;UpdateHints();
     }
     private void ReleasePointer(){pointerDown=false;pointerCaptured=false;if(HoldCloseButton.IsMouseCaptured)HoldCloseButton.ReleaseMouseCapture();}
-    private void CancelHold(){ReleasePointer();closeHold.Cancel();HeaderArea.Visibility=Visibility.Visible;TabArea.Visibility=Visibility.Visible;closeSource=null;keyboardDown=false;ConfirmPanel.Visibility=Visibility.Collapsed;ContentScroll.Visibility=Visibility.Visible;CloseArea.Visibility=Visibility.Visible;UpdatePersistentState();UpdateHints();}
-    internal void Page(int index){if(TransitionPending)return;index=(index+3)%3;if(subpage==""&&index==page)tabSelection[index]=index switch{0=>"return",1=>Controller.Apps.FirstOrDefault() is {} app?WindowId(app):"refresh-apps",_=>"display"};else tabSelection[page]=navigation.Id;page=index;subpage="";detail=null;operationOrigin=null;navigation=new(tabSelection[page]);CancelHold();RefreshRows();}
-    private void Subpage(string name,string first){subSelection=navigation.Id;subpage=name;navigation=new(first);RefreshRows();}
+    private void CancelHold(){var restore=view.Current.Route==OverlayRoute.Confirmation;ReleasePointer();closeHold.Cancel();HeaderArea.Visibility=Visibility.Visible;TabArea.Visibility=Visibility.Visible;closeSource=null;keyboardDown=false;ConfirmPanel.Visibility=Visibility.Collapsed;ContentScroll.Visibility=Visibility.Visible;CloseArea.Visibility=Visibility.Visible;if(restore&&view.Back()){SyncView();RefreshRows();ContentScroll.ScrollToVerticalOffset(view.Current.ScrollOffset);}UpdatePersistentState();UpdateHints();}
+    private void SaveView()=>view.Remember(navigation.Id,ContentScroll.VerticalOffset);
+    private void SyncView()
+    {
+        page=(int)view.Tab;detail=view.Current.Target;subpage=view.Current.Route switch{OverlayRoute.WindowsAudio=>"audio",OverlayRoute.Details=>"details",OverlayRoute.TargetOptions=>"options",OverlayRoute.Integrations=>"integrations",OverlayRoute.Customize=>"customize",OverlayRoute.Setup=>"setup",OverlayRoute.OperationResult=>"operation",OverlayRoute.Confirmation=>"confirmation",_=>""};navigation=new(view.Current.SelectedId);
+    }
+    private void OpenView(OverlayViewFrame next){if(busy||TransitionPending||Confirming)return;SaveView();view.Open(next);SyncView();RefreshRows();ContentScroll.ScrollToVerticalOffset(next.ScrollOffset);}
+    internal void OpenOptions(WindowRef target)=>OpenView(new(OverlayRoute.TargetOptions,target,"application-mute"));
+    private void ChooseSession()=>OpenView(new(OverlayRoute.Apps,SelectedId:Controller.Apps.FirstOrDefault() is {} w?WindowId(w):"refresh-apps",ChooseSession:true));
+    internal void Page(int index){if(TransitionPending||Confirming)return;SaveView();view.SwitchTab((OverlayTab)((index+3)%3));SyncView();RefreshRows();ContentScroll.ScrollToVerticalOffset(view.Current.ScrollOffset);}
+    private void Subpage(string name,string first)=>OpenView(new(name switch{"audio"=>OverlayRoute.WindowsAudio,"details"=>OverlayRoute.Details,"options"=>OverlayRoute.TargetOptions,"integrations"=>OverlayRoute.Integrations,"customize"=>OverlayRoute.Customize,"setup"=>OverlayRoute.Setup,_=>OverlayRoute.OperationResult},detail,first));
     internal void RefreshRows()
     {
+        if(Confirming){UpdatePersistentState();return;}
         var previous=entries.Select(e=>e.Id).ToArray();Rows.Children.Clear();Rows.RowDefinitions.Clear();Rows.ColumnDefinitions.Clear();Rows.ColumnDefinitions.Add(new());Rows.ColumnDefinitions.Add(new());CloseArea.Children.Clear();entries.Clear();operationText=null;
-        entries.Add(new("settings",SettingsGear,()=>Page(2),true,"Abrir Sistema"));ContextCard.Visibility=page==0&&subpage==""?Visibility.Visible:Visibility.Collapsed;
-        var context=Controller.Session.Anchor is {} anchor&&Controller.Platform.Valid(anchor)?anchor:null;
-        TargetLabel.Text=context?.Title??"Escolha uma janela";TargetLabel.ToolTip=context?.Title;
-        AutomationProperties.SetName(ContextCard,context?.Title??"Nenhuma janela selecionada");
-        SessionEvidence.Text=context?.ProcessName??"Aplicativos";ContextStatus.Text=context is null?"Sem seleção":"Disponível";ContextStatusDot.Opacity=context is null?.3:1;
-        ContextIcon.Source=context is null?null:Controller.Platform.Icon(context);ContextIcon.Visibility=ContextIcon.Source is null?Visibility.Collapsed:Visibility.Visible;ContextGlyph.Visibility=ContextIcon.Source is null?Visibility.Visible:Visibility.Collapsed;
-        BackButton.Visibility=subpage!=""?Visibility.Visible:Visibility.Collapsed;UpdateHints();UpdatePersistentState();
+        entries.Add(new("settings",SettingsGear,()=>Page(2),true,"Abrir Sistema"));ContextCard.Visibility=view.Current.Route==OverlayRoute.Hub?Visibility.Visible:Visibility.Collapsed;
+        var target=Controller.Session.Anchor;var valid=target is not null&&Controller.Platform.Valid(target);
+        SessionKicker.Visibility=narrow?Visibility.Collapsed:Visibility.Visible;SessionCardButton.Padding=new Thickness(12,narrow?10:16,12,narrow?10:16);TargetLabel.Text=target?.Title??"Escolha uma janela";TargetLabel.ToolTip=target?.Title;AutomationProperties.SetName(ContextCard,target?.Title??"Nenhuma janela selecionada");
+        SessionEvidence.Text=target?.ProcessName??"Aplicativos";ContextStatus.Text=target is null?"Sem seleção":valid?"Disponível":"Janela indisponível";ContextStatusDot.Opacity=valid?1:.3;
+        ContextIcon.Source=target is null?null:Controller.Platform.Icon(target);ContextIcon.Visibility=ContextIcon.Source is null?Visibility.Collapsed:Visibility.Visible;ContextGlyph.Visibility=ContextIcon.Source is null?Visibility.Visible:Visibility.Collapsed;SessionAudioLabel.Text=target is null?"Selecione uma janela para ver o áudio":!valid?"Janela indisponível":AudioFor(target)?AudioBadge():"Estado não confirmado";ControllerStatusLabel.Text=controllerStatus;
+        BackButton.Visibility=view.Depth>0?Visibility.Visible:Visibility.Collapsed;if(view.Depth>0)RegisterFixed("back-header",BackButton,Back,true,"Voltar ao contexto anterior");UpdateHints();
         foreach(var pair in new[]{(HomeTab,0),(AppsTab,1),(SettingsTab,2)}){var selected=pair.Item2==page;pair.Item1.BorderThickness=new(0,0,0,selected?2:0);pair.Item1.SetResourceReference(BorderBrushProperty,ThemeSupport.Success);pair.Item1.SetResourceReference(BackgroundProperty,selected?ThemeSupport.Control:ThemeSupport.Card);pair.Item1.SetResourceReference(ForegroundProperty,selected?ThemeSupport.Text:ThemeSupport.SecondaryText);AutomationProperties.SetName(pair.Item1,(pair.Item2 switch{0=>"Sessão",1=>"Aplicativos",_=>"Sistema"})+(selected?" · selecionada":""));AutomationProperties.SetItemStatus(pair.Item1,selected?"Selecionada":"Não selecionada");}
-        PageTitle.Text=subpage switch{"audio"=>"Áudio do Windows","details"=>"Detalhes da janela","integrations"=>"Integrações","operation"=>"Resultado da operação",_=>page switch{0=>"Controle da sessão",1=>"Aplicativos",_=>"Sistema"}};
-        void Section(string title){var label=new TextBlock{Text=title,FontSize=11,FontWeight=FontWeights.SemiBold,Margin=new(2,18,0,8)};label.SetResourceReference(TextBlock.ForegroundProperty,ThemeSupport.SecondaryText);var r=Rows.RowDefinitions.Count;Rows.RowDefinitions.Add(new(){Height=GridLength.Auto});Grid.SetRow(label,r);Grid.SetColumnSpan(label,2);Rows.Children.Add(label);}
-        void Add(string id,string title,string description,Action run,bool available=true,string icon="\uE8A7",bool danger=false,int? gridRow=null,int column=0){if(narrow&&gridRow is not null){gridRow=null;column=0;}var row=gridRow??Rows.RowDefinitions.Count;if(row>=Rows.RowDefinitions.Count)Rows.RowDefinitions.Add(new(){Height=GridLength.Auto});var button=MakeButton(id,title,description,run,available,icon,danger);Grid.SetRow(button,row);Grid.SetColumn(button,column);Grid.SetColumnSpan(button,gridRow is null?2:1);if(gridRow is not null)button.Margin=new(column==0?0:4,4,column==0?4:0,4);if(available)Rows.Children.Add(button);else{var descriptionHost=new Border{Focusable=true,Tag="description:"+id,Margin=new(-2)};AutomationProperties.SetName(descriptionHost,title+". "+description);AutomationProperties.SetHelpText(descriptionHost,entries[^1].Reason);button.Resources["DescriptionTarget"]=descriptionHost;Grid.SetRow(descriptionHost,row);Grid.SetColumn(descriptionHost,column);Grid.SetColumnSpan(descriptionHost,gridRow is null?2:1);Rows.Children.Add(descriptionHost);Rows.Children.Add(button);}
-        }
-        if(subpage=="operation"&&Controller.Operation is {} operation){
-            Add("operation-text","Ler mensagem completa","Setas para rolar · B / Esc para voltar",()=>operationText?.Focus());
-            operationText=new TextBox{Text=operation.Message,IsReadOnly=true,TextWrapping=TextWrapping.Wrap,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,MinHeight=120,MaxHeight=160,FontSize=16,Padding=new(12),Margin=new(0,8,0,8)};operationText.SetResourceReference(BackgroundProperty,ThemeSupport.Card);operationText.SetResourceReference(ForegroundProperty,ThemeSupport.Text);AutomationProperties.SetName(operationText,"Resultado completo · "+operation.State);AutomationProperties.SetHelpText(operationText,"Use as setas para ler; Esc ou B volta ao painel.");var r=Rows.RowDefinitions.Count;Rows.RowDefinitions.Add(new(){Height=GridLength.Auto});Grid.SetRow(operationText,r);Grid.SetColumnSpan(operationText,2);Rows.Children.Add(operationText);
-            Add("dismiss-operation","Dispensar resultado","Remove apenas esta mensagem",DismissOperation);Add("back","Voltar ao painel","Mantém o resultado disponível",Back,true,"\uE72B");
-        }else if(subpage=="audio"){
-            var state=audio.Current;Add("volume-down","Diminuir volume","− 5% · saída padrão do Windows",()=>AdjustVolume(-.05f),state.Available,"\uE767");Add("volume","Volume · "+(state.Available?state.Volume.ToString("P0"):"indisponível"),"Aumentar + 5% · ← / → ajusta · saída padrão do Windows",()=>AdjustVolume(.05f),state.Available,"\uE767");Add("mute",state.Muted?"Ativar som":"Silenciar","Afeta a saída de áudio do Windows",()=>AudioAction(audio.Set(muted:!audio.Current.Muted)),state.Available,"\uE74F");Add("back","Voltar",state.Status,Back,true,"\uE72B");
-        }else if(subpage=="details"&&detail is {} window){
-            var identity=new StackPanel{Margin=new(2,4,2,16)};identity.Children.Add(new TextBlock{Text=window.Title,FontSize=22,FontWeight=FontWeights.SemiBold,TextWrapping=TextWrapping.Wrap});identity.Children.Add(new TextBlock{Text=$"{window.ProcessName} · PID {window.Pid}",FontSize=15,Margin=new(0,8,0,0)});AutomationProperties.SetName(identity,window.Title);Rows.RowDefinitions.Add(new(){Height=GridLength.Auto});Grid.SetColumnSpan(identity,2);Rows.Children.Add(identity);
-            Add("switch-detail","Alternar para esta janela",$"{window.ProcessName} · PID {window.Pid}",()=>RunEffect(()=>Controller.Platform.Switch(window),()=>Controller.Platform.Valid(window)),true,"\uE8A7");Add("select-session","Usar nesta sessão","Mantém esta janela como referência para retomar e acessar atalhos",()=>{Controller.Select(window);subpage="";Page(0);},!window.Launcher&&!window.Protected,"\uE73E");Add("close-detail","Fechar esta janela…",window.CanClose?"Nova pressão longa · 1,5 s":"Janela protegida contra fechamento",()=>Confirm(window),window.CanClose,"\uE74D",true);Add("back","Voltar à lista","B / Esc também retorna",Back,true,"\uE72B");
-        }else if(subpage=="integrations"){
-            Add("test-steam","Solicitar overlay Steam",SteamPermission.Reason(Controller.SteamEvidence),()=>Shortcut(Controller.Settings.SteamShortcut),Controller.Session.Anchor is not null&&Controller.SteamEvidence==ModuleEvidence.Loaded,"\uE7FC");Add("guide","Botão Xbox / Guide · "+(Controller.Settings.GuideXInputEnabled?"ligado":"desligado"),GuideDescription(),()=>Change(Controller.Settings with{GuideXInputEnabled=!Controller.Settings.GuideXInputEnabled}),!diagnostic&&!Controller.Platform.IsPreview,"\uE7FC");Add("external-close","Fechar overlays externos","Indisponível: visibilidade e navegação externas não verificadas",()=>{},false,"\uE711");Add("back","Voltar","Duplo clique na bandeja também abre o painel",Back,true,"\uE72B");
-        }else if(page==0){
-            var game=context;Add("return",game is null?"Escolher janela":"Retomar janela",game?.Title??"Escolher janela em Aplicativos",()=>{if(game is not null)RunEffect(()=>Controller.Platform.Switch(game),()=>Controller.Platform.Valid(game));else Page(1);},true,"\uE72B");
-            Add("playnite","Playnite",Controller.Settings.PlaynitePath is null?"Configure o caminho em Sistema":"Biblioteca em tela cheia",()=>RunEffect(()=>Controller.Launch(true)),Controller.Settings.PlaynitePath is not null||Controller.Apps.Any(a=>a.ProcessName.Equals("Playnite.FullscreenApp",StringComparison.OrdinalIgnoreCase)),"\uE7FC");
-            Add("steam","Steam Big Picture",Controller.SteamAvailable?"Sua biblioteca em modo de controle":"Protocolo Steam indisponível",()=>RunEffect(()=>Controller.Launch(false)),Controller.SteamAvailable,"\uE7FC");
-            Add("apps","Aplicativos abertos",Controller.Apps.Count==1?"1 janela disponível":$"{Controller.Apps.Count} janelas disponíveis",()=>Page(1),true,"\uE737");
-            var label=new TextBlock{Text="ACESSO RÁPIDO",FontSize=13,Margin=new(2,12,0,5)};label.SetResourceReference(TextBlock.ForegroundProperty,ThemeSupport.SecondaryText);var row=Rows.RowDefinitions.Count;Rows.RowDefinitions.Add(new(){Height=GridLength.Auto});Grid.SetRow(label,row);Grid.SetColumnSpan(label,2);Rows.Children.Add(label);
-            var steamContext=Controller.ReturnTarget;var menu=Controller.Platform.CanSteamMenu(steamContext);var steamGame=steamContext is not null&&!steamContext.Launcher&&!steamContext.Protected&&Controller.Platform.SteamEvidence(steamContext)==ModuleEvidence.Loaded;
-            Add("gamebar","Game Bar",game is null?"Escolha uma janela em Aplicativos":"Xbox · janela da sessão",()=>Shortcut("Win+G"),Controller.Session.Anchor is not null,"\uE7FC",gridRow:row+1);Add("steam-overlay",menu?"Menu do Steam Big Picture":"Overlay Steam",menu?"Menu · "+steamContext!.Title:steamGame?"Overlay · "+steamContext!.Title:"Sem contexto Steam confirmado",()=>{if(steamContext is null)return;if(menu)RunEffect(()=>Controller.Platform.SteamMenu(steamContext),()=>Controller.Platform.CanSteamMenu(steamContext));else RunEffect(()=>Controller.Platform.Shortcut(steamContext,Controller.Settings.SteamShortcut),()=>Controller.Platform.Valid(steamContext)&&Controller.Platform.SteamEvidence(steamContext)==ModuleEvidence.Loaded);},menu||steamGame,"\uE7FC",gridRow:row+1,column:1);
-            Add("taskview","Visão de tarefas","Janelas do Windows",()=>RunEffect(Controller.Platform.TaskView),true,"\uE7C4",gridRow:row+2);Add("audio","Áudio",audio.Current.Available?(audio.Current.Muted?"Sem som":audio.Current.Volume.ToString("P0")):"Saída indisponível",()=>Subpage("audio","volume"),true,"\uE767",gridRow:row+2,column:1);
-            var close=MakeButton("close","Fechar janela…",Controller.Session.Anchor?.CanClose==true?"Confirmação por pressão longa":"Selecione uma janela elegível em Aplicativos",()=>{if(Controller.Session.Anchor is {} t)Confirm(t);},Controller.Session.Anchor?.CanClose==true,"\uE74D",true);close.MinHeight=44;close.Padding=new(12,8,12,8);close.Background=Brushes.Transparent;close.BorderThickness=new(0);CloseArea.Children.Add(close);
-        }else if(page==1){
-            foreach(var app in Controller.Apps){var captured=app;var id=WindowId(app);Add(id,app.Title,app.ProcessName+" · Alternar janela",()=>RunEffect(()=>Controller.Platform.Switch(captured),()=>Controller.Platform.Valid(captured)),true,"\uE737");var appButton=entries[^1].Button;var content=(Grid)appButton.Content;((StackPanel)content.Children[1]).Margin=new(0,0,58,0);if(Controller.Platform.Icon(app) is {} appIcon){content.Children.RemoveAt(0);content.Children.Insert(0,new Image{Source=appIcon,Width=28,Height=28,HorizontalAlignment=HorizontalAlignment.Left});}
-                var more=new Button{Content="···",Width=44,MinHeight=44,Padding=new(4),Margin=new(0,8,8,8),HorizontalAlignment=HorizontalAlignment.Right,VerticalAlignment=VerticalAlignment.Center,Tag="details:"+id};AutomationProperties.SetName(more,"Detalhes de "+app.Title);AutomationProperties.SetHelpText(more,"Ver identidade, usar nesta sessão ou fechar com confirmação");more.Click+=(_,_)=>{if(NavigationAllowed&&!busy&&!TransitionPending&&!Confirming){navigation=new(id);detail=captured;Subpage("details","switch-detail");}};Grid.SetRow(more,Rows.RowDefinitions.Count-1);Grid.SetColumn(more,1);Rows.Children.Add(new Border{Child=more,HorizontalAlignment=HorizontalAlignment.Right,Width=60});Grid.SetRow(Rows.Children[^1],Rows.RowDefinitions.Count-1);Grid.SetColumn(Rows.Children[^1],1);
-            }
-            if(Controller.Apps.Count==0){var text=new TextBlock{Text="Nenhuma janela disponível. As bibliotecas, áudio e ajustes continuam acessíveis.",TextWrapping=TextWrapping.Wrap,FontSize=21,Margin=new(6,20,6,24)};Rows.RowDefinitions.Add(new(){Height=GridLength.Auto});Grid.SetColumnSpan(text,2);Rows.Children.Add(text);}
-            Add("refresh-apps","Atualizar janelas","Obtém apenas janelas relevantes e visíveis",async()=>{try{await Controller.Refresh();RefreshRows();}catch(OperationCanceledException){}},true,"\uE72C");
-        }else{
-            Section("EXIBIÇÃO E APARÊNCIA");Add("display","Monitor · "+(Controller.Settings.DisplayId??"janela ativa"),"A alterna entre automático e as telas disponíveis",CycleDisplay,true,"\uE7F4");
-            Add("motion",Controller.Settings.ReducedMotion?"Animações reduzidas":"Animações suaves","A alterna · não há animação contínua",()=>Change(Controller.Settings with{ReducedMotion=!Controller.Settings.ReducedMotion}),true,"\uE713");
-            Section("ENTRADA E CONTROLE");Add("deadzone","Deadzone · "+Controller.Settings.Deadzone,"A alterna sensibilidade do analógico",()=>Change(Controller.Settings with{Deadzone=Controller.Settings.Deadzone<12000?12000:Controller.Settings.Deadzone<18000?18000:Controller.Settings.Deadzone<24000?24000:12000}),true,"\uE713");Add("guide","Botão Xbox / Guide · "+(Controller.Settings.GuideXInputEnabled?"ligado":"desligado"),GuideDescription(),()=>Change(Controller.Settings with{GuideXInputEnabled=!Controller.Settings.GuideXInputEnabled}),!diagnostic&&!Controller.Platform.IsPreview,"\uE713");
-            Add("guide-limit",GuideLimitTitle(),"← / → ajusta · 0,5–3,0 s · Salvar para manter",()=>{},true,"\uE713");
-            var limitButton=entries[^1].Button;limitButton.MinHeight=112;
-            var limitTexts=(StackPanel)((Grid)limitButton.Content).Children[1];
-            var limitSlider=new Slider{Minimum=500,Maximum=3000,TickFrequency=100,SmallChange=100,LargeChange=100,IsSnapToTickEnabled=true,Focusable=true,Value=Controller.Settings.GuideOpenMaxHoldMs,Margin=new(0,9,0,0)};
-            AutomationProperties.SetName(limitSlider,"Limite de pressão do Guide para abrir, em milissegundos");AutomationProperties.SetHelpText(limitSlider,"De 500 a 3000 ms. Setas ajustam 100 ms; Home e End definem os limites.");
-            limitSlider.PreviewKeyDown+=(_,e)=>{var delta=e.Key switch{Key.Left or Key.Down=>-100,Key.Right or Key.Up=>100,Key.PageDown=>-500,Key.PageUp=>500,_=>0};if(delta!=0){limitSlider.Value=Math.Clamp(limitSlider.Value+delta,500,3000);e.Handled=true;}else if(e.Key is Key.Home or Key.End){limitSlider.Value=e.Key==Key.Home?500:3000;e.Handled=true;}};
-            limitSlider.ValueChanged+=(_,_)=>{var value=(int)Math.Round(limitSlider.Value/100)*100;Controller.Change(Controller.Settings with{GuideOpenMaxHoldMs=value});SetEntryText("guide-limit",GuideLimitTitle());UpdatePersistentState();FeedbackText("Alteração em memória · Salvar ajustes para manter.");};limitTexts.Children.Add(limitSlider);
-            Section("INTEGRAÇÕES");Add("configure-playnite","Caminho do Playnite",Controller.Settings.PlaynitePath is null?"Escolher executável…":"Instalação configurada",ConfigurePlaynite,true,"\uE8B7");
-            Add("shortcut","Atalho Steam · "+Controller.Settings.SteamShortcut,"A alterna Shift+Tab / Ctrl+Tab",()=>Change(Controller.Settings with{SteamShortcut=Controller.Settings.SteamShortcut=="Shift+Tab"?"Ctrl+Tab":"Shift+Tab"}),true,"\uE765");
-            Add("integrations","Integrações e limites","Guide, Steam e funções externas",()=>Subpage("integrations","test-steam"),true,"\uE713");Add("save","Salvar ajustes","AppData · cópia anterior preservada",Save,true,"\uE74E");Add("exit","Encerrar overlay",Controller.SettingsDirty?"Alterações não salvas serão perdidas":"Encerra observadores e remove o ícone da bandeja",()=>QueueHandoff(Close),true,"\uE7E8");
-        }
-        UpdatePersistentState();
-        navigation=navigation with{Id=Navigation.Preserve(navigation.Id,previous,entries.Select(e=>e.Id).ToArray())};SetSelection(false);
+        PageTitle.Text=view.Current.Route switch{OverlayRoute.WindowsAudio=>"Áudio do Windows",OverlayRoute.Details=>"Detalhes da janela",OverlayRoute.TargetOptions=>"Opções da janela",OverlayRoute.Integrations=>"Integrações",OverlayRoute.Customize=>"Acesso rápido",OverlayRoute.Setup=>"Seu painel, do seu jeito",OverlayRoute.OperationResult=>"Resultado da operação",OverlayRoute.Apps=>view.Current.ChooseSession?"Escolher janela":"Aplicativos",OverlayRoute.System=>"Sistema",_=>"Controle da sessão"};
+        BuildCurrentView();UpdatePersistentState();navigation=navigation with{Id=Navigation.Preserve(navigation.Id,previous,entries.Select(e=>e.Id).ToArray())};SaveView();TrackApplicationAudio();revealPending=true;SetSelection(false);
     }
     private string GuideDescription()=>Controller.Platform.IsPreview?"Prévia · conexão Guide não é consultada":!Controller.Settings.GuideXInputEnabled?"Desativado · abra pelo duplo clique na bandeja":guideBackend?.Active==true?guideBackend.Status:guideConnection?.Status??"Controle ou leitura Guide indisponível";
     private Button MakeButton(string id,string title,string description,Action action,bool available,string icon,bool danger)
     {
-        var grid=new Grid();grid.ColumnDefinitions.Add(new(){Width=new GridLength(42)});grid.ColumnDefinitions.Add(new());grid.ColumnDefinitions.Add(new(){Width=GridLength.Auto});var glyph=ActionIcon(id,icon);if(page==2&&subpage==""&&id is "deadzone" or "motion" or "guide-limit" or "shortcut" or "integrations" or "save"){glyph.Visibility=Visibility.Collapsed;grid.ColumnDefinitions[0].Width=new(0);}grid.Children.Add(glyph);var texts=new StackPanel{VerticalAlignment=VerticalAlignment.Center};texts.Children.Add(new TextBlock{Text=title,FontSize=id=="return"?22:18,TextTrimming=TextTrimming.CharacterEllipsis,FontWeight=FontWeights.SemiBold});if(description.Length>0)texts.Children.Add(new TextBlock{Text=description,FontSize=15,TextWrapping=TextWrapping.Wrap,Margin=new(0,4,0,0)});Grid.SetColumn(texts,1);grid.Children.Add(texts);
+        var grid=new Grid();grid.ColumnDefinitions.Add(new(){Width=new GridLength(38)});grid.ColumnDefinitions.Add(new());grid.ColumnDefinitions.Add(new(){Width=GridLength.Auto});var glyph=ActionIcon(id.StartsWith("favorite:",StringComparison.Ordinal)?id[9..]:id,icon);if(page==2&&subpage==""&&id is "deadzone" or "motion" or "guide-limit" or "shortcut" or "integrations" or "save" or "side" or "ui-scale" or "sound-feedback" or "haptic-feedback" or "test-feedback" or "customize" or "setup"){glyph.Visibility=Visibility.Collapsed;grid.ColumnDefinitions[0].Width=new(0);}grid.Children.Add(glyph);var texts=new StackPanel{VerticalAlignment=VerticalAlignment.Center};texts.Children.Add(new TextBlock{Text=title,FontSize=18,TextWrapping=TextWrapping.Wrap,FontWeight=FontWeights.SemiBold});if(description.Length>0)texts.Children.Add(new TextBlock{Text=description,FontSize=15,TextWrapping=TextWrapping.Wrap,Margin=new(0,4,0,0)});Grid.SetColumn(texts,1);grid.Children.Add(texts);
         var badge=new Border{CornerRadius=new(18),Width=30,Height=30,Margin=new(8,0,0,0),Visibility=Visibility.Collapsed,Child=new TextBlock{Text="A",FontSize=18,FontWeight=FontWeights.SemiBold,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center,Foreground=new SolidColorBrush(Color.FromRgb(15,38,20))}};badge.SetResourceReference(BackgroundProperty,ThemeSupport.Success);Grid.SetColumn(badge,2);grid.Children.Add(badge);
         if(id=="apps"){var count=new Border{CornerRadius=new(15),Padding=new(9,4,9,4),Margin=new(8,0,0,0),VerticalAlignment=VerticalAlignment.Center,Child=new TextBlock{Text=Controller.Apps.Count.ToString(),FontSize=17}};count.SetResourceReference(BackgroundProperty,ThemeSupport.Card);Grid.SetColumn(count,2);grid.Children.Add(count);grid.Resources["CountBadge"]=count;}
         ((TextBlock)badge.Child).SetResourceReference(TextBlock.ForegroundProperty,SystemParameters.HighContrast?SystemColors.HighlightTextBrushKey:ThemeSupport.Surface);
         var button=new Button{Content=grid,Tag=id,MinHeight=id=="return"?76:56,IsEnabled=available,Padding=new(12,8,12,8)};
-        if(page==0&&subpage==""&&id is "playnite" or "steam" or "apps"){button.Background=Brushes.Transparent;button.BorderThickness=new(0);button.Margin=new(0,2,0,2);}
+        if(page==0&&subpage==""&&id=="apps"){button.Background=Brushes.Transparent;button.BorderThickness=new(0);button.Margin=new(0,2,0,2);}
         if(id=="return"&&texts.Children.Count>1&&texts.Children[1] is TextBlock targetText){targetText.TextWrapping=TextWrapping.NoWrap;targetText.TextTrimming=TextTrimming.CharacterEllipsis;}
         if(id=="close"&&texts.Children.Count>1)texts.Children.RemoveAt(1);
         if(texts.Children.Count>1&&texts.Children[1] is TextBlock descriptionText)descriptionText.SetResourceReference(TextBlock.ForegroundProperty,ThemeSupport.SecondaryText);if(danger)button.SetResourceReference(ForegroundProperty,ThemeSupport.Critical);
@@ -321,46 +307,55 @@ public partial class MainWindow : Window
     }
     private FrameworkElement ActionIcon(string id,string fallback)
     {
-        var key=id.StartsWith("window:",StringComparison.Ordinal)?"apps":id switch{"return" or "back"=>"back","steam" or "steam-overlay" or "test-steam"=>"steam","gamebar" or "chord" or "guide"=>"gamebar","apps" or "refresh-apps" or "next-apps" or "switch-detail"=>"apps","taskview" or "display"=>"taskview","audio" or "volume" or "volume-down"=>"speaker","mute"=>audio.Current.Muted?"speaker":"mute","close" or "close-detail" or "exit" or "external-close"=>"close","playnite" or "configure-playnite"=>"playnite","select-session"=>"controller",_=>"settings"};
+        var key=id.StartsWith("window:",StringComparison.Ordinal)||id.StartsWith("recent:",StringComparison.Ordinal)?"apps":id switch{"session-card" or "previous-window" or "back"=>"back","steam" or "steam-overlay" or "test-steam"=>"steam","gamebar" or "chord" or "guide"=>"gamebar","apps" or "refresh-apps" or "next-apps" or "switch-detail"=>"apps","taskview" or "display" or "minimize"=>"taskview","audio" or "volume" or "volume-down" or "application-mute"=>"speaker","mute"=>audio.Current.Muted?"speaker":"mute","close" or "close-detail" or "exit" or "external-close"=>"close","playnite" or "configure-playnite"=>"playnite","select-session"=>"controller",_=>"settings"};
         var icon=new System.Windows.Shapes.Path{Data=(Geometry)FindResource("Icon."+key),Stretch=Stretch.Uniform,Width=26,Height=26,HorizontalAlignment=HorizontalAlignment.Left,VerticalAlignment=VerticalAlignment.Center};
         icon.SetResourceReference(System.Windows.Shapes.Shape.FillProperty,id is "close" or "close-detail"?ThemeSupport.Critical:ThemeSupport.Text);return icon;
     }
     private void SetSelection(bool showReason=true)
     {
-        foreach(var entry in entries){var selected=entry.Id==navigation.Id;var danger=entry.Id is "close" or "close-detail";var primary=entry.Id=="return";
+        foreach(var entry in entries){var selected=entry.Id==navigation.Id;var danger=entry.Id is "close" or "close-detail";var primary=entry.Id=="session-card";
             entry.Button.BorderThickness=new(selected?2:entry.Id=="close"?0:1);entry.Button.SetResourceReference(BorderBrushProperty,selected?ThemeSupport.Success:ThemeSupport.Stroke);
             entry.Button.SetResourceReference(BackgroundProperty,primary?ThemeSupport.SuccessBackground:selected?ThemeSupport.Card:ThemeSupport.Control);if(entry.Id=="close")entry.Button.Background=Brushes.Transparent;
-            if(page==0&&subpage==""&&entry.Id is "playnite" or "steam" or "apps"){entry.Button.Background=selected?(Brush)FindResource(ThemeSupport.Card):Brushes.Transparent;entry.Button.BorderThickness=new(selected?2:0);}entry.Button.Effect=null;if(entry.Button.Resources["ABadge"] is Border badge)badge.Visibility=selected&&entry.Available&&inputMethod=="controller"&&!entry.Id.StartsWith("window:",StringComparison.Ordinal)?Visibility.Visible:Visibility.Collapsed;
-            if(entry.Button.Resources["DescriptionTarget"] is Border host){host.BorderThickness=new(selected?2:0);host.CornerRadius=new(12);host.SetResourceReference(Border.BorderBrushProperty,ThemeSupport.Success);}
-            if(selected){if(showReason)FeedbackText(entry.Available?entry.Reason:"Indisponível · "+entry.Reason);if(NavigationAllowed){if(entry.Available)entry.Button.Focus();else if(entry.Button.Resources["DescriptionTarget"] is Border description)description.Focus();entry.Button.BringIntoView();}}
+            if(page==0&&subpage==""&&entry.Id=="apps"){entry.Button.Background=selected?(Brush)FindResource(ThemeSupport.Card):Brushes.Transparent;entry.Button.BorderThickness=new(selected?2:0);}entry.Button.Effect=null;if(entry.Button.Resources["ABadge"] is Border badge)badge.Visibility=selected&&entry.Available&&inputMethod=="controller"&&!entry.Id.StartsWith("window:",StringComparison.Ordinal)?Visibility.Visible:Visibility.Collapsed;
+            if(entry.Button.Resources["DescriptionTarget"] is Border host){host.BorderThickness=new(selected&&!entry.Available?2:0);host.CornerRadius=new(12);host.SetResourceReference(Border.BorderBrushProperty,ThemeSupport.Success);}
+            if(selected){if(showReason)FeedbackText(entry.Available?entry.Reason:"Indisponível · "+entry.Reason);SaveView();if(NavigationAllowed){FocusTarget(entry).Focus();FocusTarget(entry).BringIntoView();}}
         }
     }
     private static string WindowId(WindowRef w)=>$"window:{w.Handle}:{w.Pid}:{w.Started}:{w.Generation}";
     internal string SelectedAction=>navigation.Id;internal string Feedback=>StatusLabel.Text;internal bool Confirming=>closeHold.Target is not null;internal WindowRef? HeldCloseTarget=>closeHold.Target;internal double CloseProgress=>closeHold.Progress;internal IReadOnlyList<string> ActionIds=>entries.Select(e=>e.Id).ToArray();
     internal Color SurfaceColor=>((SolidColorBrush)FindResource(ThemeSupport.Surface)).Color;internal Color SelectionColor=>((SolidColorBrush)FindResource(ThemeSupport.SuccessBackground)).Color;
     private bool IsFooterAction(string id)=>id is "save-pending" or "discard-pending"||(subpage!="operation"&&(id is "operation-details" or "dismiss-operation"));
-    internal void Move(NavDirection direction){if(!NavigationAllowed||busy||Confirming||TransitionPending)return;if(subpage=="operation"&&operationText?.IsKeyboardFocusWithin==true){if(direction==NavDirection.Up)operationText.LineUp();else if(direction==NavDirection.Down)operationText.LineDown();else{navigation=new(direction==NavDirection.Left?"operation-text":"dismiss-operation");SetSelection();}return;}
-        var hasResult=Controller.Operation is not null&&subpage!="operation";
-        var lastContent=entries.Last(e=>!IsFooterAction(e.Id)).Id;
-        if(navigation.Id==lastContent&&direction==NavDirection.Down&&(hasResult||Controller.SettingsDirty)){navigation=new(hasResult?"operation-details":"save-pending");SetSelection();return;}
-        if(navigation.Id is "operation-details" or "dismiss-operation"&&subpage!="operation"){
-            navigation=direction switch{NavDirection.Left=>new("operation-details"),NavDirection.Right=>new("dismiss-operation"),NavDirection.Down when Controller.SettingsDirty=>new("save-pending"),NavDirection.Up=>new(lastContent),_=>navigation};SetSelection();return;
-        }
-        if(navigation.Id is "save-pending" or "discard-pending"){
-            navigation=direction switch{NavDirection.Left=>new("save-pending"),NavDirection.Right=>new("discard-pending"),NavDirection.Up when hasResult=>new("operation-details"),NavDirection.Up=>new(lastContent),_=>Navigation.Linear(navigation,entries.Select(e=>e.Id).ToArray(),direction)};SetSelection();return;
-        }if(AdjustGuideLimit(direction))return;if(subpage=="audio"&&navigation.Id=="volume"&&direction is NavDirection.Left or NavDirection.Right){AdjustVolume(direction==NavDirection.Left?-.05f:.05f);return;}navigation=page==0&&subpage==""?narrow?Navigation.Linear(navigation,entries.Select(e=>e.Id).ToArray(),direction):Navigation.Home(navigation,direction):Navigation.Linear(navigation,entries.Select(e=>e.Id).ToArray(),direction);SetSelection();}
-    internal void Sequential(int step){if(!NavigationAllowed||Confirming)return;navigation=Navigation.Sequential(navigation,entries.Select(e=>e.Id).ToArray(),step);SetSelection();}
-    internal void ActivateEntry(){if(!NavigationAllowed||TransitionPending)return;var entry=entries.FirstOrDefault(e=>e.Id==navigation.Id);if(entry is null)return;if(Navigation.CanActivate(busy,Confirming,entry.Available))entry.Run();else if(!entry.Available)FeedbackText("Indisponível · "+entry.Reason);}
-    internal void Details(){if(!NavigationAllowed)return;var target=Controller.Apps.FirstOrDefault(w=>WindowId(w)==navigation.Id)??Controller.Session.Anchor;if(target is null){FeedbackText("Escolha uma janela em Apps.");return;}detail=target;Subpage("details","switch-detail");}
+    internal void Move(NavDirection direction)
+    {
+        if(!NavigationAllowed||busy||TransitionPending)return;if(Confirming){MoveConfirmation(direction is NavDirection.Up or NavDirection.Left?-1:1);return;}
+        var reader=subpage=="operation"?operationText:subpage=="details"?detailsText:null;
+        if(reader?.IsKeyboardFocusWithin==true){if(direction==NavDirection.Up)reader.LineUp();else if(direction==NavDirection.Down)reader.LineDown();else{navigation=new(subpage=="operation"?direction==NavDirection.Left?"operation-text":"dismiss-operation":direction==NavDirection.Left?"window-information":"switch-detail");SetSelection();}return;}
+        if(AdjustGuideLimit(direction))return;if(subpage=="audio"&&navigation.Id=="volume"&&direction is NavDirection.Left or NavDirection.Right){AdjustVolume(direction==NavDirection.Left?-.05f:.05f);return;}
+        var before=navigation.Id;var layout=entries.Select((entry,index)=>{var element=FocusTarget(entry);if(element.IsArrangeValid&&element.ActualHeight>0){var point=element.TranslatePoint(new Point(element.ActualWidth/2,element.ActualHeight/2),(UIElement)Content);return(entry.Id,point.X,point.Y);}return(entry.Id,0d,index*60d);}).ToArray();
+        navigation=navigation with{Id=Navigation.Spatial(navigation.Id,layout,direction)};SetSelection();if(before!=navigation.Id)RequestCue(FeedbackCue.Navigation);
+    }
+    internal void Sequential(int step){if(!NavigationAllowed||busy||TransitionPending)return;if(Confirming){MoveConfirmation(step);return;}var before=navigation.Id;navigation=Navigation.Sequential(navigation,entries.Select(e=>e.Id).ToArray(),step);SetSelection();if(before!=navigation.Id)RequestCue(FeedbackCue.Navigation);}
+    private void MoveConfirmation(int step){if(closeHold.Target is not {} target)return;closeHold.Open(target);keyboardDown=false;ReleasePointer();navigation=Navigation.Sequential(navigation,entries.Select(e=>e.Id).ToArray(),step);SetSelection(false);}
+    internal void ActivateEntry(){if(!NavigationAllowed||TransitionPending)return;var entry=entries.FirstOrDefault(e=>e.Id==navigation.Id);if(entry is null)return;if(Navigation.CanActivate(busy,Confirming,entry.Available)){RequestCue(FeedbackCue.Confirmation);entry.Run();}else if(!entry.Available){FeedbackText("Indisponível · "+entry.Reason);RequestCue(FeedbackCue.Unavailable);}}
+    internal void Details(){if(!NavigationAllowed||busy||TransitionPending||Confirming)return;var target=Controller.Apps.FirstOrDefault(w=>WindowId(w)==navigation.Id||"options:"+WindowId(w)==navigation.Id)??Controller.Recent.Items.FirstOrDefault(w=>"recent:"+WindowId(w)==navigation.Id||"options:recent:"+WindowId(w)==navigation.Id)??view.Current.Target??Controller.Session.Anchor;if(target is null){ChooseSession();return;}OpenOptions(target);}
     internal void Back()=>Back(false);
-    private void Back(bool trustedDismiss){if(TransitionPending){if(handoffDismiss){ReaffirmDismiss(trustedDismiss);return;}CancelHandoff();input.Cancel();if(page==0&&subpage=="")HidePanel(true);else FeedbackText("Transição cancelada.");return;}if(Confirming){CancelHold();FeedbackText("Fechamento cancelado antes do envio.");return;}if(busy){pending?.Cancel();RetainOperation("Não confirmado","Observação interrompida; o comando já enviado não pode ser desfeito. Verifique a janela.",dispatched:true);return;}if(subpage=="operation"&&operationOrigin is {} origin){subpage=origin.Subpage;navigation=origin.Navigation;subSelection=origin.ParentSelection;detail=origin.Detail;operationOrigin=null;RefreshRows();ContentScroll.ScrollToVerticalOffset(origin.ScrollOffset);return;}if(subpage!=""){subpage="";detail=null;navigation=new(subSelection);RefreshRows();return;}if(page!=0){Page(0);return;}HidePanel(true);}
+    private void Back(bool trustedDismiss)
+    {
+        if(TransitionPending){if(handoffDismiss){ReaffirmDismiss(trustedDismiss);return;}CancelHandoff();input.Cancel();if(page==0&&subpage=="")HidePanel(true);else FeedbackText("Transição cancelada.");return;}
+        if(Confirming){CancelHold();FeedbackText("Fechamento cancelado antes do envio.");return;}
+        if(busy){pending?.Cancel();RetainOperation("Não confirmado","Observação interrompida; o comando já enviado não pode ser desfeito. Verifique a janela.",dispatched:true);return;}
+        if(view.Back()){SyncView();RefreshRows();ContentScroll.ScrollToVerticalOffset(view.Current.ScrollOffset);SetSelection(false);return;}
+        if(page!=0){Page(0);return;}HidePanel(true);
+    }
     private void OnKeyDown(object sender,KeyEventArgs e)
     {
-        inputMethod="keyboard";UpdateHints();if(e.OriginalSource is Slider or TextBox&&e.Key is not Key.Escape)return;
+        inputMethod="keyboard";UpdateHints();
+        if((operationText?.IsKeyboardFocusWithin==true||detailsText?.IsKeyboardFocusWithin==true)&&e.Key is Key.Left or Key.Right){if(NavigationAllowed&&navigationKeysArmed)Move(e.Key==Key.Left?NavDirection.Left:NavDirection.Right);e.Handled=true;return;}
+        if(e.OriginalSource is Slider or TextBox&&e.Key is not Key.Escape)return;
         if(e.Key==Key.Tab&&navigation.Id=="guide-limit"&&!Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)&&entries.FirstOrDefault(x=>x.Id=="guide-limit")?.Button.Content is Grid limitGrid&&limitGrid.Children[1] is StackPanel limitTexts&&limitTexts.Children.OfType<Slider>().FirstOrDefault() is {} editor){editor.Focus();e.Handled=true;return;}
         var key=NormalizeKey(e.Key,e.SystemKey,e.ImeProcessedKey,e.DeadCharProcessedKey);var firstPress=key!=Key.None&&heldKeys.Add(key);if(Confirming&&closeSource!=0&&firstPress&&key!=Key.Escape){CancelHold();FeedbackText("Origem da pressão mudou; fechamento cancelado.");e.Handled=true;return;}if(key==Key.None&&TransitionPending){RejectHandoff("Transição cancelada; tecla não identificada.");e.Handled=true;return;}if(TransitionPending){if(e.Key==Key.Escape&&firstPress&&!e.IsRepeat)Back(trustedDismiss:true);e.Handled=true;return;}
-        if(ownedDialog){e.Handled=true;return;}if(e.Key is Key.Enter or Key.Space){if(!NavigationAllowed||!navigationKeysArmed){e.Handled=true;return;}keyboardDown=true;if(Confirming&&closeSource!=0){CancelHold();FeedbackText("Origem da pressão mudou; fechamento cancelado.");}else if(!e.IsRepeat&&!Confirming){dispatchSource=0;ActivateEntry();dispatchSource=null;}e.Handled=true;return;}
-        if(e.Key==Key.Escape){Back();e.Handled=true;return;}if(!NavigationAllowed||!navigationKeysArmed){e.Handled=true;return;}if(Confirming){e.Handled=true;return;}switch(e.Key){case Key.Up:Move(NavDirection.Up);break;case Key.Down:Move(NavDirection.Down);break;case Key.Left:Move(NavDirection.Left);break;case Key.Right:Move(NavDirection.Right);break;case Key.Tab:Sequential(Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)?-1:1);break;case Key.PageUp:Page(page-1);break;case Key.PageDown:Page(page+1);break;case Key.X:Details();break;default:return;}e.Handled=true;
+        if(ownedDialog){e.Handled=true;return;}if(e.Key is Key.Enter or Key.Space){if(!NavigationAllowed||!navigationKeysArmed){e.Handled=true;return;}if(Confirming&&navigation.Id=="confirm-cancel"){Back();e.Handled=true;return;}keyboardDown=true;if(Confirming&&closeSource!=0){CancelHold();FeedbackText("Origem da pressão mudou; fechamento cancelado.");}else if(!e.IsRepeat&&!Confirming){dispatchSource=0;ActivateEntry();dispatchSource=null;}e.Handled=true;return;}
+        if(e.Key==Key.Escape){Back();e.Handled=true;return;}if(!NavigationAllowed||!navigationKeysArmed){e.Handled=true;return;}if(Confirming){if(e.Key==Key.Tab)Sequential(Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)?-1:1);else if(e.Key is Key.Up or Key.Down or Key.Left or Key.Right)Move(e.Key is Key.Up or Key.Left?NavDirection.Up:NavDirection.Down);e.Handled=true;return;}switch(e.Key){case Key.Up:Move(NavDirection.Up);break;case Key.Down:Move(NavDirection.Down);break;case Key.Left:Move(NavDirection.Left);break;case Key.Right:Move(NavDirection.Right);break;case Key.Tab:Sequential(Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)?-1:1);break;case Key.PageUp:Page(page-1);break;case Key.PageDown:Page(page+1);break;case Key.X:Details();break;default:return;}e.Handled=true;
     }
     internal void PollGuideStatus(XInputGuideBackend backend)
     {
@@ -370,18 +365,18 @@ public partial class MainWindow : Window
     internal void UpdateGuideStatus(string status)=>SetEntryDescription("guide",status);
     private void Tick(object? sender,EventArgs args)
     {
-        if(exiting)return;if(guideBackend is not null)PollGuideStatus(guideBackend);var frames=Enumerable.Range(0,4).Select(i=>Native.ReadPad((uint)i)).ToArray();var now=Environment.TickCount64;lastInputSample=new(frames,now,GuideHeld:guideBackend?.Held==true,GuideValid:guideBackend is null||!guideBackend.Active||guideBackend.SnapshotValid,GuideConnections:guideBackend?.Connections??0);UpdatePolling(frames.Any(f=>f.Connected));var current=input.Update(frames,IsVisible,now);
+        if(exiting)return;if(guideBackend is not null)PollGuideStatus(guideBackend);var frames=Enumerable.Range(0,4).Select(i=>Native.ReadPad((uint)i)).ToArray();var now=Environment.TickCount64;lastInputSample=new(frames,now,GuideHeld:guideBackend?.Held==true,GuideValid:guideBackend is null||!guideBackend.Active||guideBackend.SnapshotValid,GuideConnections:guideBackend?.Connections??0);UpdatePolling(frames.Any(f=>f.Connected));var current=input.Update(frames,IsVisible,now);UpdateControllerTelemetry(frames,current.Slot,now);
         if(TransitionPending){if(GuidePolling.Consume(ref guideToggleRequested,current.Toggle)){Toggle(trustedDismiss:current.Toggle||guideBackend?.SnapshotValid==true);return;}if(current.Events.Pressed.HasFlag(PadButtons.B))Back(trustedDismiss:current.Slot is {} slot&&frames[slot].Connected&&!frames[slot].ReadFailed);else AdvanceHandoff(lastInputSample.Value,now);return;}
         if(GuidePolling.Consume(ref guideToggleRequested,current.Toggle)){Toggle();return;}if(!IsVisible)return;var events=current.Events;if(events.Pressed!=0||events.Direction!=0){inputMethod="controller";UpdateHints();}if(!NavigationAllowed){if(!ownedDialog&&events.Pressed.HasFlag(PadButtons.B))Back();return;}if(!navigationKeysArmed&&heldKeys.Count==0&&PhysicalKeysNeutral())navigationKeysArmed=true;
         if(Confirming&&closeSource==-1){var point=Mouse.GetPosition(HoldCloseButton);var inside=point.X>=0&&point.Y>=0&&point.X<HoldCloseButton.ActualWidth&&point.Y<HoldCloseButton.ActualHeight;var mixed=keyboardDown||heldKeys.Count>0||events.Pressed!=0||events.Direction!=0;AdvancePointerHold(pointerDown,(!pointerDown||pointerCaptured&&HoldCloseButton.IsMouseCaptured)&&!mixed,inside,now);return;}
-        if(Confirming&&closeHold.Target is {} target){var sourceValid=closeSource==0||current.Slot is {} slot&&closeSource==slot+1&&current.Connected;var down=closeSource==0?keyboardDown:sourceValid&&events.ADown;if((closeSource!=0&&keyboardDown)||(closeSource==0&&events.Pressed.HasFlag(PadButtons.A)))sourceValid=false;var valid=Controller.Platform.Valid(target)?target:null;if(closeHold.Tick(down,events.Pressed.HasFlag(PadButtons.B),IsActive,sourceValid,valid,Environment.TickCount64)){CancelHold();RunClose(target);}else if(!Confirming)CancelHold();HoldProgress.Value=closeHold.Progress;ConfirmHint.Text=closeHold.Progress>0?$"Mantenha pressionado… {closeHold.Progress:P0}":"Solte e pressione novamente por 1,5 s.";return;}
-        if(busy)return;if(events.Direction!=0)Move((NavDirection)events.Direction);dispatchSource=current.Slot+1;if(events.Pressed.HasFlag(PadButtons.B))Back();else if(events.Pressed.HasFlag(PadButtons.A))ActivateEntry();else if(events.Pressed.HasFlag(PadButtons.X))Details();else if(events.Pressed.HasFlag(PadButtons.LB))Page(page-1);else if(events.Pressed.HasFlag(PadButtons.RB))Page(page+1);dispatchSource=null;
+        if(Confirming&&navigation.Id=="confirm-cancel"&&events.Pressed.HasFlag(PadButtons.A)){Back();return;}if(Confirming&&events.Direction!=0&&closeSource!=-1){Move((NavDirection)events.Direction);return;}if(Confirming&&closeHold.Target is {} target){var sourceValid=closeSource==0||current.Slot is {} slot&&closeSource==slot+1&&current.Connected;var down=closeSource==0?keyboardDown:sourceValid&&events.ADown;if((closeSource!=0&&keyboardDown)||(closeSource==0&&events.Pressed.HasFlag(PadButtons.A)))sourceValid=false;var valid=Controller.Platform.Valid(target)?target:null;if(closeHold.Tick(down,events.Pressed.HasFlag(PadButtons.B),IsActive,sourceValid,valid,Environment.TickCount64)){CancelHold();RunClose(target);}else if(!Confirming)CancelHold();HoldProgress.Value=closeHold.Progress;ConfirmHint.Text=closeHold.Progress>0?$"Mantenha pressionado… {closeHold.Progress:P0}":"Solte e pressione novamente por 1,5 s.";return;}
+        if(busy)return;dispatchSource=current.Slot+1;if(events.Direction!=0)Move((NavDirection)events.Direction);if(events.Pressed.HasFlag(PadButtons.B))Back();else if(events.Pressed.HasFlag(PadButtons.A))ActivateEntry();else if(events.Pressed.HasFlag(PadButtons.X))Details();else if(events.Pressed.HasFlag(PadButtons.LB))Page(page-1);else if(events.Pressed.HasFlag(PadButtons.RB))Page(page+1);dispatchSource=null;
     }
-    internal void Confirm(WindowRef target){if(!target.CanClose||!Controller.Platform.Valid(target)){FeedbackText("Janela protegida ou identidade alterada; fechamento bloqueado.");return;}closeSource=dispatchSource??0;closeHold.Open(target);HeaderArea.Visibility=Visibility.Collapsed;TabArea.Visibility=Visibility.Collapsed;UpdatePersistentState();ConfirmTarget.Text=target.Title;ConfirmTarget.ToolTip=target.Title;AutomationProperties.SetName(ConfirmTarget,target.Title);ConfirmPanel.Visibility=Visibility.Visible;ContentScroll.Visibility=Visibility.Collapsed;CloseArea.Visibility=Visibility.Collapsed;HoldProgress.Value=0;ConfirmHint.Text="Aguardando soltar…";FeedbackText("Nenhum comando de fechamento enviado.");UpdateHints();}
+    internal void Confirm(WindowRef target){if(!target.CanClose||!Controller.Platform.Valid(target)){FeedbackText("Janela protegida ou identidade alterada; fechamento bloqueado.");return;}SaveView();view.Open(new(OverlayRoute.Confirmation,target,navigation.Id,ContentScroll.VerticalOffset));SyncView();closeSource=dispatchSource??0;closeHold.Open(target);entries.Clear();RegisterFixed("confirm-hold",HoldCloseButton,()=>{},true,"Segure por 1,5 s após soltar");RegisterFixed("confirm-cancel",CancelCloseButton,Back,true,"Cancelar fechamento");navigation=new("confirm-hold");HeaderArea.Visibility=Visibility.Collapsed;TabArea.Visibility=Visibility.Collapsed;UpdatePersistentState();ConfirmTarget.Text=target.Title;ConfirmTarget.ToolTip=target.Title;AutomationProperties.SetName(ConfirmTarget,target.Title);ConfirmPanel.Visibility=Visibility.Visible;ContentScroll.Visibility=Visibility.Collapsed;CloseArea.Visibility=Visibility.Collapsed;HoldProgress.Value=0;ConfirmHint.Text="Aguardando soltar…";FeedbackText("Nenhum comando de fechamento enviado.");UpdateHints();SetSelection(false);}
     internal bool AdvancePointerHold(bool down,bool captured,bool inside,long now)
     {
         if(!Confirming||closeSource!=-1)return false;var target=closeHold.Target!;var context=InputContext;
-        var valid=Controller.Platform.Valid(target)&&target.Same(subpage=="details"?detail:Controller.Session.Anchor)?target:null;
+        var valid=Controller.Platform.Valid(target)&&target.Same(view.Current.Target??Controller.Session.Anchor)?target:null;
         var completed=closeHold.Tick(down,false,context.Active&&context.OwnForeground&&context.Confirmed,captured&&(!down||inside),valid,now);
         HoldProgress.Value=closeHold.Progress;ConfirmHint.Text=closeHold.Progress>0?$"Mantenha pressionado… {closeHold.Progress:P0}":"Solte e pressione novamente por 1,5 s.";
         if(completed){CancelHold();RunClose(target);}else if(!Confirming)CancelHold();return completed;
@@ -394,7 +389,7 @@ public partial class MainWindow : Window
         if(!IsVisible&&result.Kind is ResultKind.Failed or ResultKind.Unknown or ResultKind.Partial or ResultKind.Unavailable or ResultKind.Cancelled)RequestResultNotification(result.ToString());
     }
     private void RequestResultNotification(string message){if(exiting)return;if(ResultNotificationRequest is {} request){request(message);return;}if(!diagnostic&&!Controller.Platform.IsPreview)tray?.NotifyResult(message);}
-    private void RunEffect(Func<Task<ActionResult>> effect,Func<bool>? valid=null){var action=navigation.Id;var target=subpage=="details"?detail:Controller.Session.Anchor;QueueHandoff(()=>BeginEffect(effect,action,target),valid);}
+    private void RunEffect(Func<Task<ActionResult>> effect,Func<bool>? valid=null){var action=navigation.Id;var target=view.Current.Target??Controller.Session.Anchor;QueueHandoff(()=>BeginEffect(effect,action,target),valid);}
     internal Task OperationTask {get;private set;}=Task.CompletedTask;
     private void BeginEffect(Func<Task<ActionResult>> effect,string action,WindowRef? target)=>OperationTask=BeginEffectCore(effect,action,target);
     private async Task BeginEffectCore(Func<Task<ActionResult>> effect,string action,WindowRef? target)
@@ -409,7 +404,7 @@ public partial class MainWindow : Window
     private void CycleDisplay(){var ids=new string?[]{null}.Concat(Controller.Displays.Select(d=>(string?)d.Id)).ToArray();var index=Array.IndexOf(ids,Controller.Settings.DisplayId);Change(Controller.Settings with{DisplayId=ids[(index+1)%ids.Length]});Place();}
     private string GuideLimitTitle()=>"Guide · limite para abrir "+(Controller.Settings.GuideOpenMaxHoldMs/1000d).ToString("0.0",System.Globalization.CultureInfo.GetCultureInfo("pt-BR"))+" s";
     private bool AdjustGuideLimit(NavDirection direction){if(navigation.Id!="guide-limit"||direction is not (NavDirection.Left or NavDirection.Right))return false;if(entries.FirstOrDefault(e=>e.Id=="guide-limit")?.Button.Content is Grid grid&&grid.Children[1] is StackPanel texts&&texts.Children.OfType<Slider>().FirstOrDefault() is {} slider)slider.Value=Math.Clamp(slider.Value+(direction==NavDirection.Left?-100:100),500,3000);return true;}
-    private void ApplySettings(){if(!OpenAnimationAllowed)CancelOpenAnimation();input=new(Controller.Settings);input.Cancel();ConfigureGuide();if(IsVisible)Place();}
+    private void ApplySettings(){feedbackService.Suspend();feedbackService.Configure(Controller.Settings.SoundFeedbackEnabled,Controller.Settings.HapticFeedbackEnabled);if(!OpenAnimationAllowed)CancelOpenAnimation();input=new(Controller.Settings);input.Cancel();ConfigureGuide();if(IsVisible)Place();}
     private void Change(UserSettings settings){Controller.Change(settings);ApplySettings();RefreshRows();FeedbackText("Alteração em memória · Salvar ajustes para manter.");}
     private void Save(){try{Controller.Save();RetainOperation(Controller.Platform.IsPreview?"Simulado":"Concluído",Controller.Status);FeedbackText(Controller.Status);}catch(Exception e)when(e is IOException or UnauthorizedAccessException or InvalidDataException){RetainOperation("Falhou","Falha ao salvar; configuração anterior preservada. Tente salvar novamente ou descarte as alterações.");FeedbackText("Falha ao salvar; configuração anterior preservada.");}UpdatePersistentState();}
     private void ConfigurePlaynite()=>DialogTask=ConfigurePlayniteCore();
@@ -425,5 +420,67 @@ public partial class MainWindow : Window
             ownedDialog=false;if(CurrentCycle(cycle)){RevokeFocus("dialog-return");var resumed=focusCycle;var focus=AcquireFocus(resumed);OpeningTask=focus;if(await focus&&CurrentCycle(resumed))SetSelection(false);}
         }
     }
-    public void SetRenderState(string state){switch(state){case "apps":Page(1);break;case "system":Page(2);break;case "audio":Subpage("audio","volume");break;case "integrations":Subpage("integrations","test-steam");break;case "details":Details();break;case "confirmation":if(Controller.Session.Anchor is {} t)Confirm(t);break;case "long-error":FeedbackText("Não confirmado · A identidade da janela mudou. Selecione novamente em Apps. Nenhum comando adicional foi enviado.");break;case "steam-unavailable":navigation=new("steam-overlay");SetSelection();break;}}
+    internal void RevealSelection()=>SetSelection(false);
+    private FrameworkElement FocusTarget(Entry entry)=>!entry.Available&&entry.Button.Resources["DescriptionTarget"] is FrameworkElement reason?reason:entry.Button;
+    private bool AudioFor(WindowRef target)=>audioTarget?.Same(target)==true&&appAudio.Target?.Same(target)==true&&appAudio.Generation==audioGeneration;
+    private string AudioBadge()=>appAudio.Availability switch{
+        ApplicationAudioAvailability.Partial=>"Áudio parcialmente disponível",
+        ApplicationAudioAvailability.Unavailable=>"Áudio indisponível",
+        ApplicationAudioAvailability.Unknown=>"Estado não confirmado",
+        _=>appAudio.MuteState switch{ApplicationMuteState.Audible=>"Som ativo",ApplicationMuteState.Muted=>"Aplicativo sem som",ApplicationMuteState.Mixed=>"Áudio misto",_=>"Estado não confirmado"}};
+    private string MuteActionTitle()=>appAudio.MuteState==ApplicationMuteState.Muted&&appAudio.Availability==ApplicationAudioAvailability.Available?"Ativar som do aplicativo":appAudio.Availability!=ApplicationAudioAvailability.Available||appAudio.MuteState is ApplicationMuteState.Mixed or ApplicationMuteState.Unknown?"Silenciar áudio disponível":"Silenciar aplicativo";
+    private string AppAudioDescription()=>AudioBadge()+" · "+(appAudio.Availability==ApplicationAudioAvailability.Available?"Afeta também outras janelas deste aplicativo.":appAudio.Availability==ApplicationAudioAvailability.Partial?"Algumas saídas não foram verificadas. Afeta as janelas deste aplicativo.":"Consulte os detalhes ou tente novamente.");
+    private void TrackApplicationAudio()
+    {
+        if(exiting)return;var context=InputContext;if(!context.Visible||!context.Confirmed||!context.Active||!context.OwnForeground){if(audioTarget is not null){applicationAudio.Suspend();audioTarget=null;audioGeneration++;}return;}
+        var target=view.Current.Target??Controller.Session.Anchor;if(target is null||!Controller.Platform.Valid(target)){if(audioTarget is not null){applicationAudio.Suspend();audioTarget=null;audioGeneration++;}return;}
+        if(audioTarget?.Same(target)==true)return;audioTarget=target;audioGeneration++;audioRevision=-1;appAudio=new(target,audioGeneration,0,ApplicationAudioAvailability.Unknown,ApplicationMuteState.Unknown,0,0,"Consultando sessões do aplicativo…");SessionAudioLabel.Text=AudioBadge();applicationAudio.Track(target,true,audioGeneration);
+    }
+    private void ApplicationAudioChanged(ApplicationAudioSnapshot snapshot)
+    {
+        if(exiting||Dispatcher.HasShutdownStarted)return;if(!Dispatcher.CheckAccess()){Dispatcher.BeginInvoke(()=>ApplicationAudioChanged(snapshot));return;}
+        if(!InputContext.Visible||snapshot.Generation!=audioGeneration||audioTarget is null||!audioTarget.Same(snapshot.Target)||snapshot.Revision<=audioRevision)return;
+        audioRevision=snapshot.Revision;appAudio=snapshot;SessionAudioLabel.Text=AudioBadge();
+        var index=entries.FindIndex(e=>e.Id=="application-mute");if(index>=0){var entry=entries[index];var available=snapshot.CanSetMute&&Controller.Platform.Valid(audioTarget);entry.Button.IsEnabled=available;entries[index]=entry with{Available=available,Reason=AppAudioDescription()};SetEntryText("application-mute",MuteActionTitle());SetEntryDescription("application-mute",AppAudioDescription());if(entry.Button.Resources["DescriptionTarget"] is Border reason)AutomationProperties.SetName(reason,MuteActionTitle()+". "+AppAudioDescription());if(entry.Available!=available&&navigation.Id==entry.Id)SetSelection(false);}
+    }
+    private void FeedbackStatusChanged(FeedbackStatus status)
+    {
+        if(exiting||Dispatcher.HasShutdownStarted)return;if(!Dispatcher.CheckAccess()){Dispatcher.BeginInvoke(()=>FeedbackStatusChanged(status));return;}SetEntryDescription("test-feedback",status.Reason);
+    }
+    private void MuteApplication(WindowRef target)
+    {
+        if(!AudioFor(target)||!appAudio.CanSetMute){FeedbackText("Nenhuma sessão de áudio identificada; nada foi enviado.");return;}
+        var desired=!(appAudio.MuteState==ApplicationMuteState.Muted&&appAudio.Availability==ApplicationAudioAvailability.Available);var generation=audioGeneration;
+        RunInPlace(target,async token=>{var change=await applicationAudio.SetMutedAsync(target,desired,generation,token);if(!exiting)ApplicationAudioChanged(change.Snapshot);return change.Result;},"application-mute");
+    }
+    private void RunInPlace(WindowRef target,Func<CancellationToken,Task<ActionResult>> effect,string action)=>QueueHandoff(()=>OperationTask=RunInPlaceCore(target,effect,action),()=>Controller.Platform.Valid(target)&&(view.Current.Target??Controller.Session.Anchor)?.Same(target)==true);
+    private async Task RunInPlaceCore(WindowRef target,Func<CancellationToken,Task<ActionResult>> effect,string action)
+    {
+        if(busy||exiting)return;var generation=++operationGeneration;busy=true;pending=new();RetainOperation("Pendente","Solicitação enviada; aguardando confirmação.",action,target,true);
+        ActionResult result;try{result=await effect(pending.Token);}catch(OperationCanceledException){result=new(ResultKind.Unknown,"Observação interrompida; o comando enviado não pode ser desfeito. Verifique o aplicativo.");}catch(Exception error)when(error is InvalidOperationException or System.ComponentModel.Win32Exception){result=new(ResultKind.Failed,"Não foi possível confirmar a operação; não haverá repetição automática.");}finally{pending.Dispose();pending=null;busy=false;}
+        if(exiting||generation!=operationGeneration)return;RecordResult(result,action,target);UpdatePersistentState();
+    }
+    private int controllerMask;
+    internal void UpdateControllerTelemetry(IReadOnlyList<PadFrame> frames,int? slot,long now)
+    {
+        controllerDevices.UpdateConnections(frames.Select(frame=>frame.Connected&&!frame.ReadFailed).ToArray());var mask=0;for(var i=0;i<frames.Count;i++)if(frames[i].Connected&&!frames[i].ReadFailed)mask|=1<<i;
+        var connectionsChanged=mask!=controllerMask;if(connectionsChanged){controllerMask=mask;nextBatteryRead=0;activeEpoch=0;feedbackService.Suspend();}connectedControllers=frames.Count(frame=>frame.Connected&&!frame.ReadFailed);var failed=frames.Any(frame=>frame.ReadFailed);
+        var owner=slot is {} value&&value>=0&&value<frames.Count&&frames[value].Connected&&!frames[value].ReadFailed?(uint?)value:null;
+        var ownerChanged=owner!=activeSlot;if(ownerChanged){feedbackService.Suspend();activeSlot=owner;activeEpoch=0;nextBatteryRead=0;}
+        if(mask==0&&failed){activeEpoch=0;nextBatteryRead=0;SetControllerStatus("Leitura do controle indisponível");feedbackService.Suspend();return;}
+        if(connectionsChanged||ownerChanged||activeSlot is null)SetControllerStatus(activeSlot is {} selected?"Controle "+(selected+1)+" · Bateria não informada":connectedControllers switch{0=>"Nenhum controle conectado",1=>failed?"1 controle confirmado · outras leituras indisponíveis":"1 controle conectado · aguardando entrada",_=>failed?$"{connectedControllers} controles confirmados · outras leituras indisponíveis":$"{connectedControllers} controles conectados · aguardando entrada"});
+        var context=InputContext;var confirmed=context.Visible&&context.Confirmed&&context.Active&&context.OwnForeground&&!context.Exiting&&!context.OwnedDialog;
+        if(!confirmed){if(activeSlot is {} hiddenSlot)SetControllerStatus("Controle "+(hiddenSlot+1)+" · Bateria não informada");nextBatteryRead=0;feedbackService.Suspend();return;}
+        if(activeSlot is {} active&&now>=nextBatteryRead){nextBatteryRead=now+5000;var status=controllerDevices.Read(active);activeEpoch=status.ConnectionEpoch;SetControllerStatus("Controle "+(active+1)+" · "+BatteryText(status));}
+        feedbackService.SetContext(new(context.Visible,confirmed,activeSlot,activeEpoch));
+    }
+    private void SetControllerStatus(string text){controllerStatus=text;ControllerStatusLabel.Text=text;if(controllerStatusParagraph is not null){controllerStatusParagraph.Text=text;AutomationProperties.SetName(controllerStatusParagraph,text);}}
+    private static string BatteryText(ControllerDeviceSnapshot status)=>!status.Connected?"Desconectado":status.BatteryType==ControllerBatteryType.Wired?"Com fio":status.BatteryType is ControllerBatteryType.Alkaline or ControllerBatteryType.NickelMetalHydride?status.BatteryLevel switch{ControllerBatteryLevel.Empty=>"Bateria esgotada",ControllerBatteryLevel.Low=>"Bateria baixa",ControllerBatteryLevel.Medium=>"Bateria média",ControllerBatteryLevel.Full=>"Bateria cheia",_=>"Bateria não informada"}:"Bateria não informada";
+    private void RequestCue(FeedbackCue cue)
+    {
+        if(exiting)return;var context=InputContext;feedbackService.SetContext(new(context.Visible,context.Confirmed&&context.Active&&context.OwnForeground&&!context.OwnedDialog&&!context.Exiting,activeSlot,activeEpoch));
+        var sourceKind=dispatchSource>0||inputMethod=="controller"?FeedbackSourceKind.Controller:dispatchSource==-1||inputMethod=="mouse"?FeedbackSourceKind.Pointer:FeedbackSourceKind.Keyboard;
+        feedbackService.Request(cue,new(sourceKind,sourceKind==FeedbackSourceKind.Controller?activeSlot:null,activeEpoch));
+    }
+    public void SetRenderState(string state){switch(state){case "apps":Page(1);break;case "system":Page(2);break;case "audio":Subpage("audio","volume");break;case "integrations":Subpage("integrations","test-steam");break;case "details":if(Controller.Session.Anchor is {} selected)OpenView(new(OverlayRoute.Details,selected,"switch-detail"));break;case "options":if(Controller.Session.Anchor is {} option)OpenOptions(option);break;case "confirmation":if(Controller.Session.Anchor is {} t)Confirm(t);break;case "long-error":FeedbackText("Não confirmado · A identidade da janela mudou. Selecione novamente em Apps. Nenhum comando adicional foi enviado.");break;case "steam-unavailable":navigation=new("steam-overlay");SetSelection();break;}}
 }

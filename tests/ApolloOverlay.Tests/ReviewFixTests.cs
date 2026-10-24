@@ -11,7 +11,7 @@ using ApolloOverlay;
 internal static class ReviewFixTests
 {
     internal static void Require(bool value,string message){if(!value)throw new Exception(message);}
-    internal static Button Button(MainWindow w,string id)=>PremiumInterfaceTests.Descendants<Button>((DependencyObject)w.Content).First(b=>Equals(b.Tag,id));
+    internal static Button Button(MainWindow w,string id){if(id=="return")id="session-card";if(id=="close"&&!w.ActionIds.Contains(id)&&w.Controller.Session.Anchor is {} target)w.OpenOptions(target);return PremiumInterfaceTests.Descendants<Button>((DependencyObject)w.Content).First(b=>Equals(b.Tag,id));}
     internal static MainWindow Window(){var w=new MainWindow(renderOnly:true,platform:new PreviewPlatform(new(101,42,100,"Janela de teste","fixture")));w.InputContextReader=()=>new(true,true,true,true);w.PhysicalKeyReader=_=>0;w.Controller.CaptureReturn();w.Controller.Refresh().GetAwaiter().GetResult();w.RefreshRows();return w;}
     internal static void Capture(string output,bool focused=false)
     {
@@ -49,7 +49,7 @@ internal static class ReviewFixTests
                 }
                 if(scroll.Visibility==Visibility.Visible){Require(scroll.ViewportHeight>0,"No scroll viewport: "+item);scroll.ScrollToEnd();root.UpdateLayout();Require(scroll.VerticalOffset+scroll.ViewportHeight>=scroll.ExtentHeight-1,"Scroll end unreachable");if(state!="system-dirty")scroll.ScrollToTop();root.UpdateLayout();}
                 if(state.EndsWith("template-simulation")){
-                    var button=PremiumInterfaceTests.Descendants<Button>(root).First(b=>Equals(b.Tag,"return"));button.ApplyTemplate();
+                    var button=PremiumInterfaceTests.Descendants<Button>(root).First(b=>Equals(b.Tag,"session-card"));button.ApplyTemplate();
                     if(state=="focus-template-simulation")((Border)button.Template.FindName("FocusRing",button)).Visibility=Visibility.Visible;
                     else ((Border)button.Template.FindName("Interaction",button)).Opacity=state=="hover-template-simulation"?.06:.13;
                 }
@@ -76,11 +76,11 @@ internal static class ReviewFixTests
         foreach(var state in new[]{"home","apps","system","details","audio","integrations"})test("RF UIA all page actions "+state,()=>{var w=Window();try{
             w.SetRenderState(state);var gear=(Button)w.FindName("SettingsGear");Require(new ButtonAutomationPeer(gear).GetName()=="Abrir Sistema","Gear name missing");Require(new ButtonAutomationPeer(gear).GetHelpText().Length>0,"Gear help missing");
             var buttons=((Grid)w.FindName("Rows")).Children.OfType<Button>().Concat(((Grid)w.FindName("CloseArea")).Children.OfType<Button>()).ToArray();Require(buttons.Length>0,"Empty page fixture");
-            foreach(var button in buttons){var texts=(StackPanel)((Grid)button.Content).Children[1];var peer=new ButtonAutomationPeer(button);Require(peer.GetName()==((TextBlock)texts.Children[0]).Text,"Action name differs: "+button.Tag);Require(peer.GetHelpText().Length>0,"Action help missing: "+button.Tag);if(texts.Children.Count>1&&texts.Children[1] is TextBlock desc)Require(peer.GetHelpText()==desc.Text,"Description differs: "+button.Tag);}
+            foreach(var button in buttons){var peer=new ButtonAutomationPeer(button);Require(peer.GetHelpText().Length>0,"Action help missing: "+button.Tag);if(button.Content is Grid grid){var texts=(StackPanel)grid.Children[1];Require(peer.GetName()==((TextBlock)texts.Children[0]).Text,"Action name differs: "+button.Tag);if(texts.Children.Count>1&&texts.Children[1] is TextBlock desc)Require(peer.GetHelpText()==desc.Text,"Description differs: "+button.Tag);}else Require(peer.GetName().StartsWith("Opções de "),"Sibling options missing full target name");}
             Require(!w.IsVisible,"Accessibility probe must stay offscreen");
         }finally{w.Close();}});
         test("RF audio description stays accessible despite omitted home subtitle",()=>{var w=Window();try{var button=Button(w,"audio");var peer=new ButtonAutomationPeer(button);w.UpdateAudioEntries(new("fixture",.35f,true,"fixture"));Require(peer.GetHelpText()=="Sem som","Mute help stale");w.UpdateAudioEntries(new("fixture",.35f,false,"fixture"));Require(peer.GetHelpText()==.35f.ToString("P0"),"Volume help stale");w.UpdateAudioEntries(new(null,0,false,"fixture"));Require(peer.GetHelpText()=="Saída indisponível","Unavailable help stale");}finally{w.Close();}});
         test("RF Guide status reason and limit title update existing peers",()=>{var w=Window();try{w.SetRenderState("integrations");var button=Button(w,"guide");var peer=new ButtonAutomationPeer(button);w.UpdateGuideStatus("Controle indisponível · fixture");Require(peer.GetHelpText()=="Controle indisponível · fixture","Guide help stale");Require(ReferenceEquals(button,Button(w,"guide")),"Guide rebuilt button");w.Page(2);var limit=Button(w,"guide-limit");var limitPeer=new ButtonAutomationPeer(limit);var texts=(StackPanel)((Grid)limit.Content).Children[1];texts.Children.OfType<Slider>().Single().Value=1500;Require(limitPeer.GetName()==((TextBlock)texts.Children[0]).Text&&limitPeer.GetName().Contains("1,5"),"Guide limit name stale");}finally{w.Close();}});
-        test("RF UIA action exposes visible title and reason without Show",()=>{var w=Window();try{var button=Button(w,"return");var peer=new ButtonAutomationPeer(button);Require(peer.GetName()=="Retomar janela","Missing action name: '"+peer.GetName()+"'");Require(peer.GetHelpText()=="Janela de teste","Missing action reason: '"+peer.GetHelpText()+"'");Require(!w.IsVisible,"Probe must stay offscreen");}finally{w.Close();}});
+        test("RF UIA card exposes full target title and resume action without Show",()=>{var w=Window();try{var button=Button(w,"session-card");var peer=new ButtonAutomationPeer(button);Require(peer.GetName().Contains("Janela de teste")&&peer.GetName().Contains("Retomar janela"),"Missing card target/action name: '"+peer.GetName()+"'");Require(peer.GetHelpText().Contains("retoma")&&peer.GetHelpText().Contains("opções"),"Missing card help: '"+peer.GetHelpText()+"'");Require(!w.IsVisible,"Probe must stay offscreen");}finally{w.Close();}});
     }
 }
