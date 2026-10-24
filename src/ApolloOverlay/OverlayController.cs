@@ -8,6 +8,12 @@ public sealed class OverlayController : IDisposable
     public IPlatform Platform {get;}
     public LocalDiagnostics Diagnostics {get;}
     public UserSettings Settings {get;private set;}
+    public UserSettings SavedSettings {get;private set;}
+    public bool SettingsDirty=>Settings!=SavedSettings;
+    public OverlayOperation? Operation {get;private set;}
+    public void SetOperation(string state,string message,string action="",WindowRef? target=null,bool dispatched=false)=>Operation=new(state,message,action,target,dispatched);
+    public void DismissOperation()=>Operation=null;
+    public void Discard()=>Settings=SavedSettings;
     public SessionTracker Session {get;}=new();
     public WindowRef? ReturnTarget {get;private set;}
     public IReadOnlyList<WindowRef> Apps {get;private set;}=[];
@@ -20,7 +26,7 @@ public sealed class OverlayController : IDisposable
     public OverlayController(IPlatform? platform=null,LocalDiagnostics? diagnostics=null)
     {
         Platform=platform??new WindowsPlatform();Diagnostics=diagnostics??new();if(Platform.IsPreview){Settings=new();Status="Prévia · ações de janela simuladas";}else{Settings=Diagnostics.Load(out var status);Status=status;}
-        if(!Platform.IsPreview&&Settings.PlaynitePath is null){var candidates=new[]{Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Playnite","Playnite.FullscreenApp.exe"),Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"Playnite","Playnite.FullscreenApp.exe")};Settings=Settings with{PlaynitePath=candidates.FirstOrDefault(File.Exists)};}
+        if(!Platform.IsPreview&&Settings.PlaynitePath is null){var candidates=new[]{Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Playnite","Playnite.FullscreenApp.exe"),Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"Playnite","Playnite.FullscreenApp.exe")};Settings=Settings with{PlaynitePath=candidates.FirstOrDefault(File.Exists)};}SavedSettings=Settings;
     }
     public void CaptureReturn(){ReturnTarget=Platform.Foreground();Session.ClearIfStale(Platform.Valid);Session.Observe(ReturnTarget);}
     public IReadOnlyList<DisplayRef> RefreshDisplays()=>Displays=Platform.Displays();
@@ -34,7 +40,7 @@ public sealed class OverlayController : IDisposable
     }
     public void Select(WindowRef window){Session.Select(window);Steam.Invalidate();}
     public void Change(UserSettings value){_=UserSettings.Parse(System.Text.Json.JsonSerializer.Serialize(value,SettingsJson.Default.UserSettings));Settings=value;}
-    public void Save(){if(Platform.IsPreview){Status="Prévia · nada foi salvo.";return;}Diagnostics.Save(Settings);Status="Ajustes salvos em AppData.";}
+    public void Save(){if(Platform.IsPreview){Status="Prévia · nada foi salvo; alterações apenas nesta sessão.";return;}Diagnostics.Save(Settings);SavedSettings=Settings;Status="Ajustes salvos em AppData.";}
     public async Task<ActionResult> Launch(bool playnite)
     {
         if(disposed)return new(ResultKind.Cancelled,"Overlay encerrada; nenhuma inicialização enviada.");
@@ -46,3 +52,4 @@ public sealed class OverlayController : IDisposable
     }
     public void Dispose(){if(disposed)return;disposed=true;revision++;refresh?.Cancel();refresh?.Dispose();Platform.Dispose();}
 }
+public sealed record OverlayOperation(string State,string Message,string Action,WindowRef? Target,bool Dispatched);

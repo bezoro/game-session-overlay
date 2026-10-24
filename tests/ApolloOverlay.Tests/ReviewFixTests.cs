@@ -11,28 +11,50 @@ using ApolloOverlay;
 internal static class ReviewFixTests
 {
     internal static void Require(bool value,string message){if(!value)throw new Exception(message);}
-    internal static Button Button(MainWindow w,string id)=>((Grid)w.FindName("Rows")).Children.OfType<Button>().Concat(((Grid)w.FindName("CloseArea")).Children.OfType<Button>()).First(b=>Equals(b.Tag,id));
+    internal static Button Button(MainWindow w,string id)=>PremiumInterfaceTests.Descendants<Button>((DependencyObject)w.Content).First(b=>Equals(b.Tag,id));
     internal static MainWindow Window(){var w=new MainWindow(renderOnly:true,platform:new PreviewPlatform(new(101,42,100,"Janela de teste","fixture")));w.InputContextReader=()=>new(true,true,true,true);w.PhysicalKeyReader=_=>0;w.Controller.CaptureReturn();w.Controller.Refresh().GetAwaiter().GetResult();w.RefreshRows();return w;}
-    internal static void Capture(string output)
+    internal static void Capture(string output,bool focused=false)
     {
         Directory.CreateDirectory(output);var app=Application.Current??new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};
-        foreach(var theme in new[]{"dark","light","contrast-palette"})foreach(var height in new[]{940,600})foreach(var state in new[]{"home","system","audio","confirmation"}){
-            ThemeSupport.ForceForValidation(app,theme=="light");var palette=new ResourceDictionary();
+        var matrix=new List<(string Theme,int Width,int Height,string State)>();
+        foreach(var theme in new[]{"dark","light"}){
+            foreach(var size in new[]{(572,940),(572,600),(420,600),(360,480)})matrix.Add((theme,size.Item1,size.Item2,"home"));
+            foreach(var state in new[]{"system-dirty-top","system-dirty","apps","details","audio","integrations","confirmation","progress","cancelled","empty","long-error","hover-template-simulation","pressed-template-simulation","focus-template-simulation"})matrix.Add((theme,572,940,state));
+            foreach(var state in new[]{"system-dirty","confirmation","audio","apps","empty","long-error"})matrix.Add((theme,360,480,state));
+        }
+        foreach(var state in new[]{"home","system-dirty","confirmation","audio"})matrix.Add(("contrast-palette",420,600,state));
+        if(focused){matrix.Clear();foreach(var theme in new[]{"dark","light"}){matrix.Add((theme,360,480,"long-error"));matrix.Add((theme,360,480,"operation"));matrix.Add((theme,572,940,"integrations"));}}
+        foreach(var item in matrix){
+            var (theme,width,height,state)=item;ThemeSupport.ForceForValidation(app,theme=="light");var palette=new ResourceDictionary();
             if(theme=="contrast-palette"){
                 foreach(var key in new[]{ThemeSupport.Surface,ThemeSupport.Card,ThemeSupport.Control,ThemeSupport.SuccessBackground,ThemeSupport.CriticalBackground})palette[key]=Brushes.Black;
                 foreach(var key in new[]{ThemeSupport.Text,ThemeSupport.SecondaryText,ThemeSupport.DisabledText})palette[key]=Brushes.White;
                 palette[ThemeSupport.Stroke]=Brushes.White;palette[ThemeSupport.Success]=Brushes.Yellow;palette[ThemeSupport.Critical]=Brushes.Cyan;app.Resources.MergedDictionaries.Add(palette);
             }
-            var w=Window();try{
-                w.SetRenderState(state);var root=(FrameworkElement)w.Content;w.Content=null;root.Resources.MergedDictionaries.Add(w.Resources);root.SetResourceReference(TextElement.ForegroundProperty,ThemeSupport.Text);root.SetValue(TextElement.FontFamilyProperty,w.FontFamily);root.SetValue(TextElement.FontSizeProperty,w.FontSize);
-                root.Measure(new Size(572,height));root.Arrange(new Rect(0,0,572,height));root.UpdateLayout();
+            var platform=new PremiumInterfaceTests.FixturePlatform{Empty=state=="empty"};var w=PremiumInterfaceTests.FixtureWindow(platform);
+            try{
+                if(state.StartsWith("system-dirty")){w.Controller.Change(w.Controller.Settings with{ReducedMotion=true,GuideOpenMaxHoldMs=1500});w.Page(2);}
+                else if(state is "confirmation" or "progress" or "cancelled"){
+                    Button(w,"close").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                    if(state=="progress"){w.AdvancePointerHold(false,true,true,0);w.AdvancePointerHold(true,true,true,1);w.AdvancePointerHold(true,true,true,751);}
+                    if(state=="cancelled")w.Back();
+                }else if(state is "long-error" or "operation"){w.Controller.SetOperation("Não confirmado","A identidade da janela mudou durante a solicitação. Abra Aplicativos, escolha a janela novamente e verifique se há um diálogo de salvar antes de tentar outra vez. Nenhum comando adicional foi enviado.","fixture",dispatched:true);w.RefreshRows();if(state=="operation")((Button)w.FindName("OperationDetailsButton")).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));}
+                else if(state is not ("home" or "empty")&&!state.EndsWith("template-simulation"))w.SetRenderState(state);
+                var root=(FrameworkElement)w.Content;w.Content=null;root.Resources.MergedDictionaries.Add(w.Resources);root.SetResourceReference(TextElement.ForegroundProperty,ThemeSupport.Text);root.SetValue(TextElement.FontFamilyProperty,w.FontFamily);root.SetValue(TextElement.FontSizeProperty,w.FontSize);
+                root.Measure(new Size(width,height));root.Arrange(new Rect(0,0,width,height));root.UpdateLayout();
                 var scroll=(ScrollViewer)w.FindName("ContentScroll");var mode=(TextBlock)w.FindName("ModeLabel");var footer=mode.TransformToAncestor(root).TransformBounds(new Rect(new Size(mode.ActualWidth,mode.ActualHeight)));
-                Require(footer.Bottom<=height+1&&footer.Top>=0,"Footer clipped: "+theme+state+height);Require(mode.ActualHeight>=24,"Runtime tab/movement hints did not wrap");
-                Require(mode.Text.Contains("PgUp/PgDn")&&mode.Text.Contains("Tab"),"Runtime keyboard hint missing");
-                if(state!="confirmation"){Require(scroll.ViewportHeight>0,"No scroll viewport");scroll.ScrollToEnd();root.UpdateLayout();Require(scroll.VerticalOffset+scroll.ViewportHeight>=scroll.ExtentHeight-1,"Scroll end unreachable");scroll.ScrollToTop();root.UpdateLayout();}
-                else Require(w.Confirming,"Confirmation fixture absent");
-                var bitmap=new RenderTargetBitmap(572,height,96,96,PixelFormats.Pbgra32);bitmap.Render(root);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(bitmap));var name=$"{theme}-{height}-{state}";using(var stream=File.Create(Path.Combine(output,name+".png")))encoder.Save(stream);
-                Console.WriteLine($"CAPTURE {name}; footer={footer}; viewport={scroll.ViewportHeight}; extent={scroll.ExtentHeight}; offscreen={!w.IsVisible}");
+                Require(footer.Bottom<=height+1&&footer.Top>=0,"Footer clipped: "+item);Require(!w.IsVisible,"Capture acquired foreground");
+                foreach(var controlName in state.StartsWith("system-dirty")?new[]{"SaveSettingsButton","DiscardSettingsButton"}:state is "confirmation" or "progress"?new[]{"HoldCloseButton","CancelCloseButton"}:Array.Empty<string>()){
+                    var control=(FrameworkElement)w.FindName(controlName);var bounds=control.TransformToAncestor(root).TransformBounds(new Rect(new Size(control.ActualWidth,control.ActualHeight)));Require(bounds.Top>=0&&bounds.Bottom<=height+1&&bounds.Width>=40&&bounds.Height>=40,"Essential control clipped: "+controlName+item);
+                }
+                if(scroll.Visibility==Visibility.Visible){Require(scroll.ViewportHeight>0,"No scroll viewport: "+item);scroll.ScrollToEnd();root.UpdateLayout();Require(scroll.VerticalOffset+scroll.ViewportHeight>=scroll.ExtentHeight-1,"Scroll end unreachable");if(state!="system-dirty")scroll.ScrollToTop();root.UpdateLayout();}
+                if(state.EndsWith("template-simulation")){
+                    var button=PremiumInterfaceTests.Descendants<Button>(root).First(b=>Equals(b.Tag,"return"));button.ApplyTemplate();
+                    if(state=="focus-template-simulation")((Border)button.Template.FindName("FocusRing",button)).Visibility=Visibility.Visible;
+                    else ((Border)button.Template.FindName("Interaction",button)).Opacity=state=="hover-template-simulation"?.06:.13;
+                }
+                var bitmap=new RenderTargetBitmap(width,height,96,96,PixelFormats.Pbgra32);bitmap.Render(root);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(bitmap));var name=$"{theme}-{width}x{height}-{state}";using(var stream=File.Create(Path.Combine(output,name+".png")))encoder.Save(stream);
+                Console.WriteLine($"CAPTURE {name}; footer={footer}; viewport={scroll.ViewportHeight}; extent={scroll.ExtentHeight}; offset={scroll.VerticalOffset}; offscreen={!w.IsVisible}; templateSimulation={state.EndsWith("template-simulation")}");
             }finally{w.Close();if(theme=="contrast-palette")app.Resources.MergedDictionaries.Remove(palette);ThemeSupport.FollowSystem(app);}
         }
     }
@@ -59,6 +81,6 @@ internal static class ReviewFixTests
         }finally{w.Close();}});
         test("RF audio description stays accessible despite omitted home subtitle",()=>{var w=Window();try{var button=Button(w,"audio");var peer=new ButtonAutomationPeer(button);w.UpdateAudioEntries(new("fixture",.35f,true,"fixture"));Require(peer.GetHelpText()=="Sem som","Mute help stale");w.UpdateAudioEntries(new("fixture",.35f,false,"fixture"));Require(peer.GetHelpText()==.35f.ToString("P0"),"Volume help stale");w.UpdateAudioEntries(new(null,0,false,"fixture"));Require(peer.GetHelpText()=="Saída indisponível","Unavailable help stale");}finally{w.Close();}});
         test("RF Guide status reason and limit title update existing peers",()=>{var w=Window();try{w.SetRenderState("integrations");var button=Button(w,"guide");var peer=new ButtonAutomationPeer(button);w.UpdateGuideStatus("Controle indisponível · fixture");Require(peer.GetHelpText()=="Controle indisponível · fixture","Guide help stale");Require(ReferenceEquals(button,Button(w,"guide")),"Guide rebuilt button");w.Page(2);var limit=Button(w,"guide-limit");var limitPeer=new ButtonAutomationPeer(limit);var texts=(StackPanel)((Grid)limit.Content).Children[1];texts.Children.OfType<Slider>().Single().Value=1500;Require(limitPeer.GetName()==((TextBlock)texts.Children[0]).Text&&limitPeer.GetName().Contains("1,5"),"Guide limit name stale");}finally{w.Close();}});
-        test("RF UIA action exposes visible title and reason without Show",()=>{var w=Window();try{var button=Button(w,"return");var peer=new ButtonAutomationPeer(button);Require(peer.GetName()=="Voltar ao jogo","Missing action name: '"+peer.GetName()+"'");Require(peer.GetHelpText()=="Janela de teste","Missing action reason: '"+peer.GetHelpText()+"'");Require(!w.IsVisible,"Probe must stay offscreen");}finally{w.Close();}});
+        test("RF UIA action exposes visible title and reason without Show",()=>{var w=Window();try{var button=Button(w,"return");var peer=new ButtonAutomationPeer(button);Require(peer.GetName()=="Retomar janela","Missing action name: '"+peer.GetName()+"'");Require(peer.GetHelpText()=="Janela de teste","Missing action reason: '"+peer.GetHelpText()+"'");Require(!w.IsVisible,"Probe must stay offscreen");}finally{w.Close();}});
     }
 }

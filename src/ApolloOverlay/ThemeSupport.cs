@@ -7,6 +7,18 @@ internal static class ThemeSupport
 {
     internal const string Surface="ApplicationBackgroundBrush",Card="CardBackgroundFillColorDefaultBrush",Control="ControlFillColorDefaultBrush",Stroke="ControlStrokeColorDefaultBrush",Text="TextFillColorPrimaryBrush",SecondaryText="TextFillColorSecondaryBrush",DisabledText="TextFillColorDisabledBrush",Success="SystemFillColorSuccessBrush",SuccessBackground="SystemFillColorSuccessBackgroundBrush",Critical="SystemFillColorCriticalBrush",CriticalBackground="SystemFillColorCriticalBackgroundBrush";
     private static ResourceDictionary? validation;
+    private static ResourceDictionary? contrast;
+    internal static void ApplySystemPalette(Application? application)
+    {
+        if(application is null)return;
+        if(contrast is not null){application.Resources.MergedDictionaries.Remove(contrast);contrast=null;}
+        if(!SystemParameters.HighContrast)return;
+        contrast=new ResourceDictionary();
+        foreach(var key in new[]{Surface,Card,Control,SuccessBackground,CriticalBackground})contrast[key]=SystemColors.WindowBrush;
+        foreach(var key in new[]{Text,SecondaryText,Stroke})contrast[key]=SystemColors.WindowTextBrush;
+        contrast[DisabledText]=SystemColors.GrayTextBrush;contrast[Success]=SystemColors.HighlightBrush;contrast[Critical]=SystemColors.WindowTextBrush;
+        application.Resources.MergedDictionaries.Add(contrast);
+    }
     internal static void FollowSystem(Application application)
     {
         if(validation is not null){application.Resources.MergedDictionaries.Remove(validation);validation=null;}
