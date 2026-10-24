@@ -2,9 +2,9 @@
 
 Use **Abrir overlay.cmd**. O produto opera normalmente; não há flag de piloto ou confirmação de entrada.
 
-- Controle USB/Bluetooth/virtual: abrir por LB+RB+Start650ms, soltar, navegar em todas as páginas, desconectar/reconectar, retornar com B. Verificar conflito do chord e observar se o jogo também recebe os botões.
+- Controle USB/Bluetooth/virtual: habilitar explicitamente o Guide experimental nas configurações. Após uma leitura neutra com Guide solto, pressionar brevemente e soltar dentro do limite configurado para abrir; depois navegar em todas as páginas, desconectar/reconectar e retornar com B. Se o Guide não estiver disponível, abrir pelo menu da bandeja. Observar se o jogo ou outro aplicativo também recebe o Guide; a leitura não bloqueia o botão para outros processos.
 - Janelas borderless DX11/DX12/Vulkan: abertura, alt-tab, retorno, recusa de foco e troca de sessão. Fullscreen exclusivo não é garantido.
-- Steam/Playnite presentes e ausentes; Big Picture, atalhos e abertura/reuso. Só considerar visibilidade confirmada se realmente observada. Guide longo e preservação do toque curto seguem indisponíveis.
+- Steam/Playnite presentes e ausentes; Big Picture, atalhos e abertura/reuso. Só considerar visibilidade confirmada se realmente observada. Confirmar que uma pressão de Guide acima do limite não abre o painel ao soltar. O toque curto pode também acionar Steam/Game Bar; a compatibilidade física e o comportamento de pressão longa/desligamento precisam de validação manual.
 - Dois monitores/DPI misto, origem negativa, monitor virtual Apollo, resolução removida/trocada, 4K100% na TV; assegurar texto e foco legíveis.
 - Claro/escuro enquanto o painel já está aberto, alto contraste, animações do Windows desativadas e HDR. Não alterar configurações do usuário durante checks automáticos.
 - Áudio: mudança do endpoint durante página aberta, desconexão, volume/mudo por outro aplicativo. Confirmar atualização sem reiniciar.

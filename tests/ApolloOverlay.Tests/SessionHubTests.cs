@@ -39,7 +39,41 @@ internal static class SessionHubTests
         foreach(var dpi in new[]{96,144,192})foreach(var percent in new[]{100,115,130,150})test($"hub physical placement negative origin dpi{dpi} scale{percent}",()=>{
             var display=new DisplayRef("negative",-2560,-180,2560,1400,false);var left=SidebarLayout.Place(display,dpi,percent,"Left");var right=SidebarLayout.Place(display,dpi,percent,"Right");Check(left.X>=display.X&&left.Y>=display.Y&&right.X+right.Width<=display.X+display.Width&&left.Height<=display.Height,"Outside usable work area");Check(right.X>left.X&&right.Width==left.Width,"Side placement broken");Check(SidebarLayout.EffectiveScale(display,dpi,percent)>=percent/100d,"Chosen scale was reduced");
         });
-        TelemetryFailures(test);RunViews(test);
+        BusyControllerChecks(test);TelemetryFailures(test);RunViews(test);
+    }
+    internal static void BusyControllerChecks(Action<string,Action> test)
+    {
+        foreach(var buttons in new[]{PadButtons.A,PadButtons.X,PadButtons.LB,PadButtons.RB,PadButtons.Up,PadButtons.Down,PadButtons.Left,PadButtons.Right})
+            test("hub busy Tick blocks "+buttons,()=>BusyController(buttons,false,ResultKind.Partial));
+        var mixed=PadButtons.B|PadButtons.A|PadButtons.X|PadButtons.LB|PadButtons.RB|PadButtons.Down;
+        foreach(var buttons in new[]{PadButtons.B,mixed})foreach(var outcome in new[]{ResultKind.Partial,ResultKind.Failed,ResultKind.Unknown})
+            test("hub busy Tick cancels only "+buttons+" then "+outcome,()=>BusyController(buttons,true,outcome));
+    }
+    private static void BusyController(PadButtons buttons,bool cancel,ResultKind outcome)
+    {
+        var w=Fixture(out var p,out var audio,out _,out _);
+        var completion=new TaskCompletionSource<ApplicationAudioChange>();audio.Next=completion.Task;
+        try{
+            w.Left=-12000;w.Top=-12000;w.ShowDiagnostic();w.OpenOptions(p.A);Pick(w,"application-mute");
+            Click(w,"application-mute");Release(w);
+            Check(audio.Writes==1&&w.Controller.Operation is {State:"Pendente",Dispatched:true},"Fake audio command was not dispatched once");
+            var selected=w.SelectedAction;var entries=w.ActionIds.ToArray();var title=((TextBlock)w.FindName("PageTitle")).Text;
+            var frames=new[]{new PadFrame(true,PadButtons.None),default,default,default};
+            w.ReviewTick(frames);frames[0]=new(true,buttons);w.ReviewTick(frames);
+            Check(audio.Token.IsCancellationRequested==cancel,"Tick swallowed B or cancelled for another button");
+            Check(w.IsVisible&&w.SelectedAction==selected&&w.ActionIds.SequenceEqual(entries)&&((TextBlock)w.FindName("PageTitle")).Text==title,"Busy input navigated, activated or hid the panel");
+            Check(audio.Writes==1&&p.Switches==0&&p.Minimizes==0&&!w.TransitionPending,"Busy input dispatched another operation");
+            if(cancel)Check(w.Controller.Operation is {State:"Não confirmado",Dispatched:true} operation&&operation.Message.Contains("não pode ser desfeito"),"Cancellation claimed undo or confirmed success");
+            else Check(w.Controller.Operation is {State:"Pendente",Dispatched:true},"Non-B input changed pending outcome");
+            if(outcome==ResultKind.Unknown)completion.SetCanceled(audio.Token);
+            else completion.SetResult(new(new(outcome,"Fixture late outcome; verify the application."),audio.Snapshot(),2,1,1,true));
+            Complete(w.OperationTask);
+            var expected=outcome switch{ResultKind.Partial=>"Parcial",ResultKind.Failed=>"Falhou",_=>"Não confirmado"};
+            Check(audio.Writes==1&&w.Controller.Operation is {Dispatched:true} result&&result.State==expected,"Late outcome was lost, retried or reported as success");
+            Check(w.IsVisible&&w.SelectedAction==selected&&p.Switches==0&&p.Minimizes==0,"Late outcome navigated or hid the panel");
+            frames[0]=new(true,PadButtons.None);w.ReviewTick(frames);
+            Check(audio.Writes==1&&!w.TransitionPending,"Neutral recovery retried the command");
+        }finally{w.Close();completion.TrySetCanceled();Complete(w.OperationTask);}
     }
     internal static void TelemetryFailures(Action<string,Action> test)
     {
