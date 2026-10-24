@@ -76,5 +76,19 @@
     "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/c71c69e3a27e4436936b831c72643e6513b9f49b/LICENSE.md",
     "commit": "c71c69e3a27e4436936b831c72643e6513b9f49b",
     "sha256": "9046848b63a5c92bff14e4accca80bd987e0623b74adf9226ce5198d312b79d5"
+  },
+  {
+    "name": "playnite",
+    "url": "https://raw.githubusercontent.com/JosefNemec/Playnite/3e8abb241873e326e27c75b59dd0d2ea367698e3/media/playnite-logo-white.svg",
+    "commit": "3e8abb241873e326e27c75b59dd0d2ea367698e3",
+    "sha256": "e73a0d99e74a671bf3cc1e6263e35f1e9881596a3f9cdfacedea955331eb393d",
+    "license": "MIT",
+    "transformation": "Original SVG preserved byte-for-byte. Icons.xaml copies the single path d unchanged with F1 (SVG default nonzero fill); existing 26 DIP Stretch.Uniform and dynamic theme brush supply size/color. No runtime SVG dependency."
+  },
+  {
+    "name": "playnite-license",
+    "url": "https://raw.githubusercontent.com/JosefNemec/Playnite/3e8abb241873e326e27c75b59dd0d2ea367698e3/LICENSE.md",
+    "commit": "3e8abb241873e326e27c75b59dd0d2ea367698e3",
+    "sha256": "10c0871ee7dd3ac9f6ef53097a173113229edd1b23e9218d952287889b2b84eb"
   }
 ]

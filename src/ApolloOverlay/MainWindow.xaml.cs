@@ -321,7 +321,7 @@ public partial class MainWindow : Window
     }
     private FrameworkElement ActionIcon(string id,string fallback)
     {
-        var key=id.StartsWith("window:",StringComparison.Ordinal)?"apps":id switch{"return" or "back"=>"back","steam" or "steam-overlay" or "test-steam"=>"steam","gamebar" or "chord" or "guide"=>"gamebar","apps" or "refresh-apps" or "next-apps" or "switch-detail"=>"apps","taskview" or "display"=>"taskview","audio" or "volume" or "volume-down"=>"speaker","mute"=>audio.Current.Muted?"speaker":"mute","close" or "close-detail" or "exit" or "external-close"=>"close","playnite" or "configure-playnite"=>"play","select-session"=>"controller",_=>"settings"};
+        var key=id.StartsWith("window:",StringComparison.Ordinal)?"apps":id switch{"return" or "back"=>"back","steam" or "steam-overlay" or "test-steam"=>"steam","gamebar" or "chord" or "guide"=>"gamebar","apps" or "refresh-apps" or "next-apps" or "switch-detail"=>"apps","taskview" or "display"=>"taskview","audio" or "volume" or "volume-down"=>"speaker","mute"=>audio.Current.Muted?"speaker":"mute","close" or "close-detail" or "exit" or "external-close"=>"close","playnite" or "configure-playnite"=>"playnite","select-session"=>"controller",_=>"settings"};
         var icon=new System.Windows.Shapes.Path{Data=(Geometry)FindResource("Icon."+key),Stretch=Stretch.Uniform,Width=26,Height=26,HorizontalAlignment=HorizontalAlignment.Left,VerticalAlignment=VerticalAlignment.Center};
         icon.SetResourceReference(System.Windows.Shapes.Shape.FillProperty,id is "close" or "close-detail"?ThemeSupport.Critical:ThemeSupport.Text);return icon;
     }
