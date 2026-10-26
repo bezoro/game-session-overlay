@@ -14,6 +14,7 @@ internal static class SessionHubTests
     private static void Check(bool value,string reason){if(!value)throw new Exception(reason);}
     internal static void Run(Action<string,Action> test)
     {
+        SelectionAudioRegressions(test);
         test("hub settings v1 v2 migrate and optional fields recover independently",()=>{
             foreach(var version in new[]{1,2,3}){var value=UserSettings.Parse("{\"Version\":"+version+",\"GuideXInputEnabled\":true,\"UiScalePercent\":\"bad\",\"PanelSide\":4,\"FavoriteQuickActions\":false,\"HapticFeedbackEnabled\":{},\"SoundFeedbackEnabled\":true}");Check(value.Version==3&&value.GuideXInputEnabled&&value.SoundFeedbackEnabled&&!value.HapticFeedbackEnabled&&value.UiScalePercent==100&&value.PanelSide=="Left"&&SessionHubSettings.Favorites(value).Count()==6,"Field-local recovery lost valid settings");}
         });
@@ -198,6 +199,34 @@ internal static class SessionHubTests
             }finally{w.Close();if(pendingCompletion is not null){pendingCompletion.TrySetCanceled();Complete(w.OperationTask);}if(palette is not null)app.Resources.MergedDictionaries.Remove(palette);ThemeSupport.FollowSystem(app);}
         }
         File.WriteAllText(Path.Combine(output,"capture-report.json"),JsonSerializer.Serialize(metadata,SessionCaptureJson.Default.ListSessionCaptureInfo));
+    }
+    private static void SelectionAudioRegressions(Action<string,Action> test)
+    {
+        foreach(var width in new[]{360,572})foreach(var theme in new[]{"dark","light","contrast-palette"})
+        test($"hub row typography and geometry stable across selection {width} {theme}",()=>{
+            var app=Application.Current??new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};ThemeSupport.ForceForValidation(app,theme=="light");ResourceDictionary? palette=null;
+            if(theme=="contrast-palette"){palette=new();foreach(var key in new[]{ThemeSupport.Surface,ThemeSupport.Card,ThemeSupport.Control,ThemeSupport.SuccessBackground})palette[key]=Brushes.Black;foreach(var key in new[]{ThemeSupport.Text,ThemeSupport.SecondaryText,ThemeSupport.Stroke})palette[key]=Brushes.White;palette[ThemeSupport.Success]=Brushes.Yellow;app.Resources.MergedDictionaries.Add(palette);}
+            var w=Fixture(out var p,out _,out _,out _);
+            try{
+                w.Left=-12000;w.Top=-12000;w.Width=width;w.Height=width==360?480:940;w.ShowDiagnostic();w.OpenOptions(p.A);
+                var root=(FrameworkElement)w.Content;var button=ReviewFixTests.Button(w,"application-mute");
+                var label=((StackPanel)((Grid)button.Content).Children[1]).Children.OfType<TextBlock>().Last();
+                // Keep a real multiline description close to wrapping boundaries.
+                label.Text="As sessões de áudio identificadas deste aplicativo podem ser silenciadas e restauradas nesta janela.";
+                void Layout(){Arrange(w,width,width==360?480:940);root.UpdateLayout();}
+                string Geometry()=>string.Join("|",PremiumInterfaceTests.Descendants<TextBlock>(button).Select(t=>$"{t.Text}:{t.FontFamily.Source}:{t.FontSize}:{t.FontWeight}:{t.FontStyle}:{t.TextWrapping}:{t.TranslatePoint(new Point(),button)}:{t.ActualWidth}:{t.ActualHeight}"));
+                void Capture(string state){var output=Environment.GetEnvironmentVariable("BEZORO_POLISH_CAPTURES");if(output is null)return;Directory.CreateDirectory(output);var image=new System.Windows.Media.Imaging.RenderTargetBitmap(width,width==360?480:940,96,96,PixelFormats.Pbgra32);image.Render(root);var png=new System.Windows.Media.Imaging.PngBitmapEncoder();png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(image));using var file=File.Create(Path.Combine(output,$"{theme}-{width}-{state}.png"));png.Save(file);}
+                Pick(w,"minimize");Layout();var before=Geometry();Capture("unselected");
+                typeof(MainWindow).GetField("inputMethod",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Instance)!.SetValue(w,"controller");
+                Pick(w,"application-mute");Layout();var after=Geometry();Capture("selected");Console.WriteLine($"SELECTION {width} {theme} before={before}; after={after}");
+                Check(before==after,"Selection changed rendered text geometry or typography");
+                Check(((Border)button.Resources["ABadge"]).Visibility==Visibility.Visible,"Controller feedback disappeared");
+                Check(Equals(button.BorderBrush,app.FindResource(ThemeSupport.Success)),"Selection outline missing");
+                Pick(w,"minimize");button.Focus();Layout();Check(button.IsKeyboardFocused&&before==Geometry(),"Keyboard focus changed text");
+                // Same existing template overlays used for hover/pressed capture; no global pointer input.
+                var interaction=(Border)button.Template.FindName("Interaction",button);interaction.Opacity=.06;Layout();Check(before==Geometry(),"Hover overlay changed text");interaction.Opacity=.13;Layout();Check(before==Geometry(),"Pressed overlay changed text");
+            }finally{w.Close();if(palette is not null)app.Resources.MergedDictionaries.Remove(palette);ThemeSupport.FollowSystem(app);}
+        });
     }
     private sealed class HubPlatform:IPlatform
     {
