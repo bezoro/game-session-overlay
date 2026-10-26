@@ -433,7 +433,7 @@ public partial class MainWindow : Window
         ApplicationAudioAvailability.Unavailable=>"Áudio indisponível",
         ApplicationAudioAvailability.Unknown=>"Estado não confirmado",
         _=>appAudio.MuteState switch{ApplicationMuteState.Audible=>"Som ativo",ApplicationMuteState.Muted=>"Aplicativo sem som",ApplicationMuteState.Mixed=>"Áudio misto",_=>"Estado não confirmado"}};
-    private string MuteActionTitle()=>appAudio.MuteState==ApplicationMuteState.Muted&&appAudio.Availability==ApplicationAudioAvailability.Available?"Ativar som do aplicativo":appAudio.Availability!=ApplicationAudioAvailability.Available||appAudio.MuteState is ApplicationMuteState.Mixed or ApplicationMuteState.Unknown?"Silenciar áudio disponível":"Silenciar aplicativo";
+    private string MuteActionTitle()=>appAudio.MuteState==ApplicationMuteState.Muted?"Restaurar áudio do aplicativo":appAudio.Availability!=ApplicationAudioAvailability.Available||appAudio.MuteState is ApplicationMuteState.Mixed or ApplicationMuteState.Unknown?"Silenciar áudio disponível":"Silenciar áudio do aplicativo";
     private string AppAudioDescription()=>AudioBadge()+" · "+(appAudio.Availability==ApplicationAudioAvailability.Available?"Afeta também outras janelas deste aplicativo.":appAudio.Availability==ApplicationAudioAvailability.Partial?"Algumas saídas não foram verificadas. Afeta as janelas deste aplicativo.":"Consulte os detalhes ou tente novamente.");
     private void TrackApplicationAudio()
     {
@@ -455,7 +455,7 @@ public partial class MainWindow : Window
     private void MuteApplication(WindowRef target)
     {
         if(!AudioFor(target)||!appAudio.CanSetMute){FeedbackText("Nenhuma sessão de áudio identificada; nada foi enviado.");return;}
-        var desired=!(appAudio.MuteState==ApplicationMuteState.Muted&&appAudio.Availability==ApplicationAudioAvailability.Available);var generation=audioGeneration;
+        var desired=appAudio.MuteState!=ApplicationMuteState.Muted;var generation=audioGeneration;
         RunInPlace(target,async token=>{var change=await applicationAudio.SetMutedAsync(target,desired,generation,token);if(!exiting)ApplicationAudioChanged(change.Snapshot);return change.Result;},"application-mute");
     }
     private void RunInPlace(WindowRef target,Func<CancellationToken,Task<ActionResult>> effect,string action)=>QueueHandoff(()=>OperationTask=RunInPlaceCore(target,effect,action),()=>Controller.Platform.Valid(target)&&(view.Current.Target??Controller.Session.Anchor)?.Same(target)==true);

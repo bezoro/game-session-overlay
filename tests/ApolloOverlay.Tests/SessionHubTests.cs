@@ -227,6 +227,21 @@ internal static class SessionHubTests
                 var interaction=(Border)button.Template.FindName("Interaction",button);interaction.Opacity=.06;Layout();Check(before==Geometry(),"Hover overlay changed text");interaction.Opacity=.13;Layout();Check(before==Geometry(),"Pressed overlay changed text");
             }finally{w.Close();if(palette is not null)app.Resources.MergedDictionaries.Remove(palette);ThemeSupport.FollowSystem(app);}
         });
+        foreach(var partial in new[]{false,true})test("hub confirmed app mute restore cycle "+(partial?"partial":"complete"),()=>{
+            var w=Fixture(out var p,out var audio,out _,out _);try{
+                w.Left=-12000;w.Top=-12000;w.ShowDiagnostic();w.OpenOptions(p.A);audio.Availability=partial?ApplicationAudioAvailability.Partial:ApplicationAudioAvailability.Available;audio.Emit();
+                var button=ReviewFixTests.Button(w,"application-mute");string Title()=>System.Windows.Automation.AutomationProperties.GetName(button);
+                Check(Title().Contains("Silenciar"),"Initial action must clearly offer muting");
+                var pending=new TaskCompletionSource<ApplicationAudioChange>();audio.Next=pending.Task;Click(w,"application-mute");Release(w);Check(audio.Writes==1&&audio.LastDesired&&Title().Contains("Silenciar"),"Mute was optimistic or not explicit");
+                pending.SetResult(new(new(partial?ResultKind.Partial:ResultKind.Completed,"Fixture observed mute"),audio.Snapshot(),2,2,2,true));Complete(w.OperationTask);audio.Next=null;
+                var mutedTitle=Title();Check(ReferenceEquals(button,ReviewFixTests.Button(w,"application-mute"))&&button.IsEnabled,"Confirmed mute rebuilt or disabled action");
+                Click(w,"application-mute");Release(w);Complete(w.OperationTask);Check(audio.Writes==2&&!audio.LastDesired&&audio.LastTarget?.Same(p.A)==true&&audio.LastGeneration==audio.Generation,"Restore did not target same validated session with desired=false");Check(mutedTitle.Contains("Restaurar áudio")&&Title().Contains("Silenciar áudio"),"Toggle labels do not expose mute and restore");
+                audio.Mute=ApplicationMuteState.Muted;audio.Emit();Check(Title().Contains("Restaurar áudio"),"External mute not reflected");
+                audio.Next=Task.FromResult(new ApplicationAudioChange(new(ResultKind.Unknown,"Fixture read failure"),audio.Snapshot() with{MuteState=ApplicationMuteState.Unknown,Availability=ApplicationAudioAvailability.Partial},1,1,0,true));Click(w,"application-mute");Release(w);Complete(w.OperationTask);Check(!Title().Contains("Restaurar áudio")&&w.Controller.Operation?.State=="Não confirmado","Unknown result claimed known mute state");audio.Next=null;
+                foreach(var state in new[]{ApplicationMuteState.Mixed,ApplicationMuteState.Unknown}){audio.Mute=state;audio.Emit();Check(!Title().Contains("Restaurar áudio"),"Mixed/unknown state guessed restoration");Click(w,"application-mute");Release(w);Complete(w.OperationTask);Check(audio.LastDesired,"Mixed/unknown action must explicitly mute");}
+                audio.Identified=0;audio.Availability=ApplicationAudioAvailability.Unavailable;audio.Emit();Check(!button.IsEnabled,"No-session action enabled");var writes=audio.Writes;Click(w,"application-mute");Release(w);Check(audio.Writes==writes,"No-session action wrote audio");
+            }finally{w.Close();}
+        });
     }
     private sealed class HubPlatform:IPlatform
     {
@@ -236,9 +251,9 @@ internal static class SessionHubTests
     }
     private sealed class HubAudio:IApplicationAudio
     {
-        public event Action<ApplicationAudioSnapshot>? Changed;internal WindowRef? Target;internal long Generation,Revision;internal ApplicationMuteState Mute=ApplicationMuteState.Audible;internal ApplicationAudioAvailability Availability=ApplicationAudioAvailability.Available;internal int Writes,Suspends,Identified=2;internal bool LastDesired;internal Task<ApplicationAudioChange>? Next;internal CancellationToken Token;
+        public event Action<ApplicationAudioSnapshot>? Changed;internal WindowRef? Target,LastTarget;internal long Generation,Revision,LastGeneration;internal ApplicationMuteState Mute=ApplicationMuteState.Audible;internal ApplicationAudioAvailability Availability=ApplicationAudioAvailability.Available;internal int Writes,Suspends,Identified=2;internal bool LastDesired;internal Task<ApplicationAudioChange>? Next;internal CancellationToken Token;
         internal ApplicationAudioSnapshot Snapshot()=>new(Target,Generation,++Revision,Availability,Mute,Identified,Availability==ApplicationAudioAvailability.Partial?1:0,"Fixture · sessões do processo identificado");internal void Emit()=>Changed?.Invoke(Snapshot());internal void Raise(ApplicationAudioSnapshot value)=>Changed?.Invoke(value);
-        public void Track(WindowRef? target,bool visible,long generation){Target=target;Generation=generation;Revision=0;if(visible)Emit();}public Task<ApplicationAudioSnapshot> RefreshAsync(WindowRef target,long generation,CancellationToken cancellation=default)=>Task.FromResult(Snapshot());public Task<ApplicationAudioChange> SetMutedAsync(WindowRef target,bool desiredMute,long generation,CancellationToken cancellation=default){Writes++;Token=cancellation;LastDesired=desiredMute;Mute=desiredMute?ApplicationMuteState.Muted:ApplicationMuteState.Audible;return Next??Task.FromResult(new ApplicationAudioChange(new(ResultKind.Completed,"Fixture explicit desired readback"),Snapshot(),2,2,2,true));}public void Suspend(){Suspends++;}public void Dispose(){}
+        public void Track(WindowRef? target,bool visible,long generation){Target=target;Generation=generation;Revision=0;if(visible)Emit();}public Task<ApplicationAudioSnapshot> RefreshAsync(WindowRef target,long generation,CancellationToken cancellation=default)=>Task.FromResult(Snapshot());public Task<ApplicationAudioChange> SetMutedAsync(WindowRef target,bool desiredMute,long generation,CancellationToken cancellation=default){Writes++;Token=cancellation;LastDesired=desiredMute;LastTarget=target;LastGeneration=generation;Mute=desiredMute?ApplicationMuteState.Muted:ApplicationMuteState.Audible;return Next??Task.FromResult(new ApplicationAudioChange(new(ResultKind.Completed,"Fixture explicit desired readback"),Snapshot(),2,2,2,true));}public void Suspend(){Suspends++;}public void Dispose(){}
     }
     private sealed class HubDevices:IControllerDevices
     {
