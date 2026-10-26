@@ -60,12 +60,12 @@ public partial class MainWindow
     }
     private void BuildFavorite(string id,int? row,int column)
     {
-        var target=Controller.Session.Anchor;var steamContext=Controller.ReturnTarget;var menu=Controller.Platform.CanSteamMenu(steamContext);var steamGame=steamContext is not null&&!steamContext.Launcher&&!steamContext.Protected&&Controller.Platform.SteamEvidence(steamContext)==ModuleEvidence.Loaded;
+        var target=Controller.Session.Anchor;var steamContext=Controller.ReturnTarget;var menu=Controller.Platform.CanSteamMenu(steamContext);var steamGame=Controller.SteamOverlayEligible(steamContext);
         switch(id){
             case "playnite":AddRow(id,"Playnite",Controller.Settings.PlaynitePath is null?"Configure em Sistema":"Biblioteca em tela cheia",()=>RunEffect(()=>Controller.Launch(true)),Controller.Settings.PlaynitePath is not null||Controller.Apps.Any(a=>a.ProcessName.Equals("Playnite.FullscreenApp",StringComparison.OrdinalIgnoreCase)),row:row,column:column);break;
             case "steam":AddRow(id,"Steam Big Picture",Controller.SteamAvailable?"Sua biblioteca":"Protocolo indisponível",()=>RunEffect(()=>Controller.Launch(false)),Controller.SteamAvailable,row:row,column:column);break;
             case "gamebar":AddRow(id,"Game Bar",target is null?"Escolha uma janela":"Xbox · janela da sessão",()=>Shortcut("Win+G"),target is not null,row:row,column:column);break;
-            case "steam-overlay":AddRow(id,menu?"Menu do Steam Big Picture":"Overlay Steam",menu?"Big Picture":steamGame?"Atalho do aplicativo":"Sem contexto confirmado",()=>{if(steamContext is null)return;if(menu)RunEffect(()=>Controller.Platform.SteamMenu(steamContext),()=>Controller.Platform.CanSteamMenu(steamContext));else RunEffect(()=>Controller.Platform.Shortcut(steamContext,Controller.Settings.SteamShortcut),()=>Controller.Platform.Valid(steamContext)&&Controller.Platform.SteamEvidence(steamContext)==ModuleEvidence.Loaded);},menu||steamGame,row:row,column:column);break;
+            case "steam-overlay":AddRow(id,menu?"Menu do Steam Big Picture":"Overlay Steam",menu?"Big Picture":steamGame?Controller.HasSteamLaunchObservation(steamContext)?"Iniciado pela Steam · "+Controller.Settings.SteamShortcut:"Atalho do aplicativo":"Sem contexto confirmado",()=>{if(steamContext is null)return;if(menu)RunEffect(()=>Controller.Platform.SteamMenu(steamContext),()=>Controller.Platform.CanSteamMenu(steamContext));else RunEffect(()=>Controller.Platform.Shortcut(steamContext,Controller.Settings.SteamShortcut),()=>Controller.ReturnTarget?.Same(steamContext)==true&&Controller.SteamOverlayEligible(steamContext));},menu||steamGame,row:row,column:column);break;
             case "taskview":AddRow(id,"Visão de tarefas","Janelas do Windows",()=>RunEffect(Controller.Platform.TaskView),row:row,column:column);break;
             case "audio":AddRow(id,"Áudio do Windows",audio.Current.Available?audio.Current.Muted?"Saída sem som":audio.Current.Volume.ToString("P0"):"Saída indisponível",()=>Subpage("audio","volume"),row:row,column:column);break;
         }
@@ -124,7 +124,7 @@ public partial class MainWindow
     }
     private void BuildIntegrations()
     {
-        AddRow("test-steam","Solicitar overlay Steam",SteamPermission.Reason(Controller.SteamEvidence),()=>Shortcut(Controller.Settings.SteamShortcut),Controller.Session.Anchor is not null&&Controller.SteamEvidence==ModuleEvidence.Loaded);
+        AddRow("test-steam","Solicitar overlay Steam",(Controller.HasSteamLaunchObservation(Controller.Session.Anchor)&&Controller.SteamEvidence!=ModuleEvidence.Loaded?"Iniciado pela Steam · ":"")+SteamPermission.Reason(Controller.SteamEvidence),()=>Shortcut(Controller.Settings.SteamShortcut),Controller.SteamOverlayEligible(Controller.Session.Anchor));
         AddGuideToggle();AddRow("external-close","Fechar overlays externos","Indisponível: visibilidade externa não verificada",()=>{},false);AddRow("back","Voltar","Duplo clique na bandeja abre o painel",Back);
     }
     private void BuildSystem()

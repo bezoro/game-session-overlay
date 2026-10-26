@@ -18,6 +18,7 @@ public interface IPlatform : IDisposable
     ImageSource? Icon(WindowRef window)=>null;
     IReadOnlyList<DisplayRef> Displays();
     ModuleEvidence SteamEvidence(WindowRef? window);
+    bool HasSteamLaunchContext(WindowRef? window)=>false;
     Task<ActionResult> Switch(WindowRef window);
     Task<ActionResult> Close(WindowRef window,CancellationToken cancellation);
     Task<ActionResult> Minimize(WindowRef window,CancellationToken cancellation)=>Task.FromResult(new ActionResult(ResultKind.Unavailable,"Minimização indisponível nesta plataforma."));
@@ -114,6 +115,7 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
             return ModuleEvidence.Absent;
         } catch (Exception e) when (e is Win32Exception or InvalidOperationException or ArgumentException) { return ModuleEvidence.Denied; }
     }
+    public bool HasSteamLaunchContext(WindowRef? window)=>window is not null&&SteamLaunchContext.Observe(window,Valid);
     public Task<ActionResult> Switch(WindowRef window)=>new GuardedActions(this).Switch(window);
     public ImageSource? Icon(WindowRef window)
     {

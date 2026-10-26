@@ -23,6 +23,8 @@ static class Program
         if(args.Length==2&&args[1]=="--session-hub-focus-captures"){SessionHubTests.Capture(args[0],true);return 0;}
         if(args.Length==2&&args[1]=="--session-hub"){SessionHubTests.Run(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--session-hub-telemetry"){SessionHubTests.TelemetryFailures(Case);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--steam-detection"){SteamOverlayDetectionTests.Run(Case);GuideAbiTests.SteamLaunchRegression(Case);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--steam-launch-smoke"){SteamOverlayDetectionTests.NativeSmoke(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--premium"){PremiumInterfaceTests.Run(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--premium-safety"){PremiumInterfaceTests.RunSafety(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--premium-local-dismiss"){PremiumInterfaceTests.LocalDismissalRegression(Case);return Finish(args[0]);}
@@ -103,6 +105,8 @@ static class Program
         Case("Cleanup prevents late Steam launch after pending focus completes",GuideAbiTests.LateLaunchBaseline);
         Case("Disposed platform refuses owned target validation and activation",GuideAbiTests.DisposedPlatformBaseline);
         GuideAbiTests.HandoffTests(Case);
+        SteamOverlayDetectionTests.Run(Case);
+        GuideAbiTests.SteamLaunchRegression(Case);
         Case("legacy Guide settings absent off on save preserves default and backup",()=>{True(!UserSettings.Parse("{}").GuideXInputEnabled);True(!UserSettings.Parse("{\"GuideXInputEnabled\":false}").GuideXInputEnabled);True(UserSettings.Parse("{\"GuideXInputEnabled\":true}").GuideXInputEnabled);var path=Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[0]))!,"guide-settings.json");UserSettings.Save(path,new());UserSettings.Save(path,new(GuideXInputEnabled:true));True(UserSettings.Load(path,out _).GuideXInputEnabled);True(!UserSettings.Parse(File.ReadAllText(path+".previous")).GuideXInputEnabled);});
         GuideAbiTests.GuideSettingsChecks(Case,Path.GetDirectoryName(Path.GetFullPath(args[0]))!);
         PremiumInterfaceTests.Run(Case);

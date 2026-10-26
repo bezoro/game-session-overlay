@@ -307,11 +307,41 @@ internal static unsafe class GuideAbiTests
         });
         test("Back cancels settings exit action without forcing subpage hidden",()=>{using var p=new HandoffPlatform();var w=Host(p);try{w.Page(2);Button(w,"exit").RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));Require(w.TransitionPending);w.Back();Commit(w);Require(w.IsVisible&&!w.TransitionPending&&!p.Disposed&&p.Switches==0);}finally{w.Close();}});
     }
+    internal static void SteamLaunchRegression(Action<string,Action> test)
+    {
+        test("Steam denied modules with confirmed target launch enables guarded shortcut",()=>{
+            using var p=new HandoffPlatform{LaunchContext=true,Denied=true};var w=Host(p);try{
+                FinishFocus(w.Controller.Refresh());w.RefreshRows();var tile=Button(w,"steam-overlay");
+                Require(tile.IsEnabled,"Confirmed launch context ignored when module access denied");
+                var labels=(System.Windows.Controls.StackPanel)((System.Windows.Controls.Grid)tile.Content).Children[1];Require(((System.Windows.Controls.TextBlock)labels.Children[1]).Text.Contains("Iniciado pela Steam"),"Launch label claims module injection");
+                var reads=p.LaunchQueries;for(var i=0;i<4;i++)w.RefreshRows();Require(p.LaunchQueries==reads,"Row rebuild scanned process ancestry");tile=Button(w,"steam-overlay");
+                var scans=p.LaunchQueries;tile.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));Require(p.Shortcuts==0&&w.TransitionPending,"Shortcut bypassed handoff");
+                w.AdvanceHandoff(Neutral(0) with{KeysNeutral=false},0);w.AdvanceHandoff(Neutral(100),100);Require(p.Shortcuts==0,"Held input bypassed release");w.AdvanceHandoff(Neutral(200),200);w.AdvanceHandoff(Neutral(300),300);
+                Require(p.Shortcuts==1&&p.LastTarget?.Same(p.Game)==true&&p.LastKeys==w.Controller.Settings.SteamShortcut,"Configured target shortcut not requested exactly once");Require(p.LaunchQueries==scans,"Handoff rescanned process ancestry");
+            }finally{w.Close();}
+        });
+        foreach(var mode in new[]{"cancel","target-change","identity-change"}){
+            var scenario=mode;test("Steam launch fallback handoff refuses "+scenario,()=>{
+                using var p=new HandoffPlatform{LaunchContext=true};var w=Host(p);try{
+                    FinishFocus(w.Controller.Refresh());w.RefreshRows();Button(w,"steam-overlay").RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));Require(w.TransitionPending,"Fallback did not queue");
+                    if(scenario=="cancel")w.Back();else if(scenario=="identity-change")p.ValidTarget=false;else{p.Context=p.BigPicture;w.Controller.CaptureReturn();}
+                    Commit(w);Require(p.Shortcuts==0&&!w.TransitionPending,"Stale/cancelled fallback sent input");
+                }finally{w.Close();}
+            });
+        }
+        test("Steam launch integration action preserves module diagnostic and requests once",()=>{
+            using var p=new HandoffPlatform{LaunchContext=true,Denied=true};var w=Host(p);try{
+                FinishFocus(w.Controller.Refresh());w.SetRenderState("integrations");var button=Button(w,"test-steam");var texts=(System.Windows.Controls.StackPanel)((System.Windows.Controls.Grid)button.Content).Children[1];var description=((System.Windows.Controls.TextBlock)texts.Children[1]).Text;
+                Require(button.IsEnabled&&description.Contains("Iniciado pela Steam")&&!description.Contains("Módulo carregado"),"Integration fallback misstates module evidence");button.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));Require(p.Shortcuts==0,"Integration bypassed handoff");Commit(w);Commit(w);Require(p.Shortcuts==1&&p.LastTarget?.Same(p.Game)==true,"Integration fallback duplicated or retargeted request");
+            }finally{w.Close();}
+        });
+    }
     private static void Commit(MainWindow w){w.AdvanceHandoff(Neutral(1000),1000);w.AdvanceHandoff(Neutral(1100),1100);}
     private sealed class HandoffPlatform:IPlatform
     {
-        internal readonly WindowRef Game=new(301,44,100,"Owned game fixture","game"),BigPicture=new(302,45,100,"Steam Big Picture Mode","steamwebhelper",true);internal WindowRef? Context;internal bool Menu,Loaded,ValidTarget=true,Disposed;internal int Switches,Globals,Menus,Shortcuts;internal string? LastKeys;internal WindowRef? LastTarget;
-        internal HandoffPlatform(){Context=Game;}public bool IsPreview=>true;public WindowRef? Foreground()=>Context;public IReadOnlyList<WindowRef> Windows()=>[Game];public bool Valid(WindowRef w)=>!Disposed&&ValidTarget&&w.Same(Game);public IReadOnlyList<DisplayRef> Displays()=>[new("owned-fixture",0,0,1280,720,true)];public ModuleEvidence SteamEvidence(WindowRef? w)=>Loaded&&w?.Same(Game)==true?ModuleEvidence.Loaded:ModuleEvidence.Absent;
+        internal readonly WindowRef Game=new(301,44,100,"Owned game fixture","game"),BigPicture=new(302,45,100,"Steam Big Picture Mode","steamwebhelper",true);internal WindowRef? Context;internal bool Menu,Loaded,LaunchContext,Denied,ValidTarget=true,Disposed;internal int Switches,Globals,Menus,Shortcuts,LaunchQueries;internal string? LastKeys;internal WindowRef? LastTarget;
+        public bool HasSteamLaunchContext(WindowRef? target){LaunchQueries++;return LaunchContext&&target?.Same(Game)==true;}
+        internal HandoffPlatform(){Context=Game;}public bool IsPreview=>true;public WindowRef? Foreground()=>Context;public IReadOnlyList<WindowRef> Windows()=>[Game];public bool Valid(WindowRef w)=>!Disposed&&ValidTarget&&w.Same(Game);public IReadOnlyList<DisplayRef> Displays()=>[new("owned-fixture",0,0,1280,720,true)];public ModuleEvidence SteamEvidence(WindowRef? w)=>Loaded&&w?.Same(Game)==true?ModuleEvidence.Loaded:Denied?ModuleEvidence.Denied:ModuleEvidence.Absent;
         public bool CanSteamMenu(WindowRef? w)=>!Disposed&&Menu&&w is not null&&w.Same(Context)&&w.Same(BigPicture);public Task<ActionResult> SteamMenu(WindowRef w){Menus++;LastTarget=w;LastKeys="F1";return Task.FromResult(new ActionResult(ResultKind.Requested,"fixture F1"));}public Task<ActionResult> TaskView(){Globals++;LastKeys="Win+Tab";return Task.FromResult(new ActionResult(ResultKind.Requested,"fixture WinTab"));}
         public Task<ActionResult> Switch(WindowRef w){Switches++;LastTarget=w;return Task.FromResult(new ActionResult(ResultKind.Completed,"fixture focus"));}public Task<ActionResult> Shortcut(WindowRef w,string k){Shortcuts++;LastTarget=w;LastKeys=k;return Task.FromResult(new ActionResult(ResultKind.Requested,"fixture keys"));}public ActionResult Launch(bool p,string? s)=>new(ResultKind.Requested,"fixture launch");public Task<ActionResult> Close(WindowRef w,CancellationToken c)=>throw new Exception("Unexpected close");public void Dispose()=>Disposed=true;
     }
