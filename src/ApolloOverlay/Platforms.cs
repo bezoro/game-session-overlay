@@ -9,6 +9,8 @@ using System.Windows.Media.Imaging;
 
 namespace ApolloOverlay;
 
+public readonly record struct ShortcutDispatch(long Revision,int Expected,uint Accepted,int CleanupExpected,uint CleanupAccepted);
+
 public interface IPlatform : IDisposable
 {
     bool IsPreview { get; }
@@ -23,6 +25,9 @@ public interface IPlatform : IDisposable
     Task<ActionResult> Close(WindowRef window,CancellationToken cancellation);
     Task<ActionResult> Minimize(WindowRef window,CancellationToken cancellation)=>Task.FromResult(new ActionResult(ResultKind.Unavailable,"Minimização indisponível nesta plataforma."));
     Task<ActionResult> Shortcut(WindowRef window,string keys);
+    Task<ActionResult> Shortcut(WindowRef window,string keys,CancellationToken cancellation,Func<bool> continuing)=>cancellation.IsCancellationRequested||!continuing()?Task.FromResult(new ActionResult(ResultKind.Cancelled,"Cancelado antes do envio.")):IsPreview?Shortcut(window,keys):Task.FromResult(new ActionResult(ResultKind.Unavailable,"Esta plataforma não oferece atalho cancelável."));
+    async Task<ActionResult> Focus(WindowRef window,CancellationToken cancellation,Func<bool> continuing){if(cancellation.IsCancellationRequested||!continuing())return new(ResultKind.Cancelled,"Cancelado antes do foco.");var result=await Switch(window);return cancellation.IsCancellationRequested||!continuing()?new(ResultKind.Unknown,"Foco solicitado; observação cancelada."):result;}
+    ShortcutDispatch? LastShortcutDispatch=>null;
     Task<ActionResult> TaskView()=>Task.FromResult(new ActionResult(ResultKind.Unavailable,"Visão de tarefas indisponível nesta plataforma."));
     bool CanSteamMenu(WindowRef? window)=>false;
     Task<ActionResult> SteamMenu(WindowRef window)=>Task.FromResult(new ActionResult(ResultKind.Unavailable,"Menu Big Picture não confirmado."));
@@ -45,6 +50,7 @@ public sealed class PreviewPlatform : IPlatform
         windows.RemoveAll(window.Same); return Task.FromResult(new ActionResult(ResultKind.Simulated,$"Fecharia somente {window.Title}."));
     }
     public Task<ActionResult> Shortcut(WindowRef window,string keys)=>Task.FromResult(new ActionResult(ResultKind.Simulated,$"Solicitaria {keys}; nenhum comando externo foi enviado."));
+    public Task<ActionResult> Shortcut(WindowRef window,string keys,CancellationToken cancellation,Func<bool> continuing)=>Task.FromResult(cancellation.IsCancellationRequested||!continuing()?new ActionResult(ResultKind.Cancelled,"Cancelado sem envio."):new ActionResult(ResultKind.Simulated,"Prévia: nenhum atalho externo enviado."));
     public Task<ActionResult> Minimize(WindowRef window,CancellationToken cancellation)=>Task.FromResult(cancellation.IsCancellationRequested?new ActionResult(ResultKind.Cancelled,"Nada foi enviado."):!Valid(window)||window.Protected?new ActionResult(ResultKind.Unavailable,"Janela indisponível para minimizar."):new ActionResult(ResultKind.Simulated,$"Minimizaria {window.Title}; nenhum comando externo foi enviado."));
     public ActionResult Launch(bool playnite,string? path)=>new(ResultKind.Simulated,playnite ? "Solicitaria o Playnite em tela cheia." : "Solicitaria Steam Big Picture.");
     public void Dispose() { }
@@ -52,6 +58,8 @@ public sealed class PreviewPlatform : IPlatform
 
 public sealed class WindowsPlatform : IPlatform,IWindowEffects
 {
+    public ShortcutDispatch? LastShortcutDispatch{get;private set;}
+    private long shortcutRevision;
     private bool disposed;
     private readonly Func<Native.Input[],uint> keySender;
     public bool IsPreview=>false;
@@ -127,6 +135,8 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
     public bool IsMinimized(WindowRef window)=>Valid(window)&&Native.IsIconic(window.Handle);
     public bool RequestMinimize(WindowRef window)=>!disposed&&!window.Protected&&Valid(window)&&Native.ShowWindowAsync(window.Handle,6);
     public Task<ActionResult> Shortcut(WindowRef window,string keys)=>keys is "Win+G" or "Shift+Tab" or "Ctrl+Tab"?new GuardedActions(this).Shortcut(window,keys):Task.FromResult(new ActionResult(ResultKind.Unavailable,"Atalho não permitido neste caminho."));
+    public Task<ActionResult> Shortcut(WindowRef window,string keys,CancellationToken cancellation,Func<bool> continuing)=>keys is "Shift+Tab" or "Ctrl+Tab"?new GuardedActions(this).Shortcut(window,keys,cancellation,continuing):Task.FromResult(new ActionResult(ResultKind.Unavailable,"Somente o atalho Steam configurado aceita este caminho."));
+    public Task<ActionResult> Focus(WindowRef window,CancellationToken cancellation,Func<bool> continuing)=>new GuardedActions(this).FocusStable(window,cancellation,continuing);
     public WindowObservation ObserveWindow(WindowRef window)=>ClosureObservation.Classify(window,Probe(window.Handle));
     private WindowProbe Probe(nint hwnd)
     {
@@ -148,8 +158,9 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
     public uint SendKeys(string keys)
     {
         if(disposed)return 0;var inputs=Native.KeyInputs(keys);if(inputs.Length==0)return 0;var sent=keySender(inputs);
+        LastShortcutDispatch=new(++shortcutRevision,inputs.Length,sent,0,0);
         // Cleanup only key-up events after a partial insertion; never retry the action/key-down.
-        if(sent!=inputs.Length&&!disposed){var release=inputs.Where(i=>i.Flags==2).ToArray();keySender(release);}
+        if(sent!=inputs.Length&&!disposed){var release=inputs.Where(i=>i.Flags==2).ToArray();var cleanup=keySender(release);LastShortcutDispatch=new(shortcutRevision,inputs.Length,sent,release.Length,cleanup);}
         return sent;
     }
     public Task<ActionResult> TaskView()=>Task.FromResult(disposed?new ActionResult(ResultKind.Cancelled,"Overlay encerrada; nenhum atalho enviado."):Outcome.Keys(SendKeys("Win+Tab"),4));

@@ -12,6 +12,7 @@ static class Program
     private static void Case(string name,Action test) {try{test();results.Add(new(name,true,null));Console.WriteLine("PASS "+name);}catch(Exception e){results.Add(new(name,false,e.Message));Console.Error.WriteLine("FAIL "+name+": "+e.Message);failed++;}}
     private static int failed;
     private static ActionResult Run(Task<ActionResult> task)=>task.GetAwaiter().GetResult();
+    private static void TargetChangedDuringFocus(){var f=new FakeEffects{InvalidateOnFocus=true};Equal(ResultKind.Failed,Run(new GuardedActions(f).Shortcut(Game,"Shift+Tab")).Kind);Equal(0,f.Sends);}
     [STAThread] public static int Main(string[] args)
     {
         if(args.Length is not (1 or 2)) {Console.Error.WriteLine("Expected report path");return 2;}
@@ -23,6 +24,10 @@ static class Program
         if(args.Length==2&&args[1]=="--session-hub-focus-captures"){SessionHubTests.Capture(args[0],true);return 0;}
         if(args.Length==2&&args[1]=="--session-hub"){SessionHubTests.Run(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--session-hub-telemetry"){SessionHubTests.TelemetryFailures(Case);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--automation-host")return AutomationTests.Host(args[0]);
+        if(args.Length==2&&args[1]=="--automation-smoke"){AutomationTests.Prerequisites(Case);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--automation"){AutomationTests.Run(Case);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--steam-focus"){Case("target change during focus prevents dispatch",TargetChangedDuringFocus);SteamShortcutFocusTests.Run(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--steam-detection"){SteamOverlayDetectionTests.Run(Case);GuideAbiTests.SteamLaunchRegression(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--steam-launch-smoke"){SteamOverlayDetectionTests.NativeSmoke(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--premium"){PremiumInterfaceTests.Run(Case);return Finish(args[0]);}
@@ -67,7 +72,7 @@ static class Program
         Case("focus disconnect and target changes cancel hold",()=>{foreach(var cause in new[]{0,1,2}){var h=new CloseHold();h.Open(Game);h.Tick(false,false,true,true,Game,0);h.Tick(true,false,true,true,Game,1);True(!h.Tick(true,false,cause!=0,cause!=1,cause==2?Game with{Generation=1}:Game,2000));Equal<WindowRef?>(null,h.Target);}});
         Case("foreground refusal prevents shortcut dispatch",()=>{var f=new FakeEffects{FocusAllowed=false};Equal(ResultKind.Failed,Run(new GuardedActions(f).Shortcut(Game,"Win+G")).Kind);Equal(0,f.Sends);});
         Case("foreground timeout is unknown and sends nothing",()=>{var f=new FakeEffects{Foreground=false};Equal(ResultKind.Unknown,Run(new GuardedActions(f).Shortcut(Game,"Win+G")).Kind);Equal(0,f.Sends);Equal(6,f.Waits);});
-        Case("target change during focus prevents dispatch",()=>{var f=new FakeEffects{InvalidateOnFocus=true};Equal(ResultKind.Failed,Run(new GuardedActions(f).Shortcut(Game,"Shift+Tab")).Kind);Equal(0,f.Sends);});
+        Case("target change during focus prevents dispatch",TargetChangedDuringFocus);
         Case("partial SendInput does not retry shortcut",()=>{var f=new FakeEffects{Sent=2};Equal(ResultKind.Partial,Run(new GuardedActions(f).Shortcut(Game,"Shift+Tab")).Kind);Equal(1,f.Sends);});
         Case("dispatch is requested not opened",()=>{var f=new FakeEffects();Equal(ResultKind.Requested,Run(new GuardedActions(f).Shortcut(Game,"Win+Tab")).Kind);});
         Case("close target does not follow current foreground",()=>{var f=new FakeEffects{StillExists=false};Equal(ResultKind.Completed,Run(new GuardedActions(f).Close(Game,CancellationToken.None)).Kind);True(Game.Same(f.Closed));});
@@ -105,6 +110,8 @@ static class Program
         Case("Cleanup prevents late Steam launch after pending focus completes",GuideAbiTests.LateLaunchBaseline);
         Case("Disposed platform refuses owned target validation and activation",GuideAbiTests.DisposedPlatformBaseline);
         GuideAbiTests.HandoffTests(Case);
+        SteamShortcutFocusTests.Run(Case);
+        AutomationTests.Run(Case);
         SteamOverlayDetectionTests.Run(Case);
         GuideAbiTests.SteamLaunchRegression(Case);
         Case("legacy Guide settings absent off on save preserves default and backup",()=>{True(!UserSettings.Parse("{}").GuideXInputEnabled);True(!UserSettings.Parse("{\"GuideXInputEnabled\":false}").GuideXInputEnabled);True(UserSettings.Parse("{\"GuideXInputEnabled\":true}").GuideXInputEnabled);var path=Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[0]))!,"guide-settings.json");UserSettings.Save(path,new());UserSettings.Save(path,new(GuideXInputEnabled:true));True(UserSettings.Load(path,out _).GuideXInputEnabled);True(!UserSettings.Parse(File.ReadAllText(path+".previous")).GuideXInputEnabled);});

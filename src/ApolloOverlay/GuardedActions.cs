@@ -46,9 +46,37 @@ public sealed class GuardedActions(IWindowEffects effects)
     }
     public async Task<ActionResult> Shortcut(WindowRef window,string keys)
     {
+        if(keys is "Shift+Tab" or "Ctrl+Tab")return await Shortcut(window,keys,CancellationToken.None,()=>true);
         var focused=await Switch(window);
         if(focused.Kind!=ResultKind.Completed) return focused;
         if(!effects.Valid(window) || !effects.IsForeground(window)) return new(ResultKind.Failed,"O alvo mudou antes do envio; atalho bloqueado.");
+        return Outcome.Keys(effects.SendKeys(keys),4);
+    }
+    public async Task<ActionResult> FocusStable(WindowRef window,CancellationToken cancellation,Func<bool> continuing)
+    {
+        bool Allowed()=>!cancellation.IsCancellationRequested&&continuing()&&effects.Valid(window);
+        if(!Allowed())return new(ResultKind.Cancelled,"Cancelado antes de solicitar foco.");
+        if(!effects.RequestFocus(window))return new(ResultKind.Failed,"O Windows recusou o foco; nenhum atalho enviado.");
+        if(!effects.Valid(window))return new(ResultKind.Failed,"A janela foi substituída durante a ativação; nenhum atalho enviado.");
+        var confirmed=false;
+        for(var i=0;i<=6;i++){
+            if(!Allowed())return new(ResultKind.Cancelled,"Alvo ou solicitação mudou durante o foco; nenhum atalho enviado.");
+            if(effects.IsForeground(window)){confirmed=true;break;}
+            if(i<6){await effects.Wait(50);if(!Allowed())return new(ResultKind.Cancelled,"Foco cancelado; nenhum atalho enviado.");}
+        }
+        if(!confirmed)return new(ResultKind.Unknown,"Foco não confirmado em 300 ms; nenhum atalho enviado.");
+        for(var i=0;i<10;i++){
+            if(!Allowed()||!effects.IsForeground(window))return new(ResultKind.Cancelled,"Foco ou entrada alterada; nenhum atalho enviado.");
+            await effects.Wait(50);
+            if(!Allowed()||!effects.IsForeground(window))return new(ResultKind.Cancelled,"Foco ou entrada alterada; nenhum atalho enviado.");
+        }
+        return new(ResultKind.Completed,"A mesma janela permaneceu em primeiro plano por 500 ms.");
+    }
+    public async Task<ActionResult> Shortcut(WindowRef window,string keys,CancellationToken cancellation,Func<bool> continuing)
+    {
+        var focused=await FocusStable(window,cancellation,continuing);
+        if(focused.Kind!=ResultKind.Completed)return focused;
+        if(cancellation.IsCancellationRequested||!continuing()||!effects.Valid(window)||!effects.IsForeground(window))return new(ResultKind.Cancelled,"Cancelado antes do envio; nenhum atalho enviado.");
         return Outcome.Keys(effects.SendKeys(keys),4);
     }
     public async Task<ActionResult> Close(WindowRef window,CancellationToken cancellation)
