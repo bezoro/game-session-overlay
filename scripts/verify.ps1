@@ -10,15 +10,23 @@ New-Item -ItemType Directory -Path $checks -Force | Out-Null
 function Invoke-Checked([string[]]$Arguments){ & $dotnet @Arguments; if($LASTEXITCODE -ne 0){throw "dotnet exit $LASTEXITCODE"} }
 try {
  if($Stage -in @('All','Build')){Invoke-Checked @('build','ApolloOverlay.sln','-c','Release')}
- if($Stage -in @('All','Behavior')){Invoke-Checked @('tests/ApolloOverlay.Tests/bin/Release/net10.0-windows/ApolloOverlay.Tests.dll',(Join-Path $checks 'behavior-report.json'))}
+ if($Stage -in @('All','Behavior')){
+  Invoke-Checked @('tests/ApolloOverlay.Tests/bin/Release/net10.0-windows/ApolloOverlay.Tests.dll',(Join-Path $checks 'behavior-report.json'))
+  $cliTests=Join-Path $taskRoot 'tests/ApolloOverlay.Cli.Tests/bin/Release/net10.0-windows/ApolloOverlay.Cli.Tests.exe'
+  & $cliTests
+  if($LASTEXITCODE -ne 0){throw "CLI tests exit $LASTEXITCODE"}
+  & $cliTests '--roundtrip' (Join-Path $taskRoot 'tools/ApolloOverlay.Cli/bin/Release/net10.0-windows/ApolloOverlay.Cli.exe')
+  if($LASTEXITCODE -ne 0){throw "CLI roundtrip exit $LASTEXITCODE"}
+ }
  if($Stage -in @('All','Package')){
   if(Test-Path -LiteralPath $publish){throw 'Publish directory exists; use a fresh native-vN.'}
   Invoke-Checked @('publish','src/ApolloOverlay/ApolloOverlay.csproj','-c','Release','-r','win-x64','--self-contained','true','-o',$publish)
   Copy-Item -LiteralPath (Join-Path $taskRoot 'README.md'),(Join-Path $taskRoot 'Abrir overlay.cmd'),(Join-Path $taskRoot 'Iniciar-previa.cmd') -Destination $publish
+  Copy-Item -LiteralPath (Join-Path $taskRoot 'scripts/startup-task.ps1') -Destination $publish
   Copy-Item -LiteralPath (Join-Path $taskRoot 'docs/pilot-checklist.md') -Destination (Join-Path $publish 'compatibilidade.md')
   Copy-Item -LiteralPath (Join-Path $taskRoot 'docs/third-party-icons.md') -Destination (Join-Path $publish 'third-party-icons.md')
  }
- if($Stage -eq 'PublishedBehavior'){
+ if($Stage -in @('All','PublishedBehavior')){
   $isolated=Join-Path $checks 'published-test-host'
   if(Test-Path -LiteralPath $isolated){throw 'Isolated test directory already exists.'}
   Copy-Item -LiteralPath $publish -Destination $isolated -Recurse
@@ -41,3 +49,4 @@ try {
  Write-Output "VERIFY SUCCESS stage=$Stage; output=$OutputVersion; source/publish/results remain separate review artifacts."
  exit 0
 } catch {Write-Error -Message $_ -ErrorAction Continue;exit 1}
+

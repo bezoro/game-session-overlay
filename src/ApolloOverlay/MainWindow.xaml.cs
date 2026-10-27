@@ -38,6 +38,7 @@ public partial class MainWindow : Window
     private long focusCycle;private bool focusConfirmed,navigationKeysArmed=true;
     private readonly WindowsAudio audio=new();private InputCoordinator input;private readonly CloseHold closeHold=new();private readonly DispatcherTimer timer;
     private bool revealPending,compactChrome;
+    private bool fadingOut,fadeInterrupted;private long fadeGeneration;
     private bool pointerDown,pointerCaptured,narrow;private string inputMethod="keyboard";
     private readonly bool diagnostic;private HwndSource? source;private TrayHost? tray;private bool busy,exiting,opening,keyboardDown;private int? closeSource,dispatchSource;private CancellationTokenSource? pending;
     private XInputGuideBackend? guideBackend;private GuideConnection? guideConnection;private bool guideToggleRequested;
@@ -127,7 +128,7 @@ public partial class MainWindow : Window
         Rows.LayoutUpdated+=(_,_)=>{if(revealPending&&Rows.IsArrangeValid&&ContentScroll.ViewportHeight>0){revealPending=false;if(Keyboard.FocusedElement is FrameworkElement editor&&editor is TextBox or Slider&&Rows.IsAncestorOf(editor))editor.BringIntoView();else SetSelection(false);}};
         Rows.SizeChanged+=(_,e)=>{var compact=e.NewSize.Width<390;if(compact!=narrow){narrow=compact;if(!Confirming&&view.Current.Route==OverlayRoute.Hub){var offset=ContentScroll.VerticalOffset;RefreshRows();ContentScroll.ScrollToVerticalOffset(offset);}}};
         PreviewKeyDown+=OnKeyDown;PreviewKeyUp+=(_,e)=>{var key=NormalizeKey(e.Key,e.SystemKey,e.ImeProcessedKey,e.DeadCharProcessedKey);if(key!=Key.None)heldKeys.Remove(key);else if(TransitionPending)RejectHandoff("Transição cancelada; tecla não identificada.");if(!navigationKeysArmed&&heldKeys.Count==0&&PhysicalKeysNeutral())navigationKeysArmed=true;if(e.Key is Key.Enter or Key.Space){keyboardDown=false;e.Handled=true;}};
-        Deactivated+=(_,_)=>{if(steamHiding||opening||exiting||(committing&&!busy))return;RevokeFocus("deactivated",!ownedDialog);CancelHandoff();heldKeys.Clear();CancelHold();input.Cancel();if(IsVisible&&!ownedDialog){HideNow(false);}};
+        Deactivated+=(_,_)=>{if(fadingOut){fadeInterrupted=true;return;}if(steamHiding||opening||exiting||(committing&&!busy))return;RevokeFocus("deactivated",!ownedDialog);CancelHandoff();heldKeys.Clear();CancelHold();input.Cancel();if(IsVisible&&!ownedDialog){HideNow(false);}};
         SourceInitialized+=(_,_)=>{source=HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);source.CompositionTarget.BackgroundColor=Colors.Transparent;source.AddHook(WindowMessage);if(!diagnostic)tray=new(Dispatcher,OpenPanel,ExitFromTray);};
         Closing+=OnClosing;audio.Changed+=AudioChanged;
         SystemParameters.StaticPropertyChanged+=OnSystemParametersChanged;UpdateAppearance();
@@ -161,11 +162,11 @@ public partial class MainWindow : Window
         if(message is 0x7E or 0x2E0 && IsVisible&&!placing)Dispatcher.BeginInvoke(()=>Place());return 0;
     }
     internal void Toggle()=>Toggle(false);
-    private void Toggle(bool trustedDismiss){CancelSteamOwner("Reabertura solicitada; nenhum novo atalho enviado.");if(busy&&steamOwner is null)return;if(IsVisible)HidePanel(true,trustedDismiss);else if(!TransitionPending)OpenPanel();}
+    private void Toggle(bool trustedDismiss){CancelSteamOwner("Reabertura solicitada; nenhum novo atalho enviado.");if(busy&&steamOwner is null)return;if(fadingOut)OpenPanel();else if(IsVisible)HidePanel(true,trustedDismiss);else if(!TransitionPending)OpenPanel();}
     internal void OpenPanel(){CancelSteamOwner("Painel reaberto; solicitação anterior cancelada.");if(exiting||closeRequested||busy&&steamOwner is null)return;OpeningTask=OpenPanelCore();}
     private async Task OpenPanelCore()
     {
-        var wasVisible=IsVisible;RevokeFocus("request");var cycle=focusCycle;CancelHandoff();CancelHold();input.Cancel();if(!wasVisible)Controller.CaptureReturn();
+        var wasVisible=IsVisible;fadeGeneration++;fadingOut=false;CancelOpenAnimation();RevokeFocus("request");var cycle=focusCycle;CancelHandoff();CancelHold();input.Cancel();if(!wasVisible)Controller.CaptureReturn();
         opening=true;try{if(!wasVisible){Place();PrepareOpenAnimation();Show();}}finally{opening=false;}UpdatePolling();audio.SetVisible(!Controller.Platform.IsPreview);RefreshRows();if(!wasVisible)AnimateOpen();
         if(!await AcquireFocus(cycle))return;
         try{await (RefreshFocusFixture?.Invoke()??Controller.Refresh());if(!CurrentCycle(cycle))return;TraceFocus("refresh",ResultKind.Completed);if(!NavigationAllowed)return;Place();RefreshRows();SetSelection(false);}
@@ -234,10 +235,19 @@ public partial class MainWindow : Window
     }
     private async void HideNow(bool restore,WindowRef? returnTarget=null,bool preserveSteam=false)
     {
-        if(!preserveSteam)CancelSteamOwner("Painel ocultado; solicitação anterior cancelada.");if(!IsVisible)return;var wasForeground=Native.GetForegroundWindow()==new WindowInteropHelper(this).Handle;RevokeFocus("hide");CancelHandoff();heldKeys.Clear();CancelHold();if(!preserveSteam)pending?.Cancel();input.Cancel();Sidebar.BeginAnimation(OpacityProperty,null);Hide();audio.SetVisible(false);UpdatePolling();
-        if(restore&&wasForeground&&returnTarget is {} target&&Controller.Platform.Valid(target)){var result=await Controller.Platform.Switch(target);if(result.Kind!=ResultKind.Completed&&result.Kind!=ResultKind.Simulated&&!exiting){if(!Controller.Platform.IsPreview)Controller.Diagnostics.Log("focus-return",result.Kind);FeedbackText(result.Message);}}
+        if(!preserveSteam)CancelSteamOwner("Painel ocultado; solicitação anterior cancelada.");if(!IsVisible||fadingOut)return;var wasForeground=Native.GetForegroundWindow()==new WindowInteropHelper(this).Handle;RevokeFocus("hide");CancelHandoff();heldKeys.Clear();CancelHold();if(!preserveSteam)pending?.Cancel();input.Cancel();Sidebar.BeginAnimation(OpacityProperty,null);
+        var generation=++fadeGeneration;fadeInterrupted=false;
+        // Steam requires the window to disappear before its focus handshake. Diagnostics stay synchronous.
+        if(!preserveSteam&&!diagnostic&&OpenAnimationAllowed){
+            fadingOut=true;var animation=new DoubleAnimation(Opacity,0,TimeSpan.FromMilliseconds(180)){FillBehavior=FillBehavior.HoldEnd,EasingFunction=new CubicEase{EasingMode=EasingMode.EaseOut}};BeginAnimation(OpacityProperty,animation);
+            await Task.Delay(180);
+            if(exiting||generation!=fadeGeneration)return;fadingOut=false;
+        }
+        var stillForeground=Native.GetForegroundWindow()==new WindowInteropHelper(this).Handle;
+        Hide();CancelOpenAnimation();audio.SetVisible(false);UpdatePolling();
+        if(restore&&wasForeground&&stillForeground&&!fadeInterrupted&&PhysicalKeysNeutral()&&returnTarget is {} target&&Controller.Platform.Valid(target)){var result=await Controller.Platform.Switch(target);if(result.Kind!=ResultKind.Completed&&result.Kind!=ResultKind.Simulated&&!exiting){if(!Controller.Platform.IsPreview)Controller.Diagnostics.Log("focus-return",result.Kind);FeedbackText(result.Message);}}
     }
-    private void Cleanup(){if(exiting)return;CancelSteamOwner("Overlay encerrada.");automationHost?.Dispose();exiting=true;operationGeneration++;RevokeFocus("cleanup");CancelHandoff();heldKeys.Clear();SystemParameters.StaticPropertyChanged-=OnSystemParametersChanged;timer.Stop();timer.Tick-=Tick;guideConnection?.Dispose();guideConnection=null;guideBackend=null;guideToggleRequested=false;pending?.Cancel();ResultNotificationRequest=null;applicationAudio.Changed-=ApplicationAudioChanged;feedbackService.Changed-=FeedbackStatusChanged;applicationAudio.Dispose();feedbackService.Dispose();controllerDevices.Dispose();audio.Dispose();source?.RemoveHook(WindowMessage);tray?.Dispose();Controller.Dispose();}
+    private void Cleanup(){if(exiting)return;fadeGeneration++;fadingOut=false;CancelSteamOwner("Overlay encerrada.");automationHost?.Dispose();exiting=true;operationGeneration++;RevokeFocus("cleanup");CancelHandoff();heldKeys.Clear();SystemParameters.StaticPropertyChanged-=OnSystemParametersChanged;timer.Stop();timer.Tick-=Tick;guideConnection?.Dispose();guideConnection=null;guideBackend=null;guideToggleRequested=false;pending?.Cancel();ResultNotificationRequest=null;applicationAudio.Changed-=ApplicationAudioChanged;feedbackService.Changed-=FeedbackStatusChanged;applicationAudio.Dispose();feedbackService.Dispose();controllerDevices.Dispose();audio.Dispose();source?.RemoveHook(WindowMessage);tray?.Dispose();Controller.Dispose();}
     private void FeedbackText(string text)=>StatusLabel.Text=text;
     private void RetainOperation(string state,string message,string action="",WindowRef? target=null,bool dispatched=false){Controller.SetOperation(state,message,action,target,dispatched);UpdatePersistentState();}
     private void UpdatePersistentState()
@@ -388,7 +398,7 @@ public partial class MainWindow : Window
     }
     private void Tick(object? sender,EventArgs args)
     {
-        if(exiting)return;if(guideBackend is not null)PollGuideStatus(guideBackend);var frames=reviewFrames??Enumerable.Range(0,4).Select(i=>Native.ReadPad((uint)i)).ToArray();var now=Environment.TickCount64;lastInputSample=new(frames,now,GuideHeld:guideBackend?.Held==true,GuideValid:guideBackend is null||!guideBackend.Active||guideBackend.SnapshotValid,GuideConnections:guideBackend?.Connections??0);UpdatePolling(frames.Any(f=>f.Connected));var current=input.Update(frames,IsVisible,now);UpdateControllerTelemetry(frames,current.Slot,now);if(steamOwner is{} owner&&((owner.InputQualified&&!Neutral(SteamSample(),Environment.TickCount64))||frames.Any(f=>f.Buttons.HasFlag(PadButtons.B))||(PhysicalKeyReader(0x1B)&0x8000)!=0||!SteamAlive(owner)))CancelSteamOwner("Nova entrada ou contexto alterado durante foco.");
+        if(exiting)return;if(guideBackend is not null)PollGuideStatus(guideBackend);var frames=reviewFrames??Enumerable.Range(0,4).Select(i=>Native.ReadPad((uint)i)).ToArray();var now=Environment.TickCount64;if(fadingOut&&(frames.Any(f=>f.ReadFailed||f.Connected&&(f.Buttons!=0||Math.Abs((int)f.X)>=Controller.Settings.Deadzone*2/3||Math.Abs((int)f.Y)>=Controller.Settings.Deadzone*2/3||Math.Abs((int)f.RX)>=Controller.Settings.Deadzone*2/3||Math.Abs((int)f.RY)>=Controller.Settings.Deadzone*2/3||f.LT>=30||f.RT>=30))||guideBackend is {Active:true} backend&&(!backend.SnapshotValid||backend.Held)||!PhysicalKeysNeutral()))fadeInterrupted=true;if(fadingOut){if(GuidePolling.Consume(ref guideToggleRequested,false))OpenPanel();return;}lastInputSample=new(frames,now,GuideHeld:guideBackend?.Held==true,GuideValid:guideBackend is null||!guideBackend.Active||guideBackend.SnapshotValid,GuideConnections:guideBackend?.Connections??0);UpdatePolling(frames.Any(f=>f.Connected));var current=input.Update(frames,IsVisible,now);UpdateControllerTelemetry(frames,current.Slot,now);if(steamOwner is{} owner&&((owner.InputQualified&&!Neutral(SteamSample(),Environment.TickCount64))||frames.Any(f=>f.Buttons.HasFlag(PadButtons.B))||(PhysicalKeyReader(0x1B)&0x8000)!=0||!SteamAlive(owner)))CancelSteamOwner("Nova entrada ou contexto alterado durante foco.");
         if(TransitionPending){if(GuidePolling.Consume(ref guideToggleRequested,current.Toggle)){Toggle(trustedDismiss:current.Toggle||guideBackend?.SnapshotValid==true);return;}if(current.Events.Pressed.HasFlag(PadButtons.B))Back(trustedDismiss:current.Slot is {} slot&&frames[slot].Connected&&!frames[slot].ReadFailed);else AdvanceHandoff(lastInputSample.Value,now);return;}
         if(GuidePolling.Consume(ref guideToggleRequested,current.Toggle)){Toggle();return;}if(!IsVisible)return;var events=current.Events;if(events.Pressed!=0||events.Direction!=0){inputMethod="controller";UpdateHints();}if(!NavigationAllowed){if(!ownedDialog&&events.Pressed.HasFlag(PadButtons.B))Back();return;}if(!navigationKeysArmed&&heldKeys.Count==0&&PhysicalKeysNeutral())navigationKeysArmed=true;
         if(Confirming&&closeSource==-1){var point=Mouse.GetPosition(HoldCloseButton);var inside=point.X>=0&&point.Y>=0&&point.X<HoldCloseButton.ActualWidth&&point.Y<HoldCloseButton.ActualHeight;var mixed=keyboardDown||heldKeys.Count>0||events.Pressed!=0||events.Direction!=0;AdvancePointerHold(pointerDown,(!pointerDown||pointerCaptured&&HoldCloseButton.IsMouseCaptured)&&!mixed,inside,now);return;}
@@ -507,3 +517,4 @@ public partial class MainWindow : Window
     }
     public void SetRenderState(string state){switch(state){case "apps":Page(1);break;case "system":Page(2);break;case "audio":Subpage("audio","volume");break;case "integrations":Subpage("integrations","test-steam");break;case "details":if(Controller.Session.Anchor is {} selected)OpenView(new(OverlayRoute.Details,selected,"switch-detail"));break;case "options":if(Controller.Session.Anchor is {} option)OpenOptions(option);break;case "confirmation":if(Controller.Session.Anchor is {} t)Confirm(t);break;case "long-error":FeedbackText("Não confirmado · A identidade da janela mudou. Selecione novamente em Apps. Nenhum comando adicional foi enviado.");break;case "steam-unavailable":navigation=new("steam-overlay");SetSelection();break;}}
 }
+

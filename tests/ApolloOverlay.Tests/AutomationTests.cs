@@ -23,6 +23,23 @@ internal static class AutomationTests
     internal static void Run(Action<string,Action> test)
     {
         Prerequisites(test);
+        test("corrupt automation ledger leaves overlay usable and evidence intact",()=>{
+            foreach(var invalid in new[]{"{", "{}", "{\"Records\":[null]}", "{\"Records\":[{}]}", new string(' ',1024*1024+1)}){
+                var root=Temp();var ledgerRoot=Path.Combine(root,"automation",Process.GetCurrentProcess().SessionId.ToString());Directory.CreateDirectory(ledgerRoot);
+                var path=Path.Combine(ledgerRoot,"automation-ledger.json");File.WriteAllText(path,invalid);
+                var window=new MainWindow(renderOnly:true,platform:new PreviewPlatform(),diagnostics:new(root));
+                try{
+                    var startup=window.StartAutomation();var watch=Stopwatch.StartNew();
+                    while(!startup.IsCompleted&&watch.ElapsedMilliseconds<5000){var frame=new System.Windows.Threading.DispatcherFrame();System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,()=>frame.Continue=false);System.Windows.Threading.Dispatcher.PushFrame(frame);}
+                    Require(startup.IsCompleted,"Startup deadline");startup.GetAwaiter().GetResult();
+                    Require(window.Controller.Operation?.State=="Indisponível"&&File.ReadAllText(path)==invalid,"Corrupt history was erased or overlay startup failed");
+                    var bridge=window.StartAutomation(grant:new AutomationGrant("fixed",false));watch.Restart();
+                    while(!bridge.IsCompleted&&watch.ElapsedMilliseconds<5000){var frame=new System.Windows.Threading.DispatcherFrame();System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,()=>frame.Continue=false);System.Windows.Threading.Dispatcher.PushFrame(frame);}
+                    Require(bridge.IsCompleted,"Bridge startup deadline");var refused=false;try{bridge.GetAwaiter().GetResult();}catch(InvalidOperationException){refused=true;}
+                    Require(refused&&File.ReadAllText(path)==invalid,"Explicit bridge failed open or changed evidence");
+                }finally{window.Close();}
+            }
+        });
         test("automation ledger retained duplicates and altered payload reject",()=>{var ledger=new AutomationLedger(Temp());var id=ledger.Issue("one");Require(ledger.Accept(id,"one","payload")=="Accepted","Intent not accepted");Require(ledger.Accept(id,"one","payload")=="Duplicate","Duplicate redispatched");Require(ledger.Accept(id,"one","changed")=="Rejected"&&ledger.Accept(id,"other","payload")=="Rejected","Payload or connection transferred");});
         test("automation retired watermark rejects evicted result without effects",()=>{var ledger=new AutomationLedger(Temp());string first="";var effects=0;for(var i=0;i<257;i++){var id=ledger.Issue("c"+i);if(i==0)first=id;if(ledger.Accept(id,"c"+i,"same")=="Accepted")effects++;ledger.Update(id,AutomationReply.Error("Completed","",id));}Require(ledger.Find(first) is null&&ledger.Accept(first,"c0","same")=="Rejected"&&effects==257,"Evicted ID became executable");});
         test("automation expires and invalidates older unused tickets",()=>{long now=0;var ledger=new AutomationLedger(Temp(),()=>now);var old=ledger.Issue("old");var fresh=ledger.Issue("fresh");Require(ledger.Accept(fresh,"fresh","x")=="Accepted"&&ledger.Accept(old,"old","x")=="Rejected","Older unused ticket accepted");var expired=ledger.Issue("expired");now=10001;Require(ledger.Accept(expired,"expired","x")=="Rejected","Expired ticket accepted");ledger.Retire("fresh");Require(ledger.Accept(fresh,"fresh","x")=="Rejected","Disconnected ticket accepted");});
@@ -108,3 +125,4 @@ internal static class AutomationTests
         public Task<ActionResult> Switch(WindowRef w)=>Task.FromResult(new ActionResult(ResultKind.Simulated,"Owned preview focus"));public Task<ActionResult> Shortcut(WindowRef w,string keys)=>Task.FromResult(new ActionResult(ResultKind.Simulated,"Owned preview shortcut"));public async Task<ActionResult> Shortcut(WindowRef w,string keys,CancellationToken token,Func<bool> continuing){await Task.Delay(120,token);return new(continuing()?ResultKind.Simulated:ResultKind.Cancelled,"Owned preview only; no input");}public Task<ActionResult> Close(WindowRef w,CancellationToken token)=>throw new Exception("No close target expected");public ActionResult Launch(bool playnite,string? path)=>throw new Exception("No launch expected");public void Dispose(){}
     }
 }
+

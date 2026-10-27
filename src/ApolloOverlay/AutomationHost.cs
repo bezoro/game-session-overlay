@@ -24,7 +24,9 @@ internal sealed class AutomationLedger
     {
         this.clock=clock??(()=>Environment.TickCount64);path=Path.Combine(root,"automation-ledger.json");Directory.CreateDirectory(root);
         if(!File.Exists(path))return;if(new FileInfo(path).Length>1024*1024)throw new InvalidDataException("Ledger outside bounds.");
-        var saved=JsonSerializer.Deserialize(File.ReadAllBytes(path),AutomationJson.Default.AutomationRecords)??throw new InvalidDataException();
+        var saved=JsonSerializer.Deserialize(File.ReadAllBytes(path),AutomationJson.Default.AutomationRecords)??throw new InvalidDataException("Ledger vazio.");
+        if(saved.Records is null || saved.Records.Any(record => record is null || string.IsNullOrEmpty(record.Id) || record.Canonical is null || record.Reply is null))
+            throw new InvalidDataException("Ledger inválido; histórico preservado.");
         foreach(var record in saved.Records.TakeLast(256))records[record.Id]=record.Terminal?record:record with{Terminal=true,Reply=record.Reply with{Outcome="Unknown",Reason="Instância reiniciada após intenção persistida; efeito desconhecido, sem reenvio.",Terminal=true,Dispatched=null}};
         Save();
     }
@@ -133,3 +135,4 @@ public sealed class AutomationHost:IDisposable
     }
     public void Dispose(){lock(gate){if(disposed)return;disposed=true;stopping.Cancel();active?.Cancel();foreach(var pipe in servers.ToArray())pipe.Dispose();servers.Clear();}}
 }
+

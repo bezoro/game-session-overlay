@@ -11,6 +11,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{07C2787E
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApolloOverlay.Cli", "tools\ApolloOverlay.Cli\ApolloOverlay.Cli.csproj", "{2A905A0B-C34A-4622-9E33-24EEBAB01CFD}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApolloOverlay.Cli.Tests", "tests\ApolloOverlay.Cli.Tests\ApolloOverlay.Cli.Tests.csproj", "{479DF3B3-0190-45D7-B88E-49F062C9F843}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Release|Any CPU = Release|Any CPU
@@ -57,6 +59,18 @@ Global
 		{2A905A0B-C34A-4622-9E33-24EEBAB01CFD}.Debug|x64.Build.0 = Debug|Any CPU
 		{2A905A0B-C34A-4622-9E33-24EEBAB01CFD}.Debug|x86.ActiveCfg = Debug|Any CPU
 		{2A905A0B-C34A-4622-9E33-24EEBAB01CFD}.Debug|x86.Build.0 = Debug|Any CPU
+		{479DF3B3-0190-45D7-B88E-49F062C9F843}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{479DF3B3-0190-45D7-B88E-49F062C9F843}.Release|Any CPU.Build.0 = Release|Any CPU
+		{479DF3B3-0190-45D7-B88E-49F062C9F843}.Release|x64.ActiveCfg = Release|Any CPU
+		{479DF3B3-0190-45D7-B88E-49F062C9F843}.Release|x64.Build.0 = Release|Any CPU
+		{479DF3B3-0190-45D7-B88E-49F062C9F843}.Release|x86.ActiveCfg = Release|Any CPU
+		{479DF3B3-0190-45D7-B88E-49F062C9F843}.Release|x86.Build.0 = Release|Any CPU
+		{479DF3B3-0190-45D7-B88E-49F062C9F843}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{479DF3B3-0190-45D7-B88E-49F062C9F843}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{479DF3B3-0190-45D7-B88E-49F062C9F843}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{479DF3B3-0190-45D7-B88E-49F062C9F843}.Debug|x64.Build.0 = Debug|Any CPU
+		{479DF3B3-0190-45D7-B88E-49F062C9F843}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{479DF3B3-0190-45D7-B88E-49F062C9F843}.Debug|x86.Build.0 = Debug|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -65,3 +79,4 @@ Global
 		{2A905A0B-C34A-4622-9E33-24EEBAB01CFD} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
 	EndGlobalSection
 EndGlobal
+

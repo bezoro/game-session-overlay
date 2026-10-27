@@ -124,7 +124,7 @@ public sealed record DisplayRef(string Id, int X, int Y, int Width, int Height, 
     public (double X,double Y,double Width,double Height) Dips(double dpi) => (X*96/dpi,Y*96/dpi,Width*96/dpi,Height*96/dpi);
 }
 
-public sealed record UserSettings(string? PlaynitePath=null, string? DisplayId=null, string SteamShortcut="Shift+Tab",int Version=3,string Hotkey="Ctrl+Alt+Space",string Chord="LB+RB+Start",int ChordHoldMs=650,int Deadzone=18000,bool ReducedMotion=false,bool GuideXInputEnabled=false,int GuideOpenMaxHoldMs=2000,string[]? FavoriteQuickActions=null,int UiScalePercent=100,string PanelSide="Left",bool SoundFeedbackEnabled=false,bool HapticFeedbackEnabled=false,bool SetupSeen=false)
+public sealed record UserSettings(string? PlaynitePath=null, string? DisplayId=null, string SteamShortcut="Shift+Tab",int Version=3,string Hotkey="Ctrl+Alt+Space",string Chord="LB+RB+Start",int ChordHoldMs=650,int Deadzone=18000,bool ReducedMotion=false,bool GuideXInputEnabled=true,int GuideOpenMaxHoldMs=2000,string[]? FavoriteQuickActions=null,int UiScalePercent=100,string PanelSide="Left",bool SoundFeedbackEnabled=false,bool HapticFeedbackEnabled=false,bool SetupSeen=false)
 {
     public static UserSettings Parse(string text)=>Parse(text,out _);
     private static UserSettings Parse(string text,out bool recovered)
@@ -177,3 +177,4 @@ public sealed record UserSettings(string? PlaynitePath=null, string? DisplayId=n
     internal static bool ValidGuideLimit(int value)=>value is >=500 and <=3000&&value%100==0;
 }
 [JsonSerializable(typeof(UserSettings))] internal partial class SettingsJson : JsonSerializerContext;
+

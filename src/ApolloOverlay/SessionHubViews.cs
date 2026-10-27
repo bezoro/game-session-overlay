@@ -11,7 +11,7 @@ public partial class MainWindow
     private TextBlock? controllerStatusParagraph;
     private void Section(string title)
     {
-        var text=new TextBlock{Text=title,FontSize=12,FontWeight=FontWeights.SemiBold,Margin=new(2,18,0,8)};text.SetResourceReference(TextBlock.ForegroundProperty,ThemeSupport.SecondaryText);AddVisual(text);
+        var text=new TextBlock{Text=title,FontSize=14,FontWeight=FontWeights.SemiBold,Margin=new(2,18,0,8)};text.SetResourceReference(TextBlock.ForegroundProperty,ThemeSupport.SecondaryText);AddVisual(text);
     }
     private TextBlock Paragraph(string text,int size=16)
     {
@@ -52,10 +52,10 @@ public partial class MainWindow
         var previous=Controller.Recent.Previous(Controller.Platform.Valid);
         AddRow("previous-window","Janela anterior",previous?.Title??"Alterne entre janelas para criar seu histórico",()=>{if(previous is not null)RunEffect(()=>Controller.Switch(previous),()=>Controller.Platform.Valid(previous));},previous is not null);
         var recents=Controller.Recent.Items.Where(w=>!w.Same(Controller.Recent.OpeningForeground)).Take(4).ToArray();
-        if(recents.Length>0){Section("RECENTES");foreach(var recent in recents)AddWindowRow(recent,"recent:",false);}
+        if(recents.Length>0){Section("Recentes");foreach(var recent in recents)AddWindowRow(recent,"recent:",false);}
         AddRow("apps","Aplicativos abertos",$"{Controller.Apps.Count} janelas · escolher ou alternar",()=>Page(1));
         var favorites=SessionHubSettings.Favorites(Controller.Settings);
-        if(favorites.Length>0){Section("ACESSO RÁPIDO");var first=Rows.RowDefinitions.Count;for(var i=0;i<favorites.Length;i++)BuildFavorite(favorites[i],narrow?null:first+i/2,i%2);}
+        if(favorites.Length>0){Section("Acesso rápido");var first=Rows.RowDefinitions.Count;for(var i=0;i<favorites.Length;i++)BuildFavorite(favorites[i],narrow?null:first+i/2,i%2);}
         if(!Controller.Settings.SetupSeen)AddRow("setup-invitation","Deixe do seu jeito","Guia opcional · três passos rápidos",()=>OpenView(new(OverlayRoute.Setup,SelectedId:"setup-next")));
     }
     private void BuildFavorite(string id,int? row,int column)
@@ -129,11 +129,11 @@ public partial class MainWindow
     }
     private void BuildSystem()
     {
-        Section("EXIBIÇÃO E APARÊNCIA");AddDisplay();AddRow("side","Lado · "+(Controller.Settings.PanelSide=="Right"?"Direito":"Esquerdo"),"A alterna a posição na área útil do monitor",()=>Change(Controller.Settings with{PanelSide=Controller.Settings.PanelSide=="Left"?"Right":"Left"}));AddScale();
+        Section("Exibição e aparência");AddDisplay();AddRow("side","Lado · "+(Controller.Settings.PanelSide=="Right"?"Direito":"Esquerdo"),"A alterna a posição na área útil do monitor",()=>Change(Controller.Settings with{PanelSide=Controller.Settings.PanelSide=="Left"?"Right":"Left"}));AddScale();
         AddRow("motion",Controller.Settings.ReducedMotion?"Animações reduzidas":"Animações suaves","Não há animação contínua",()=>Change(Controller.Settings with{ReducedMotion=!Controller.Settings.ReducedMotion}));
-        Section("CONTROLE");controllerStatusParagraph=Paragraph(controllerStatus);AddRow("deadzone","Deadzone · "+Controller.Settings.Deadzone,"Sensibilidade do analógico",()=>Change(Controller.Settings with{Deadzone=Controller.Settings.Deadzone<12000?12000:Controller.Settings.Deadzone<18000?18000:Controller.Settings.Deadzone<24000?24000:12000}));AddGuideToggle();AddGuideLimit();
-        Section("DO SEU JEITO");AddRow("customize","Personalizar acesso rápido",$"{SessionHubSettings.Favorites(Controller.Settings).Length} ações visíveis · ordem e visibilidade",()=>OpenView(new(OverlayRoute.Customize,SelectedId:"favorite:playnite")));AddFeedback();AddRow("setup","Guia de configuração","Três passos opcionais · pode sair a qualquer momento",()=>OpenView(new(OverlayRoute.Setup,SelectedId:"setup-next")));
-        Section("INTEGRAÇÕES");AddRow("configure-playnite","Caminho do Playnite",Controller.Settings.PlaynitePath is null?"Escolher executável…":"Instalação configurada",ConfigurePlaynite);AddRow("shortcut","Atalho Steam · "+Controller.Settings.SteamShortcut,"A alterna Shift+Tab / Ctrl+Tab",()=>Change(Controller.Settings with{SteamShortcut=Controller.Settings.SteamShortcut=="Shift+Tab"?"Ctrl+Tab":"Shift+Tab"}));AddRow("integrations","Integrações e limites","Guide, Steam e funções externas",()=>Subpage("integrations","test-steam"));AddRow("save","Salvar ajustes","AppData · cópia anterior preservada",Save);AddRow("exit","Encerrar overlay",Controller.SettingsDirty?"Alterações não salvas serão perdidas":"Encerra observadores e remove o ícone da bandeja",()=>QueueHandoff(Close));
+        Section("Controle");controllerStatusParagraph=Paragraph(controllerStatus);AddRow("deadzone","Deadzone · "+Controller.Settings.Deadzone,"Sensibilidade do analógico",()=>Change(Controller.Settings with{Deadzone=Controller.Settings.Deadzone<12000?12000:Controller.Settings.Deadzone<18000?18000:Controller.Settings.Deadzone<24000?24000:12000}));AddGuideToggle();AddGuideLimit();
+        Section("Do seu jeito");AddRow("customize","Personalizar acesso rápido",$"{SessionHubSettings.Favorites(Controller.Settings).Length} ações visíveis · ordem e visibilidade",()=>OpenView(new(OverlayRoute.Customize,SelectedId:"favorite:playnite")));AddFeedback();AddRow("setup","Guia de configuração","Três passos opcionais · pode sair a qualquer momento",()=>OpenView(new(OverlayRoute.Setup,SelectedId:"setup-next")));
+        Section("Integrações");AddRow("configure-playnite","Caminho do Playnite",Controller.Settings.PlaynitePath is null?"Escolher executável…":"Instalação configurada",ConfigurePlaynite);AddRow("shortcut","Atalho Steam · "+Controller.Settings.SteamShortcut,"A alterna Shift+Tab / Ctrl+Tab",()=>Change(Controller.Settings with{SteamShortcut=Controller.Settings.SteamShortcut=="Shift+Tab"?"Ctrl+Tab":"Shift+Tab"}));AddRow("integrations","Integrações e limites","Guide, Steam e funções externas",()=>Subpage("integrations","test-steam"));AddRow("save","Salvar ajustes","AppData · cópia anterior preservada",Save);AddRow("exit","Encerrar overlay",Controller.SettingsDirty?"Alterações não salvas serão perdidas":"Encerra observadores e remove o ícone da bandeja",()=>QueueHandoff(Close));
     }
     private void AddDisplay()=>AddRow("display","Monitor · "+(Controller.Settings.DisplayId??"janela ativa"),"Automático ou uma das telas disponíveis",CycleDisplay);
     private void AddScale()=>AddRow("ui-scale","Escala da interface · "+Controller.Settings.UiScalePercent+"%","100 / 115 / 130 / 150% · texto maior, conteúdo com rolagem",()=>{var scales=new[]{100,115,130,150};Change(Controller.Settings with{UiScalePercent=scales[(Array.IndexOf(scales,Controller.Settings.UiScalePercent)+1)%scales.Length]});});
@@ -167,7 +167,7 @@ public partial class MainWindow
     private void BuildSetup()
     {
         var step=view.Current.SetupStep;Section($"CONFIGURAÇÃO · {step+1} DE 3");
-        if(step==0){Paragraph("Seu painel, sempre à mão",23);controllerStatusParagraph=Paragraph(controllerStatus);Paragraph("Abra com duplo clique na bandeja. O botão Xbox / Guide é opcional e depende de leitura compatível. Nenhuma opção será ativada automaticamente.");AddGuideToggle();}
+        if(step==0){Paragraph("Seu painel, sempre à mão",23);controllerStatusParagraph=Paragraph(controllerStatus);Paragraph("Pressione e solte o botão Xbox / Guide para abrir. A leitura depende de um controle compatível. Também é possível abrir pela bandeja.");AddGuideToggle();}
         else if(step==1){Paragraph("Conforto na sua tela",23);Paragraph("Escolha o monitor, o lado e o tamanho. A prévia muda agora; salvar continua sendo sua escolha.");AddDisplay();AddRow("side","Lado · "+Controller.Settings.PanelSide,"Esquerdo / Direito",()=>Change(Controller.Settings with{PanelSide=Controller.Settings.PanelSide=="Left"?"Right":"Left"}));AddScale();}
         else{Paragraph("Bibliotecas e retorno",23);AddRow("configure-playnite","Configurar Playnite",Controller.Settings.PlaynitePath??"Escolher executável",ConfigurePlaynite);AddFeedback();}
         if(step>0)AddRow("setup-back","Passo anterior","Preserva seus ajustes",()=>SetSetupStep(step-1));
@@ -203,3 +203,4 @@ internal sealed class PreviewFeedbackService:IFeedbackService
     public FeedbackStatus Status=>new(false,false,"Prévia · sons e vibração não enviados");
     public void Configure(bool sound,bool haptics){}public void SetContext(FeedbackContext context){}public FeedbackDispatch Request(FeedbackCue cue,FeedbackSource source)=>new(false,false,Status.Reason);public void Suspend(){}public void Dispose(){}
 }
+

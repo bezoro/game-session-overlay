@@ -118,13 +118,14 @@ static class Program
         AutomationTests.Run(Case);
         SteamOverlayDetectionTests.Run(Case);
         GuideAbiTests.SteamLaunchRegression(Case);
-        Case("legacy Guide settings absent off on save preserves default and backup",()=>{True(!UserSettings.Parse("{}").GuideXInputEnabled);True(!UserSettings.Parse("{\"GuideXInputEnabled\":false}").GuideXInputEnabled);True(UserSettings.Parse("{\"GuideXInputEnabled\":true}").GuideXInputEnabled);var path=Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[0]))!,"guide-settings.json");UserSettings.Save(path,new());UserSettings.Save(path,new(GuideXInputEnabled:true));True(UserSettings.Load(path,out _).GuideXInputEnabled);True(!UserSettings.Parse(File.ReadAllText(path+".previous")).GuideXInputEnabled);});
+        Case("Guide defaults on and preserves explicit disabled backup",()=>{True(UserSettings.Parse("{}").GuideXInputEnabled);True(!UserSettings.Parse("{\"GuideXInputEnabled\":false}").GuideXInputEnabled);True(UserSettings.Parse("{\"GuideXInputEnabled\":true}").GuideXInputEnabled);var path=Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[0]))!,"guide-settings.json");UserSettings.Save(path,new(GuideXInputEnabled:false));UserSettings.Save(path,new(GuideXInputEnabled:true));True(UserSettings.Load(path,out _).GuideXInputEnabled);True(!UserSettings.Parse(File.ReadAllText(path+".previous")).GuideXInputEnabled);});
         GuideAbiTests.GuideSettingsChecks(Case,Path.GetDirectoryName(Path.GetFullPath(args[0]))!);
         PremiumInterfaceTests.Run(Case);
         SessionHubTests.Run(Case);
         SessionHubServiceTests.Run(Case);
         ReviewFixTests.Run(Case);
         NavigationTests.Run(Case);
+        StartupRegistrationTests.Run(Case);
         CorrectionTests.Run(Case,Path.GetDirectoryName(Path.GetFullPath(args[0]))!);
         return Finish(args[0]);
     }
@@ -159,3 +160,4 @@ static class Program
 internal sealed record TestCaseResult(string Name,bool Passed,string? Error);
 internal sealed record TestReport(int Total,int Passed,int Failed,TestCaseResult[] Cases);
 [System.Text.Json.Serialization.JsonSerializable(typeof(TestReport))] internal partial class TestJson : System.Text.Json.Serialization.JsonSerializerContext;
+
