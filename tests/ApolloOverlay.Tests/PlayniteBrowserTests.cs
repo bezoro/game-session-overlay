@@ -1,12 +1,33 @@
 using System.IO;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls.Primitives;
+using System.Windows.Threading;
 using ApolloOverlay;
 
 internal static class PlayniteBrowserTests
 {
     internal static void Run(Action<string,Action> test)
     {
+        test("Playnite browser page navigation selects the first folder on the requested page",()=>{
+            SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
+            var root=Path.Combine(Path.GetTempPath(),"ApolloOverlayBrowserTests",Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            for(var index=0;index<25;index++)Directory.CreateDirectory(Path.Combine(root,$"Folder{index:00}"));
+            var window=ReviewFixTests.Window();
+            try{
+                window.Left=-12000;window.Top=-12000;window.ShowDiagnostic();window.Page(2);
+                var open=typeof(MainWindow).GetMethod("OpenView",BindingFlags.NonPublic|BindingFlags.Instance)??throw new Exception("Browser route not available.");
+                open.Invoke(window,[new OverlayViewFrame(OverlayRoute.PlayniteBrowser,SelectedId:"playnite-loading",BrowserFolder:root)]);
+                var deadline=System.Diagnostics.Stopwatch.StartNew();
+                while(!window.ActionIds.Contains("playnite-page-next")&&deadline.ElapsedMilliseconds<5000){var frame=new DispatcherFrame();Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background,()=>frame.Continue=false);Dispatcher.PushFrame(frame);Thread.Sleep(1);}
+                if(!window.ActionIds.Contains("playnite-page-next"))throw new Exception("Folder results did not arrive.");
+                ReviewFixTests.Button(window,"playnite-page-next").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                if(window.SelectedAction!="playnite-folder:20"||!window.ActionIds.Contains("playnite-page-previous"))throw new Exception("Next page did not select its first folder.");
+                ReviewFixTests.Button(window,"playnite-page-previous").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                if(window.SelectedAction!="playnite-folder:0")throw new Exception("Previous page did not select its first folder.");
+            }finally{window.Close();Directory.Delete(root,true);}
+        });
         test("Playnite browser opens from settings and Back leaves the setting unchanged",()=>{
             var window=ReviewFixTests.Window();
             try{

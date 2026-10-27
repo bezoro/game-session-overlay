@@ -47,18 +47,18 @@ public partial class MainWindow
     private void BuildHub()
     {
         var target=Controller.Session.Anchor;var valid=target is not null&&Controller.Platform.Valid(target);
-        RegisterFixed("session-card",SessionCardButton,()=>{if(target is null)ChooseSession();else RunEffect(()=>Controller.Switch(target),()=>Controller.Platform.Valid(target));},target is null||valid,target?.Title??"Escolher uma janela em Aplicativos");
+        RegisterFixed("session-card",SessionCardButton,()=>{if(target is null||!valid)ChooseSession();else RunEffect(()=>Controller.Switch(target),()=>Controller.Platform.Valid(target));},true,valid?target!.Title:"Escolher uma janela em Aplicativos");
         RegisterFixed("session-options",SessionOptionsButton,()=>{if(target is not null)OpenOptions(target);else ChooseSession();},true,"Opções da janela da sessão");
-        AutomationProperties.SetName(SessionCardButton,target is null?"Escolher janela":target.Title+" · Retomar janela");AutomationProperties.SetHelpText(SessionCardButton,target is null?"Escolher uma janela em Aplicativos":"A / Enter retoma esta janela. X abre opções.");
+        AutomationProperties.SetName(SessionCardButton,valid?target!.Title+" · Retomar janela":"Escolher janela");AutomationProperties.SetHelpText(SessionCardButton,valid?"A / Enter retoma esta janela. X abre opções.":"Escolher uma janela em Aplicativos");
         var windowCount=Controller.Apps.Count;
         var windowSummary=windowCount switch{0=>"Nenhuma janela encontrada",1=>"1 janela disponível",_=>$"{windowCount} janelas disponíveis"};
         AddRow("apps","Aplicativos abertos",windowSummary,()=>Page(1));
         var favorites=SessionHubSettings.Favorites(Controller.Settings);
         if(favorites.Length>0){Section("Acesso rápido");var first=Rows.RowDefinitions.Count;for(var i=0;i<favorites.Length;i++)BuildFavorite(favorites[i],narrow?null:first+i/2,i%2);}
         var previous=Controller.Recent.Previous(Controller.Platform.Valid);
-        var recents=Controller.Recent.Items.Where(w=>!w.Same(Controller.Recent.OpeningForeground)).Take(4).ToArray();
+        var recents=Controller.Recent.Items.Where(w=>!w.Same(Controller.Recent.OpeningForeground)&&!w.Same(previous)).Take(4).ToArray();
         if(previous is not null||recents.Length>0)Section("Recentes");
-        AddRow("previous-window","Janela anterior",previous?.Title??"Disponível após alternar entre janelas",()=>{if(previous is not null)RunEffect(()=>Controller.Switch(previous),()=>Controller.Platform.Valid(previous));},previous is not null);
+        if(previous is not null)AddRow("previous-window","Janela anterior",previous.Title,()=>RunEffect(()=>Controller.Switch(previous),()=>Controller.Platform.Valid(previous)));
         foreach(var recent in recents)AddWindowRow(recent,"recent:",false);
         if(!Controller.Settings.SetupSeen)AddRow("setup-invitation","Personalizar painel","Configuração rápida em três passos",()=>OpenView(new(OverlayRoute.Setup,SelectedId:"setup-next")));
     }

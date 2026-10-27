@@ -1,5 +1,8 @@
 using System.Diagnostics;
+using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using ApolloOverlay;
 
 internal static class WindowIconCacheTests
@@ -9,8 +12,68 @@ internal static class WindowIconCacheTests
         if (!value) throw new Exception(message);
     }
 
+    private sealed class IconPlatform : IPlatform, IWindowIconNotifications
+    {
+        internal readonly WindowRef Target = new(11, 22, 33, "Window", "fixture", Generation: 1);
+        private readonly ImageSource icon;
+        private bool ready;
+        internal IconPlatform() { var image = new DrawingImage(); image.Freeze(); icon = image; }
+        public bool IsPreview => true;
+        public event Action<WindowRef>? IconAvailable;
+        public WindowRef? Foreground() => Target;
+        public IReadOnlyList<WindowRef> Windows() => [Target];
+        public bool Valid(WindowRef window) => Target.Same(window);
+        public ImageSource? Icon(WindowRef window) => ready && Valid(window) ? icon : null;
+        public IReadOnlyList<DisplayRef> Displays() => [new("fixture", 0, 0, 1920, 1080, true)];
+        public ModuleEvidence SteamEvidence(WindowRef? window) => ModuleEvidence.Unknown;
+        public Task<ActionResult> Switch(WindowRef window) => Task.FromResult(new ActionResult(ResultKind.Simulated, "fixture"));
+        public Task<ActionResult> Close(WindowRef window, CancellationToken token) => Task.FromResult(new ActionResult(ResultKind.Simulated, "fixture"));
+        public Task<ActionResult> Shortcut(WindowRef window, string keys) => Task.FromResult(new ActionResult(ResultKind.Simulated, "fixture"));
+        public ActionResult Launch(bool playnite, string? path) => new(ResultKind.Simulated, "fixture");
+        internal void Publish() { ready = true; IconAvailable?.Invoke(Target); }
+        public void Dispose() { IconAvailable = null; }
+    }
+
+    private static void DrainDispatcher()
+    {
+        var frame = new DispatcherFrame();
+        Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => frame.Continue = false);
+        Dispatcher.PushFrame(frame);
+    }
+
     internal static void Run(Action<string, Action> test)
     {
+        test("icon completion updates the row without changing selection or replacing its button", () =>
+        {
+            var platform = new IconPlatform();
+            var window = new MainWindow(renderOnly: true, platform: platform)
+            {
+                Left = -12000,
+                Top = -12000,
+                InputContextReader = () => new(true, true, true, true),
+                PhysicalKeyReader = _ => 0
+            };
+            try
+            {
+                window.Controller.CaptureReturn();
+                window.Controller.Refresh().GetAwaiter().GetResult();
+                window.ShowDiagnostic();
+                window.Page(1);
+                var id = window.ActionIds.Single(item => item.StartsWith("window:", StringComparison.Ordinal));
+                for (var i = 0; i < window.ActionIds.Count && window.SelectedAction != id; i++) window.Sequential(1);
+                Require(window.SelectedAction == id, "Fixture did not select the application row");
+                var button = ReviewFixTests.Button(window, id);
+                var grid = (Grid)button.Content;
+                var selected = window.SelectedAction;
+                platform.Publish();
+                DrainDispatcher();
+                Require(window.SelectedAction == selected, "Icon completion moved the selected action");
+                Require(ReferenceEquals(button, ReviewFixTests.Button(window, id)), "Icon completion rebuilt the row");
+                Require(grid.Children[0] is Image { Source: not null }, "Icon was not applied to the existing row");
+            }
+            finally { window.Close(); }
+        });
+
         test("icon request is nonblocking and publishes a cached frozen image", () =>
         {
             var image = new DrawingImage();

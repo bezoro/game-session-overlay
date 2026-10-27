@@ -89,7 +89,8 @@ public partial class MainWindow
 
     private void PlaynitePage(int page)
     {
-        view.Replace(view.Current with{BrowserPage=page,SelectedId="playnite-browser-back",ScrollOffset=0});navigation=new("playnite-browser-back");RefreshRows();ContentScroll.ScrollToTop();
+        var first=page*PlaynitePageSize;var selected=playniteListing is {} listing&&first<listing.Folders.Length?"playnite-folder:"+first:"playnite-browser-back";
+        view.Replace(view.Current with{BrowserPage=page,SelectedId=selected,ScrollOffset=0});navigation=new(selected);RefreshRows();ContentScroll.ScrollToTop();
     }
 
     private async void ChoosePlayniteExecutable(string executable)
