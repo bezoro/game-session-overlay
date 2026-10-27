@@ -27,6 +27,10 @@ static class Program
         if(args.Length==2&&args[1]=="--automation-host")return AutomationTests.Host(args[0]);
         if(args.Length==2&&args[1]=="--automation-smoke"){AutomationTests.Prerequisites(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--automation"){AutomationTests.Run(Case);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--steam-sequence"){SteamShortcutFocusTests.SequenceChecks(Case);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--steam-effects-handshake"){SteamShortcutFocusTests.EffectsHandshakeChecks(Case);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--steam-closing"){SteamShortcutFocusTests.ClosingChecks(Case);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--steam-owner"){SteamShortcutFocusTests.SequenceOwnerChecks(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--steam-focus"){Case("target change during focus prevents dispatch",TargetChangedDuringFocus);SteamShortcutFocusTests.Run(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--steam-detection"){SteamOverlayDetectionTests.Run(Case);GuideAbiTests.SteamLaunchRegression(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--steam-launch-smoke"){SteamOverlayDetectionTests.NativeSmoke(Case);return Finish(args[0]);}
@@ -73,7 +77,7 @@ static class Program
         Case("foreground refusal prevents shortcut dispatch",()=>{var f=new FakeEffects{FocusAllowed=false};Equal(ResultKind.Failed,Run(new GuardedActions(f).Shortcut(Game,"Win+G")).Kind);Equal(0,f.Sends);});
         Case("foreground timeout is unknown and sends nothing",()=>{var f=new FakeEffects{Foreground=false};Equal(ResultKind.Unknown,Run(new GuardedActions(f).Shortcut(Game,"Win+G")).Kind);Equal(0,f.Sends);Equal(6,f.Waits);});
         Case("target change during focus prevents dispatch",TargetChangedDuringFocus);
-        Case("partial SendInput does not retry shortcut",()=>{var f=new FakeEffects{Sent=2};Equal(ResultKind.Partial,Run(new GuardedActions(f).Shortcut(Game,"Shift+Tab")).Kind);Equal(1,f.Sends);});
+        Case("partial SendInput batch does not retry Ctrl Tab shortcut",()=>{var f=new FakeEffects{Sent=2};Equal(ResultKind.Partial,Run(new GuardedActions(f).Shortcut(Game,"Ctrl+Tab")).Kind);Equal(1,f.Sends);});
         Case("dispatch is requested not opened",()=>{var f=new FakeEffects();Equal(ResultKind.Requested,Run(new GuardedActions(f).Shortcut(Game,"Win+Tab")).Kind);});
         Case("close target does not follow current foreground",()=>{var f=new FakeEffects{StillExists=false};Equal(ResultKind.Completed,Run(new GuardedActions(f).Close(Game,CancellationToken.None)).Kind);True(Game.Same(f.Closed));});
         Case("stale target blocks close",()=>{var f=new FakeEffects{IsValid=false};Equal(ResultKind.Failed,Run(new GuardedActions(f).Close(Game,CancellationToken.None)).Kind);Equal(0,f.Closes);});

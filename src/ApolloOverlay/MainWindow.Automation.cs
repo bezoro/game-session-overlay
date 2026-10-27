@@ -2,12 +2,13 @@ using ApolloOverlay.Automation;
 using System.Security.Cryptography;
 using System.Text;
 using System.Windows.Threading;
+using System.Windows.Input;
 
 namespace ApolloOverlay;
 
 public partial class MainWindow
 {
-    private sealed record SteamOwner(long Generation,string Id,WindowRef Target,CancellationTokenSource Cancellation,long Deadline,Func<bool> Context,string Origin){public bool InputQualified=Origin=="UI";}
+    private sealed record SteamOwner(long Generation,string Id,WindowRef Target,CancellationTokenSource Cancellation,long Deadline,Func<bool> Context,string Origin){public bool InputQualified=Origin=="UI";public int OwnedKeys;public OverlayOperation? PendingRecord;public readonly TaskCompletionSource Drained=new(TaskCreationOptions.RunContinuationsAsynchronously);}
     private SteamOwner? steamOwner;private bool steamHiding;private long automationRevision,automationTargetsAt;private IReadOnlyList<WindowRef>? automationObservedApps;private AutomationHost? automationHost;private WindowRef? automationGrantTarget;
     private void NoteAutomationTargets(){if(!ReferenceEquals(automationObservedApps,Controller.Apps)){automationObservedApps=Controller.Apps;automationTargetsAt=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();}}
     internal Func<ReleaseSample>? AutomationInputReader {get;set;}
@@ -15,15 +16,17 @@ public partial class MainWindow
     private WindowRef[] AutomationWindows()=>Controller.Apps.Concat(new[]{Controller.Session.Anchor,Controller.ReturnTarget}.OfType<WindowRef>()).DistinctBy(TargetId).Where(Controller.Platform.Valid).Take(64).ToArray();
     private ReleaseSample SteamSample()
     {
-        if(AutomationInputReader is{} fixture)return fixture();var at=Environment.TickCount64;guideBackend?.PollForOverlay(IsVisible,focusCycle,at,Controller.Settings.GuideOpenMaxHoldMs);
-        return new(Enumerable.Range(0,4).Select(i=>Native.ReadPad((uint)i)).ToArray(),at,heldKeys.Count==0&&PhysicalKeysNeutral(),guideBackend?.Held==true,guideBackend is null||!guideBackend.Active||guideBackend.SnapshotValid,guideBackend?.Connections??0);
+        var owned=steamOwner?.OwnedKeys??0;
+        bool KeyboardNeutral()=>heldKeys.All(k=>SteamKeyOwned(KeyInterop.VirtualKeyFromKey(k),owned))&&PhysicalKeysNeutral(owned);
+        if(AutomationInputReader is{} fixture){var sample=fixture();return sample with{KeysNeutral=sample.KeysNeutral&&KeyboardNeutral()};}var at=Environment.TickCount64;guideBackend?.PollForOverlay(IsVisible,focusCycle,at,Controller.Settings.GuideOpenMaxHoldMs);
+        return new(Enumerable.Range(0,4).Select(i=>Native.ReadPad((uint)i)).ToArray(),at,KeyboardNeutral(),guideBackend?.Held==true,guideBackend is null||!guideBackend.Active||guideBackend.SnapshotValid,guideBackend?.Connections??0);
     }
     private bool Neutral(ReleaseSample sample,long now)=>sample.Pads.Count==4&&sample.GuideValid&&!sample.GuideHeld&&!sample.Pads.Any(p=>p.ReadFailed)&&sample.Timestamp<=now&&now-sample.Timestamp<=80&&sample.KeysNeutral&&sample.Pads.All(p=>!p.Connected||(p.Buttons==0&&Math.Abs((int)p.X)<Controller.Settings.Deadzone*2/3&&Math.Abs((int)p.Y)<Controller.Settings.Deadzone*2/3&&Math.Abs((int)p.RX)<Controller.Settings.Deadzone*2/3&&Math.Abs((int)p.RY)<Controller.Settings.Deadzone*2/3&&p.LT<30&&p.RT<30));
     private void CancelSteamOwner(string reason)
     {
-        if(steamOwner is not{} old)return;steamOwner=null;operationGeneration++;old.Cancellation.Cancel();if(ReferenceEquals(pending,old.Cancellation))pending=null;busy=false;RetainOperation("Cancelado",reason,"steam-overlay",old.Target,false);UpdatePolling();
+        if(steamOwner is not{} old||old.Cancellation.IsCancellationRequested)return;operationGeneration++;old.Cancellation.Cancel();UpdatePolling();
     }
-    private bool SteamAlive(SteamOwner owner)=>ReferenceEquals(steamOwner,owner)&&owner.Generation==operationGeneration&&!exiting&&!ownedDialog&&!owner.Cancellation.IsCancellationRequested&&Environment.TickCount64<=owner.Deadline&&owner.Context()&&Controller.Platform.Valid(owner.Target);
+    private bool SteamAlive(SteamOwner owner)=>ReferenceEquals(steamOwner,owner)&&owner.Generation==operationGeneration&&!exiting&&!closeRequested&&!ownedDialog&&!owner.Cancellation.IsCancellationRequested&&Environment.TickCount64<=owner.Deadline&&owner.Context()&&Controller.Platform.Valid(owner.Target);
     private void QueueSteam(WindowRef target,Func<bool> context)=>QueueHandoff(()=>OperationTask=RunUiSteam(target,context),()=>context()&&Controller.SteamOverlayEligible(target));
     private async Task RunUiSteam(WindowRef target,Func<bool> context)
     {
@@ -32,25 +35,29 @@ public partial class MainWindow
     }
     private async Task<AutomationReply> RunSteam(WindowRef target,Func<bool> context,string id,string origin,bool focusOnly,CancellationToken cancellation,Action<AutomationReply> phase)
     {
-        if(busy||exiting)return AutomationReply.Error("Busy","Outra operação está ativa.",id);
+        if(busy||exiting||closeRequested||steamOwner is not null)return AutomationReply.Error("Busy","Outra operação está ativa ou drenando.",id);
         var cts=CancellationTokenSource.CreateLinkedTokenSource(cancellation);cts.CancelAfter(10000);var owner=new SteamOwner(++operationGeneration,id,target,cts,Environment.TickCount64+10000,context,origin);steamOwner=owner;pending=cts;busy=true;UpdatePolling();
         var initial=SteamSample();var connections=initial.Pads.Select((p,i)=>(p,i)).Where(x=>x.p.Connected).Aggregate(0,(mask,x)=>mask|1<<x.i);var guides=initial.GuideConnections;
         bool Continue(){if(!SteamAlive(owner))return false;var sample=SteamSample();var mask=sample.Pads.Select((p,i)=>(p,i)).Where(x=>x.p.Connected).Aggregate(0,(bits,x)=>bits|1<<x.i);return (connections&~mask)==0&&(guides&~sample.GuideConnections)==0&&Neutral(sample,Environment.TickCount64);}
+        var previous=Controller.Platform.LastShortcutDispatch?.Revision;
+        AutomationReply Receipt(ActionResult result){
+            var evidence=Controller.Platform.LastShortcutDispatch;var fresh=evidence is{} dispatch&&dispatch.Revision!=previous;var accepted=fresh?evidence!.Value.Accepted:0;
+            bool? sent=accepted is null?(evidence?.Sequence?.Events.Any(e=>!e.Cleanup&&e.Accepted==1)==true?true:null):accepted>0;
+            return new(){RequestId=id,Outcome=result.Kind.ToString(),Reason=result.Message,Dispatched=sent,Expected=fresh?evidence!.Value.Expected:focusOnly?0:4,Accepted=accepted,CleanupExpected=fresh?evidence!.Value.CleanupExpected:null,CleanupAccepted=fresh?evidence!.Value.CleanupAccepted:null,Sequence=fresh?evidence!.Value.Sequence:null};
+        }
         try{
             if(origin=="CLI"){
                 var gate=new ReleaseGate();while(SteamAlive(owner)){var sample=SteamSample();var state=gate.Update(sample,Environment.TickCount64,true,Controller.Settings.Deadzone);if(state==ReleaseState.Cancelled)return AutomationReply.Error("Cancelled","Entrada desconhecida ou conexão perdida.",id);if(state==ReleaseState.Ready){owner.InputQualified=true;break;}await Task.Delay(10,cts.Token);}
             }
             if(!Continue())return AutomationReply.Error("Cancelled","Entrada ou alvo não confirmado; nenhum foco/atalho enviado.",id);
-            RetainOperation("Pendente","Focando o jogo; nenhum atalho enviado.","steam-overlay",target,false);phase(new(){Outcome="Pending",Reason="Focusing",RequestId=id,Terminal=false,Dispatched=false});
+            RetainOperation("Pendente","Focando o jogo; nenhum atalho enviado.","steam-overlay",target,false);owner.PendingRecord=Controller.Operation;phase(new(){Outcome="Pending",Reason="Focusing",RequestId=id,Terminal=false,Dispatched=false});
             steamHiding=true;try{HideNow(false,preserveSteam:true);}finally{steamHiding=false;}
-            var previous=Controller.Platform.LastShortcutDispatch?.Revision;
-            var result=focusOnly?await Controller.Platform.Focus(target,cts.Token,Continue):await Controller.Platform.Shortcut(target,Controller.Settings.SteamShortcut,cts.Token,Continue);
-            var evidence=Controller.Platform.LastShortcutDispatch;var fresh=evidence is{} dispatch&&dispatch.Revision!=previous;var accepted=fresh?evidence!.Value.Accepted:(uint?)null;var sent=accepted>0;
-            var reply=new AutomationReply{RequestId=id,Outcome=result.Kind.ToString(),Reason=result.Message,Dispatched=sent,Expected=fresh?evidence!.Value.Expected:focusOnly?0:4,Accepted=accepted,CleanupExpected=fresh?evidence!.Value.CleanupExpected:null,CleanupAccepted=fresh?evidence!.Value.CleanupAccepted:null};
-            if(SteamAlive(owner)){RecordResult(result,focusOnly?"focus":"steam-overlay",target);if(Controller.Operation is{} operation)Controller.SetOperation(operation.State,operation.Message,operation.Action,operation.Target,sent);UpdatePersistentState();}
+            var result=focusOnly?await Controller.Platform.Focus(target,cts.Token,Continue):await Controller.Platform.Shortcut(target,Controller.Settings.SteamShortcut,cts.Token,Continue,dispatch=>{owner.OwnedKeys=dispatch.Sequence?.PossiblyHeld??0;phase(Receipt(new(ResultKind.Requested,"Sequência em andamento; resultado ainda não terminal.")) with{Outcome="Pending",Terminal=false});});
+            var reply=Receipt(result);
+            if(ReferenceEquals(steamOwner,owner)&&owner.PendingRecord is not null&&ReferenceEquals(Controller.Operation,owner.PendingRecord)&&!exiting&&!closeRequested){RecordResult(result,focusOnly?"focus":"steam-overlay",target);if(Controller.Operation is{} operation)Controller.SetOperation(operation.State,operation.Message,operation.Action,operation.Target,reply.Dispatched==true);UpdatePersistentState();}
             return reply;
-        }catch(OperationCanceledException){return AutomationReply.Error("Cancelled","Solicitação cancelada antes de novo envio.",id);}
-        finally{if(ReferenceEquals(steamOwner,owner)){steamOwner=null;if(ReferenceEquals(pending,cts))pending=null;busy=false;UpdatePolling();}cts.Dispose();}
+        }catch(OperationCanceledException){return Receipt(new(ResultKind.Cancelled,"Solicitação interrompida; consulte contagens e liberação antes de nova tentativa."));}
+        finally{if(ReferenceEquals(steamOwner,owner)){steamOwner=null;if(ReferenceEquals(pending,cts))pending=null;busy=false;UpdatePolling();}cts.Dispose();owner.Drained.TrySetResult();}
     }
     private static readonly HashSet<string> SynchronousActions=new(StringComparer.Ordinal){"settings","apps","audio","session-options","choose-session","clear-session","select-session","details","back","back-header","integrations","customize","setup-invitation","setup-next","setup-back","setup-skip","setup-finish","save","save-pending","discard-pending","display","ui-scale","side","motion","deadzone","shortcut","guide-limit","sound-feedback","haptic-feedback","volume","volume-down","mute"};
     private string Capability(Entry entry)=>entry.Id is "close" or "close-detail" or "confirm-hold"?"RequiresGesture":entry.Id is "steam-overlay" or "test-steam"?(Controller.Platform.CanSteamMenu(Controller.ReturnTarget)&&entry.Id=="steam-overlay"?"RequiresInteractive":"Execute"):SynchronousActions.Contains(entry.Id)||view.Current.ChooseSession&&entry.Id.StartsWith("window:",StringComparison.Ordinal)||entry.Id.StartsWith("options:",StringComparison.Ordinal)||entry.Id.StartsWith("favorite:",StringComparison.Ordinal)?"Execute":"RequiresInteractive";

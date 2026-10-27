@@ -84,11 +84,12 @@ public partial class MainWindow : Window
         var context=InputContext;var state=releaseGate.Update(sample,now,context.Visible&&context.Active&&context.OwnForeground&&!context.Exiting,Controller.Settings.Deadzone);
         if(state==ReleaseState.Cancelled||handoffValid?.Invoke()==false){RejectHandoff("Transição cancelada; foco, controle ou alvo mudou.");if(handoffDegraded)AdvanceDegradedDismiss(sample,now);return;}if(state==ReleaseState.Waiting)return;CommitHandoff();
     }
-    internal bool PhysicalKeysNeutral()
+    private static bool SteamKeyOwned(int key,int mask)=>(mask&1)!=0&&key is 16 or 0xA0 or 0xA1||(mask&2)!=0&&key==9;
+    internal bool PhysicalKeysNeutral(int owned=0)
     {
         if((PhysicalKeyReader(0x03)&0x8000)!=0)return false;
-        for(var key=0x08;key<=0xFE;key++)if((PhysicalKeyReader(key)&0x8000)!=0)return false;
-        return heldKeys.All(k=>(PhysicalKeyReader(KeyInterop.VirtualKeyFromKey(k))&0x8000)==0);
+        for(var key=0x08;key<=0xFE;key++)if(!SteamKeyOwned(key,owned)&&(PhysicalKeyReader(key)&0x8000)!=0)return false;
+        return heldKeys.All(k=>SteamKeyOwned(KeyInterop.VirtualKeyFromKey(k),owned)||(PhysicalKeyReader(KeyInterop.VirtualKeyFromKey(k))&0x8000)==0);
     }
     private void UpdatePolling(bool connected=true)=>timer.Interval=TimeSpan.FromMilliseconds(steamOwner is not null?16:GuidePolling.Interval(guideBackend?.Active==true,IsVisible,connected));
     private void ConfigureGuide()
@@ -128,7 +129,7 @@ public partial class MainWindow : Window
         PreviewKeyDown+=OnKeyDown;PreviewKeyUp+=(_,e)=>{var key=NormalizeKey(e.Key,e.SystemKey,e.ImeProcessedKey,e.DeadCharProcessedKey);if(key!=Key.None)heldKeys.Remove(key);else if(TransitionPending)RejectHandoff("Transição cancelada; tecla não identificada.");if(!navigationKeysArmed&&heldKeys.Count==0&&PhysicalKeysNeutral())navigationKeysArmed=true;if(e.Key is Key.Enter or Key.Space){keyboardDown=false;e.Handled=true;}};
         Deactivated+=(_,_)=>{if(steamHiding||opening||exiting||(committing&&!busy))return;RevokeFocus("deactivated",!ownedDialog);CancelHandoff();heldKeys.Clear();CancelHold();input.Cancel();if(IsVisible&&!ownedDialog){HideNow(false);}};
         SourceInitialized+=(_,_)=>{source=HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);source.CompositionTarget.BackgroundColor=Colors.Transparent;source.AddHook(WindowMessage);if(!diagnostic)tray=new(Dispatcher,OpenPanel,ExitFromTray);};
-        Closing+=(_,_)=>Cleanup();audio.Changed+=AudioChanged;
+        Closing+=OnClosing;audio.Changed+=AudioChanged;
         SystemParameters.StaticPropertyChanged+=OnSystemParametersChanged;UpdateAppearance();
         new WindowInteropHelper(this).EnsureHandle();ConfigureGuide();if(!diagnostic)timer.Start();RefreshRows();FeedbackText(Controller.Status);
     }
@@ -160,8 +161,8 @@ public partial class MainWindow : Window
         if(message is 0x7E or 0x2E0 && IsVisible&&!placing)Dispatcher.BeginInvoke(()=>Place());return 0;
     }
     internal void Toggle()=>Toggle(false);
-    private void Toggle(bool trustedDismiss){CancelSteamOwner("Reabertura solicitada; nenhum novo atalho enviado.");if(busy)return;if(IsVisible)HidePanel(true,trustedDismiss);else if(!TransitionPending)OpenPanel();}
-    internal void OpenPanel(){CancelSteamOwner("Painel reaberto; solicitação anterior cancelada.");if(exiting||busy)return;OpeningTask=OpenPanelCore();}
+    private void Toggle(bool trustedDismiss){CancelSteamOwner("Reabertura solicitada; nenhum novo atalho enviado.");if(busy&&steamOwner is null)return;if(IsVisible)HidePanel(true,trustedDismiss);else if(!TransitionPending)OpenPanel();}
+    internal void OpenPanel(){CancelSteamOwner("Painel reaberto; solicitação anterior cancelada.");if(exiting||closeRequested||busy&&steamOwner is null)return;OpeningTask=OpenPanelCore();}
     private async Task OpenPanelCore()
     {
         var wasVisible=IsVisible;RevokeFocus("request");var cycle=focusCycle;CancelHandoff();CancelHold();input.Cancel();if(!wasVisible)Controller.CaptureReturn();
@@ -190,6 +191,22 @@ public partial class MainWindow : Window
         }return false;
     }
     internal void ExitFromTray(){if(!exiting)Close();}
+    private bool closeRequested,closeFinalizing;private Task? closeDrain;
+    internal Task ClosingTask=>closeDrain??Task.CompletedTask;
+    private void OnClosing(object? sender,System.ComponentModel.CancelEventArgs args)
+    {
+        if(exiting)return;
+        if(closeFinalizing){Cleanup();return;}
+        if(closeRequested){args.Cancel=true;return;}
+        if(steamOwner is not{} owner){Cleanup();return;}
+        args.Cancel=true;closeRequested=true;CancelSteamOwner("Encerramento solicitado; drenando teclas.");closeDrain=DrainAndClose(owner,OperationTask);
+    }
+    private async Task DrainAndClose(SteamOwner owner,Task operation)
+    {
+        await owner.Drained.Task;
+        try{await operation;}catch(Exception e)when(e is System.IO.IOException or UnauthorizedAccessException or OperationCanceledException){}
+        await Dispatcher.InvokeAsync(()=>{closeFinalizing=true;Close();});
+    }
     internal void ShowDiagnostic(){opening=true;Show();Activate();Native.SetForegroundWindow(new WindowInteropHelper(this).Handle);opening=false;focusCycle++;focusConfirmed=IsActive&&OwnForeground;navigationKeysArmed=true;SetSelection(false);}
     internal void ValidationHost(bool visible){if(visible){ShowDiagnostic();audio.SetVisible(true);}else{Hide();audio.SetVisible(false);}UpdatePolling();timer.Start();}
     private bool OpenAnimationAllowed=>!Controller.Settings.ReducedMotion&&!SystemParameters.HighContrast&&SystemParameters.ClientAreaAnimation;

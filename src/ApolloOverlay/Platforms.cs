@@ -9,7 +9,7 @@ using System.Windows.Media.Imaging;
 
 namespace ApolloOverlay;
 
-public readonly record struct ShortcutDispatch(long Revision,int Expected,uint Accepted,int CleanupExpected,uint CleanupAccepted);
+public readonly record struct ShortcutDispatch(long Revision,int Expected,uint? Accepted,int CleanupExpected,uint? CleanupAccepted,Automation.SteamSequenceEvidence? Sequence=null);
 
 public interface IPlatform : IDisposable
 {
@@ -28,6 +28,8 @@ public interface IPlatform : IDisposable
     Task<ActionResult> Shortcut(WindowRef window,string keys,CancellationToken cancellation,Func<bool> continuing)=>cancellation.IsCancellationRequested||!continuing()?Task.FromResult(new ActionResult(ResultKind.Cancelled,"Cancelado antes do envio.")):IsPreview?Shortcut(window,keys):Task.FromResult(new ActionResult(ResultKind.Unavailable,"Esta plataforma não oferece atalho cancelável."));
     async Task<ActionResult> Focus(WindowRef window,CancellationToken cancellation,Func<bool> continuing){if(cancellation.IsCancellationRequested||!continuing())return new(ResultKind.Cancelled,"Cancelado antes do foco.");var result=await Switch(window);return cancellation.IsCancellationRequested||!continuing()?new(ResultKind.Unknown,"Foco solicitado; observação cancelada."):result;}
     ShortcutDispatch? LastShortcutDispatch=>null;
+    int SteamOwnedKeys=>0;
+    Task<ActionResult> Shortcut(WindowRef window,string keys,CancellationToken cancellation,Func<bool> continuing,Action<ShortcutDispatch> progress)=>Shortcut(window,keys,cancellation,continuing);
     Task<ActionResult> TaskView()=>Task.FromResult(new ActionResult(ResultKind.Unavailable,"Visão de tarefas indisponível nesta plataforma."));
     bool CanSteamMenu(WindowRef? window)=>false;
     Task<ActionResult> SteamMenu(WindowRef window)=>Task.FromResult(new ActionResult(ResultKind.Unavailable,"Menu Big Picture não confirmado."));
@@ -59,6 +61,7 @@ public sealed class PreviewPlatform : IPlatform
 public sealed class WindowsPlatform : IPlatform,IWindowEffects
 {
     public ShortcutDispatch? LastShortcutDispatch{get;private set;}
+    public int SteamOwnedKeys{get;private set;}
     private long shortcutRevision;
     private bool disposed;
     private readonly Func<Native.Input[],uint> keySender;
@@ -136,6 +139,7 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
     public bool RequestMinimize(WindowRef window)=>!disposed&&!window.Protected&&Valid(window)&&Native.ShowWindowAsync(window.Handle,6);
     public Task<ActionResult> Shortcut(WindowRef window,string keys)=>keys is "Win+G" or "Shift+Tab" or "Ctrl+Tab"?new GuardedActions(this).Shortcut(window,keys):Task.FromResult(new ActionResult(ResultKind.Unavailable,"Atalho não permitido neste caminho."));
     public Task<ActionResult> Shortcut(WindowRef window,string keys,CancellationToken cancellation,Func<bool> continuing)=>keys is "Shift+Tab" or "Ctrl+Tab"?new GuardedActions(this).Shortcut(window,keys,cancellation,continuing):Task.FromResult(new ActionResult(ResultKind.Unavailable,"Somente o atalho Steam configurado aceita este caminho."));
+    public Task<ActionResult> Shortcut(WindowRef window,string keys,CancellationToken cancellation,Func<bool> continuing,Action<ShortcutDispatch> progress)=>keys is "Shift+Tab" or "Ctrl+Tab"?new GuardedActions(this,_=>progress(LastShortcutDispatch!.Value)).Shortcut(window,keys,cancellation,continuing):Task.FromResult(new ActionResult(ResultKind.Unavailable,"Atalho não permitido."));
     public Task<ActionResult> Focus(WindowRef window,CancellationToken cancellation,Func<bool> continuing)=>new GuardedActions(this).FocusStable(window,cancellation,continuing);
     public WindowObservation ObserveWindow(WindowRef window)=>ClosureObservation.Classify(window,Probe(window.Handle));
     private WindowProbe Probe(nint hwnd)
@@ -155,6 +159,23 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
     public bool RequestFocus(WindowRef window) { if(disposed)return false;if(Native.IsIconic(window.Handle))Native.ShowWindow(window.Handle,9);return !disposed&&Native.SetForegroundWindow(window.Handle); }
     public bool PostClose(WindowRef window){if(disposed)return false;var current=Read(window.Handle);return current is not null&&current.CanClose&&window.Same(current)&&Valid(current)&&Native.PostMessage(window.Handle,0x10,0,0);}
     public Task Wait(int milliseconds)=>Task.Delay(milliseconds);
+    public SteamKeyReceipt SendSteamEvent(ushort key,bool up)
+    {
+        if(key is not(16 or 9)||disposed&&!up)return new(false,0);
+        var bit=key==16?1:2;if(up&&(SteamOwnedKeys&bit)==0)return new(false,0);
+        var input=Native.KeyInputs("Shift+Tab")[key==16?(up?3:0):(up?2:1)];var previous=SteamOwnedKeys;
+        if(!up)SteamOwnedKeys|=bit;
+        try{var count=keySender([input]);if(!up&&count==0)SteamOwnedKeys=previous;return new(true,count);}
+        catch(Exception){return new(true,null);}
+    }
+    public bool SteamKeysReleased(int mask)=>((mask&1)==0||(Native.GetAsyncKeyState(16)&0x8000)==0&&(Native.GetAsyncKeyState(0xA0)&0x8000)==0&&(Native.GetAsyncKeyState(0xA1)&0x8000)==0)&&((mask&2)==0||(Native.GetAsyncKeyState(9)&0x8000)==0);
+    public void SteamOwnership(int mask)=>SteamOwnedKeys=mask;
+    public void RecordSteamSequence(Automation.SteamSequenceEvidence evidence)
+    {
+        var normal=evidence.Events.Where(e=>!e.Cleanup).ToArray();var cleanup=evidence.Events.Where(e=>e.Cleanup).ToArray();
+        uint? Count(Automation.SteamKeyEvent[] entries)=>entries.Any(e=>e.Accepted is null||e.Accepted>1)?null:(uint)entries.Sum(e=>(long)e.Accepted!.Value);
+        LastShortcutDispatch=new(++shortcutRevision,4,Count(normal),cleanup.Length,Count(cleanup),evidence);
+    }
     public uint SendKeys(string keys)
     {
         if(disposed)return 0;var inputs=Native.KeyInputs(keys);if(inputs.Length==0)return 0;var sent=keySender(inputs);

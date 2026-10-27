@@ -12,14 +12,17 @@ public sealed record AutomationRequest
 public sealed record AutomationTarget(string Id,long Handle,int Pid,long Started,long Generation,string Process);
 public sealed record AutomationAction(string Id,bool Available,string Reason,string Capability,string[] Intents);
 public sealed record AutomationSnapshot(string Instance,int Pid,long Started,long AtUtc,long Revision,string Route,bool Visible,bool Busy,AutomationTarget[] Targets,AutomationAction[] Actions,string SourceRevision,bool Truncated=false,string PendingRequestId="",string Phase="",long TargetsAtUtc=0);
+public sealed record SteamKeyEvent(ushort Key,bool Up,bool Cleanup,long OffsetMs,bool Started,uint? Accepted);
+public sealed record SteamSequenceEvidence(string Configuration,int[] MinimumIntervals,int FocusMs,SteamKeyEvent[] Events,int PossiblyHeld,bool? Released);
 public sealed record AutomationReply
 {
     public int Version{get;init;}=1;public string Outcome{get;init;}="Unavailable";public string Reason{get;init;}="";public string RequestId{get;init;}="";public bool Terminal{get;init;}=true;public bool? Dispatched{get;init;}=false;public int? Expected{get;init;}public uint? Accepted{get;init;}public int? CleanupExpected{get;init;}public uint? CleanupAccepted{get;init;}public AutomationSnapshot? Snapshot{get;init;}public string Ticket{get;init;}="";public long ExpiresUtc{get;init;}public string Instance{get;init;}="";public int Pid{get;init;}public long Started{get;init;}public string[] Trace{get;init;}=[];
+    public SteamSequenceEvidence? Sequence{get;init;}
     public static AutomationReply Error(string outcome,string reason,string id="")=>new(){Outcome=outcome,Reason=reason,RequestId=id};
 }
 public sealed record AutomationRecord(string Id,string Canonical,AutomationReply Reply,bool Terminal,long AtUtc);
 public sealed record AutomationRecords(AutomationRecord[] Records);
-public sealed record AutomationTrace(string Instance,string RequestId,string Phase,long AtUtc,string SourceRevision,string TargetId,long Foreground,bool? Dispatched,int? Expected,uint? Accepted,string Outcome);
+public sealed record AutomationTrace(string Instance,string RequestId,string Phase,long AtUtc,string SourceRevision,string TargetId,long Foreground,bool? Dispatched,int? Expected,uint? Accepted,string Outcome,SteamSequenceEvidence? Sequence=null);
 [JsonSourceGenerationOptions(PropertyNameCaseInsensitive=false)]
 [JsonSerializable(typeof(AutomationRequest))][JsonSerializable(typeof(AutomationReply))][JsonSerializable(typeof(AutomationSnapshot))][JsonSerializable(typeof(AutomationRecords))][JsonSerializable(typeof(AutomationTrace))]
 public partial class AutomationJson:JsonSerializerContext;
