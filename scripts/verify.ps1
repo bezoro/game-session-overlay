@@ -3,7 +3,7 @@ $ErrorActionPreference='Stop'
 $PSNativeCommandUseErrorActionPreference=$false
 $taskRoot=Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $taskRoot
-$dotnet='C:/Program Files/dotnet/dotnet.exe'
+$dotnet=(Get-Command dotnet -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
 $checks=Join-Path $taskRoot "artifacts/check-$OutputVersion"
 $publish=Join-Path $taskRoot "artifacts/$OutputVersion/publish"
 New-Item -ItemType Directory -Path $checks -Force | Out-Null
@@ -21,10 +21,11 @@ try {
  if($Stage -in @('All','Package')){
   if(Test-Path -LiteralPath $publish){throw 'Publish directory exists; use a fresh native-vN.'}
   Invoke-Checked @('publish','src/ApolloOverlay/ApolloOverlay.csproj','-c','Release','-r','win-x64','--self-contained','true','-o',$publish)
-  Copy-Item -LiteralPath (Join-Path $taskRoot 'README.md'),(Join-Path $taskRoot 'Abrir overlay.cmd'),(Join-Path $taskRoot 'Iniciar-previa.cmd') -Destination $publish
+  Copy-Item -LiteralPath (Join-Path $taskRoot 'README.md'),(Join-Path $taskRoot 'Guia de uso.md'),(Join-Path $taskRoot 'Abrir overlay.cmd'),(Join-Path $taskRoot 'Iniciar-previa.cmd') -Destination $publish
   Copy-Item -LiteralPath (Join-Path $taskRoot 'scripts/startup-task.ps1') -Destination $publish
   Copy-Item -LiteralPath (Join-Path $taskRoot 'docs/pilot-checklist.md') -Destination (Join-Path $publish 'compatibilidade.md')
   Copy-Item -LiteralPath (Join-Path $taskRoot 'docs/third-party-icons.md') -Destination (Join-Path $publish 'third-party-icons.md')
+  Copy-Item -LiteralPath (Join-Path $taskRoot 'docs') -Destination $publish -Recurse
  }
  if($Stage -in @('All','PublishedBehavior')){
   $isolated=Join-Path $checks 'published-test-host'

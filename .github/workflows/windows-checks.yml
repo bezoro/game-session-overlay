@@ -1,0 +1,136 @@
+name: Windows checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Build, tests and package
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install the SDK specified by global.json
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          global-json-file: global.json
+
+      - name: Build solution
+        id: build
+        run: |
+          ./scripts/verify.ps1 -Stage Build -OutputVersion native-v1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # These suites exercise managed state, mocked native boundaries and settings on Windows.
+      # They do not establish compatibility with a physical controller or interactive desktop.
+      - name: Run non-interactive behavior suites
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 8
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $checks = 'artifacts/check-native-v1'
+          New-Item -ItemType Directory -Path $checks -Force | Out-Null
+          $testDll = 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows/ApolloOverlay.Tests.dll'
+          $failed = $false
+          foreach ($suite in @('guide-settings', 'guide-release-red', 'session-hub-services', 'steam-sequence', 'steam-effects-handshake')) {
+            Write-Host "Running $suite"
+            & dotnet $testDll "$checks/$suite.json" "--$suite" 2>&1 | Tee-Object -FilePath "$checks/$suite.log"
+            if ($LASTEXITCODE -ne 0) { Write-Error "$suite failed with exit code $LASTEXITCODE" -ErrorAction Continue; $failed = $true }
+          }
+          if ($failed) { exit 1 }
+
+      - name: Run CLI tests and shutdown roundtrip
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 5
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $checks = 'artifacts/check-native-v1'
+          New-Item -ItemType Directory -Path $checks -Force | Out-Null
+          $cliTests = 'tests/ApolloOverlay.Cli.Tests/bin/Release/net10.0-windows/ApolloOverlay.Cli.Tests.exe'
+          $cli = 'tools/ApolloOverlay.Cli/bin/Release/net10.0-windows/ApolloOverlay.Cli.exe'
+          $failed = $false
+          & $cliTests 2>&1 | Tee-Object -FilePath "$checks/cli-tests.log"
+          if ($LASTEXITCODE -ne 0) { Write-Error "CLI tests failed with exit code $LASTEXITCODE" -ErrorAction Continue; $failed = $true }
+          & $cliTests '--roundtrip' $cli 2>&1 | Tee-Object -FilePath "$checks/cli-roundtrip.log"
+          if ($LASTEXITCODE -ne 0) { Write-Error "CLI roundtrip failed with exit code $LASTEXITCODE" -ErrorAction Continue; $failed = $true }
+          if ($failed) { exit 1 }
+
+      # Several WPF fixtures require a real interactive foreground window. Failure on a
+      # hosted runner without an interactive desktop is reported, not treated as a pass.
+      - name: Run full WPF behavior suite
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 12
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $checks = 'artifacts/check-native-v1'
+          New-Item -ItemType Directory -Path $checks -Force | Out-Null
+          & dotnet 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows/ApolloOverlay.Tests.dll' "$checks/behavior-report.json" 2>&1 | Tee-Object -FilePath "$checks/behavior.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # These render the app's own WPF tree with fixtures and synthetic palettes.
+      # Images are review artifacts, not a physical TV or streaming compatibility test.
+      - name: Capture WPF interface fixtures
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 8
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $checks = 'artifacts/check-native-v1'
+          New-Item -ItemType Directory -Path $checks -Force | Out-Null
+          $testDll = 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows/ApolloOverlay.Tests.dll'
+          $failed = $false
+          foreach ($mode in @('review-captures', 'session-hub-captures', 'session-hub-focus-captures')) {
+            Write-Host "Capturing $mode"
+            & dotnet $testDll "$checks/$mode" "--$mode" 2>&1 | Tee-Object -FilePath "$checks/$mode.log"
+            if ($LASTEXITCODE -ne 0) { Write-Error "$mode failed with exit code $LASTEXITCODE" -ErrorAction Continue; $failed = $true }
+          }
+          if ($failed) { exit 1 }
+
+      - name: Publish self-contained Windows package
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 8
+        run: |
+          ./scripts/verify.ps1 -Stage Package -OutputVersion native-v1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload test reports and logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-test-reports
+          path: artifacts/check-native-v1/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Windows package
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-package
+          path: artifacts/ApolloOverlay-native-v1.zip
+          if-no-files-found: warn
+          retention-days: 14
