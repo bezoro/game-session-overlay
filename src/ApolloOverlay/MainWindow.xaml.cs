@@ -220,7 +220,7 @@ public partial class MainWindow : Window
     {
         if(placing)return;placing=true;try{
         var screens=Controller.RefreshDisplays();if(screens.Count==0)return;
-        var target=Controller.ReturnTarget??Controller.Session.Anchor;var monitor=target is null?0:Native.MonitorFromWindow(target.Handle,2);var info=new Native.MonitorInfo{Size=System.Runtime.InteropServices.Marshal.SizeOf<Native.MonitorInfo>(),Device=""};var active=monitor!=0&&Native.GetMonitorInfo(monitor,ref info)?screens.FirstOrDefault(d=>d.Id==info.Device):null;
+        var foreground=Controller.ReturnTarget;var anchor=Controller.Session.Anchor;var target=foreground is {Protected:false}?foreground:anchor is not null&&Controller.Platform.Valid(anchor)?anchor:foreground;var monitor=target is null?0:Native.MonitorFromWindow(target.Handle,2);var info=new Native.MonitorInfo{Size=System.Runtime.InteropServices.Marshal.SizeOf<Native.MonitorInfo>(),Device=""};var active=monitor!=0&&Native.GetMonitorInfo(monitor,ref info)?screens.FirstOrDefault(d=>d.Id==info.Device):null;
         var chosen=screens.FirstOrDefault(d=>d.Id==Controller.Settings.DisplayId)??active??screens.FirstOrDefault(d=>d.Primary)??screens[0];var hwnd=new WindowInteropHelper(this).Handle;
         if(hwnd!=0)Native.SetWindowPos(hwnd,0,chosen.X+16,chosen.Y+16,0,0,0x15);
         var dpi=DpiReader(hwnd);if(dpi==0)dpi=96;var scale=dpi/96d;
