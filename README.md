@@ -26,6 +26,8 @@ Ajustes são explicitamente salvos em `%LOCALAPPDATA%\Bezoro\GameSessionOverlay\
 
 `--preview` é diagnóstico com ações de janelas simuladas e contexto vazio; não representa um jogo. A operação normal usa contexto e ações reais. `--capture-native DIRETÓRIO`, `--capture-alpha DIRETÓRIO` e `--native-check DIRETÓRIO` são verificações limitadas a janelas próprias; a última inclui teste reversível de áudio.
 
+A overlay também funciona com controles XInput conectados diretamente ao PC, sem Apollo. O controle continua compartilhado com outros aplicativos: a overlay não confirma isolamento de entrada. A investigação das opções e dos testes necessários está em [Isolamento do controle](docs/controller-isolation.md).
+
 ## Painel da sessão
 
 O cartão é a ação principal: clique, A ou Enter retoma aquela janela. O botão `···`, X ou a navegação para a direita abre suas opções. Ali ficam áudio do aplicativo, minimizar, escolher outra janela, detalhes e fechamento protegido. Os botões são independentes, inclusive para Tab e mouse. Em **Detalhes**, o leitor oferece o título completo e as informações técnicas; A/Enter entra na leitura, setas rolam e esquerda/direita retorna às ações.

@@ -39,6 +39,10 @@ public partial class MainWindow : Window
     private readonly WindowsAudio audio=new();private InputCoordinator input;private readonly CloseHold closeHold=new();private readonly DispatcherTimer timer;
     private bool revealPending,compactChrome;
     private bool fadingOut,fadeInterrupted;private long fadeGeneration;
+    internal bool ForceFadeFixture {private get;set;}
+    internal Func<PadFrame[]>? FadeFramesFixture {private get;set;}
+    internal bool FadePending=>fadingOut;
+    internal void BeginFadeFixture()=>HideNow(false);
     private bool pointerDown,pointerCaptured,narrow;private string inputMethod="keyboard";
     private readonly bool diagnostic;private HwndSource? source;private TrayHost? tray;private bool busy,exiting,opening,keyboardDown;private int? closeSource,dispatchSource;private CancellationTokenSource? pending;
     private XInputGuideBackend? guideBackend;private GuideConnection? guideConnection;private bool guideToggleRequested;
@@ -233,17 +237,28 @@ public partial class MainWindow : Window
         if(handoffDismiss)ReaffirmDismiss(trustedDismiss);
         var target=Controller.ReturnTarget;QueueHandoff(()=>HideNow(restore,target),()=>target is null?Controller.ReturnTarget is null:Controller.ReturnTarget?.Same(target)==true&&Controller.Platform.Valid(target),dismiss:true);
     }
+    private bool FadeInputsNeutral(IReadOnlyList<PadFrame> frames)
+    {
+        if(frames.Count!=4||frames.Any(f=>f.ReadFailed||f.Connected&&(f.Buttons!=0||Math.Abs((int)f.X)>=Controller.Settings.Deadzone*2/3||Math.Abs((int)f.Y)>=Controller.Settings.Deadzone*2/3||Math.Abs((int)f.RX)>=Controller.Settings.Deadzone*2/3||Math.Abs((int)f.RY)>=Controller.Settings.Deadzone*2/3||f.LT>=30||f.RT>=30)))return false;
+        if(guideBackend is {Active:true} backend&&(!backend.SnapshotValid||backend.Held))return false;
+        return PhysicalKeysNeutral();
+    }
     private async void HideNow(bool restore,WindowRef? returnTarget=null,bool preserveSteam=false)
     {
         if(!preserveSteam)CancelSteamOwner("Painel ocultado; solicitação anterior cancelada.");if(!IsVisible||fadingOut)return;var wasForeground=Native.GetForegroundWindow()==new WindowInteropHelper(this).Handle;RevokeFocus("hide");CancelHandoff();heldKeys.Clear();CancelHold();if(!preserveSteam)pending?.Cancel();input.Cancel();Sidebar.BeginAnimation(OpacityProperty,null);
         var generation=++fadeGeneration;fadeInterrupted=false;
         // Steam requires the window to disappear before its focus handshake. Diagnostics stay synchronous.
-        if(!preserveSteam&&!diagnostic&&OpenAnimationAllowed){
+        if(!preserveSteam&&(ForceFadeFixture||!diagnostic&&OpenAnimationAllowed)){
             fadingOut=true;var animation=new DoubleAnimation(Opacity,0,TimeSpan.FromMilliseconds(180)){FillBehavior=FillBehavior.HoldEnd,EasingFunction=new CubicEase{EasingMode=EasingMode.EaseOut}};BeginAnimation(OpacityProperty,animation);
             await Task.Delay(180);
-            if(exiting||generation!=fadeGeneration)return;fadingOut=false;
+            if(exiting||generation!=fadeGeneration)return;
+            // Recheck at the handoff itself: the timer may have been delayed on the UI thread.
+            guideBackend?.PollForOverlay(IsVisible,focusCycle,Environment.TickCount64,Controller.Settings.GuideOpenMaxHoldMs);
+            fadeInterrupted|=!FadeInputsNeutral(FadeFramesFixture?.Invoke()??Enumerable.Range(0,4).Select(i=>Native.ReadPad((uint)i)).ToArray());
+            fadingOut=false;
         }
         var stillForeground=Native.GetForegroundWindow()==new WindowInteropHelper(this).Handle;
+        if(stillForeground&&fadeInterrupted){OpenPanel();FeedbackText("Entrada detectada ao fechar. Solte os controles e tente novamente.");return;}
         Hide();CancelOpenAnimation();audio.SetVisible(false);UpdatePolling();
         if(restore&&wasForeground&&stillForeground&&!fadeInterrupted&&PhysicalKeysNeutral()&&returnTarget is {} target&&Controller.Platform.Valid(target)){var result=await Controller.Platform.Switch(target);if(result.Kind!=ResultKind.Completed&&result.Kind!=ResultKind.Simulated&&!exiting){if(!Controller.Platform.IsPreview)Controller.Diagnostics.Log("focus-return",result.Kind);FeedbackText(result.Message);}}
     }
@@ -377,6 +392,7 @@ public partial class MainWindow : Window
     }
     private void OnKeyDown(object sender,KeyEventArgs e)
     {
+        if(fadingOut){fadeInterrupted=true;e.Handled=true;return;}
         inputMethod="keyboard";UpdateHints();
         if((operationText?.IsKeyboardFocusWithin==true||detailsText?.IsKeyboardFocusWithin==true)&&e.Key is Key.Left or Key.Right){if(NavigationAllowed&&navigationKeysArmed)Move(e.Key==Key.Left?NavDirection.Left:NavDirection.Right);e.Handled=true;return;}
         if(e.OriginalSource is Slider or TextBox&&e.Key is not Key.Escape)return;
@@ -398,7 +414,7 @@ public partial class MainWindow : Window
     }
     private void Tick(object? sender,EventArgs args)
     {
-        if(exiting)return;if(guideBackend is not null)PollGuideStatus(guideBackend);var frames=reviewFrames??Enumerable.Range(0,4).Select(i=>Native.ReadPad((uint)i)).ToArray();var now=Environment.TickCount64;if(fadingOut&&(frames.Any(f=>f.ReadFailed||f.Connected&&(f.Buttons!=0||Math.Abs((int)f.X)>=Controller.Settings.Deadzone*2/3||Math.Abs((int)f.Y)>=Controller.Settings.Deadzone*2/3||Math.Abs((int)f.RX)>=Controller.Settings.Deadzone*2/3||Math.Abs((int)f.RY)>=Controller.Settings.Deadzone*2/3||f.LT>=30||f.RT>=30))||guideBackend is {Active:true} backend&&(!backend.SnapshotValid||backend.Held)||!PhysicalKeysNeutral()))fadeInterrupted=true;if(fadingOut){if(GuidePolling.Consume(ref guideToggleRequested,false))OpenPanel();return;}lastInputSample=new(frames,now,GuideHeld:guideBackend?.Held==true,GuideValid:guideBackend is null||!guideBackend.Active||guideBackend.SnapshotValid,GuideConnections:guideBackend?.Connections??0);UpdatePolling(frames.Any(f=>f.Connected));var current=input.Update(frames,IsVisible,now);UpdateControllerTelemetry(frames,current.Slot,now);if(steamOwner is{} owner&&((owner.InputQualified&&!Neutral(SteamSample(),Environment.TickCount64))||frames.Any(f=>f.Buttons.HasFlag(PadButtons.B))||(PhysicalKeyReader(0x1B)&0x8000)!=0||!SteamAlive(owner)))CancelSteamOwner("Nova entrada ou contexto alterado durante foco.");
+        if(exiting)return;if(guideBackend is not null)PollGuideStatus(guideBackend);var frames=reviewFrames??Enumerable.Range(0,4).Select(i=>Native.ReadPad((uint)i)).ToArray();var now=Environment.TickCount64;if(fadingOut&&!FadeInputsNeutral(frames))fadeInterrupted=true;if(fadingOut){if(GuidePolling.Consume(ref guideToggleRequested,false))OpenPanel();return;}lastInputSample=new(frames,now,GuideHeld:guideBackend?.Held==true,GuideValid:guideBackend is null||!guideBackend.Active||guideBackend.SnapshotValid,GuideConnections:guideBackend?.Connections??0);UpdatePolling(frames.Any(f=>f.Connected));var current=input.Update(frames,IsVisible,now);UpdateControllerTelemetry(frames,current.Slot,now);if(steamOwner is{} owner&&((owner.InputQualified&&!Neutral(SteamSample(),Environment.TickCount64))||frames.Any(f=>f.Buttons.HasFlag(PadButtons.B))||(PhysicalKeyReader(0x1B)&0x8000)!=0||!SteamAlive(owner)))CancelSteamOwner("Nova entrada ou contexto alterado durante foco.");
         if(TransitionPending){if(GuidePolling.Consume(ref guideToggleRequested,current.Toggle)){Toggle(trustedDismiss:current.Toggle||guideBackend?.SnapshotValid==true);return;}if(current.Events.Pressed.HasFlag(PadButtons.B))Back(trustedDismiss:current.Slot is {} slot&&frames[slot].Connected&&!frames[slot].ReadFailed);else AdvanceHandoff(lastInputSample.Value,now);return;}
         if(GuidePolling.Consume(ref guideToggleRequested,current.Toggle)){Toggle();return;}if(!IsVisible)return;var events=current.Events;if(events.Pressed!=0||events.Direction!=0){inputMethod="controller";UpdateHints();}if(!NavigationAllowed){if(!ownedDialog&&events.Pressed.HasFlag(PadButtons.B))Back();return;}if(!navigationKeysArmed&&heldKeys.Count==0&&PhysicalKeysNeutral())navigationKeysArmed=true;
         if(Confirming&&closeSource==-1){var point=Mouse.GetPosition(HoldCloseButton);var inside=point.X>=0&&point.Y>=0&&point.X<HoldCloseButton.ActualWidth&&point.Y<HoldCloseButton.ActualHeight;var mixed=keyboardDown||heldKeys.Count>0||events.Pressed!=0||events.Direction!=0;AdvancePointerHold(pointerDown,(!pointerDown||pointerCaptured&&HoldCloseButton.IsMouseCaptured)&&!mixed,inside,now);return;}

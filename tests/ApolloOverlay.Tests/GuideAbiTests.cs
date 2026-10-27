@@ -210,6 +210,26 @@ internal static unsafe class GuideAbiTests
     {
         var w=new MainWindow(renderOnly:true,platform:p);w.Controller.Select(p.Game);w.FocusForeground=()=>new System.Windows.Interop.WindowInteropHelper(w).Handle;w.FocusRequest=_=>true;w.RefreshFocusFixture=()=>Task.CompletedTask;return w;
     }
+    internal static void FadeHandoffChecks(Action<string,Action> test)
+    {
+        System.Threading.SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());
+        foreach(var scenario in new[]{"during", "at-end", "neutral", "read-failed"})test("fade protects foreground handoff: "+scenario,()=>{
+            using var p=new HandoffPlatform();var w=Host(p);var frames=new PadFrame[]{new(true,0),default,default,default};
+            try{
+                w.PhysicalKeyReader=_=>0;w.ForceFadeFixture=true;w.FadeFramesFixture=()=>frames;
+                Require(Native.GetForegroundWindow()==new System.Windows.Interop.WindowInteropHelper(w).Handle,"Owned fade fixture lacks foreground");
+                w.BeginFadeFixture();Require(w.FadePending&&w.IsVisible,"Fade was not started");
+                if(scenario=="during"){w.ReviewTick(new PadFrame[]{new(true,PadButtons.A),default,default,default});frames=new PadFrame[]{new(true,0),default,default,default};}
+                if(scenario=="at-end")frames=new PadFrame[]{new(true,PadButtons.A),default,default,default};
+                if(scenario=="read-failed")frames=new PadFrame[]{new(false,0,ReadFailed:true),default,default,default};
+                var deadline=System.Diagnostics.Stopwatch.StartNew();while(w.FadePending&&deadline.ElapsedMilliseconds<5000){PumpFocus();Thread.Sleep(1);}
+                Require(!w.FadePending,"Fade did not finish");
+                if(scenario=="neutral")Require(!w.IsVisible,"Neutral fade did not hide");
+                else Require(w.IsVisible,"Fade ceded focus after new or unreadable input");
+                Require(p.Switches==0,"Fade unexpectedly requested an external switch");
+            }finally{w.Close();}
+        });
+    }
     internal static void FocusChecks(Action<string,Action> test)
     {
         System.Threading.SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());FocusOpenRed(test);
@@ -402,3 +422,4 @@ internal static unsafe class GuideAbiTests
     [UnmanagedCallersOnly(CallConvs=[typeof(CallConvStdcall)])] private static void Stop(nint self,ulong token) {Calls.Add(token==123 ? "stop" : "bad-token");}
     [UnmanagedCallersOnly(CallConvs=[typeof(CallConvStdcall)])] private static byte Unregister(nint self,ulong token) {Calls.Add(token==123 ? "unregister" : "bad-token");return removal ? (byte)1 : (byte)0;}
 }
+

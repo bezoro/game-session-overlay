@@ -17,6 +17,7 @@ internal static class PremiumInterfaceTests
     internal static void Run(Action<string,Action> test)
     {
         _=Application.Current??new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};
+        test("shared controller notice is visible and accessible",()=>{var w=ReviewFixTests.Window();try{var notice=(TextBlock)w.FindName("SharedControlNotice");Require(notice.Visibility==Visibility.Visible&&notice.Text.Contains("também pode agir no jogo"),"Missing or misleading controller sharing notice");var peer=new TextBlockAutomationPeer(notice);Require(peer.GetName().Contains("enquanto este painel está aberto"),"Screen reader cannot discover the complete notice");}finally{w.Close();}});
         test("premium neutral anchor wording",()=>{var w=ReviewFixTests.Window();try{var card=ReviewFixTests.Button(w,"session-card");Require(new ButtonAutomationPeer(card).GetName().Contains("Retomar janela")&&!new ButtonAutomationPeer(card).GetName().Contains("jogo"),"Ordinary application is called a game");}finally{w.Close();}});
         test("premium unavailable action has disabled UIA semantics",()=>{var w=ReviewFixTests.Window();try{Require(!new ButtonAutomationPeer(ReviewFixTests.Button(w,"steam-overlay")).IsEnabled(),"Unavailable action remains invokable");}finally{w.Close();}});
         test("premium mouse app options affordance",()=>{var w=ReviewFixTests.Window();try{w.Page(1);Require(Descendants<Button>((DependencyObject)w.Content).Any(b=>System.Windows.Automation.AutomationProperties.GetName(b).StartsWith("Opções de ")),"Mouse options absent");}finally{w.Close();}});
@@ -117,3 +118,4 @@ internal static class PremiumInterfaceTests
         public bool IsPreview=>preview;public WindowRef? Foreground()=>Empty?null:Window;public IReadOnlyList<WindowRef> Windows()=>Empty?[]:[Window];public bool Valid(WindowRef w)=>ValidIdentity&&Window.Same(w);public IReadOnlyList<DisplayRef> Displays()=>[new("fixture",0,0,1280,720,true)];public ModuleEvidence SteamEvidence(WindowRef? w)=>ModuleEvidence.Unknown;public Task<ActionResult> TaskView(){Calls++;return OnTaskView?.Invoke()??Next;}public Task<ActionResult> Switch(WindowRef w){Calls++;return Next;}public Task<ActionResult> Close(WindowRef w,CancellationToken token){Closes++;return Task.FromResult(new ActionResult(ResultKind.Simulated,"fixture close"));}public Task<ActionResult> Shortcut(WindowRef w,string keys)=>throw new Exception("No native keys allowed");public ActionResult Launch(bool playnite,string? path)=>throw new Exception("No native launch allowed");public void Dispose(){}
     }
 }
+

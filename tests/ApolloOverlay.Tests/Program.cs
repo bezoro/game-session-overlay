@@ -114,6 +114,7 @@ static class Program
         Case("Cleanup prevents late Steam launch after pending focus completes",GuideAbiTests.LateLaunchBaseline);
         Case("Disposed platform refuses owned target validation and activation",GuideAbiTests.DisposedPlatformBaseline);
         GuideAbiTests.HandoffTests(Case);
+        GuideAbiTests.FadeHandoffChecks(Case);
         SteamShortcutFocusTests.Run(Case);
         AutomationTests.Run(Case);
         SteamOverlayDetectionTests.Run(Case);
