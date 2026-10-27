@@ -37,9 +37,22 @@ public static class Navigation
     public static string Spatial(string selected,IReadOnlyList<(string Id,double X,double Y)> visible,NavDirection direction)
     {
         if(visible.Count==0)return selected;var origin=visible.FirstOrDefault(p=>p.Id==selected);if(origin.Id is null)return visible[0].Id;
+        if(direction==NavDirection.None)return selected;
         var vertical=direction is NavDirection.Up or NavDirection.Down;var sign=direction is NavDirection.Up or NavDirection.Left?-1:1;
-        return visible.Where(p=>p.Id!=selected&&(vertical?p.Y-origin.Y:p.X-origin.X)*sign>1&&(vertical||Math.Abs(p.Y-origin.Y)<=20))
-            .OrderBy(p=>Math.Abs(vertical?p.Y-origin.Y:p.X-origin.X)+Math.Abs(vertical?p.X-origin.X:p.Y-origin.Y)*2).Select(p=>p.Id).FirstOrDefault()??selected;
+        if(vertical)
+        {
+            // Select the nearest visual row first. A large horizontal offset must not
+            // make the controller skip a full-width row for a later aligned tile.
+            // Small center differences belong to the current row, not the next one.
+            var candidates=visible.Where(p=>p.Id!=selected&&(p.Y-origin.Y)*sign>20).ToArray();
+            if(candidates.Length==0)return selected;
+            var nearest=candidates.Min(p=>Math.Abs(p.Y-origin.Y));
+            return candidates.Where(p=>Math.Abs(p.Y-origin.Y)<=nearest+20)
+                .OrderBy(p=>Math.Abs(p.X-origin.X)).ThenBy(p=>Math.Abs(p.Y-origin.Y))
+                .Select(p=>p.Id).First();
+        }
+        return visible.Where(p=>p.Id!=selected&&(p.X-origin.X)*sign>1&&Math.Abs(p.Y-origin.Y)<=20)
+            .OrderBy(p=>Math.Abs(p.X-origin.X)+Math.Abs(p.Y-origin.Y)*2).Select(p=>p.Id).FirstOrDefault()??selected;
     }
     public static string Preserve(string selected,IReadOnlyList<string> previous,IReadOnlyList<string> current)
     {
@@ -67,3 +80,4 @@ public static class SidebarLayout
         return new(side=="Right"?display.X+display.Width-margin-width:display.X+margin,display.Y+margin,width,Math.Max(1,(int)Math.Min(980*scale*density,display.Height-2*margin)));
     }
 }
+

@@ -126,6 +126,9 @@ static class Program
         SessionHubServiceTests.Run(Case);
         ReviewFixTests.Run(Case);
         NavigationTests.Run(Case);
+        TvUsabilityTests.Run(Case);
+        WindowIconCacheTests.Run(Case);
+        PlayniteBrowserTests.Run(Case);
         StartupRegistrationTests.Run(Case);
         CorrectionTests.Run(Case,Path.GetDirectoryName(Path.GetFullPath(args[0]))!);
         return Finish(args[0]);
