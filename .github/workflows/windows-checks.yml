@@ -56,7 +56,7 @@ jobs:
           $failed = $false
           foreach ($suite in @('guide-settings', 'guide-release-red', 'session-hub-services', 'steam-sequence', 'steam-effects-handshake')) {
             Write-Host "Running $suite"
-            & dotnet $testDll "$checks/$suite.json" "--$suite" 2>&1 | Tee-Object -FilePath "$checks/$suite.log"
+            & dotnet $testDll "$checks/suite-$suite.json" "--$suite" 2>&1 | Tee-Object -FilePath "$checks/$suite.log"
             if ($LASTEXITCODE -ne 0) { Write-Error "$suite failed with exit code $LASTEXITCODE" -ErrorAction Continue; $failed = $true }
           }
           if ($failed) { exit 1 }
