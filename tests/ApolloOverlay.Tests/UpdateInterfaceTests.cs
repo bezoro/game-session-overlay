@@ -9,6 +9,7 @@ using System.Windows.Threading;
 using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Velopack.Exceptions;
 using ApolloOverlay;
 
 internal static class UpdateInterfaceTests
@@ -196,6 +197,28 @@ internal static class UpdateInterfaceTests
             Require(w.Feedback.Contains("Não foi possível preparar") && w.ActionIds.Contains("prepare-update") && !w.ActionIds.Contains("apply-update"), "Download refusal became a prepared installation");
             Require(w.Controller.Operation is { State: "Não confirmado" } && !w.TransitionPending, "Download failure has no honest result");
         });
+        foreach (var (failure, explanation) in new (Exception, string)[]
+        {
+            (new ChecksumFailedException("private-fixture-package.nupkg", "Fixture SHA-256 mismatch"), "verificação de integridade"),
+            ((Exception)Activator.CreateInstance(typeof(AcquireLockFailedException), nonPublic: true)!, "Outra atualização"),
+            ((Exception)Activator.CreateInstance(typeof(NotInstalledException), nonPublic: true)!, "Setup")
+        })
+        {
+            var error = failure; var expected = explanation;
+            test("updates UI explains SDK download failure and permits recovery: " + error.GetType().Name, () =>
+            {
+                using var host = new Host(); var w = host.Window;
+                host.Source.StageFailure = error;
+                host.Review(); Click(w, "prepare-update"); Complete(w.UpdateTask);
+                Require(w.UpdateTask.IsCompletedSuccessfully && w.Feedback.Contains(expected) && Text(w).Contains(expected), "SDK failure escaped the operation or left progress feedback behind");
+                Require(w.Controller.Operation is { State: "Não confirmado", Action: "update" } && ResultVisible(w), "SDK failure has no visible retained result");
+                Require(w.ActionIds.Contains("prepare-update") && !w.ActionIds.Contains("apply-update") && !w.TransitionPending, "Rejected SDK download exposed installation or queued restart");
+                Require(!w.Feedback.Contains("private-fixture") && !w.Feedback.Contains("Fixture SHA-256"), "SDK internals leaked into user feedback");
+                host.Source.StageFailure = null;
+                Click(w, "prepare-update"); Complete(w.UpdateTask);
+                Require(host.Source.Stages == 2 && w.ActionIds.Contains("apply-update") && w.Feedback.Contains("Download verificado") && w.Controller.Operation is null, "User could not recover after the SDK refusal");
+            });
+        }
         test("updates UI successful download retry resolves its own retained failure", () =>
         {
             using var host = new Host(); var w = host.Window;

@@ -7,6 +7,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using Velopack.Exceptions;
 
 namespace ApolloOverlay;
 
@@ -222,7 +223,7 @@ public partial class MainWindow
         return true;
     }
 
-    private static bool UpdateFailure(Exception error) => error is IOException or InvalidDataException or UnauthorizedAccessException or HttpRequestException or JsonException or InvalidOperationException or ArgumentException or Win32Exception or TimeoutException or System.Security.SecurityException;
+    private static bool UpdateFailure(Exception error) => error is IOException or InvalidDataException or UnauthorizedAccessException or HttpRequestException or JsonException or InvalidOperationException or ArgumentException or Win32Exception or TimeoutException or System.Security.SecurityException or ChecksumFailedException or AcquireLockFailedException or NotInstalledException;
     private void ClearPreviousUpdateResult()
     {
         // A new attempt supersedes only the result owned by this feature.
@@ -233,7 +234,15 @@ public partial class MainWindow
     }
     private void ReportUpdateFailure(string message, Exception error)
     {
-        var reason = error is UnauthorizedAccessException ? "Confira se o repositório está público e se o GitHub está disponível." : error is InvalidDataException or TimeoutException ? error.Message : "Confira a conexão, o espaço em disco e as permissões da pasta. Tente novamente.";
+        var reason = error switch
+        {
+            ChecksumFailedException => "O pacote recebido falhou na verificação de integridade. Nenhuma instalação foi iniciada. Baixe novamente a atualização.",
+            AcquireLockFailedException => "Outra atualização está em andamento. Aguarde sua conclusão e tente novamente.",
+            NotInstalledException => "A instalação não foi encontrada. Repare a overlay pelo Setup antes de atualizar.",
+            UnauthorizedAccessException => "Confira se o repositório está público e se o GitHub está disponível.",
+            InvalidDataException or TimeoutException => error.Message,
+            _ => "Confira a conexão, o espaço em disco e as permissões da pasta. Tente novamente."
+        };
         updateStatus = message + " " + reason; SetUpdateStatus(updateStatus); RetainOperation("Não confirmado", updateStatus, "update"); RequestCue(FeedbackCue.Unavailable);
     }
 
