@@ -1,7 +1,6 @@
 using System.Windows.Media;
 
 namespace ApolloOverlay;
-
 /// <summary>
 /// Resolves icons away from the UI thread. A window identity includes the observed
 /// generation, so an icon for a destroyed HWND cannot be reused for its successor.
@@ -30,9 +29,7 @@ internal sealed class WindowIconCache : IDisposable
     private readonly Func<long> clock;
     private long sequence;
     private bool disposed;
-
     internal event Action<WindowRef>? Available;
-
     internal WindowIconCache(Func<WindowRef, ImageSource?> load, Func<long>? clock = null)
     {
         this.load = load;
@@ -46,25 +43,30 @@ internal sealed class WindowIconCache : IDisposable
         Entry entry;
         lock (gate)
         {
-            if (disposed) return null;
+            if (disposed)
+                return null;
             if (!entries.TryGetValue(key, out entry!))
             {
                 if (entries.Count >= Capacity)
                 {
-                    var victim = entries.Where(pair => !pair.Value.Pending)
-                        .DefaultIfEmpty()
-                        .MinBy(pair => pair.Value?.LastAccess ?? long.MaxValue);
-                    if (victim.Value is null) return null;
+                    var victim = entries.Where(pair => !pair.Value.Pending).DefaultIfEmpty().MinBy(pair => pair.Value?.LastAccess ?? long.MaxValue);
+                    if (victim.Value is null)
+                        return null;
                     entries.Remove(victim.Key);
                 }
+
                 entry = new Entry();
                 entries.Add(key, entry);
             }
+
             entry.LastAccess = ++sequence;
-            if (entry.Image is not null) return entry.Image;
-            if (entry.Pending || clock() < entry.RetryAfter) return null;
+            if (entry.Image is not null)
+                return entry.Image;
+            if (entry.Pending || clock() < entry.RetryAfter)
+                return null;
             entry.Pending = true;
         }
+
         _ = LoadAsync(window, key, entry);
         return null;
     }
@@ -78,24 +80,45 @@ internal sealed class WindowIconCache : IDisposable
             await workers.WaitAsync().ConfigureAwait(false);
             try
             {
-                lock (gate) if (disposed) return;
+                lock (gate)
+                    if (disposed)
+                        return;
                 ImageSource? image;
-                try { image = load(window); }
-                catch (Exception) { image = null; }
+                try
+                {
+                    image = load(window);
+                }
+                catch (Exception)
+                {
+                    image = null;
+                }
+
                 Action<WindowRef>? notify = null;
                 lock (gate)
                 {
-                    if (disposed || !entries.TryGetValue(key, out var current) || !ReferenceEquals(current, entry)) return;
+                    if (disposed || !entries.TryGetValue(key, out var current) || !ReferenceEquals(current, entry))
+                        return;
                     entry.Pending = false;
                     entry.Image = image;
                     entry.RetryAfter = clock() + RetryMilliseconds;
-                    if (image is not null) notify = Available;
+                    if (image is not null)
+                        notify = Available;
                 }
+
                 // The observer must marshal to its own UI thread. It may unsubscribe
                 // concurrently, so the observer must also guard its own lifetime.
-                try { notify?.Invoke(window); } catch (Exception) { }
+                try
+                {
+                    notify?.Invoke(window);
+                }
+                catch (Exception)
+                {
+                }
             }
-            finally { workers.Release(); }
+            finally
+            {
+                workers.Release();
+            }
         }).ConfigureAwait(false);
     }
 
@@ -103,7 +126,8 @@ internal sealed class WindowIconCache : IDisposable
     {
         lock (gate)
         {
-            if (disposed) return;
+            if (disposed)
+                return;
             disposed = true;
             entries.Clear();
             Available = null;

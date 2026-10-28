@@ -5,37 +5,86 @@ namespace ApolloOverlay;
 
 public static class SessionHubSettings
 {
-    public static readonly IReadOnlyList<string> Catalog=Array.AsReadOnly(new[]{"playnite","steam","gamebar","steam-overlay","taskview","audio"});
-    public static string[] Favorites(UserSettings value)=>(value.FavoriteQuickActions??Catalog.ToArray()).Where(Catalog.Contains).Distinct(StringComparer.Ordinal).ToArray();
-    public static UserSettings Copy(UserSettings value)=>value with{Version=3,FavoriteQuickActions=Favorites(value),UiScalePercent=value.UiScalePercent is 100 or 115 or 130 or 150?value.UiScalePercent:100,PanelSide=value.PanelSide is "Left" or "Right"?value.PanelSide:"Left"};
-    public static bool Equivalent(UserSettings a,UserSettings b)
+    public static readonly IReadOnlyList<string> Catalog = Array.AsReadOnly(new[] { "playnite", "steam", "gamebar", "steam-overlay", "taskview", "audio" });
+    public static string[] Favorites(UserSettings value) => (value.FavoriteQuickActions ?? Catalog.ToArray()).Where(Catalog.Contains).Distinct(StringComparer.Ordinal).ToArray();
+    public static UserSettings Copy(UserSettings value) => value with
     {
-        var left=Copy(a);var right=Copy(b);
-        return left.FavoriteQuickActions!.SequenceEqual(right.FavoriteQuickActions!)&&(left with{FavoriteQuickActions=null})==(right with{FavoriteQuickActions=null});
+        Version = 3,
+        FavoriteQuickActions = Favorites(value),
+        UiScalePercent = value.UiScalePercent is 100 or 115 or 130 or 150 ? value.UiScalePercent : 100,
+        PanelSide = value.PanelSide is "Left" or "Right" ? value.PanelSide : "Left"
+    };
+    public static bool Equivalent(UserSettings a, UserSettings b)
+    {
+        var left = Copy(a);
+        var right = Copy(b);
+        return left.FavoriteQuickActions!.SequenceEqual(right.FavoriteQuickActions!) && (left with
+        {
+            FavoriteQuickActions = null
+        }
+
+        ) == (right with
+        {
+            FavoriteQuickActions = null
+        }
+
+        );
     }
-    public static UserSettings Toggle(UserSettings settings,string id)
+
+    public static UserSettings Toggle(UserSettings settings, string id)
     {
-        if(!Catalog.Contains(id))return Copy(settings);
-        var items=Favorites(settings).ToList();if(!items.Remove(id))items.Add(id);
-        return Copy(settings with{FavoriteQuickActions=items.ToArray()});
+        if (!Catalog.Contains(id))
+            return Copy(settings);
+        var items = Favorites(settings).ToList();
+        if (!items.Remove(id))
+            items.Add(id);
+        return Copy(settings with
+        {
+            FavoriteQuickActions = items.ToArray()
+        });
     }
-    public static UserSettings Move(UserSettings settings,string id,int delta)
+
+    public static UserSettings Move(UserSettings settings, string id, int delta)
     {
-        var items=Favorites(settings).ToList();var index=items.IndexOf(id);if(index<0)return Copy(settings);
-        var next=Math.Clamp(index+delta,0,items.Count-1);(items[index],items[next])=(items[next],items[index]);return Copy(settings with{FavoriteQuickActions=items.ToArray()});
+        var items = Favorites(settings).ToList();
+        var index = items.IndexOf(id);
+        if (index < 0)
+            return Copy(settings);
+        var next = Math.Clamp(index + delta, 0, items.Count - 1);
+        (items[index], items[next]) = (items[next], items[index]);
+        return Copy(settings with
+        {
+            FavoriteQuickActions = items.ToArray()
+        });
     }
-    internal static byte[] NormalizeJson(JsonElement root,out bool recovered)
+
+    internal static byte[] NormalizeJson(JsonElement root, out bool recovered)
     {
-        recovered=false;using var stream=new MemoryStream();using(var writer=new Utf8JsonWriter(stream)){
-            writer.WriteStartObject();foreach(var property in root.EnumerateObject()){
-                var value=property.Value;var valid=property.Name switch{
-                    nameof(UserSettings.FavoriteQuickActions)=>value.ValueKind is JsonValueKind.Null||value.ValueKind==JsonValueKind.Array&&value.EnumerateArray().All(v=>v.ValueKind==JsonValueKind.String),
-                    nameof(UserSettings.UiScalePercent)=>value.ValueKind==JsonValueKind.Number&&value.TryGetInt32(out var n)&&n is 100 or 115 or 130 or 150,
-                    nameof(UserSettings.PanelSide)=>value.ValueKind==JsonValueKind.String&&value.GetString() is "Left" or "Right",
-                    nameof(UserSettings.SoundFeedbackEnabled) or nameof(UserSettings.HapticFeedbackEnabled) or nameof(UserSettings.SetupSeen)=>value.ValueKind is JsonValueKind.True or JsonValueKind.False,
-                    _=>true};
-                if(valid)property.WriteTo(writer);else recovered=true;
-            }writer.WriteEndObject();
-        }return stream.ToArray();
+        recovered = false;
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            foreach (var property in root.EnumerateObject())
+            {
+                var value = property.Value;
+                var valid = property.Name switch
+                {
+                    nameof(UserSettings.FavoriteQuickActions) => value.ValueKind is JsonValueKind.Null || value.ValueKind == JsonValueKind.Array && value.EnumerateArray().All(v => v.ValueKind == JsonValueKind.String),
+                    nameof(UserSettings.UiScalePercent) => value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var n) && n is 100 or 115 or 130 or 150,
+                    nameof(UserSettings.PanelSide) => value.ValueKind == JsonValueKind.String && value.GetString() is "Left" or "Right",
+                    nameof(UserSettings.SoundFeedbackEnabled) or nameof(UserSettings.HapticFeedbackEnabled) or nameof(UserSettings.SetupSeen) => value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+                    _ => true
+                };
+                if (valid)
+                    property.WriteTo(writer);
+                else
+                    recovered = true;
+            }
+
+            writer.WriteEndObject();
+        }
+
+        return stream.ToArray();
     }
 }

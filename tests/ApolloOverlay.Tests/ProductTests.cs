@@ -5,29 +5,299 @@ using ApolloOverlay;
 
 internal static class ProductTests
 {
-    private static void Require(bool value){if(!value)throw new Exception("Native product assertion failed.");}
-    private static void Complete(Task task)=>ReviewFixTests.Complete(task);
-    private static MainWindow Window(){var w=new MainWindow(renderOnly:true,platform:new PreviewPlatform(new(101,42,100,"Janela de teste","fixture")));w.InputContextReader=()=>new(true,true,true,true);w.PhysicalKeyReader=_=>0;w.Controller.CaptureReturn();Complete(w.Controller.Refresh());w.RefreshRows();return w;}
-    internal static void Run(Action<string,Action> test)
+    private static void Require(bool value)
     {
-        var application=Application.Current??new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};ThemeSupport.FollowSystem(application);
-        test("default diagnostic context is empty rather than invented game",()=>{using var p=new PreviewPlatform();Require(p.Foreground() is null&&p.Windows().Count==0);});
-        test("native subpage restores selected action and confirmation cancels",()=>{var w=Window();try{w.Page(1);w.Details();for(var i=0;i<w.ActionIds.Count&&w.SelectedAction!="details";i++)w.Sequential(1);Require(w.SelectedAction=="details");w.ActivateEntry();Require(w.SelectedAction=="switch-detail");w.Move(NavDirection.Down);w.Move(NavDirection.Down);Require(w.SelectedAction=="close-detail");w.ActivateEntry();Require(w.Confirming);w.Back();Require(!w.Confirming);w.Back();Require(w.ActionIds.Contains(w.SelectedAction));}finally{w.Close();}});
-        test("current tab resets to predictable top action",()=>{var w=Window();try{w.Page(2);w.Move(NavDirection.Down);w.Page(2);Require(w.SelectedAction=="display");}finally{w.Close();}});
-        test("native UI exit is controller-reachable",()=>{var w=Window();try{w.Page(2);for(var i=0;i<20;i++)w.Move(NavDirection.Down);Require(w.SelectedAction=="exit");}finally{w.Close();}});
-        test("native dynamic resources switch on same tree preserving focus and hold",()=>{var w=Window();try{w.SetRenderState("confirmation");var selected=w.SelectedAction;var target=w.HeldCloseTarget;ThemeSupport.ForceForValidation(application,true);var light=w.SurfaceColor;ThemeSupport.ForceForValidation(application,false);Require(w.SurfaceColor!=light&&w.SelectedAction==selected&&w.HeldCloseTarget!.Same(target)&&w.Confirming);ThemeSupport.FollowSystem(application);Require(ThemeSupport.FollowsSystem(application));}finally{w.Close();}});
-        foreach(var light in new[]{false,true})test("confirmation occludes underlying actions "+light,()=>{ThemeSupport.ForceForValidation(application,light);var w=Window();try{w.SetRenderState("confirmation");var scroll=(System.Windows.Controls.ScrollViewer)w.FindName("ContentScroll");var panel=(System.Windows.Controls.Border)w.FindName("ConfirmPanel");Require(w.Confirming&&scroll.Visibility==Visibility.Collapsed&&((System.Windows.Media.SolidColorBrush)panel.Background).Color.A==255);}finally{w.Close();ThemeSupport.FollowSystem(application);}});
-        test("first deliberate pad direction after visible neutral history retained",()=>{var input=new InputCoordinator(new());input.Update([new(true,0),default,default,default],true,0);var first=input.Update([new(true,PadButtons.Right),default,default,default],true,1);Require(first.Events.Direction==2&&first.Slot==0);});
-        test("first deliberate pad A retained and cannot combine controllers",()=>{var input=new InputCoordinator(new());input.Update([new(true,0),new(true,0),default,default],true,0);var first=input.Update([new(true,PadButtons.Right),new(true,0),default,default],true,1);Require(first.Slot==0);var next=input.Update([new(true,0),new(true,PadButtons.A),default,default],true,2);Require(next.Events.Pressed==0);next=input.Update([new(true,PadButtons.A),new(true,0),default,default],true,3);Require(next.Events.Pressed==PadButtons.A);});
-        test("controller reconnect and held initial buttons require neutral",()=>{var input=new InputCoordinator(new());Require(input.Update([new(true,PadButtons.A),default,default,default],true,0).Events.Pressed==0);input.Update([new(true,0),default,default,default],true,1);Require(input.Update([new(true,PadButtons.A),default,default,default],true,2).Events.Pressed==PadButtons.A);input.Update([default,default,default,default],true,3);Require(input.Update([new(true,PadButtons.A),default,default,default],true,4).Events.Pressed==0);});
-        test("opening chord duration latch partial release and rearm",()=>{var chord=new OpeningChord(PadButtons.LB|PadButtons.RB,650);chord.Update([new(true,0)],0);chord.Update([new(true,PadButtons.LB|PadButtons.RB)],1);chord.Update([new(true,PadButtons.LB)],500);Require(!chord.Update([new(true,PadButtons.LB|PadButtons.RB)],600));Require(!chord.Update([new(true,PadButtons.LB|PadButtons.RB)],1150));Require(chord.Update([new(true,PadButtons.LB|PadButtons.RB)],1250));Require(!chord.Update([new(true,PadButtons.LB|PadButtons.RB)],3000));chord.Update([new(true,0)],3001);chord.Update([new(true,PadButtons.LB|PadButtons.RB)],3002);Require(chord.Update([new(true,PadButtons.LB|PadButtons.RB)],3652));});
-        test("opening chord never combines slots",()=>{var chord=new OpeningChord(PadButtons.LB|PadButtons.RB,650);chord.Update([new(true,0),new(true,0)],0);Require(!chord.Update([new(true,PadButtons.LB),new(true,PadButtons.RB)],1));Require(!chord.Update([new(true,PadButtons.LB),new(true,PadButtons.RB)],1000));});
-        test("removed opening chord stays hidden and Cancel suppresses until release",()=>{var i=new InputCoordinator(new());var mask=PadButtons.LB|PadButtons.RB|PadButtons.Start;Require(!i.Update([new(true,mask),default,default,default],false,1).Toggle);Require(!i.Update([new(true,mask),default,default,default],false,1000).Toggle);i.Cancel();Require(i.Update([new(true,PadButtons.A),default,default,default],true,1001).Events.Pressed==0);i.Update([new(true,0),default,default,default],true,1002);Require(i.Update([new(true,PadButtons.A),default,default,default],true,1003).Events.Pressed==PadButtons.A);});
-        test("deadzone is configurable without initial-held activation",()=>{var p=new PadInterpreter(24000);p.Update(new(true,0),0);Require(p.Update(new(true,0,20000,0),1).Direction==0);Require(p.Update(new(true,0,25000,0),2).Direction==2);});
-        test("invalid version hotkey chord and deadzone settings rejected",()=>{foreach(var text in new[]{"{\"Version\":4}","{\"Hotkey\":\"Space\"}","{\"Chord\":\"Guide\"}","{\"Deadzone\":0}"}){var rejected=false;try{UserSettings.Parse(text);}catch(InvalidDataException){rejected=true;}Require(rejected);}});
-        test("settings versions 1 2 and 3 remain supported and migrate in memory",()=>{foreach(var version in new[]{1,2,3})Require(UserSettings.Parse("{\"Version\":"+version+"}").Version==3);});
-        test("audio restore protects replacement and concurrent user fields",()=>{var original=new AudioSnapshot("A",.5f,false,"");var applied=original with{Volume=.51f,Muted=true};var same=AudioRestore.Decide(original,applied,applied);Require(same.Volume&&same.Mute);var user=AudioRestore.Decide(original,applied,applied with{Volume=.7f});Require(!user.Volume&&user.Mute);var replacement=AudioRestore.Decide(original,applied,applied with{EndpointId="B"});Require(!replacement.Volume&&!replacement.Mute);var gone=AudioRestore.Decide(original,applied,applied with{EndpointId=null});Require(!gone.Volume&&!gone.Mute);});
-        test("launcher and Explorer close protection does not block valid activation guard",()=>{foreach(var name in new[]{"steam","Playnite.FullscreenApp","explorer"}){var target=new WindowRef(9,12,13,"Janela de teste",name,name=="explorer");Require(!target.CanClose);var effect=new ActivationEffects();Require(new GuardedActions(effect).Switch(target).GetAwaiter().GetResult().Kind==ResultKind.Completed&&effect.FocusCalls==1);}});
+        if (!value)
+            throw new Exception("Native product assertion failed.");
     }
-    private sealed class ActivationEffects:IWindowEffects{public int FocusCalls;public bool Valid(WindowRef w)=>true;public bool IsForeground(WindowRef w)=>true;public bool RequestFocus(WindowRef w){FocusCalls++;return true;}public uint SendKeys(string keys)=>throw new Exception("Unexpected shortcut");public bool PostClose(WindowRef w)=>throw new Exception("Unexpected close");public WindowObservation ObserveWindow(WindowRef w)=>WindowObservation.SameIdentity;public Task Wait(int ms)=>Task.CompletedTask;}
+
+    private static void Complete(Task task) => ReviewFixTests.Complete(task);
+    private static MainWindow Window()
+    {
+        var w = new MainWindow(renderOnly: true, platform: new PreviewPlatform(new(101, 42, 100, "Janela de teste", "fixture")));
+        w.InputContextReader = () => new(true, true, true, true);
+        w.PhysicalKeyReader = _ => 0;
+        w.Controller.CaptureReturn();
+        Complete(w.Controller.Refresh());
+        w.RefreshRows();
+        return w;
+    }
+
+    internal static void Run(Action<string, Action> test)
+    {
+        var application = Application.Current ?? new Application
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown
+        };
+        ThemeSupport.FollowSystem(application);
+        test("default diagnostic context is empty rather than invented game", () =>
+        {
+            using var p = new PreviewPlatform();
+            Require(p.Foreground() is null && p.Windows().Count == 0);
+        });
+        test("native subpage restores selected action and confirmation cancels", () =>
+        {
+            var w = Window();
+            try
+            {
+                w.Page(1);
+                w.Details();
+                for (var i = 0; i < w.ActionIds.Count && w.SelectedAction != "details"; i++)
+                    w.Sequential(1);
+                Require(w.SelectedAction == "details");
+                w.ActivateEntry();
+                Require(w.SelectedAction == "switch-detail");
+                w.Move(NavDirection.Down);
+                w.Move(NavDirection.Down);
+                Require(w.SelectedAction == "close-detail");
+                w.ActivateEntry();
+                Require(w.Confirming);
+                w.Back();
+                Require(!w.Confirming);
+                w.Back();
+                Require(w.ActionIds.Contains(w.SelectedAction));
+            }
+            finally
+            {
+                w.Close();
+            }
+        });
+        test("current tab resets to predictable top action", () =>
+        {
+            var w = Window();
+            try
+            {
+                w.Page(2);
+                w.Move(NavDirection.Down);
+                w.Page(2);
+                Require(w.SelectedAction == "display");
+            }
+            finally
+            {
+                w.Close();
+            }
+        });
+        test("native UI exit is controller-reachable", () =>
+        {
+            var w = Window();
+            try
+            {
+                w.Page(2);
+                for (var i = 0; i < 20; i++)
+                    w.Move(NavDirection.Down);
+                Require(w.SelectedAction == "exit");
+            }
+            finally
+            {
+                w.Close();
+            }
+        });
+        test("native dynamic resources switch on same tree preserving focus and hold", () =>
+        {
+            var w = Window();
+            try
+            {
+                w.SetRenderState("confirmation");
+                var selected = w.SelectedAction;
+                var target = w.HeldCloseTarget;
+                ThemeSupport.ForceForValidation(application, true);
+                var light = w.SurfaceColor;
+                ThemeSupport.ForceForValidation(application, false);
+                Require(w.SurfaceColor != light && w.SelectedAction == selected && w.HeldCloseTarget!.Same(target) && w.Confirming);
+                ThemeSupport.FollowSystem(application);
+                Require(ThemeSupport.FollowsSystem(application));
+            }
+            finally
+            {
+                w.Close();
+            }
+        });
+        foreach (var light in new[]
+        {
+            false,
+            true
+        }
+
+        )
+            test("confirmation occludes underlying actions " + light, () =>
+            {
+                ThemeSupport.ForceForValidation(application, light);
+                var w = Window();
+                try
+                {
+                    w.SetRenderState("confirmation");
+                    var scroll = (System.Windows.Controls.ScrollViewer)w.FindName("ContentScroll");
+                    var panel = (System.Windows.Controls.Border)w.FindName("ConfirmPanel");
+                    Require(w.Confirming && scroll.Visibility == Visibility.Collapsed && ((System.Windows.Media.SolidColorBrush)panel.Background).Color.A == 255);
+                }
+                finally
+                {
+                    w.Close();
+                    ThemeSupport.FollowSystem(application);
+                }
+            });
+        test("first deliberate pad direction after visible neutral history retained", () =>
+        {
+            var input = new InputCoordinator(new());
+            input.Update([new(true, 0), default, default, default], true, 0);
+            var first = input.Update([new(true, PadButtons.Right), default, default, default], true, 1);
+            Require(first.Events.Direction == 2 && first.Slot == 0);
+        });
+        test("first deliberate pad A retained and cannot combine controllers", () =>
+        {
+            var input = new InputCoordinator(new());
+            input.Update([new(true, 0), new(true, 0), default, default], true, 0);
+            var first = input.Update([new(true, PadButtons.Right), new(true, 0), default, default], true, 1);
+            Require(first.Slot == 0);
+            var next = input.Update([new(true, 0), new(true, PadButtons.A), default, default], true, 2);
+            Require(next.Events.Pressed == 0);
+            next = input.Update([new(true, PadButtons.A), new(true, 0), default, default], true, 3);
+            Require(next.Events.Pressed == PadButtons.A);
+        });
+        test("controller reconnect and held initial buttons require neutral", () =>
+        {
+            var input = new InputCoordinator(new());
+            Require(input.Update([new(true, PadButtons.A), default, default, default], true, 0).Events.Pressed == 0);
+            input.Update([new(true, 0), default, default, default], true, 1);
+            Require(input.Update([new(true, PadButtons.A), default, default, default], true, 2).Events.Pressed == PadButtons.A);
+            input.Update([default, default, default, default], true, 3);
+            Require(input.Update([new(true, PadButtons.A), default, default, default], true, 4).Events.Pressed == 0);
+        });
+        test("opening chord duration latch partial release and rearm", () =>
+        {
+            var chord = new OpeningChord(PadButtons.LB | PadButtons.RB, 650);
+            chord.Update([new(true, 0)], 0);
+            chord.Update([new(true, PadButtons.LB | PadButtons.RB)], 1);
+            chord.Update([new(true, PadButtons.LB)], 500);
+            Require(!chord.Update([new(true, PadButtons.LB | PadButtons.RB)], 600));
+            Require(!chord.Update([new(true, PadButtons.LB | PadButtons.RB)], 1150));
+            Require(chord.Update([new(true, PadButtons.LB | PadButtons.RB)], 1250));
+            Require(!chord.Update([new(true, PadButtons.LB | PadButtons.RB)], 3000));
+            chord.Update([new(true, 0)], 3001);
+            chord.Update([new(true, PadButtons.LB | PadButtons.RB)], 3002);
+            Require(chord.Update([new(true, PadButtons.LB | PadButtons.RB)], 3652));
+        });
+        test("opening chord never combines slots", () =>
+        {
+            var chord = new OpeningChord(PadButtons.LB | PadButtons.RB, 650);
+            chord.Update([new(true, 0), new(true, 0)], 0);
+            Require(!chord.Update([new(true, PadButtons.LB), new(true, PadButtons.RB)], 1));
+            Require(!chord.Update([new(true, PadButtons.LB), new(true, PadButtons.RB)], 1000));
+        });
+        test("removed opening chord stays hidden and Cancel suppresses until release", () =>
+        {
+            var i = new InputCoordinator(new());
+            var mask = PadButtons.LB | PadButtons.RB | PadButtons.Start;
+            Require(!i.Update([new(true, mask), default, default, default], false, 1).Toggle);
+            Require(!i.Update([new(true, mask), default, default, default], false, 1000).Toggle);
+            i.Cancel();
+            Require(i.Update([new(true, PadButtons.A), default, default, default], true, 1001).Events.Pressed == 0);
+            i.Update([new(true, 0), default, default, default], true, 1002);
+            Require(i.Update([new(true, PadButtons.A), default, default, default], true, 1003).Events.Pressed == PadButtons.A);
+        });
+        test("deadzone is configurable without initial-held activation", () =>
+        {
+            var p = new PadInterpreter(24000);
+            p.Update(new(true, 0), 0);
+            Require(p.Update(new(true, 0, 20000, 0), 1).Direction == 0);
+            Require(p.Update(new(true, 0, 25000, 0), 2).Direction == 2);
+        });
+        test("invalid version hotkey chord and deadzone settings rejected", () =>
+        {
+            foreach (var text in new[]
+            {
+                "{\"Version\":4}",
+                "{\"Hotkey\":\"Space\"}",
+                "{\"Chord\":\"Guide\"}",
+                "{\"Deadzone\":0}"
+            }
+
+            )
+            {
+                var rejected = false;
+                try
+                {
+                    UserSettings.Parse(text);
+                }
+                catch (InvalidDataException)
+                {
+                    rejected = true;
+                }
+
+                Require(rejected);
+            }
+        });
+        test("settings versions 1 2 and 3 remain supported and migrate in memory", () =>
+        {
+            foreach (var version in new[]
+            {
+                1,
+                2,
+                3
+            }
+
+            )
+                Require(UserSettings.Parse("{\"Version\":" + version + "}").Version == 3);
+        });
+        test("audio restore protects replacement and concurrent user fields", () =>
+        {
+            var original = new AudioSnapshot("A", .5f, false, "");
+            var applied = original with
+            {
+                Volume = .51f,
+                Muted = true
+            };
+            var same = AudioRestore.Decide(original, applied, applied);
+            Require(same.Volume && same.Mute);
+            var user = AudioRestore.Decide(original, applied, applied with
+            {
+                Volume = .7f
+            });
+            Require(!user.Volume && user.Mute);
+            var replacement = AudioRestore.Decide(original, applied, applied with
+            {
+                EndpointId = "B"
+            });
+            Require(!replacement.Volume && !replacement.Mute);
+            var gone = AudioRestore.Decide(original, applied, applied with
+            {
+                EndpointId = null
+            });
+            Require(!gone.Volume && !gone.Mute);
+        });
+        test("launcher and Explorer close protection does not block valid activation guard", () =>
+        {
+            foreach (var name in new[]
+            {
+                "steam",
+                "Playnite.FullscreenApp",
+                "explorer"
+            }
+
+            )
+            {
+                var target = new WindowRef(9, 12, 13, "Janela de teste", name, name == "explorer");
+                Require(!target.CanClose);
+                var effect = new ActivationEffects();
+                Require(new GuardedActions(effect).Switch(target).GetAwaiter().GetResult().Kind == ResultKind.Completed && effect.FocusCalls == 1);
+            }
+        });
+    }
+
+    private sealed class ActivationEffects : IWindowEffects
+    {
+        public int FocusCalls;
+        public bool Valid(WindowRef w) => true;
+        public bool IsForeground(WindowRef w) => true;
+        public bool RequestFocus(WindowRef w)
+        {
+            FocusCalls++;
+            return true;
+        }
+
+        public uint SendKeys(string keys) => throw new Exception("Unexpected shortcut");
+        public bool PostClose(WindowRef w) => throw new Exception("Unexpected close");
+        public WindowObservation ObserveWindow(WindowRef w) => WindowObservation.SameIdentity;
+        public Task Wait(int ms) => Task.CompletedTask;
+    }
 }

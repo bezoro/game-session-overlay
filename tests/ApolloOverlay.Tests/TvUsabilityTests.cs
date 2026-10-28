@@ -7,7 +7,8 @@ internal static class TvUsabilityTests
 {
     private static void Require(bool value, string message)
     {
-        if (!value) throw new Exception(message);
+        if (!value)
+            throw new Exception(message);
     }
 
     private static MainWindow Window()
@@ -67,11 +68,16 @@ internal static class TvUsabilityTests
             }
             finally
             {
-                try { window?.Close(); }
-                finally { SynchronizationContext.SetSynchronizationContext(previous); }
+                try
+                {
+                    window?.Close();
+                }
+                finally
+                {
+                    SynchronizationContext.SetSynchronizationContext(previous);
+                }
             }
         });
-
         test("TV direction and A together move without activating the newly selected action", () =>
         {
             var window = Window();
@@ -90,10 +96,18 @@ internal static class TvUsabilityTests
                 Require(((TextBlock)window.FindName("PageTitle")).Text == "Controle da sessão", "Simultaneous input activated the next item");
                 Require(!window.TransitionPending, "Simultaneous input queued an external action");
             }
-            finally { window.Close(); }
+            finally
+            {
+                window.Close();
+            }
         });
+        foreach (var when in new[]
+        {
+            "during",
+            "at-end"
+        }
 
-        foreach (var when in new[] { "during", "at-end" })
+        )
             test("TV fade does not cede focus after controller disconnect " + when, () =>
             {
                 var previous = SynchronizationContext.Current;
@@ -102,7 +116,13 @@ internal static class TvUsabilityTests
                 {
                     SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
                     window = Window();
-                    var frames = new PadFrame[] { new(true, PadButtons.None), default, default, default };
+                    var frames = new PadFrame[]
+                    {
+                        new(true, PadButtons.None),
+                        default,
+                        default,
+                        default
+                    };
                     window.ForceFadeFixture = true;
                     window.FadeFramesFixture = () => frames;
                     window.ReviewTick(frames);
@@ -113,20 +133,37 @@ internal static class TvUsabilityTests
                     if (when == "during")
                     {
                         window.ReviewTick(frames);
-                        frames = new PadFrame[] { new(true, PadButtons.None), default, default, default };
+                        frames = new PadFrame[]
+                        {
+                            new(true, PadButtons.None),
+                            default,
+                            default,
+                            default
+                        };
                     }
+
                     var timeout = System.Diagnostics.Stopwatch.StartNew();
-                    while (window.FadePending && timeout.ElapsedMilliseconds < 5000) { PumpDispatcher(); Thread.Sleep(1); }
+                    while (window.FadePending && timeout.ElapsedMilliseconds < 5000)
+                    {
+                        PumpDispatcher();
+                        Thread.Sleep(1);
+                    }
+
                     Require(!window.FadePending && window.IsVisible, "Disconnect allowed the fade to hand off focus");
                     Require(Native.GetForegroundWindow() == new WindowInteropHelper(window).Handle, "Disconnect ceded foreground focus");
                 }
                 finally
                 {
-                    try { window?.Close(); }
-                    finally { SynchronizationContext.SetSynchronizationContext(previous); }
+                    try
+                    {
+                        window?.Close();
+                    }
+                    finally
+                    {
+                        SynchronizationContext.SetSynchronizationContext(previous);
+                    }
                 }
             });
-
         test("TV unavailable session card opens window picker", () =>
         {
             var platform = new PremiumInterfaceTests.FixturePlatform();
@@ -139,9 +176,11 @@ internal static class TvUsabilityTests
                 Require(window.ActionIds.Contains("refresh-apps"), "Unavailable session card did not offer the window picker");
                 Require(platform.Calls == 0, "Unavailable session card attempted to switch to an invalid window");
             }
-            finally { window.Close(); }
+            finally
+            {
+                window.Close();
+            }
         });
-
         test("TV X opens options only from relevant pages", () =>
         {
             var window = Window();
@@ -164,9 +203,11 @@ internal static class TvUsabilityTests
                 PressX(window);
                 Require(((TextBlock)window.FindName("PageTitle")).Text == "Opções da janela", "X no longer opens application options");
             }
-            finally { window.Close(); }
+            finally
+            {
+                window.Close();
+            }
         });
-
         test("TV session hint reflects whether a window is selected", () =>
         {
             var window = Window();
@@ -181,9 +222,11 @@ internal static class TvUsabilityTests
                 window.RefreshRows();
                 Require(hint.Text.Contains("Retomar", StringComparison.OrdinalIgnoreCase), "Selected session does not advertise resuming");
             }
-            finally { window.Close(); }
+            finally
+            {
+                window.Close();
+            }
         });
-
         test("TV compact hints do not advertise contextual options on the system page", () =>
         {
             var window = Window();
@@ -197,7 +240,10 @@ internal static class TvUsabilityTests
                 hint = ((TextBlock)window.FindName("ModeLabel")).Text;
                 Require(hint.Contains("X opções", StringComparison.Ordinal), "Apps page lost its contextual options hint");
             }
-            finally { window.Close(); }
+            finally
+            {
+                window.Close();
+            }
         });
     }
 }

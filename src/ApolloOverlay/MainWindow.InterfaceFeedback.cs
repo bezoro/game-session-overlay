@@ -9,19 +9,26 @@ namespace ApolloOverlay;
 public partial class MainWindow
 {
     private int interfaceActionDepth;
-
     private void ClickTab(Button button, int index)
     {
-        if (!NavigationAllowed || TransitionPending || Confirming || page == index && view.Depth == 0) return;
+        if (!NavigationAllowed || TransitionPending || Confirming || page == index && view.Depth == 0)
+            return;
         var previousSource = dispatchSource;
         dispatchSource = -1;
-        try { RunInterfaceAction(button, () => Page(index), FeedbackCue.Navigation); }
-        finally { dispatchSource = previousSource; }
+        try
+        {
+            RunInterfaceAction(button, () => Page(index), FeedbackCue.Navigation);
+        }
+        finally
+        {
+            dispatchSource = previousSource;
+        }
     }
 
     private void ActivatePointerEntry(Button button)
     {
-        if (button.Tag is not string id) return;
+        if (button.Tag is not string id)
+            return;
         var previousSource = dispatchSource;
         dispatchSource = -1;
         try
@@ -32,31 +39,42 @@ public partial class MainWindow
                 RunInterfaceAction(button, () => Page(2), FeedbackCue.Confirmation);
             else if (NavigationAllowed && (id == "back-header" || Confirming && id == "confirm-cancel"))
                 RunInterfaceAction(button, Back, FeedbackCue.Cancellation);
-            else ActivateEntry();
+            else
+                ActivateEntry();
         }
-        finally { dispatchSource = previousSource; }
+        finally
+        {
+            dispatchSource = previousSource;
+        }
     }
 
     private void RunInterfaceAction(Button button, Action action, FeedbackCue? cue)
     {
-        if (interfaceActionDepth == 0 && cue is {} signal) RequestCue(signal);
+        if (interfaceActionDepth == 0 && cue is { } signal)
+            RequestCue(signal);
         PulseActivation(button);
         interfaceActionDepth++;
-        try { action(); }
+        try
+        {
+            action();
+        }
         finally
         {
             interfaceActionDepth--;
             // Settings rebuild their row. Keep the acknowledgement on the replacement too.
-            if (button.Tag is string id && entries.FirstOrDefault(e => e.Id == id)?.Button is {} current && current != button)
+            if (button.Tag is string id && entries.FirstOrDefault(e => e.Id == id)?.Button is { } current && current != button)
                 PulseActivation(current);
         }
     }
 
     private void PulseActivation(Button button)
     {
-        InteractionMotion.Press(button);button.ApplyTemplate();
-        if (button.Template.FindName("ActivationFeedback", button) is not Border highlight) return;
-        if (button.Resources["ActivationTimer"] is DispatcherTimer previous) previous.Stop();
+        InteractionMotion.Press(button);
+        button.ApplyTemplate();
+        if (button.Template.FindName("ActivationFeedback", button) is not Border highlight)
+            return;
+        if (button.Resources["ActivationTimer"] is DispatcherTimer previous)
+            previous.Stop();
         highlight.BeginAnimation(OpacityProperty, null);
         highlight.Opacity = .18;
         if (OpenAnimationAllowed)
@@ -64,9 +82,18 @@ public partial class MainWindow
             highlight.BeginAnimation(OpacityProperty, new DoubleAnimation(.18, 0, TimeSpan.FromMilliseconds(180)));
             return;
         }
+
         // A system animation restriction still receives a brief static acknowledgement.
-        var reset = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
-        reset.Tick += (_, _) => { reset.Stop(); highlight.Opacity = 0; button.Resources.Remove("ActivationTimer"); };
+        var reset = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(150)
+        };
+        reset.Tick += (_, _) =>
+        {
+            reset.Stop();
+            highlight.Opacity = 0;
+            button.Resources.Remove("ActivationTimer");
+        };
         button.Resources["ActivationTimer"] = reset;
         reset.Start();
     }
@@ -78,7 +105,14 @@ public partial class MainWindow
         var brush = problem ? ThemeSupport.Critical : complete ? ThemeSupport.Success : ThemeSupport.Stroke;
         OperationPanel.SetResourceReference(Border.BorderBrushProperty, brush);
         OperationGlyph.SetResourceReference(TextBlock.ForegroundProperty, problem ? ThemeSupport.Critical : complete ? ThemeSupport.Success : ThemeSupport.SecondaryText);
-        OperationGlyph.Text = state switch { "Concluído" => "✓", "Pendente" => "…", "Cancelado" => "×", "Falhou" or "Indisponível" or "Parcial" or "Não confirmado" => "!", _ => "i" };
+        OperationGlyph.Text = state switch
+        {
+            "Concluído" => "✓",
+            "Pendente" => "…",
+            "Cancelado" => "×",
+            "Falhou" or "Indisponível" or "Parcial" or "Não confirmado" => "!",
+            _ => "i"
+        };
         AutomationProperties.SetItemStatus(OperationPanel, state ?? "");
     }
 
@@ -91,9 +125,7 @@ public partial class MainWindow
             (true, true) => "Teste solicitado. Confira o som e a vibração no controle ativo.",
             (true, false) => "Teste solicitado. Confira o som na saída de áudio ativa.",
             (false, true) => "Teste solicitado. Confira a vibração no controle ativo.",
-            _ => Controller.Settings.HapticFeedbackEnabled && !Controller.Settings.SoundFeedbackEnabled && !controllerSource
-                ? "Use A no controle ativo para testar a vibração."
-                : sent.Reason
+            _ => Controller.Settings.HapticFeedbackEnabled && !Controller.Settings.SoundFeedbackEnabled && !controllerSource ? "Use A no controle ativo para testar a vibração." : sent.Reason
         });
     }
 
@@ -103,8 +135,6 @@ public partial class MainWindow
             return "Ative sons ou vibração para testar";
         if (Controller.Settings.SoundFeedbackEnabled && !feedbackService.Status.SoundAvailable)
             return feedbackService.Status.Reason;
-        return Controller.Settings.SoundFeedbackEnabled
-            ? "Ouvir navegação, confirmação e retorno · use o controle para testar vibração"
-            : "Use A para testar um pulso curto no controle ativo";
+        return Controller.Settings.SoundFeedbackEnabled ? "Ouvir navegação, confirmação e retorno · use o controle para testar vibração" : "Use A para testar um pulso curto no controle ativo";
     }
 }

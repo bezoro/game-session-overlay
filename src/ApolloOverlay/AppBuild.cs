@@ -15,10 +15,8 @@ public static class AppBuild
 
     private static AppBuildInfo Read(Assembly assembly)
     {
-        var fields = assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
-            .ToDictionary(attribute => attribute.Key, attribute => attribute.Value ?? "", StringComparer.Ordinal);
+        var fields = assembly.GetCustomAttributes<AssemblyMetadataAttribute>().ToDictionary(attribute => attribute.Key, attribute => attribute.Value ?? "", StringComparer.Ordinal);
         string Field(string key, string fallback) => fields.TryGetValue(key, out var value) && value.Length > 0 ? value : fallback;
-        return new(assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.2.0-dev+local",
-            Field("OverlayBuildId", "local"), Field("OverlayCommit", "unknown"), Field("OverlayChannel", "testing"));
+        return new(assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.2.0-dev+local", Field("OverlayBuildId", "local"), Field("OverlayCommit", "unknown"), Field("OverlayChannel", "testing"));
     }
 }
