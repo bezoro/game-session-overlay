@@ -40,7 +40,7 @@ public interface IControllerDevices : IDisposable
     ControllerVibrationResult SetVibration(uint slot, long connectionEpoch, ushort leftMotor, ushort rightMotor);
 }
 
-public enum FeedbackCue { Navigation, Confirmation, Unavailable, Test }
+public enum FeedbackCue { Navigation, Confirmation, Unavailable, Test, Cancellation, Completion }
 public enum FeedbackSourceKind { Keyboard, Pointer, Controller }
 public readonly record struct FeedbackSource(FeedbackSourceKind Kind, uint? Slot = null, long ConnectionEpoch = 0);
 public readonly record struct FeedbackContext(bool Visible, bool ConfirmedForeground, uint? ActiveSlot, long ConnectionEpoch = 0);

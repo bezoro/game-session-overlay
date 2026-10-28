@@ -78,7 +78,7 @@ public partial class MainWindow
     {
         var id=prefix+WindowId(target);var eligible=!chooser||!target.Protected&&!target.Launcher;var button=AddRow(id,target.Title,eligible?target.ProcessName+(chooser?" · Usar nesta sessão":" · Alternar janela"):"Esta janela não pode ser a referência da sessão",()=>{if(chooser){if(!Controller.Platform.Valid(target)){FeedbackText("A janela mudou; atualize a lista.");return;}Controller.Select(target);Back();RefreshRows();}else RunEffect(()=>Controller.Switch(target),()=>Controller.Platform.Valid(target));},eligible);
         var grid=(Grid)button.Content;var texts=(StackPanel)grid.Children[1];texts.Margin=new(0,0,48,0);if(Controller.Platform.Icon(target) is {} icon){grid.Children.RemoveAt(0);grid.Children.Insert(0,new Image{Source=icon,Width=26,Height=26,HorizontalAlignment=HorizontalAlignment.Left});}
-        var more=new Button{Content="···",Width=44,MinHeight=44,Padding=new(4),Margin=new(0,8,8,8),HorizontalAlignment=HorizontalAlignment.Right,Tag="options:"+id};AutomationProperties.SetName(more,"Opções de "+target.Title);AutomationProperties.SetHelpText(more,"Áudio do aplicativo, minimizar, detalhes e fechamento com confirmação");more.Click+=(_,_)=>{if(NavigationAllowed){navigation=new(id);OpenOptions(target);}};
+        var more=new Button{Content="···",Width=44,MinHeight=44,Padding=new(4),Margin=new(0,8,8,8),HorizontalAlignment=HorizontalAlignment.Right,Tag="options:"+id};AutomationProperties.SetName(more,"Opções de "+target.Title);AutomationProperties.SetHelpText(more,"Áudio do aplicativo, minimizar, detalhes e fechamento com confirmação");more.Click+=(_,_)=>ActivatePointerEntry(more);
         Grid.SetRow(more,Grid.GetRow(button));Grid.SetColumn(more,1);Rows.Children.Add(more);RegisterFixed("options:"+id,more,()=>OpenOptions(target),true,"Opções de "+target.Title);
     }
     private void BuildApps()
@@ -151,9 +151,9 @@ public partial class MainWindow
     }
     private void AddFeedback()
     {
-        AddRow("sound-feedback","Sons · "+(Controller.Settings.SoundFeedbackEnabled?"ligados":"desligados"),"Sinais discretos nas ações deliberadas",()=>Change(Controller.Settings with{SoundFeedbackEnabled=!Controller.Settings.SoundFeedbackEnabled}));
+        AddRow("sound-feedback","Sons · "+(Controller.Settings.SoundFeedbackEnabled?"ligados":"desligados"),"Navegar, confirmar e voltar · prévia ao ligar",()=>Change(Controller.Settings with{SoundFeedbackEnabled=!Controller.Settings.SoundFeedbackEnabled}));
         AddRow("haptic-feedback","Vibração · "+(Controller.Settings.HapticFeedbackEnabled?"ligada":"desligada"),"Somente o controle ativo · pulsos curtos",()=>Change(Controller.Settings with{HapticFeedbackEnabled=!Controller.Settings.HapticFeedbackEnabled}));
-        AddRow("test-feedback","Testar retorno",feedbackService.Status.Reason,()=>RequestCue(FeedbackCue.Test),Controller.Settings.SoundFeedbackEnabled||Controller.Settings.HapticFeedbackEnabled);
+        AddRow("test-feedback","Testar retorno",FeedbackDescription(),TestFeedback,Controller.Settings.SoundFeedbackEnabled||Controller.Settings.HapticFeedbackEnabled);
     }
     private void BuildCustomize()
     {
@@ -165,7 +165,7 @@ public partial class MainWindow
     {
         var entryId=(delta<0?"earlier:":"later:")+id;var label="Mover "+name+(delta<0?" antes":" depois");var button=new Button{Content=delta<0?"↑":"↓",FontSize=21,Width=44,Height=44,MinHeight=44,Padding=new(4),Margin=new(0),IsEnabled=available,Tag=entryId};AutomationProperties.SetName(button,label);AutomationProperties.SetHelpText(button,available?"Muda somente a ordem das ações visíveis":"Sem posição disponível nesta direção");
         var holder=new Border{Child=button,Width=44,Height=44,Focusable=true,Tag="description:"+entryId,HorizontalAlignment=HorizontalAlignment.Right,VerticalAlignment=VerticalAlignment.Center,Margin=new(0,0,delta<0?54:4,0)};AutomationProperties.SetName(holder,label+". Sem posição disponível nesta direção");button.Resources["DescriptionTarget"]=holder;
-        void Move(){navigation=new("favorite:"+id);Change(SessionHubSettings.Move(Controller.Settings,id,delta));}button.Click+=(_,_)=>{if(NavigationAllowed&&available)Move();};button.GotKeyboardFocus+=(_,_)=>navigation=new(entryId);Grid.SetRow(holder,row);Grid.SetColumn(holder,1);Rows.Children.Add(holder);RegisterFixed(entryId,button,Move,available,AutomationProperties.GetHelpText(button));
+        void Move(){navigation=new("favorite:"+id);Change(SessionHubSettings.Move(Controller.Settings,id,delta));}button.Click+=(_,_)=>ActivatePointerEntry(button);button.GotKeyboardFocus+=(_,_)=>navigation=new(entryId);Grid.SetRow(holder,row);Grid.SetColumn(holder,1);Rows.Children.Add(holder);RegisterFixed(entryId,button,Move,available,AutomationProperties.GetHelpText(button));
     }
     private static string FavoriteName(string id)=>id switch{"playnite"=>"Playnite","steam"=>"Steam Big Picture","gamebar"=>"Game Bar","steam-overlay"=>"Overlay Steam","taskview"=>"Visão de tarefas",_=>"Áudio do Windows"};
     private void BuildSetup()

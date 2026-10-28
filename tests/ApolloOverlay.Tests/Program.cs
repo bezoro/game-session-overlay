@@ -121,6 +121,7 @@ static class Program
         GuideAbiTests.SteamLaunchRegression(Case);
         Case("Guide defaults on and preserves explicit disabled backup",()=>{True(UserSettings.Parse("{}").GuideXInputEnabled);True(!UserSettings.Parse("{\"GuideXInputEnabled\":false}").GuideXInputEnabled);True(UserSettings.Parse("{\"GuideXInputEnabled\":true}").GuideXInputEnabled);var path=Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[0]))!,"guide-settings.json");UserSettings.Save(path,new(GuideXInputEnabled:false));UserSettings.Save(path,new(GuideXInputEnabled:true));True(UserSettings.Load(path,out _).GuideXInputEnabled);True(!UserSettings.Parse(File.ReadAllText(path+".previous")).GuideXInputEnabled);});
         GuideAbiTests.GuideSettingsChecks(Case,Path.GetDirectoryName(Path.GetFullPath(args[0]))!);
+        InterfaceFeedbackTests.Run(Case);
         PremiumInterfaceTests.Run(Case);
         SessionHubTests.Run(Case);
         SessionHubServiceTests.Run(Case);
