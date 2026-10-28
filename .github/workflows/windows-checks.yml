@@ -75,7 +75,7 @@ jobs:
           New-Item -ItemType Directory -Path $checks -Force | Out-Null
           $testDll = 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows10.0.19041.0/ApolloOverlay.Tests.dll'
           $failed = $false
-          foreach ($suite in @('guide-settings', 'guide-release-red', 'session-hub-services', 'steam-sequence', 'steam-effects-handshake')) {
+          foreach ($suite in @('window-activation', 'guide-settings', 'guide-release-red', 'session-hub-services', 'steam-sequence', 'steam-effects-handshake')) {
             Write-Host "Running $suite"
             & dotnet $testDll "$checks/suite-$suite.json" "--$suite" 2>&1 | Tee-Object -FilePath "$checks/$suite.log"
             if ($LASTEXITCODE -ne 0) { Write-Error "$suite failed with exit code $LASTEXITCODE" -ErrorAction Continue; $failed = $true }

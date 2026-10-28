@@ -18,6 +18,7 @@ static class Program
         if(args.Length is not (1 or 2)) {Console.Error.WriteLine("Expected report path");return 2;}
         if(args.Length==2&&args[1]=="--updates"){UpdateSourceTests.Run(Case);LocalUpdateHistoryTests.Run(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--settings-focus"){SettingsFocusTests.Run(Case);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--window-activation"){WindowActivationTests.Run(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--mouse-keyboard"){MouseKeyboardTests.Run(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--agent-updates"){AgentUpdateTests.Run(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--session-utilities"){SessionUtilityTests.Run(Case);return Finish(args[0]);}
@@ -132,6 +133,7 @@ static class Program
         LocalUpdateHistoryTests.Run(Case);
         InterfaceFeedbackTests.Run(Case);
         SettingsFocusTests.Run(Case);
+        WindowActivationTests.Run(Case);
         MouseKeyboardTests.Run(Case);
         AgentUpdateTests.Run(Case);
         SessionUtilityTests.Run(Case);

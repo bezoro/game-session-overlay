@@ -31,7 +31,7 @@ public partial class MainWindow : Window
     internal Func<ModifierKeys> KeyboardModifiersReader {private get;set;}=static()=>Keyboard.Modifiers;
     internal Func<nint,uint> DpiReader {private get;set;}=Native.GetDpiForWindow;
     internal Func<nint> FocusForeground {private get;set;}=Native.GetForegroundWindow;
-    internal Func<nint,bool> FocusRequest {private get;set;}=Native.SetForegroundWindow;
+    internal Func<nint,bool> FocusRequest {private get;set;}=WindowActivation.Request;
     internal Func<Task>? RefreshFocusFixture {private get;set;}
     internal Func<Task<string?>>? PlayniteDialogFixture {private get;set;}
     internal Task OpeningTask {get;private set;}=Task.CompletedTask;
