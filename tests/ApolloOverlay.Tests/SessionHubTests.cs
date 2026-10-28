@@ -171,7 +171,7 @@ internal static class SessionHubTests
         var metadata=new List<SessionCaptureInfo>();
         foreach(var item in cases){
             var (theme,width,height,state,scale,side)=item;ThemeSupport.ForceForValidation(app,theme=="light");ResourceDictionary? palette=null;
-            if(theme=="contrast-palette"){palette=new();foreach(var key in new[]{ThemeSupport.Surface,ThemeSupport.Card,ThemeSupport.Control,ThemeSupport.SuccessBackground,ThemeSupport.CriticalBackground})palette[key]=Brushes.Black;foreach(var key in new[]{ThemeSupport.Text,ThemeSupport.SecondaryText,ThemeSupport.DisabledText})palette[key]=Brushes.White;palette[ThemeSupport.Stroke]=Brushes.White;palette[ThemeSupport.Success]=Brushes.Yellow;palette[ThemeSupport.Critical]=Brushes.Cyan;app.Resources.MergedDictionaries.Add(palette);}
+            if(theme=="contrast-palette"){palette=new();foreach(var key in new[]{ThemeSupport.Surface,ThemeSupport.Card,ThemeSupport.Control,ThemeSupport.SuccessBackground,ThemeSupport.CriticalBackground})palette[key]=Brushes.Black;foreach(var key in new[]{ThemeSupport.Text,ThemeSupport.SecondaryText,ThemeSupport.DisabledText})palette[key]=Brushes.White;palette[ThemeSupport.Stroke]=Brushes.White;palette[ThemeSupport.Success]=Brushes.Yellow;palette[ThemeSupport.Focus]=Brushes.Yellow;palette[ThemeSupport.Accent]=Brushes.White;palette[ThemeSupport.Critical]=Brushes.Cyan;app.Resources.MergedDictionaries.Add(palette);}
             var w=Fixture(out var p,out var audio,out _,out _);TaskCompletionSource<ApplicationAudioChange>? pendingCompletion=null;
             try{
                 if(state=="empty"){p.Empty=true;w.Controller.ClearSelection();w.Controller.CaptureReturn();Complete(w.Controller.Refresh());}
@@ -205,7 +205,7 @@ internal static class SessionHubTests
         foreach(var width in new[]{360,572})foreach(var theme in new[]{"dark","light","contrast-palette"})
         test($"hub row typography and geometry stable across selection {width} {theme}",()=>{
             var app=Application.Current??new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};ThemeSupport.ForceForValidation(app,theme=="light");ResourceDictionary? palette=null;
-            if(theme=="contrast-palette"){palette=new();foreach(var key in new[]{ThemeSupport.Surface,ThemeSupport.Card,ThemeSupport.Control,ThemeSupport.SuccessBackground})palette[key]=Brushes.Black;foreach(var key in new[]{ThemeSupport.Text,ThemeSupport.SecondaryText,ThemeSupport.Stroke})palette[key]=Brushes.White;palette[ThemeSupport.Success]=Brushes.Yellow;app.Resources.MergedDictionaries.Add(palette);}
+            if(theme=="contrast-palette"){palette=new();foreach(var key in new[]{ThemeSupport.Surface,ThemeSupport.Card,ThemeSupport.Control,ThemeSupport.SuccessBackground,ThemeSupport.FocusBackground})palette[key]=Brushes.Black;foreach(var key in new[]{ThemeSupport.Text,ThemeSupport.SecondaryText,ThemeSupport.Stroke})palette[key]=Brushes.White;palette[ThemeSupport.Success]=Brushes.Yellow;palette[ThemeSupport.Focus]=Brushes.Yellow;palette[ThemeSupport.Accent]=Brushes.White;app.Resources.MergedDictionaries.Add(palette);}
             var w=Fixture(out var p,out _,out _,out _);
             try{
                 w.Left=-12000;w.Top=-12000;w.Width=width;w.Height=width==360?480:940;w.ShowDiagnostic();w.OpenOptions(p.A);
@@ -221,7 +221,7 @@ internal static class SessionHubTests
                 Pick(w,"application-mute");Layout();var after=Geometry();Capture("selected");Console.WriteLine($"SELECTION {width} {theme} before={before}; after={after}");
                 Check(before==after,"Selection changed rendered text geometry or typography");
                 Check(((Border)button.Resources["ABadge"]).Visibility==Visibility.Visible,"Controller feedback disappeared");
-                Check(Equals(button.BorderBrush,app.FindResource(ThemeSupport.Success)),"Selection outline missing");
+                Check(Equals(button.BorderBrush,app.FindResource(ThemeSupport.Focus)),"Selection outline missing");
                 Pick(w,"minimize");button.Focus();Layout();Check(button.IsKeyboardFocused&&before==Geometry(),"Keyboard focus changed text");
                 // Same existing template overlays used for hover/pressed capture; no global pointer input.
                 var interaction=(Border)button.Template.FindName("Interaction",button);interaction.Opacity=.06;Layout();Check(before==Geometry(),"Hover overlay changed text");interaction.Opacity=.13;Layout();Check(before==Geometry(),"Pressed overlay changed text");

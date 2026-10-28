@@ -79,7 +79,7 @@ internal static class UpdateInterfaceTests
         test("updates UI identifies its build without making a passive network request", () =>
         {
             using var host = new Host(); var w = host.Window;
-            Require(((TextBlock)w.FindName("HeaderIdentity")).Text.Contains(AppBuild.Current.Display), "Header hides compiled version identity");
+            Require(((TextBlock)w.FindName("HeaderIdentity")).Text=="v"+AppBuild.Current.Version.Split('+')[0]&&((TextBlock)w.FindName("HeaderIdentity")).ToolTip?.ToString()?.Contains(AppBuild.Current.Version)==true, "Header hides compiled version identity");
             Require(((TextBlock)w.FindName("HeaderIdentity")).ToolTip?.ToString()?.Contains(AppBuild.Current.BuildId) == true, "Header has no build identity");
             w.Page(2); w.RefreshRows();
             Require(w.ActionIds.Contains("updates") && host.Source.Checks == 0, "Settings lacks update entry or passively polls network");
