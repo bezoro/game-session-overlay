@@ -1,101 +1,118 @@
+using System.Diagnostics;
 using ApolloOverlay;
 
 internal static class WindowActivationTests
 {
     internal static void Run(Action<string, Action> test)
     {
-        test("Guide activation normal acceptance never attaches queues", () =>
+        test("Guide broker keeps WPF queue separate and detaches after activation", () =>
         {
-            var api = new Fake { FirstAccepted = true };
-            Require(WindowActivation.Request(10, api) && api.Requests == 1 && api.Attachments.Count == 0);
+            var api = new Fake(); var broker = new WindowActivation(api);
+            Require(Wait(broker.RequestAsync(10, 20, CancellationToken.None)) && api.Foreground == 10 && api.Requests == 1);
+            Require(api.Attachments.SequenceEqual(new[] { true, false }) && !api.Attached && api.QueueCreated);
         });
-        test("Guide activation observes foreground despite false native result", () =>
+        test("Guide broker cannot grant foreground merely by attaching", () =>
         {
-            var api = new Fake { OnFirst = a => a.ForegroundWindow = 10 };
-            Require(WindowActivation.Request(10, api) && api.Requests == 1 && api.Attachments.Count == 0);
-        });
-        test("Guide activation retries refused foreground with temporary attachment", () =>
-        {
-            var api = new Fake();
-            Require(WindowActivation.Request(10, api) && api.Requests == 2 && api.Foreground == 10);
+            var api = new Fake { Accepted = false };
+            Require(!Wait(new WindowActivation(api).RequestAsync(10, 20, CancellationToken.None)) && api.Foreground == 20 && api.Requests == 1);
             Require(api.Attachments.SequenceEqual(new[] { true, false }) && !api.Attached);
         });
-        test("Guide activation cannot grant foreground merely by attaching", () =>
-        {
-            var api = new Fake { SecondAccepted = false };
-            Require(!WindowActivation.Request(10, api) && api.Foreground == 20 && api.Requests == 2);
-            Require(api.Attachments.SequenceEqual(new[] { true, false }) && !api.Attached);
-        });
-        test("Guide activation attachment refusal does not retry or detach unrelated queues", () =>
+        test("Guide broker attachment refusal does not activate or detach unrelated queues", () =>
         {
             var api = new Fake { AttachAllowed = false };
-            Require(!WindowActivation.Request(10, api) && api.Requests == 1 && api.Attachments.SequenceEqual(new[] { true }));
+            Require(!Wait(new WindowActivation(api).RequestAsync(10, 20, CancellationToken.None)) && api.Requests == 0 && api.Attachments.SequenceEqual(new[] { true }));
         });
-        test("Guide activation does not follow a changed foreground", () =>
+        test("Guide broker does not follow changed foreground before attachment", () =>
         {
-            var api = new Fake { OnFirst = a => a.ForegroundWindow = 30 };
-            Require(!WindowActivation.Request(10, api) && api.Requests == 1 && api.Attachments.Count == 0);
+            var api = new Fake { ForegroundWindow = 30 };
+            Require(!Wait(new WindowActivation(api).RequestAsync(10, 20, CancellationToken.None)) && api.Requests == 0 && api.Attachments.Count == 0);
         });
-        test("Guide activation revalidates foreground after attaching and always detaches", () =>
+        test("Guide broker revalidates foreground after attaching and always detaches", () =>
         {
             var api = new Fake { OnAttach = a => a.ForegroundWindow = 30 };
-            Require(!WindowActivation.Request(10, api) && api.Requests == 1 && !api.Attached);
+            Require(!Wait(new WindowActivation(api).RequestAsync(10, 20, CancellationToken.None)) && api.Requests == 0 && !api.Attached);
             Require(api.Attachments.SequenceEqual(new[] { true, false }));
         });
-        test("Guide activation revalidates target after attaching", () =>
+        test("Guide broker revalidates target after attaching", () =>
         {
             var api = new Fake { OnAttach = a => a.TargetThread = 99 };
-            Require(!WindowActivation.Request(10, api) && api.Requests == 1 && !api.Attached);
+            Require(!Wait(new WindowActivation(api).RequestAsync(10, 20, CancellationToken.None)) && api.Requests == 0 && !api.Attached);
         });
-        test("Guide activation detaches even if activation throws", () =>
+        test("Guide broker detaches even if native activation fails exceptionally", () =>
         {
-            var api = new Fake { ThrowOnRetry = true }; var threw = false;
-            try { WindowActivation.Request(10, api); } catch (InvalidOperationException) { threw = true; }
-            Require(threw && !api.Attached && api.Attachments.SequenceEqual(new[] { true, false }));
+            var api = new Fake { ThrowOnRequest = true };
+            Require(!Wait(new WindowActivation(api).RequestAsync(10, 20, CancellationToken.None)) && !api.Attached && api.Attachments.SequenceEqual(new[] { true, false }));
         });
-        test("Guide activation rejects invalid foreign and zero-thread targets", () =>
+        test("Guide broker rejects invalid and foreign target threads", () =>
         {
             foreach (var target in new nint[] { 0, 20, 30 })
             {
-                var api = new Fake(); Require(!WindowActivation.Request(target, api) && api.Requests == 0);
+                var api = new Fake(); Require(!Wait(new WindowActivation(api).RequestAsync(target, 20, CancellationToken.None)) && api.Requests == 0);
             }
             var missing = new Fake { TargetThread = 0 };
-            Require(!WindowActivation.Request(10, missing) && missing.Requests == 0);
+            Require(!Wait(new WindowActivation(missing).RequestAsync(10, 20, CancellationToken.None)) && missing.Requests == 0);
         });
-        test("Guide activation does not attach to unknown or same-thread foreground", () =>
+        test("Guide broker never attaches WPF to its own or unknown foreground queue", () =>
         {
-            foreach (var thread in new uint[] { 0, 1 })
+            foreach (var thread in new uint[] { 0, 1, 2 })
             {
                 var api = new Fake { ForegroundThread = thread };
-                Require(!WindowActivation.Request(10, api) && api.Requests == 1 && api.Attachments.Count == 0);
+                Require(!Wait(new WindowActivation(api).RequestAsync(10, 20, CancellationToken.None)) && api.Requests == 0 && api.Attachments.Count == 0);
             }
         });
+        test("Guide broker cancellation before dispatch creates no native request", () =>
+        {
+            using var cancellation = new CancellationTokenSource(); cancellation.Cancel();var api = new Fake();
+            Require(!Wait(new WindowActivation(api).RequestAsync(10, 20, cancellation.Token)) && api.Requests == 0 && !api.QueueCreated);
+        });
+        test("Guide broker timeout leaves dispatcher free and prevents worker multiplication and late activation", () =>
+        {
+            using var entered = new ManualResetEventSlim(); using var release = new ManualResetEventSlim();
+            var api = new Fake { OnAttach = _ => { entered.Set(); release.Wait(); } }; var broker = new WindowActivation(api);
+            var watch = Stopwatch.StartNew();var first = broker.RequestAsync(10, 20, CancellationToken.None, 80);
+            Require(entered.Wait(2000));
+            try
+            {
+                Require(!Wait(first) && watch.ElapsedMilliseconds < 2000 && api.Attached && api.Requests == 0);
+                Require(!Wait(broker.RequestAsync(10, 20, CancellationToken.None)) && api.Attachments.Count == 1);
+            }
+            finally { release.Set(); }
+            Require(SpinWait.SpinUntil(() => !api.Attached, 2000) && api.Requests == 0);
+        });
+        test("Guide broker cancellation after attachment prevents stale activation", () =>
+        {
+            using var cancellation = new CancellationTokenSource();
+            var api = new Fake { OnAttach = _ => cancellation.Cancel() };
+            Require(!Wait(new WindowActivation(api).RequestAsync(10, 20, cancellation.Token)));
+            Require(SpinWait.SpinUntil(() => !api.Attached, 2000) && api.Requests == 0);
+        });
     }
-
+    private static bool Wait(Task<bool> task) { Require(task.Wait(3000)); return task.GetAwaiter().GetResult(); }
     private static void Require(bool value) { if (!value) throw new Exception("Explicit activation boundary violated"); }
     private sealed class Fake : IWindowActivationNative
     {
-        public uint CurrentThread => 1;
-        internal uint TargetThread = 1, ForegroundThread = 2;
+        private readonly int owner = Environment.CurrentManagedThreadId;
+        public uint CurrentThread => Environment.CurrentManagedThreadId == owner ? 1u : 2u;
+        internal uint TargetThread = 1, ForegroundThread = 3;
         internal nint ForegroundWindow = 20;
         public nint Foreground => ForegroundWindow;
-        internal bool FirstAccepted, SecondAccepted = true, AttachAllowed = true, Attached, ThrowOnRetry;
+        internal bool Accepted = true, AttachAllowed = true, ThrowOnRequest, QueueCreated;
+        internal volatile bool Attached;
         internal int Requests;
-        internal Action<Fake>? OnFirst, OnAttach;
+        internal Action<Fake>? OnAttach;
         internal List<bool> Attachments = [];
-        public uint WindowThread(nint window) => window == 10 ? TargetThread : window == 20 ? ForegroundThread : 3;
+        public uint WindowThread(nint window) => window == 10 ? TargetThread : window == 20 ? ForegroundThread : 4;
+        public void EnsureQueue() { Require(CurrentThread == 2); QueueCreated = true; }
         public bool SetForeground(nint window)
         {
-            Requests++;
-            if (Requests == 1) { OnFirst?.Invoke(this); return FirstAccepted; }
-            Require(Attached);
-            if (ThrowOnRetry) throw new InvalidOperationException("fixture");
-            if (SecondAccepted) ForegroundWindow = window;
-            return SecondAccepted;
+            Require(CurrentThread == 2 && WindowThread(window) == 1 && Attached && QueueCreated); Requests++;
+            if (ThrowOnRequest) throw new InvalidOperationException("fixture");
+            if (Accepted) ForegroundWindow = window;
+            return Accepted;
         }
         public bool Attach(uint current, uint foreground, bool attach)
         {
-            Require(current == 1 && foreground == 2);
+            Require(current == 2 && foreground == 3 && CurrentThread == 2);
             Attachments.Add(attach);
             if (attach && !AttachAllowed) return false;
             Attached = attach; if (attach) OnAttach?.Invoke(this); return true;
