@@ -34,6 +34,33 @@ internal static class InterfaceFeedbackTests
             }
             finally { w.Close(); }
         });
+        test("interface active tab returns from a nested page with one navigation cue", () =>
+        {
+            var w = Fixture(out var feedback);
+            try
+            {
+                w.SetRenderState("audio"); feedback.Cues.Clear();
+                Click((Button)w.FindName("HomeTab"));
+                Require(w.ActionIds.Contains("session-card") && !w.ActionIds.Contains("volume"), "Active tab trapped the user on a nested page");
+                Require(feedback.Cues.SequenceEqual(new[] { FeedbackCue.Navigation }), "Return to tab has missing or duplicate feedback");
+            }
+            finally { w.Close(); }
+        });
+        test("interface header Back cancels a pending handoff before dispatch", () =>
+        {
+            var w = Fixture(out var feedback);
+            try
+            {
+                w.OpenOptions(w.Controller.Session.Anchor!);
+                Click(ReviewFixTests.Button(w, "minimize"));
+                Require(w.TransitionPending, "Fixture did not queue handoff");
+                feedback.Cues.Clear();
+                Click((Button)w.FindName("BackButton"));
+                Require(!w.TransitionPending && w.Controller.Operation is { State: "Cancelado", Dispatched: false }, "Header Back did not cancel before dispatch");
+                Require(feedback.Cues.SequenceEqual(new[] { FeedbackCue.Cancellation }), "Header cancellation feedback missing or duplicated");
+            }
+            finally { w.Close(); }
+        });
         test("interface self test emits only its sample and explains the request", () =>
         {
             var w = Fixture(out var feedback);

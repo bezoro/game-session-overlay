@@ -12,7 +12,7 @@ public partial class MainWindow
 
     private void ClickTab(Button button, int index)
     {
-        if (!NavigationAllowed || busy || TransitionPending || Confirming || page == index) return;
+        if (!NavigationAllowed || TransitionPending || Confirming || page == index && view.Depth == 0) return;
         var previousSource = dispatchSource;
         dispatchSource = -1;
         try { RunInterfaceAction(button, () => Page(index), FeedbackCue.Navigation); }
@@ -28,7 +28,9 @@ public partial class MainWindow
         {
             navigation = new(id);
             SetSelection(false);
-            if (Confirming && id == "confirm-cancel" && NavigationAllowed && !busy)
+            if (id == "settings" && NavigationAllowed && !TransitionPending && !Confirming)
+                RunInterfaceAction(button, () => Page(2), FeedbackCue.Confirmation);
+            else if (NavigationAllowed && (id == "back-header" || Confirming && id == "confirm-cancel"))
                 RunInterfaceAction(button, Back, FeedbackCue.Cancellation);
             else ActivateEntry();
         }
