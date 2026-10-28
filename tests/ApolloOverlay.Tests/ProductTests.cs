@@ -6,7 +6,7 @@ using ApolloOverlay;
 internal static class ProductTests
 {
     private static void Require(bool value){if(!value)throw new Exception("Native product assertion failed.");}
-    private static void Complete(Task task){while(!task.IsCompleted){var frame=new DispatcherFrame();Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background,()=>frame.Continue=false);Dispatcher.PushFrame(frame);}task.GetAwaiter().GetResult();}
+    private static void Complete(Task task)=>ReviewFixTests.Complete(task);
     private static MainWindow Window(){var w=new MainWindow(renderOnly:true,platform:new PreviewPlatform(new(101,42,100,"Janela de teste","fixture")));w.InputContextReader=()=>new(true,true,true,true);w.PhysicalKeyReader=_=>0;w.Controller.CaptureReturn();Complete(w.Controller.Refresh());w.RefreshRows();return w;}
     internal static void Run(Action<string,Action> test)
     {

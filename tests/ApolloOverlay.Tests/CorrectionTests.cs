@@ -8,7 +8,7 @@ internal static class CorrectionTests
 {
     private static void Require(bool value,string message){if(!value)throw new Exception(message);}
     private static void Pump(){var frame=new DispatcherFrame();Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle,()=>frame.Continue=false);Dispatcher.PushFrame(frame);}
-    private static void Complete(Task task){while(!task.IsCompleted)Pump();task.GetAwaiter().GetResult();}
+    private static void Complete(Task task)=>ReviewFixTests.Complete(task);
     internal static void Run(Action<string,Action> test,string output)
     {
         var app=Application.Current??new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};ThemeSupport.FollowSystem(app);

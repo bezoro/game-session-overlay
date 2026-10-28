@@ -141,6 +141,16 @@ internal static unsafe class GuideAbiTests
     }
     internal static void HandoffTests(Action<string,Action> test)
     {
+        test("guide focus and fade fixtures restore the previous synchronization context on failure",()=>{
+            var previous=System.Threading.SynchronizationContext.Current;var marker=new System.Threading.SynchronizationContext();
+            try{
+                System.Threading.SynchronizationContext.SetSynchronizationContext(marker);
+                foreach(var suite in new Action<Action<string,Action>>[]{FocusOpenRed,FadeHandoffChecks,FocusChecks}){
+                    var threw=false;try{suite((_,_)=>throw new InvalidOperationException("fixture stop"));}catch(InvalidOperationException error)when(error.Message=="fixture stop"){threw=true;}
+                    Require(threw&&ReferenceEquals(System.Threading.SynchronizationContext.Current,marker),"Suite failed to restore prior context after a registration failure");
+                }
+            }finally{System.Threading.SynchronizationContext.SetSynchronizationContext(previous);}
+        });
         KnownHeldDismiss(test);
         DismissCancellation(test);
         test("actual WPF System AltY survives AltUp until YUp and100ms",SystemKeyBaseline);
@@ -178,7 +188,10 @@ internal static unsafe class GuideAbiTests
     private static MainWindow Host(HandoffPlatform platform){var w=new MainWindow(renderOnly:true,platform:platform);w.Controller.Select(platform.Game);w.Controller.CaptureReturn();w.RefreshRows();w.ShowDiagnostic();return w;}
     internal static void FocusOpenRed(Action<string,Action> test)
     {
+        var previousContext=System.Threading.SynchronizationContext.Current;
         System.Threading.SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());
+        try
+        {
         var app=System.Windows.Application.Current??new System.Windows.Application{ShutdownMode=System.Windows.ShutdownMode.OnExplicitShutdown};ThemeSupport.FollowSystem(app);
         foreach(var accepted in new[]{false,true})test("Normal OpenPanel "+(accepted?"accepted without foreground":"refused")+" cannot navigate",()=>{
             using var p=new HandoffPlatform();var other=new System.Windows.Window{Width=100,Height=100};var w=new MainWindow(renderOnly:true,platform:p);try{
@@ -186,6 +199,8 @@ internal static unsafe class GuideAbiTests
                 Require(w.SelectedAction==selected,"Unconfirmed foreground still admitted overlay navigation; requestAccepted="+accepted);Require(!w.TransitionPending&&p.Switches==0,"Unconfirmed opening dispatched action");
             }finally{w.Close();other.Close();}
         });
+        }
+        finally{System.Threading.SynchronizationContext.SetSynchronizationContext(previousContext);}
     }
     internal static void GuideReleaseRed(Action<string,Action> test)
     {
@@ -224,7 +239,10 @@ internal static unsafe class GuideAbiTests
     }
     internal static void FadeHandoffChecks(Action<string,Action> test)
     {
+        var previousContext=System.Threading.SynchronizationContext.Current;
         System.Threading.SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());
+        try
+        {
         foreach(var scenario in new[]{"during", "at-end", "neutral", "read-failed"})test("fade protects foreground handoff: "+scenario,()=>{
             using var p=new HandoffPlatform();var w=Host(p);var frames=new PadFrame[]{new(true,0),default,default,default};
             try{
@@ -241,10 +259,15 @@ internal static unsafe class GuideAbiTests
                 Require(p.Switches==0,"Fade unexpectedly requested an external switch");
             }finally{w.Close();}
         });
+        }
+        finally{System.Threading.SynchronizationContext.SetSynchronizationContext(previousContext);}
     }
     internal static void FocusChecks(Action<string,Action> test)
     {
-        System.Threading.SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());FocusOpenRed(test);
+        var previousContext=System.Threading.SynchronizationContext.Current;
+        System.Threading.SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());
+        try
+        {FocusOpenRed(test);
         test("game Steam context return reopen confirms each opening and retains Anchor",()=>{using var p=new HandoffPlatform();var w=OpeningHost(p);var requests=0;w.FocusRequest=_=>{requests++;return true;};try{
             w.OpenPanel();FinishFocus(w.OpeningTask);w.Toggle();Commit(w);Require(!w.IsVisible,"Owned context-change setup did not dismiss");p.Context=p.BigPicture;
             w.OpenPanel();FinishFocus(w.OpeningTask);Require(w.Controller.Session.Anchor?.Same(p.Game)==true&&w.Controller.ReturnTarget?.Same(p.BigPicture)==true,"BigPicture context/Anchor mismatch");Button(w,"session-card").RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));Commit(w);Require(!w.IsVisible&&p.LastTarget?.Same(p.Game)==true);p.Context=p.Game;
@@ -277,6 +300,8 @@ internal static unsafe class GuideAbiTests
         test("tray left double-click and menu callbacks dispatch once; disposed queue inert",()=>{var opens=0;var exits=0;var tray=new TrayHost(System.Windows.Threading.Dispatcher.CurrentDispatcher,()=>opens++,()=>exits++,visible:false);tray.OnDoubleClick(null,new(System.Windows.Forms.MouseButtons.Left,1,0,0,0));tray.OnDoubleClick(null,new(System.Windows.Forms.MouseButtons.Right,2,0,0,0));PumpFocus();Require(opens==0);tray.OnDoubleClick(null,new(System.Windows.Forms.MouseButtons.Left,2,0,0,0));PumpFocus();Require(opens==1);((System.Windows.Forms.ToolStripMenuItem)tray.Menu.Items[0]).PerformClick();((System.Windows.Forms.ToolStripMenuItem)tray.Menu.Items[1]).PerformClick();PumpFocus();Require(opens==2&&exits==1&&tray.Menu.Items[0].Text=="Abrir overlay"&&tray.Menu.Items[1].Text=="Sair");tray.OnDoubleClick(null,new(System.Windows.Forms.MouseButtons.Left,2,0,0,0));tray.Dispose();tray.Dispose();PumpFocus();Require(opens==2&&exits==1);});
         test("tray Sair closes hidden owned host without focus or external effects",()=>{using var p=new HandoffPlatform();var w=OpeningHost(p);var requests=0;w.FocusRequest=_=>{requests++;return true;};w.ExitFromTray();Require(p.Disposed&&!w.IsVisible&&requests==0&&p.Switches==0);});
         test("packaged custom icon embedded and exact32px frame exists in executable",()=>{using var stream=System.Windows.Application.GetResourceStream(new Uri("/ApolloOverlay;component/Assets/overlay-controller.ico",UriKind.Relative))!.Stream;using var data=new MemoryStream();stream.CopyTo(data);var bytes=data.ToArray();Require(Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes))=="c509ee949898ef1100ea251c228915245bb37a917cda94c9d08b3a292709d20a");using var reader=new BinaryReader(new MemoryStream(bytes));reader.BaseStream.Position=4;var count=reader.ReadUInt16();Require(count==8);byte[]? frame=null;for(var i=0;i<count;i++){var width=reader.ReadByte();reader.ReadBytes(7);var length=reader.ReadInt32();var offset=reader.ReadInt32();if(width==32)frame=bytes.AsSpan(offset,length).ToArray();}Require(frame is not null);var exe=File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory,"ApolloOverlay.exe"));Require(exe.AsSpan().IndexOf(frame!)>=0,"Published executable missing exact custom32px PNG frame");});
+        }
+        finally{System.Threading.SynchronizationContext.SetSynchronizationContext(previousContext);}
     }
     internal static void KnownHeldDismiss(Action<string,Action> test)
     {

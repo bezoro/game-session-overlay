@@ -292,6 +292,7 @@ public partial class MainWindow : Window
     private void RetainOperation(string state,string message,string action="",WindowRef? target=null,bool dispatched=false){Controller.SetOperation(state,message,action,target,dispatched);UpdatePersistentState();}
     private void UpdatePersistentState()
     {
+        PlaceCompactStatus();
         if(Rows.Children.Count>0&&!Confirming){
             var previous=entries.Select(e=>e.Id).ToArray();
             var selectedFooter=IsFooterAction(navigation.Id)&&previous.Contains(navigation.Id);
@@ -324,13 +325,28 @@ public partial class MainWindow : Window
             _=>"Enter selecionar · Esc voltar"+(details?" · X opções":"")+"\nPgUp/PgDn abas · Setas / Tab mover · bandeja: abrir"};
         if(compactChrome)ModeLabel.Text=inputMethod switch{"mouse"=>"Clique selecionar · bandeja: abrir","controller"=>"A selecionar · B voltar"+(details?" · X opções":"")+"\nLB/RB abas · direcional mover",_=>"Enter selecionar · Esc voltar\nTab / Setas mover · PgUp/PgDn abas"};
     }
+    private void PlaceCompactStatus()
+    {
+        // In a short window, keep the controller warning and instructions pinned;
+        // auxiliary status can scroll with the page or confirmation text instead.
+        Panel destination=compactChrome?(Confirming?ConfirmationInfo:ContentStack):FooterArea;
+        if(ReferenceEquals(StatusLabel.Parent,destination))return;
+        if(StatusLabel.Parent is Panel previous)previous.Children.Remove(StatusLabel);
+        if(ReferenceEquals(destination,FooterArea))destination.Children.Insert(2,StatusLabel);
+        else if(ReferenceEquals(destination,ContentStack))destination.Children.Insert(Math.Min(1,destination.Children.Count),StatusLabel);
+        else destination.Children.Add(StatusLabel);
+    }
     private void UpdateCompactChrome(double height)
     {
         var compact=height>0&&height<650;if(compact==compactChrome)return;compactChrome=compact;
-        if(pointerDown)CancelHold();HeaderIdentity.Visibility=compact?Visibility.Collapsed:Visibility.Visible;ControllerStatusLabel.Visibility=compact?Visibility.Collapsed:Visibility.Visible;DirtyLabel.Visibility=compact?Visibility.Collapsed:Visibility.Visible;HeaderArea.Margin=new(0,0,0,compact?8:12);DirtyStrip.Margin=new(0,compact?8:12,0,0);
+        if(pointerDown)CancelHold();HeaderIdentity.Visibility=compact?Visibility.Collapsed:Visibility.Visible;ControllerStatusLabel.Visibility=compact?Visibility.Collapsed:Visibility.Visible;DirtyLabel.Visibility=compact?Visibility.Collapsed:Visibility.Visible;HeaderArea.Margin=new(0,0,0,compact?8:12);DirtyStrip.Margin=new(0,compact?8:12,0,0);DirtyStrip.Padding=new(12,compact?6:8,12,compact?6:8);TabArea.Margin=new(0,0,0,compact?8:16);
+        // Tabs and Save/Discard stay fixed. The header and status move into the
+        // existing scroller so selected cards have room without shrinking text.
+        if(compact&&HeaderArea.Parent is Grid headerGrid){headerGrid.Children.Remove(HeaderArea);ContentStack.Children.Insert(0,HeaderArea);}
+        else if(!compact&&HeaderArea.Parent is StackPanel headerStack){headerStack.Children.Remove(HeaderArea);((Grid)Sidebar.Child).Children.Add(HeaderArea);}
         if(compact&&OperationPanel.Parent is Grid grid){grid.Children.Remove(OperationPanel);ContentStack.Children.Add(OperationPanel);}
         else if(!compact&&OperationPanel.Parent is StackPanel stack){stack.Children.Remove(OperationPanel);((Grid)Sidebar.Child).Children.Add(OperationPanel);}
-        revealPending=true;UpdateHints();
+        PlaceCompactStatus();revealPending=true;UpdateHints();
     }
     private void ReleasePointer(){pointerDown=false;pointerCaptured=false;if(HoldCloseButton.IsMouseCaptured)HoldCloseButton.ReleaseMouseCapture();}
     private void CancelHold(){nextConfirmationScroll=0;var restore=view.Current.Route==OverlayRoute.Confirmation;ReleasePointer();closeHold.Cancel();HeaderArea.Visibility=Visibility.Visible;TabArea.Visibility=Visibility.Visible;closeSource=null;keyboardDown=false;ConfirmPanel.Visibility=Visibility.Collapsed;ContentScroll.Visibility=Visibility.Visible;CloseArea.Visibility=Visibility.Visible;if(restore&&view.Back()){SyncView();RefreshRows();ContentScroll.ScrollToVerticalOffset(view.Current.ScrollOffset);}UpdatePersistentState();UpdateHints();}
