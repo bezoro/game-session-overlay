@@ -40,9 +40,16 @@ internal static class MouseKeyboardTests
             w.OpenPanel(); Complete(w.OpeningTask);
             Require(w.IsVisible && Native.GetForegroundWindow() == host.OtherHandle, "PRECONDITION: foreign foreground was not established");
             var before = w.Controller.Settings;
-            SendMouse(ReviewFixTests.Button(w, "sound-feedback"), true); SendMouse(w, false); Click(w, "sound-feedback"); Tap(w, Key.Enter);
-            Require(requests == 1 && w.Controller.Settings == before && Native.GetForegroundWindow() == host.OtherHandle && !w.TransitionPending,
-                "A local event bypassed native focus admission or stole another window's focus");
+            void Refused(string gesture)
+            {
+                Require(requests == 1, gesture + " requested native focus again: " + requests);
+                Require(w.Controller.Settings == before, gesture + " changed settings without admitted focus");
+                Require(Native.GetForegroundWindow() == host.OtherHandle, gesture + " stole native foreground: " + FocusState(w));
+                Require(!w.TransitionPending, gesture + " queued an outgoing action without admitted focus");
+            }
+            Require(SendMouse(ReviewFixTests.Button(w, "sound-feedback"), true).Handled, "Unadmitted pointer down was allowed to focus its button"); Refused("Pointer down");
+            Require(SendMouse(w, false).Handled, "Unadmitted pointer release reached its button"); Refused("Pointer up");
+            Click(w, "sound-feedback"); Refused("Click"); Tap(w, Key.Enter); Refused("Enter");
         });
         test("local keyboard Tab Shift Tab arrows Enter and Space navigate and open nested pages", () =>
         {
@@ -82,13 +89,13 @@ internal static class MouseKeyboardTests
             Require(w.Controller.Settings.GuideXInputEnabled == enabled && w.Feedback.StartsWith("Indisponível"), "Disabled Guide was activated or lacked an explanation");
             Pick(w, "guide-limit"); var before = w.Controller.Settings.GuideOpenMaxHoldMs;
             Tap(w, Key.Right); Require(w.Controller.Settings.GuideOpenMaxHoldMs == Math.Min(3000, before + 100), "Arrow did not adjust the selected Guide limit");
-            Tap(w, Key.Tab); Require(Keyboard.FocusedElement is Slider, "Tab did not enter the editable slider");
+            Tap(w, Key.Tab); Require(Keyboard.FocusedElement is Slider, "Tab did not enter the editable slider: " + SliderState(w));
             var slider = (Slider)Keyboard.FocusedElement;
             before = w.Controller.Settings.GuideOpenMaxHoldMs; Tap(slider, Key.Right);
             Require(w.Controller.Settings.GuideOpenMaxHoldMs == Math.Min(3000, before + 100), "The focused slider did not receive its own arrow adjustment");
             host.Modifiers = ModifierKeys.Shift; Tap(slider, Key.Tab); host.Modifiers = ModifierKeys.None;
             Require(w.SelectedAction == "guide-limit" && Keyboard.FocusedElement is Button, "Shift Tab trapped focus in the slider");
-            Tap(w, Key.Tab); Require(Keyboard.FocusedElement is Slider, "Slider could not be reentered");
+            Tap(w, Key.Tab); Require(Keyboard.FocusedElement is Slider, "Slider could not be reentered: " + SliderState(w));
             Tap((Slider)Keyboard.FocusedElement, Key.Tab);
             Require(w.SelectedAction != "guide-limit" && Keyboard.FocusedElement is not Slider, "Forward Tab did not leave the slider for the next overlay action"); RequireLiveSelection(w);
         });
@@ -137,10 +144,19 @@ internal static class MouseKeyboardTests
         return (TextBox)Keyboard.FocusedElement;
     }
     private static void RequireLiveSelection(MainWindow window) => Require(Keyboard.FocusedElement is FrameworkElement live && live.IsVisible && Equals(live.Tag, window.SelectedAction), "Keyboard focus and live overlay selection diverged");
+    private static string FocusState(MainWindow window) => $"selected={window.SelectedAction}; focused={Keyboard.FocusedElement?.GetType().Name}/{(Keyboard.FocusedElement as FrameworkElement)?.Tag}; active={window.IsActive}; nativeOwn={Native.GetForegroundWindow() == new WindowInteropHelper(window).Handle}";
+    private static string SliderState(MainWindow window)
+    {
+        var slider = PremiumInterfaceTests.Descendants<Slider>(ReviewFixTests.Button(window, "guide-limit")).Single();
+        return FocusState(window) + $"; sliderFocusable={slider.Focusable}; sliderVisible={slider.IsVisible}; sliderEnabled={slider.IsEnabled}; sliderLoaded={slider.IsLoaded}; sliderSize={slider.ActualWidth}x{slider.ActualHeight}";
+    }
     private static void Pick(MainWindow window, string id)
     {
         for (var count = 0; count <= window.ActionIds.Count && window.SelectedAction != id; count++) window.Sequential(1);
         Require(window.SelectedAction == id, "Action is not reachable: " + id);
+        // Routed test events are synchronous. Render the new route/control template
+        // before the next gesture, as Windows does between user interactions.
+        window.UpdateLayout();
     }
     private static void Click(MainWindow window, string id) => ReviewFixTests.Button(window, id).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
     private static void Tap(UIElement target, Key key) { SendKey(target, key, true); SendKey(target, key, false); }

@@ -31,6 +31,8 @@ Execute no mesmo usuário, sessão e nível de elevação da overlay. Se ela est
 
 Cada resposta é um objeto JSON. `Update.Version`, `BuildId`, `Commit` e `Channel` descrevem o binário da instância consultada; `Pid`, `Started`, `Session` e `Instance` identificam essa execução. `Update.TargetBuildId` e `TargetVersion` descrevem o destino preparado. `JobId`, `Phase`, `Progress`, `Terminal`, `Available` e `History` permitem acompanhar o trabalho. Salve ou descarte ajustes pendentes antes de trocar de versão.
 
+Ao iniciar uma preparação, `Terminal: true` no nível externo encerra apenas a solicitação de início. O job continua com `Update.Terminal: false` e é acompanhado por `update status`. Seu progresso e resultado ficam no recibo próprio, sem ocupar permanentemente o histórico de solicitações da CLI.
+
 Uma resposta `Outcome: Requested` à atualização ou ao rollback confirma o pedido ao Velopack e a saída da instância anterior. **Ela ainda não confirma que a nova versão iniciou.** O processo da CLI termina para permitir a substituição dos binários. Consulte a instalação novamente com uma nova execução de `gso version`; apenas uma resposta fresca `Completed`, com o `Update.BuildId` esperado e uma nova identidade de processo, confirma o destino em execução. A consulta pode retornar `Unavailable` durante o reinício. Não há um `--wait` que atravesse a substituição dos executáveis.
 
 Um agente pode usar este fluxo, sem reenviar a mutação:

@@ -18,7 +18,7 @@ internal static class AutomationTests
     }
     internal static void Prerequisites(Action<string,Action> test)
     {
-        test("automation harmless CLI startup and local identity prerequisites",()=>{var result=Command("--help");Require(result.Exit==0&&result.Out.Contains("No implicit"),"CLI startup/dependency failed: "+result.Error);var peer=AutomationPipeSecurity.Current();Require(peer.Pid==Environment.ProcessId&&peer.Logon.StartsWith("S-1-5-5-",StringComparison.Ordinal),"Local logon identity unavailable");Task.Run(async()=>{var name="BezoroPrerequisite."+Guid.NewGuid().ToString("N");using var server=AutomationPipeSecurity.Create(name,false,true);using var client=new NamedPipeClientStream(".",name,PipeDirection.InOut,PipeOptions.Asynchronous);var accept=server.WaitForConnectionAsync();await client.ConnectAsync(1000);await accept;var locality=AutomationPipeSecurity.ClientLocalityError(server);Require(locality==229&&AutomationPipeSecurity.ClientAllowed(server),"Native local-channel prerequisite failed: "+locality);Console.WriteLine("NATIVE-PIPE-LOCALITY error="+locality+"; peer-auth=True");}).GetAwaiter().GetResult();var root=Temp();File.WriteAllText(Path.Combine(root,"ready.txt"),"ready");Console.WriteLine("AUTOMATION-PREREQUISITES: console host/dependencies/output/logon SID ready; no GUI or input mutation.");});
+        test("automation harmless CLI startup and local identity prerequisites",()=>{var result=Command("--help");Require(result.Exit==0&&result.Out.Contains("gso version|history|update")&&result.Out.Contains("rollback BUILD_ID"),"CLI startup/dependency failed: "+result.Error);var peer=AutomationPipeSecurity.Current();Require(peer.Pid==Environment.ProcessId&&peer.Logon.StartsWith("S-1-5-5-",StringComparison.Ordinal),"Local logon identity unavailable");Task.Run(async()=>{var name="BezoroPrerequisite."+Guid.NewGuid().ToString("N");using var server=AutomationPipeSecurity.Create(name,false,true);using var client=new NamedPipeClientStream(".",name,PipeDirection.InOut,PipeOptions.Asynchronous);var accept=server.WaitForConnectionAsync();await client.ConnectAsync(1000);await accept;var locality=AutomationPipeSecurity.ClientLocalityError(server);Require(locality==229&&AutomationPipeSecurity.ClientAllowed(server),"Native local-channel prerequisite failed: "+locality);Console.WriteLine("NATIVE-PIPE-LOCALITY error="+locality+"; peer-auth=True");}).GetAwaiter().GetResult();var root=Temp();File.WriteAllText(Path.Combine(root,"ready.txt"),"ready");Console.WriteLine("AUTOMATION-PREREQUISITES: console host/dependencies/output/logon SID ready; no GUI or input mutation.");});
     }
     internal static void Run(Action<string,Action> test)
     {
@@ -53,6 +53,7 @@ internal static class AutomationTests
         test("automation peer user logon and session isolation",()=>{var p=AutomationPipeSecurity.Current();Require(!AutomationPipeSecurity.SameSession(p,p with{User="different"})&&!AutomationPipeSecurity.SameSession(p,p with{Logon="different"})&&!AutomationPipeSecurity.SameSession(p,p with{Session=p.Session+1}),"Peer boundary broadened");});
         test("automation locality accepts only explicit ERROR_PIPE_LOCAL",()=>{Require(AutomationPipeSecurity.LocalChannel(229),"Local pipe refused");foreach(var code in new[]{0,5,109,122,233,99999})Require(!AutomationPipeSecurity.LocalChannel(code),"Unknown/remote locality accepted");});
         test("automation owned pipe dry-run cancellation disconnect Busy and malformed input",()=>Task.Run(PipeChecks).GetAwaiter().GetResult());
+        test("automation independent update jobs do not exhaust the request ledger",()=>Task.Run(UpdateAcceptanceLedger).GetAwaiter().GetResult());
         test("automation shutdown cancellation before Close terminalizes and remains evictable",()=>Task.Run(ShutdownCancellation).GetAwaiter().GetResult());
         test("automation real console CLI owned preview routes and observed exact shutdown",CliRoundtrip);
     }
@@ -79,9 +80,37 @@ internal static class AutomationTests
             var actor=new Backend();var endpoint=name+(deadline?".deadline":".cancel");using var controlled=new AutomationHost(actor,Temp(),endpoint);var pair=await Connect(endpoint);using var channel=pair.Pipe;var command=new AutomationRequest{Verb="execute",ActionId="wait",RequestId=pair.Hello.Ticket,DeadlineUtc=deadline?DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()+500:pair.Hello.ExpiresUtc};await AutomationFrames.Write(channel,AutomationFrames.Encode(command),AutomationFrames.RequestLimit,CancellationToken.None);Require(actor.Entered.Wait(1000),"Controlled request never entered");if(!deadline){var cancelled=await Exchange(endpoint,new(){Verb="cancel",RequestId=command.RequestId});Require(cancelled.Outcome=="Cancelled","Explicit cancel not accepted");}Require(actor.Cancelled.Wait(2000)&&actor.Effects==0,"Deadline/cancel allowed late effects");
         }
     }
+    private static async Task UpdateAcceptanceLedger()
+    {
+        var root=Temp();var name="BezoroUpdateLedger."+Guid.NewGuid().ToString("N");var backend=new Backend();
+        using var host=new AutomationHost(backend,root,name);
+        using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        string first="";
+        for(var index=0;index<260;index++)
+        {
+            var pair=await Connect(name);using var pipe=pair.Pipe;
+            var request=new AutomationRequest{Verb="update-check",RequestId=pair.Hello.Ticket,DeadlineUtc=pair.Hello.ExpiresUtc};
+            if(index==0)first=request.RequestId;
+            await AutomationFrames.Write(pipe,AutomationFrames.Encode(request),AutomationFrames.RequestLimit,deadline.Token);
+            var reply=JsonSerializer.Deserialize(await AutomationFrames.Read(pipe,AutomationFrames.ResponseLimit,deadline.Token),AutomationJson.Default.AutomationReply)!;
+            Require(reply is{Outcome:"Requested",Terminal:true,Update.Terminal:false}&&reply.Update.JobId==request.RequestId,"Job acceptance exhausted the ledger or claimed job completion at index "+index);
+            var end=new byte[1];Require(await pipe.ReadAsync(end,deadline.Token)==0,"Completed request did not close its channel");
+        }
+        Require(backend.UpdateJobs==260,"An accepted job was lost or dispatched repeatedly");
+        var effect=await Exchange(name,new(){Verb="execute",ActionId="effect"});
+        Require(effect.Outcome=="Completed"&&backend.Effects==1,"Finished update requests blocked session actions");
+        var ledger=new AutomationLedger(root);
+        Require(ledger.Find(first) is null&&ledger.Accept(first,"replay","different")=="Rejected","Evicted update intent became replayable");
+    }
     private sealed class Backend:IAutomationBackend
     {
-        internal int Effects,UiCancelled,ShutdownCalls;internal readonly ManualResetEventSlim Entered=new(),Cancelled=new();
+        internal int Effects,UiCancelled,ShutdownCalls,UpdateJobs;internal readonly ManualResetEventSlim Entered=new(),Cancelled=new();
+        public Task<AutomationReply> Update(AutomationRequest request,CancellationToken token,Func<bool> continuing)
+        {
+            if(request.DryRun)return Task.FromResult(AutomationReply.Error("DryRun",""));
+            UpdateJobs++;
+            return Task.FromResult(new AutomationReply{Outcome="Requested",Terminal=false,Update=new(){JobId=request.RequestId,Phase="Checking",Terminal=false}});
+        }
         public Task<bool> Cancel(string id,string? grantedTarget,CancellationToken token){if(id is not("ui-fixed" or "ui-other")||grantedTarget is not null&&grantedTarget!=(id=="ui-fixed"?"fixed":"other"))return Task.FromResult(false);UiCancelled++;return Task.FromResult(true);}
         public Task<AutomationSnapshot> Snapshot(CancellationToken token,bool refreshTargets=false)=>Task.FromResult(new AutomationSnapshot("",0,0,0,0,"Fixture",false,false,[],[],"fixture"));
         public async Task<AutomationReply> Execute(AutomationRequest request,CancellationToken token,Action<AutomationReply> phase,Func<bool> continuing){if(request.DryRun)return AutomationReply.Error("DryRun","");if(request.ActionId=="wait"){Entered.Set();try{await Task.Delay(5000,token);}catch(OperationCanceledException){Cancelled.Set();return AutomationReply.Error("Cancelled","");}}token.ThrowIfCancellationRequested();if(!continuing())return AutomationReply.Error("Cancelled","");Effects++;return AutomationReply.Error("Completed","");}

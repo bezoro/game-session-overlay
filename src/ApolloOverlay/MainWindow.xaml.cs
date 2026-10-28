@@ -464,7 +464,7 @@ public partial class MainWindow : Window
         inputMethod="mouse";UpdateHints();
         recoveryMouseRelease=null;
         if(fadingOut){fadeInterrupted=true;recoveryMouseRelease=e.ChangedButton;e.Handled=true;return;}
-        if(!CanRecoverLocalFocus)return;
+        if(!CanRecoverLocalFocus){if(!NavigationAllowed){recoveryMouseRelease=e.ChangedButton;e.Handled=true;}return;}
         // The activation click confirms the panel, never the button underneath it.
         recoveryMouseRelease=e.ChangedButton;e.Handled=true;OpenPanel();
     }

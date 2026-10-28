@@ -131,7 +131,9 @@ public sealed class AutomationHost:IDisposable
             try{result=UpdateCommand(request.Verb)?await backend.Update(request,life.Token,()=>!life.IsCancellationRequested&&AutomationPipeSecurity.Alive(pipe)):await backend.Execute(request,life.Token,phase=>{lock(gate)ledger.Update(request.RequestId,phase with{Terminal=false});Trace(request,"Phase",phase);},()=>!life.IsCancellationRequested&&AutomationPipeSecurity.Alive(pipe));}
             catch(OperationCanceledException){result=AutomationReply.Error("Cancelled","Cancelado; consulte evidência de envio.",request.RequestId);}
             catch(Exception e)when(e is InvalidOperationException or System.ComponentModel.Win32Exception){result=AutomationReply.Error("Failed",e.GetType().Name,request.RequestId);}
-            result=result with{RequestId=request.RequestId};lock(gate)ledger.Update(request.RequestId,result);Trace(request,"Result",result);reading.Cancel();await Reply(result);
+            // The acceptance request is complete; the independent job is tracked by
+            // Update.JobId/Terminal and the persisted update receipt, not a pipe ticket.
+            result=result with{RequestId=request.RequestId,Terminal=UpdateCommand(request.Verb)&&result.Outcome=="Requested"||result.Terminal};lock(gate)ledger.Update(request.RequestId,result);Trace(request,"Result",result);reading.Cancel();await Reply(result);
         }catch(Exception e)when(e is IOException or JsonException or InvalidDataException or OperationCanceledException or UnauthorizedAccessException or ObjectDisposedException){life.Cancel();}
         finally{life.Cancel();lock(gate){ledger.Retire(connection);if(ReferenceEquals(active,life)){active=null;activeRequest=null;}servers.Remove(pipe);}pipe.Dispose();Interlocked.Decrement(ref connections);if(monitor is not null)try{await monitor;}catch(OperationCanceledException){}}
     }
