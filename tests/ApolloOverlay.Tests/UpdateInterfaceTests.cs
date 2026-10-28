@@ -91,11 +91,12 @@ internal static class UpdateInterfaceTests
             using var host = new Host(); var w = host.Window;
             host.Open(); Click(w, "check-updates"); Complete(w.UpdateTask);
             Require(host.Source.Checks == 1 && host.Source.Stages == 0 && w.ActionIds.Contains("release:" + Next.BuildId), "Catalog query downloaded or lost the release");
+            Require(w.Feedback.Contains("Há versões disponíveis"), "Footer retained an in-progress message after the query completed");
             Click(w, "release:" + Next.BuildId);
             Require(host.Source.Stages == 0 && w.ActionIds.Contains("prepare-update") && !w.ActionIds.Contains("apply-update"), "Review changed the installation or skipped download");
             Require(Text(w).Contains(Next.Version) && Text(w).Contains(Next.Commit[..7]), "Review does not identify the proposed version");
         });
-        test("updates UI authentication failure cannot claim the installed build is current", () =>
+        test("updates UI access failure cannot claim the installed build is current", () =>
         {
             using var host = new Host(); var w = host.Window;
             host.Source.CheckFailure = new UnauthorizedAccessException("Fixture server refused");
@@ -119,7 +120,7 @@ internal static class UpdateInterfaceTests
             Require(!pending.IsCompleted && host.Source.Checks == 1, "Query fixture did not suspend");
             w.Back(); Require(host.Source.LastCheckCancellation.IsCancellationRequested, "Back did not cancel query");
             Complete(pending);
-            Require(Text(w).Contains("Busca cancelada") && !w.ActionIds.Any(id => id.StartsWith("release:")), "Cancelled query produced candidates or lost cancellation feedback");
+            Require(Text(w).Contains("Busca cancelada") && w.Feedback.Contains("Busca cancelada") && !w.ActionIds.Any(id => id.StartsWith("release:")), "Cancelled query produced candidates or lost terminal cancellation feedback");
             w.Back(); Require(w.ActionIds.Contains("updates"), "Back could not leave the cancelled query page");
         });
         test("updates UI ignores a late query success after cancellation", () =>
@@ -128,7 +129,7 @@ internal static class UpdateInterfaceTests
             host.Source.CheckCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
             host.Open(); Click(w, "check-updates"); var pending = w.UpdateTask;
             w.Back(); host.Source.CheckCompletion.SetResult([Next]); Complete(pending);
-            Require(!w.ActionIds.Any(id => id.StartsWith("release:")) && w.Feedback.Contains("cancel", StringComparison.OrdinalIgnoreCase), "Late query replaced cancellation with success");
+            Require(!w.ActionIds.Any(id => id.StartsWith("release:")) && w.Feedback.Contains("Busca cancelada"), "Late query replaced terminal cancellation with success or a pending message");
             Require(host.Source.Stages == 0, "Cancelled query started download");
         });
         test("updates UI channel changes clear the old catalog without polling", () =>
@@ -159,6 +160,7 @@ internal static class UpdateInterfaceTests
             host.Review(); Click(w, "prepare-update"); Complete(w.UpdateTask);
             Require(host.Source.Stages == 1 && host.Source.Staged?.BuildId == Next.BuildId, "Wrong release downloaded");
             Require(w.ActionIds.Contains("apply-update") && !w.ActionIds.Contains("prepare-update") && Text(w).Contains("Download verificado"), "Verified payload has no distinct ready state");
+            Require(w.Feedback.Contains("Download verificado"), "Footer retained an in-progress message after download verification");
             Require(!ReviewFixTests.Button(w, "apply-update").IsEnabled && !w.TransitionPending, "Diagnostic fixture allowed native installation");
             Click(w, "apply-update");
             Require(!w.TransitionPending && w.IsLoaded == false && host.Source.Stages == 1, "Disabled install queued a native operation");
@@ -170,7 +172,7 @@ internal static class UpdateInterfaceTests
             host.Review(); Click(w, "prepare-update"); var pending = w.UpdateTask;
             Require(!pending.IsCompleted, "Download fixture did not suspend");
             w.Back(); Require(host.Source.LastStageCancellation.IsCancellationRequested, "Back did not cancel download"); Complete(pending);
-            Require(w.ActionIds.Contains("prepare-update") && !w.ActionIds.Contains("apply-update") && Text(w).Contains("Download cancelado"), "Cancelled download exposed install or lost retry");
+            Require(w.ActionIds.Contains("prepare-update") && !w.ActionIds.Contains("apply-update") && Text(w).Contains("Download cancelado") && w.Feedback.Contains("Download cancelado"), "Cancelled download exposed install or lost retry/terminal feedback");
             Require(!w.TransitionPending, "Cancelled download queued a restart");
         });
         test("updates UI download refusal cannot produce a verified or installed state", () =>
@@ -204,7 +206,8 @@ internal static class UpdateInterfaceTests
         {
             using var host = new Host(useDefaultSource: true); var w = host.Window;
             host.Open();
-            Require(!ReviewFixTests.Button(w, "check-updates").IsEnabled && !ReviewFixTests.Button(w, "install-overlay").IsEnabled, "Preview exposed network or install actions");
+            Require(!ReviewFixTests.Button(w, "check-updates").IsEnabled && Text(w).Contains("Setup"), "Preview enabled downloads or omitted the real installation path");
+            Require(!w.ActionIds.Any(id => id is "install-overlay" or "apply-update" or "apply-rollback"), "Preview exposed a native installation action");
             Click(w, "check-updates");
             Require(w.UpdateTask.IsCompleted && !w.TransitionPending, "Disabled preview started work");
         });
@@ -213,7 +216,7 @@ internal static class UpdateInterfaceTests
             using var host = new Host(); var w = host.Window;
             host.Source.Releases = [Next with { BuildId = AppBuild.Current.BuildId, Version = AppBuild.Current.Version, Commit = AppBuild.Current.Commit }];
             host.Open(); Click(w, "check-updates"); Complete(w.UpdateTask);
-            Require(Text(w).Contains("mais recente") && !ReviewFixTests.Button(w, "release:" + AppBuild.Current.BuildId).IsEnabled, "Current version is offered as an update");
+            Require(Text(w).Contains("mais recente") && w.Feedback.Contains("mais recente") && !ReviewFixTests.Button(w, "release:" + AppBuild.Current.BuildId).IsEnabled, "Current version is offered as an update or footer still claims a pending check");
         });
     }
 

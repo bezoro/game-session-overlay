@@ -152,7 +152,7 @@ public partial class MainWindow
         finally
         {
             if (ReferenceEquals(updateCancellation, cancellation)) { updateCancellation = null; busy = updateBusy = false; if(cancellation.IsCancellationRequested&&!exiting)updateStatus="Busca cancelada. A versão instalada foi preservada."; }
-            if (!exiting) { UpdatePersistentState(); if (view.Current.Route == OverlayRoute.Updates) RefreshRows(); }
+            if (!exiting) { SetUpdateStatus(updateStatus); UpdatePersistentState(); if (view.Current.Route == OverlayRoute.Updates) RefreshRows(); }
         }
     }
 
@@ -182,7 +182,7 @@ public partial class MainWindow
         finally
         {
             if (ReferenceEquals(updateCancellation, cancellation)) { updateCancellation = null; busy = updateBusy = false; if(cancellation.IsCancellationRequested&&!exiting)updateStatus="Download cancelado. A versão instalada foi preservada."; }
-            if (!exiting) { UpdatePersistentState(); if (view.Current.Route == OverlayRoute.UpdateReview) RefreshRows(); }
+            if (!exiting) { SetUpdateStatus(updateStatus); UpdatePersistentState(); if (view.Current.Route == OverlayRoute.UpdateReview) RefreshRows(); }
         }
     }
 
@@ -213,7 +213,13 @@ public partial class MainWindow
     {
         if (!updateBusy) return false;
         if (updateCommitting) { FeedbackText("A troca de versão está sendo preparada. Aguarde o reinício."); RequestCue(FeedbackCue.Unavailable); return true; }
-        if (interfaceActionDepth==0) RequestCue(FeedbackCue.Cancellation); updateGeneration++; updateCancellation?.Cancel(); SetUpdateStatus("Cancelando. A versão instalada será preservada…"); return true;
+        if (interfaceActionDepth==0) RequestCue(FeedbackCue.Cancellation);
+        updateGeneration++;
+        // Cancellation can synchronously run the awaiting operation's finally on this UI
+        // context. Publish the pending state first so it cannot overwrite the terminal one.
+        SetUpdateStatus("Cancelando. A versão instalada será preservada…");
+        updateCancellation?.Cancel();
+        return true;
     }
 
     private static bool UpdateFailure(Exception error) => error is IOException or InvalidDataException or UnauthorizedAccessException or HttpRequestException or JsonException or InvalidOperationException or ArgumentException or Win32Exception or TimeoutException or System.Security.SecurityException;

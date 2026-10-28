@@ -90,7 +90,7 @@ try {
 } catch { $failure = $_.Exception.Message; Write-Error -Message $_ -ErrorAction Continue }
 finally {
     foreach ($process in (Owned-Apps)) { Stop-Owned $process }
-    if (Test-Path -LiteralPath (Join-Path $installRoot 'Update.exe')) {
+    if ((Test-Path -LiteralPath (Join-Path $installRoot 'Update.exe')) -and (Test-Path -LiteralPath (Join-Path $installRoot 'current/sq.version'))) {
         try { Run-Owned (Join-Path $installRoot 'Update.exe') @('uninstall', '--silent', '--rootDir', $installRoot, '--log', (Join-Path $evidence 'cleanup.log')) 45 | Out-Null }
         catch { if (-not $failure) { $failure = $_.Exception.Message } }
     }

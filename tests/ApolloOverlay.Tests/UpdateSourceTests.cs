@@ -19,6 +19,7 @@ internal static class UpdateSourceTests
             var values = Done(() => source.CheckAsync("testing", CancellationToken.None));
             Require(values.Count == 1 && values[0].Version == Version && values[0].BuildId == BuildId && values[0].Commit == Commit, "Published build identity was lost");
             Require(ReferenceEquals(values[0].Asset, asset) && values[0].PackageName == asset.FileName && values[0].Sha256 == asset.SHA256, "SDK download wrapping was replaced or detached");
+            Require(values[0].Notes == "Plain release notes." && asset.NotesMarkdown.Contains("Commit: " + Commit), "Technical identity leaked into displayed notes or changed the SDK asset");
             Require(sdk.Feeds == 1 && sdk.AppId == VelopackInstallation.PackageId && sdk.Channel == "testing" && sdk.Downloads == 0, "Catalog query did not stay read-only");
             Require(GitHubUpdateSource.RepositoryUrl == "https://github.com/bezoro/game-session-overlay", "Public repository identity is wrong");
         });

@@ -109,14 +109,18 @@ public sealed class GitHubUpdateSource : IUpdateSource
         var notes = asset.NotesMarkdown ?? "";
         if (notes.Length > 65536) throw new InvalidDataException("As notas de versão excedem o limite permitido.");
         var fields = new Dictionary<string, string>(StringComparer.Ordinal);
+        var releaseNotes = new List<string>();
         foreach (var line in notes.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
         {
+            var metadata = false;
             foreach (var field in new[] { "Version", "Build", "Commit", "Channel" })
             {
                 if (!line.StartsWith(field + ":", StringComparison.Ordinal)) continue;
+                metadata = true;
                 if (!fields.TryAdd(field, line[(field.Length + 1)..].Trim()))
                     throw new InvalidDataException("As notas de versão contêm identidades duplicadas.");
             }
+            if (!metadata) releaseNotes.Add(line);
         }
         if (!fields.TryGetValue("Version", out var version) || !fields.TryGetValue("Build", out var buildId) ||
             !fields.TryGetValue("Commit", out var commit) || !fields.TryGetValue("Channel", out var declaredChannel) ||
@@ -125,7 +129,7 @@ public sealed class GitHubUpdateSource : IUpdateSource
             Regex.IsMatch(buildId.Split('.')[0], "^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant) ||
             !Regex.IsMatch(commit, "^[a-fA-F0-9]{40}$", RegexOptions.CultureInvariant) || declaredChannel != channel)
             throw new InvalidDataException("A identificação da versão não corresponde ao pacote ou ao canal selecionado.");
-        return new(0, version, buildId, commit, channel, published, notes, 0, asset.FileName, asset.Size, (asset.SHA256 ?? "").ToLowerInvariant(), asset);
+        return new(0, version, buildId, commit, channel, published, string.Join("\n", releaseNotes).Trim(), 0, asset.FileName, asset.Size, (asset.SHA256 ?? "").ToLowerInvariant(), asset);
     }
 
     private static void ValidateChannel(string channel)
