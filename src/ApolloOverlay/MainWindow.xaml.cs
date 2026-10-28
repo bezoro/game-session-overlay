@@ -31,7 +31,9 @@ public partial class MainWindow : Window
     internal Func<ModifierKeys> KeyboardModifiersReader {private get;set;}=static()=>Keyboard.Modifiers;
     internal Func<nint,uint> DpiReader {private get;set;}=Native.GetDpiForWindow;
     internal Func<nint> FocusForeground {private get;set;}=Native.GetForegroundWindow;
-    internal Func<nint,bool> FocusRequest {private get;set;}=WindowActivation.Request;
+    internal Func<nint,bool> FocusRequest {private get;set;}=Native.SetForegroundWindow;
+    internal Func<nint,nint,CancellationToken,Task<bool>>? FocusFallbackRequest {private get;set;}
+    private CancellationTokenSource? activationCancellation;
     internal Func<Task>? RefreshFocusFixture {private get;set;}
     internal Func<Task<string?>>? PlayniteDialogFixture {private get;set;}
     internal Task OpeningTask {get;private set;}=Task.CompletedTask;
@@ -121,7 +123,7 @@ public partial class MainWindow : Window
     private readonly List<Entry> entries=[];private NavState navigation=new("session-card");private string lastContentSelection="session-card";private int page;private string subpage="";private WindowRef? detail;
     public MainWindow(bool pilotRequested=false,bool renderOnly=false,IPlatform? platform=null,LocalDiagnostics? diagnostics=null,IApplicationAudio? appAudioService=null,IControllerDevices? devices=null,IFeedbackService? feedback=null,IUpdateSource? updates=null)
     {
-        diagnostic=renderOnly;updateSource=updates??(renderOnly||platform?.IsPreview==true?new PreviewUpdateSource():new GitHubUpdateSource());InitializeComponent();Controller=new(platform??(renderOnly?new PreviewPlatform():null),diagnostics);appliedSettings=Controller.Settings;input=new(Controller.Settings);if(!diagnostic&&!Controller.Platform.IsPreview)updateChannel=UpdateChannelSettings.Read(Controller.Diagnostics.Root);InitializeIconUpdates();
+        diagnostic=renderOnly;FocusFallbackRequest=renderOnly?null:WindowActivation.RequestFallbackAsync;updateSource=updates??(renderOnly||platform?.IsPreview==true?new PreviewUpdateSource():new GitHubUpdateSource());InitializeComponent();Controller=new(platform??(renderOnly?new PreviewPlatform():null),diagnostics);appliedSettings=Controller.Settings;input=new(Controller.Settings);if(!diagnostic&&!Controller.Platform.IsPreview)updateChannel=UpdateChannelSettings.Read(Controller.Diagnostics.Root);InitializeIconUpdates();
         controllerDevices=devices??(diagnostic||Controller.Platform.IsPreview?new PreviewControllerDevices():new ControllerDevices());
         applicationAudio=appAudioService??(diagnostic||Controller.Platform.IsPreview?new PreviewApplicationAudio():new ApplicationAudio(Controller.Platform.Valid));
         feedbackService=feedback??(diagnostic||Controller.Platform.IsPreview?new PreviewFeedbackService():new FeedbackService(controllerDevices));applicationAudio.Changed+=ApplicationAudioChanged;feedbackService.Changed+=FeedbackStatusChanged;feedbackService.Configure(Controller.Settings.SoundFeedbackEnabled,Controller.Settings.HapticFeedbackEnabled);
@@ -192,14 +194,23 @@ public partial class MainWindow : Window
     private bool CurrentCycle(long cycle)=>cycle==focusCycle&&!exiting&&IsVisible;
     private bool OwnForeground=>FocusForeground()==new WindowInteropHelper(this).Handle;
     private void TraceFocus(string checkpoint,ResultKind kind,string detail=""){if(!Controller.Platform.IsPreview)Controller.Diagnostics.Log($"focus/{focusCycle}/{checkpoint}/foreground={OwnForeground}/active={IsActive}{detail}",kind);}
-    private void RevokeFocus(string reason,bool supersede=true){CancelPlayniteScan();feedbackService.Suspend();applicationAudio.Suspend();audioGeneration++;audioTarget=null;nextBatteryRead=0;CancelOpenAnimation();if(supersede)focusCycle++;focusConfirmed=false;navigationKeysArmed=false;input.Cancel();CancelHold();TraceFocus(reason,ResultKind.Cancelled);}
+    private void RevokeFocus(string reason,bool supersede=true){activationCancellation?.Cancel();CancelPlayniteScan();feedbackService.Suspend();applicationAudio.Suspend();audioGeneration++;audioTarget=null;nextBatteryRead=0;CancelOpenAnimation();if(supersede)focusCycle++;focusConfirmed=false;navigationKeysArmed=false;input.Cancel();CancelHold();TraceFocus(reason,ResultKind.Cancelled);}
     private bool NavigationAllowed
     {
         get{var context=InputContext;if(!context.Confirmed||!context.Visible||context.OwnedDialog||context.Exiting)return false;if(context.Active&&context.OwnForeground)return true;RevokeFocus("lost");FeedbackFocusUnavailable("Foco perdido. Guide tenta novamente; B ou Esc oculta; bandeja: abrir.");return false;}
     }
     private async Task<bool> AcquireFocus(long cycle)
     {
-        if(!CurrentCycle(cycle)||ownedDialog)return false;bool activated,requested;opening=true;try{activated=Activate();requested=FocusRequest(new WindowInteropHelper(this).Handle);}finally{opening=false;}
+        if(!CurrentCycle(cycle)||ownedDialog)return false;
+        using var activation=new CancellationTokenSource();activationCancellation=activation;
+        try
+        {
+        var foreground=FocusForeground();bool activated,requested;opening=true;try{activated=Activate();requested=FocusRequest(new WindowInteropHelper(this).Handle);}finally{opening=false;}
+        if(!requested&&!OwnForeground&&CurrentCycle(cycle)&&!ownedDialog&&FocusFallbackRequest is {} fallback)
+        {
+            requested=await fallback(new WindowInteropHelper(this).Handle,foreground,activation.Token);
+            if(!CurrentCycle(cycle)||ownedDialog||activation.IsCancellationRequested)return false;
+        }
         TraceFocus("request-native",ResultKind.Requested,$"/activate={activated}/request={requested}");
         for(var attempt=0;attempt<=6;attempt++){
             if(!CurrentCycle(cycle)||ownedDialog)return false;
@@ -209,6 +220,7 @@ public partial class MainWindow : Window
             if(attempt==6){TraceFocus("unconfirmed",requested?ResultKind.Unknown:ResultKind.Failed);FeedbackFocusUnavailable("O Windows não confirmou o foco. Guide tenta novamente; B ou Esc oculta; bandeja: abrir.");return false;}
             await Task.Delay(50);
         }return false;
+        }finally{if(ReferenceEquals(activationCancellation,activation))activationCancellation=null;}
     }
     internal void ExitFromTray(){if(updateCommitting&&!updateCloseAuthorized){FeedbackText("A troca de versão está sendo preparada. Aguarde o reinício.");return;}if(!exiting)Close();}
     private bool closeRequested,closeFinalizing;private Task? closeDrain;
