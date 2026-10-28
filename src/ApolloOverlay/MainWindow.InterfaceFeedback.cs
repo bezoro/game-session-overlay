@@ -54,7 +54,7 @@ public partial class MainWindow
 
     private void PulseActivation(Button button)
     {
-        button.ApplyTemplate();
+        InteractionMotion.Press(button);button.ApplyTemplate();
         if (button.Template.FindName("ActivationFeedback", button) is not Border highlight) return;
         if (button.Resources["ActivationTimer"] is DispatcherTimer previous) previous.Stop();
         highlight.BeginAnimation(OpacityProperty, null);
@@ -64,7 +64,7 @@ public partial class MainWindow
             highlight.BeginAnimation(OpacityProperty, new DoubleAnimation(.18, 0, TimeSpan.FromMilliseconds(180)));
             return;
         }
-        // Reduced motion still acknowledges the press, without a fade or scale effect.
+        // A system animation restriction still receives a brief static acknowledgement.
         var reset = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
         reset.Tick += (_, _) => { reset.Stop(); highlight.Opacity = 0; button.Resources.Remove("ActivationTimer"); };
         button.Resources["ActivationTimer"] = reset;

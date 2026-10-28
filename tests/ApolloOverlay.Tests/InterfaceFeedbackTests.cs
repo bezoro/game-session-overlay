@@ -129,7 +129,7 @@ internal static class InterfaceFeedbackTests
             }
             finally { w.Close(); }
         });
-        test("interface controller confirmation visibly acknowledges a press with reduced motion", () =>
+        test("interface controller confirmation visibly acknowledges a press despite an obsolete reduced-motion preference", () =>
         {
             var w = Fixture(out var feedback);
             try
@@ -140,7 +140,7 @@ internal static class InterfaceFeedbackTests
                 feedback.Cues.Clear(); w.ActivateEntry();
                 var button = ReviewFixTests.Button(w, "side"); button.ApplyTemplate();
                 var highlight = (Border)button.Template.FindName("ActivationFeedback", button);
-                Require(highlight.Opacity > 0 && !highlight.HasAnimatedProperties, "Reduced-motion press invisible or animated");
+                Require(highlight.Opacity > 0 && highlight.HasAnimatedProperties==InteractionMotion.Allowed, "Legacy preference suppressed the new acknowledgement");
                 Require(feedback.Cues.SequenceEqual(new[] { FeedbackCue.Confirmation }), "Activation emitted multiple cues");
                 Pump(190);
                 Require(highlight.Opacity == 0, "Press acknowledgement remained stuck");

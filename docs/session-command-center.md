@@ -11,7 +11,7 @@ Esta evolução parte da foto da versão 32: o jogo precisa identificar a sessã
 - Cobre `#C89A70`: identidade da sessão, usado com moderação.
 - Verde `#78C999`: resultado confirmado, distinto da seleção.
 
-Segoe UI Variable Display nos títulos e Segoe UI Variable Text nos controles. Alinhamento à esquerda, linhas curtas, números de volume alinhados e controles com tamanho consistente. O tema claro recebe equivalentes com contraste; alto contraste conserva as cores do sistema. Movimento reduzido mantém a confirmação estática. Sons e vibração seguem as preferências existentes.
+Segoe UI Variable Display nos títulos e Segoe UI Variable Text nos controles. Alinhamento à esquerda, linhas curtas, números de volume alinhados e controles com tamanho consistente. O tema claro recebe equivalentes com contraste; alto contraste conserva as cores do sistema. A seleção respira no contorno e recebe um reflexo de baixa opacidade; o clique comprime brevemente o controle. Efeitos param ao ocultar, descarregar ou perder foco. A preferência antiga de reduzir movimento é apenas lida para compatibilidade e não participa mais da interface. Sons e vibração seguem as preferências existentes.
 
 ```text
 Game Session                       v32   Ajustes
@@ -32,7 +32,7 @@ Bibliotecas e atalhos secundários
 Entrada compartilhada       instruções contextuais
 ```
 
-A imagem da sessão é o único elemento expressivo. Os controles permanecem discretos; não há animação ambiente, brilho permanente ou cartões idênticos disputando atenção. Imagens vêm de ícones reais ou capturas locais, com fallback legível. A versão curta permanece visível; build e commit continuam acessíveis nos detalhes.
+A imagem da sessão é o único elemento expressivo. Os controles permanecem discretos; os efeitos contínuos ficam restritos ao item selecionado, com respiração de três segundos e um reflexo a cada cinco segundos. Imagens vêm de ícones reais ou capturas locais, com fallback legível. A versão curta permanece visível; build e commit continuam acessíveis nos detalhes.
 
 ## Entregas funcionais
 
@@ -47,3 +47,5 @@ O estado de entrada compartilhada continua explícito. Foco não comprova bloque
 ## Verificação
 
 Exercitar serviços com interfaces simuladas sem alterar áudio, mídia, entrada ou tela do runner. Os testes da interface precisam observar foco real, estados disponíveis/indisponíveis, seleção após reconstrução, cancelamento e perfis em ambos os canais. Gerar capturas dos temas e dos layouts TV/compacto, inspecioná-las e medir custo quando oculto. A publicação depende dos checks Windows e de review do Codex sem apontamentos pendentes.
+
+O indicador do controle fica no topo, com silhueta por família e bateria. A identificação usa metadados oficiais de Windows.Gaming.Input; o roteamento de entrada continua independente. Não se associa um modelo ao slot quando há múltiplos dispositivos possíveis. Uma porcentagem exige capacidades válidas da bateria; XInput categórico não é convertido em porcentagem. A consulta ocorre somente com o painel visível e confirmado, no máximo a cada cinco segundos.

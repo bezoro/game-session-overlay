@@ -138,6 +138,7 @@ static class Program
         WindowActivationTests.Run(Case);
         MouseKeyboardTests.Run(Case);
         AgentUpdateTests.Run(Case);
+        MotionAndControllerTests.Run(Case);
         SessionMediaLifecycleTests.Run(Case);
         SessionUtilityTests.Run(Case);
         SessionInterfaceTests.Run(Case);

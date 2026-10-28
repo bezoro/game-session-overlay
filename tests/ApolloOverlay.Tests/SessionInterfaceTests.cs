@@ -152,12 +152,12 @@ internal static class SessionInterfaceTests
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
             var app=Application.Current??new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};if(app.TryFindResource(ThemeSupport.Card) is null)ThemeSupport.ForceForValidation(app,false);
             initialize?.Invoke(Root);
-            Window=new(renderOnly:true,platform:new PremiumInterfaceTests.FixturePlatform(preview),diagnostics:new(Root),appAudioService:Audio,media:Media,systemAudioBackend:backend??new PreviewSystemAudioBackend(),mixerAudioService:Mixer);
+            Window=new(renderOnly:true,platform:new PremiumInterfaceTests.FixturePlatform(preview),diagnostics:new(Root),appAudioService:Audio,media:Media,systemAudioBackend:backend??new PreviewSystemAudioBackend(),mixerAudioService:Mixer,controllerIdentitySource:new PreviewControllerIdentitySource{Items=[new("fixture-xbox","Xbox One",ControllerFamily.Xbox,true,76,false)]});
             Window.PhysicalKeyReader=_=>0;Window.DpiReader=_=>96;Window.Controller.CaptureReturn();Complete(Window.Controller.Refresh());Window.RefreshRows();
         }
         internal void Open(int width=572,int height=940)
         {
-            Window.Left=-12000;Window.Top=-12000;Window.Width=width;Window.Height=height;Window.ShowDiagnostic();Window.RefreshRows();Window.RefreshSessionFeatures();Complete(Window.FeatureTask);Window.UpdateLayout();
+            Window.Left=-12000;Window.Top=-12000;Window.Width=width;Window.Height=height;Window.ShowDiagnostic();Window.RefreshRows();Window.UpdateControllerTelemetry([new(true,0),default,default,default],null,0);Complete(Window.ControllerBadgeTask);Window.RefreshSessionFeatures();Complete(Window.FeatureTask);Window.UpdateLayout();
             RequireFocus(Window);
         }
         public void Dispose(){try{Window.Close();}finally{SynchronizationContext.SetSynchronizationContext(previous);if(Directory.Exists(Root))Directory.Delete(Root,true);}}

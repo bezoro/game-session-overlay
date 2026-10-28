@@ -64,7 +64,7 @@ internal static class MouseKeyboardTests
             Pick(w, "back"); Tap(w, Key.Space);
             Require(w.ActionIds.Contains("session-card"), "Space did not operate the nested Back action"); host.RequireOwnedFocus();
         });
-        test("local keyboard and pointer remain usable after footer Save Discard and reduced motion", () =>
+        test("local keyboard and pointer remain usable after footer Save Discard and animated acknowledgement", () =>
         {
             using var host = new Host(); var w = host.Window; host.Open(); w.Page(2);
             Pick(w, "sound-feedback"); Tap(w, Key.Space); Pick(w, "haptic-feedback"); Tap(w, Key.Enter);
@@ -76,11 +76,11 @@ internal static class MouseKeyboardTests
             Require(saved.SoundFeedbackEnabled && saved.HapticFeedbackEnabled, "Save did not persist keyboard changes");
             Click(w, "sound-feedback"); Require(w.Controller.SettingsDirty && !w.Controller.Settings.SoundFeedbackEnabled, "Pointer did not edit after Save");
             Click(w, "discard-pending"); Require(!w.Controller.SettingsDirty && w.Controller.Settings.SoundFeedbackEnabled, "Pointer Discard did not restore the saved preferences");
-            Pick(w, "motion"); Tap(w, Key.Enter); Require(w.Controller.Settings.ReducedMotion, "Keyboard could not enable reduced motion");
-            var button = ReviewFixTests.Button(w, "motion"); button.ApplyTemplate();
+            Pick(w, "side"); Tap(w, Key.Enter); Require(w.Controller.Settings.PanelSide=="Right", "Keyboard could not change placement");
+            var button = ReviewFixTests.Button(w, "side"); button.ApplyTemplate();
             var flash = (Border)button.Template.FindName("ActivationFeedback", button);
-            Require(flash.Opacity > 0 && !flash.HasAnimatedProperties, "Keyboard acknowledgement vanished or animated in reduced motion");
-            Tap(w, Key.Up); Require(w.SelectedAction != "motion", "Keyboard navigation stopped after changing motion"); RequireLiveSelection(w);
+            Require(flash.Opacity > 0 && flash.HasAnimatedProperties==InteractionMotion.Allowed, "Keyboard acknowledgement did not follow the motion policy");
+            Tap(w, Key.Up); Require(w.SelectedAction != "side", "Keyboard navigation stopped after changing placement"); RequireLiveSelection(w);
         });
         test("local keyboard can describe disabled choices and enter adjust and leave the Guide slider", () =>
         {

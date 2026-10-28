@@ -121,13 +121,13 @@ public partial class MainWindow : Window
     }
     private sealed record Entry(string Id,Button Button,Action Run,bool Available,string Reason);
     private readonly List<Entry> entries=[];private NavState navigation=new("session-card");private string lastContentSelection="session-card";private int page;private string subpage="";private WindowRef? detail;
-    public MainWindow(bool pilotRequested=false,bool renderOnly=false,IPlatform? platform=null,LocalDiagnostics? diagnostics=null,IApplicationAudio? appAudioService=null,IControllerDevices? devices=null,IFeedbackService? feedback=null,IUpdateSource? updates=null,ISessionMedia? media=null,ISystemAudioBackend? systemAudioBackend=null,IApplicationAudio? mixerAudioService=null)
+    public MainWindow(bool pilotRequested=false,bool renderOnly=false,IPlatform? platform=null,LocalDiagnostics? diagnostics=null,IApplicationAudio? appAudioService=null,IControllerDevices? devices=null,IFeedbackService? feedback=null,IUpdateSource? updates=null,ISessionMedia? media=null,ISystemAudioBackend? systemAudioBackend=null,IApplicationAudio? mixerAudioService=null,IControllerIdentitySource? controllerIdentitySource=null)
     {
         diagnostic=renderOnly;FocusFallbackRequest=renderOnly?null:WindowActivation.RequestFallbackAsync;updateSource=updates??(renderOnly||platform?.IsPreview==true?new PreviewUpdateSource():new GitHubUpdateSource());InitializeComponent();Controller=new(platform??(renderOnly?new PreviewPlatform():null),diagnostics);appliedSettings=Controller.Settings;input=new(Controller.Settings);if(!diagnostic&&!Controller.Platform.IsPreview)updateChannel=UpdateChannelSettings.Read(Controller.Diagnostics.Root);InitializeIconUpdates();
         controllerDevices=devices??(diagnostic||Controller.Platform.IsPreview?new PreviewControllerDevices():new ControllerDevices());
         applicationAudio=appAudioService??(diagnostic||Controller.Platform.IsPreview?new PreviewApplicationAudio():new ApplicationAudio(Controller.Platform.Valid));
         feedbackService=feedback??(diagnostic||Controller.Platform.IsPreview?new PreviewFeedbackService():new FeedbackService(controllerDevices));applicationAudio.Changed+=ApplicationAudioChanged;feedbackService.Changed+=FeedbackStatusChanged;feedbackService.Configure(Controller.Settings.SoundFeedbackEnabled,Controller.Settings.HapticFeedbackEnabled);
-        InitializeSessionFeatures(media,systemAudioBackend,mixerAudioService);
+        InitializeSessionFeatures(media,systemAudioBackend,mixerAudioService);this.controllerIdentitySource=controllerIdentitySource??(diagnostic||Controller.Platform.IsPreview?new PreviewControllerIdentitySource():new WindowsControllerIdentitySource());
         timer=new DispatcherTimer(DispatcherPriority.Input){Interval=TimeSpan.FromMilliseconds(120)};timer.Tick+=Tick;
         HomeTab.Click+=(_,_)=>ClickTab(HomeTab,0);AppsTab.Click+=(_,_)=>ClickTab(AppsTab,1);SettingsTab.Click+=(_,_)=>OpenPrimaryAudio();SettingsGear.Click+=(_,_)=>ActivatePointerEntry(SettingsGear);
         BackButton.Click+=(_,_)=>ActivatePointerEntry(BackButton);
@@ -195,7 +195,7 @@ public partial class MainWindow : Window
     private bool CurrentCycle(long cycle)=>cycle==focusCycle&&!exiting&&IsVisible;
     private bool OwnForeground=>FocusForeground()==new WindowInteropHelper(this).Handle;
     private void TraceFocus(string checkpoint,ResultKind kind,string detail=""){if(!Controller.Platform.IsPreview)Controller.Diagnostics.Log($"focus/{focusCycle}/{checkpoint}/foreground={OwnForeground}/active={IsActive}{detail}",kind);}
-    private void RevokeFocus(string reason,bool supersede=true){activationCancellation?.Cancel();SuspendSessionFeatures();CancelPlayniteScan();feedbackService.Suspend();applicationAudio.Suspend();audioGeneration++;audioTarget=null;nextBatteryRead=0;CancelOpenAnimation();if(supersede)focusCycle++;focusConfirmed=false;navigationKeysArmed=false;input.Cancel();CancelHold();TraceFocus(reason,ResultKind.Cancelled);}
+    private void RevokeFocus(string reason,bool supersede=true){ResetControllerBadge();foreach(var entry in entries)InteractionMotion.Stop(entry.Button);activationCancellation?.Cancel();SuspendSessionFeatures();CancelPlayniteScan();feedbackService.Suspend();applicationAudio.Suspend();audioGeneration++;audioTarget=null;nextBatteryRead=0;CancelOpenAnimation();if(supersede)focusCycle++;focusConfirmed=false;navigationKeysArmed=false;input.Cancel();CancelHold();TraceFocus(reason,ResultKind.Cancelled);}
     private bool NavigationAllowed
     {
         get{var context=InputContext;if(!context.Confirmed||!context.Visible||context.OwnedDialog||context.Exiting)return false;if(context.Active&&context.OwnForeground)return true;RevokeFocus("lost");FeedbackFocusUnavailable("Foco perdido. Guide tenta novamente; B ou Esc oculta; bandeja: abrir.");return false;}
@@ -243,12 +243,12 @@ public partial class MainWindow : Window
     }
     internal void ShowDiagnostic(){opening=true;Show();Activate();Native.SetForegroundWindow(new WindowInteropHelper(this).Handle);opening=false;focusCycle++;focusConfirmed=IsActive&&OwnForeground;navigationKeysArmed=true;SetSelection(false);}
     internal void ValidationHost(bool visible){if(visible){ShowDiagnostic();audio.SetVisible(true);}else{Hide();audio.SetVisible(false);}UpdatePolling();timer.Start();}
-    private bool OpenAnimationAllowed=>!Controller.Settings.ReducedMotion&&!SystemParameters.HighContrast&&SystemParameters.ClientAreaAnimation;
+    private bool OpenAnimationAllowed=>InteractionMotion.Allowed;
     private void CancelOpenAnimation(){BeginAnimation(OpacityProperty,null);Opacity=1;}
     private void PrepareOpenAnimation(){CancelOpenAnimation();if(OpenAnimationAllowed)Opacity=0;}
     internal void AnimateOpen(){if(!OpenAnimationAllowed){CancelOpenAnimation();return;}Opacity=1;BeginAnimation(OpacityProperty,new DoubleAnimation(0,1,TimeSpan.FromMilliseconds(150)){FillBehavior=FillBehavior.Stop});}
     private void OnSystemParametersChanged(object? sender,PropertyChangedEventArgs args){if(exiting||Dispatcher.HasShutdownStarted)return;if(Dispatcher.CheckAccess())UpdateAppearance();else Dispatcher.BeginInvoke(UpdateAppearance);}
-    private void UpdateAppearance(){if(!OpenAnimationAllowed)CancelOpenAnimation();ThemeSupport.ApplySystemPalette(Application.Current);GlassSurface.Opacity=1;GlassSurface.Effect=SystemParameters.HighContrast?null:new System.Windows.Media.Effects.DropShadowEffect{BlurRadius=18,ShadowDepth=4,Opacity=.18};}
+    private void UpdateAppearance(){if(!OpenAnimationAllowed){CancelOpenAnimation();foreach(var entry in entries)InteractionMotion.Stop(entry.Button);}else if(IsVisible)SetSelection(false,false);ThemeSupport.ApplySystemPalette(Application.Current);GlassSurface.Opacity=1;GlassSurface.Effect=SystemParameters.HighContrast?null:new System.Windows.Media.Effects.DropShadowEffect{BlurRadius=18,ShadowDepth=4,Opacity=.18};}
     internal void Place()
     {
         if(placing)return;placing=true;try{
@@ -373,7 +373,7 @@ public partial class MainWindow : Window
     private void UpdateCompactChrome(double height)
     {
         var compact=height>0&&height<650;if(compact==compactChrome)return;compactChrome=compact;
-        if(pointerDown)CancelHold();HeaderIdentity.Visibility=Visibility.Visible;HeaderBrand.Visibility=compact||narrow||view.Depth>0?Visibility.Collapsed:Visibility.Visible;ControllerStatusLabel.Visibility=compact?Visibility.Collapsed:Visibility.Visible;DirtyLabel.Visibility=compact?Visibility.Collapsed:Visibility.Visible;HeaderArea.Margin=new(0,0,0,compact?8:12);DirtyStrip.Margin=new(0,compact?8:12,0,0);DirtyStrip.Padding=new(12,compact?6:8,12,compact?6:8);TabArea.Margin=new(0,0,0,compact?8:16);Sidebar.Padding=compact?new(20,14,20,14):new(24,22,24,22);FooterArea.Margin=new(0,compact?6:10,0,0);FooterDivider.Margin=new(0,0,0,compact?4:8);if(!compact){StatusLabel.TextWrapping=TextWrapping.NoWrap;StatusLabel.TextTrimming=TextTrimming.CharacterEllipsis;}
+        if(pointerDown)CancelHold();HeaderIdentity.Visibility=Visibility.Visible;HeaderBrand.Visibility=compact||narrow||view.Depth>0?Visibility.Collapsed:Visibility.Visible;ControllerStatusLabel.Visibility=Visibility.Collapsed;DirtyLabel.Visibility=compact?Visibility.Collapsed:Visibility.Visible;HeaderArea.Margin=new(0,0,0,compact?8:12);DirtyStrip.Margin=new(0,compact?8:12,0,0);DirtyStrip.Padding=new(12,compact?6:8,12,compact?6:8);TabArea.Margin=new(0,0,0,compact?8:16);Sidebar.Padding=compact?new(20,14,20,14):new(24,22,24,22);FooterArea.Margin=new(0,compact?6:10,0,0);FooterDivider.Margin=new(0,0,0,compact?4:8);if(!compact){StatusLabel.TextWrapping=TextWrapping.NoWrap;StatusLabel.TextTrimming=TextTrimming.CharacterEllipsis;}
         // Tabs and Save/Discard stay fixed. The header and status move into the
         // existing scroller so selected cards have room without shrinking text.
         if(compact&&HeaderArea.Parent is Grid headerGrid){headerGrid.Children.Remove(HeaderArea);ContentStack.Children.Insert(0,HeaderArea);}
@@ -434,7 +434,7 @@ public partial class MainWindow : Window
     private void SetSelection(bool showReason=true,bool restoreFocus=true)
     {
         if(navigation.Id!="exit"&&!IsFooterAction(navigation.Id)&&entries.Any(entry=>entry.Id==navigation.Id))lastContentSelection=navigation.Id;
-        foreach(var entry in entries){var selected=entry.Id==navigation.Id;var danger=entry.Id is "close" or "close-detail";var primary=entry.Id=="session-card";
+        foreach(var entry in entries){var selected=entry.Id==navigation.Id;InteractionMotion.SetIsSelected(entry.Button,selected&&entry.Available&&IsVisible&&focusConfirmed&&IsActive&&OwnForeground&&InteractionMotion.Allowed);var danger=entry.Id is "close" or "close-detail";var primary=entry.Id=="session-card";
             entry.Button.BorderThickness=new(2);entry.Button.SetResourceReference(BorderBrushProperty,selected?ThemeSupport.Focus:ThemeSupport.Stroke);
             entry.Button.SetResourceReference(BackgroundProperty,selected?ThemeSupport.FocusBackground:primary?ThemeSupport.Card:ThemeSupport.Control);if(entry.Id=="close")entry.Button.Background=Brushes.Transparent;
             if(page==0&&subpage==""&&entry.Id=="apps"){entry.Button.Background=selected?(Brush)FindResource(ThemeSupport.Card):Brushes.Transparent;entry.Button.BorderThickness=new(2);}entry.Button.Effect=null;if(entry.Button.Resources["ABadge"] is Border badge&&entry.Button.Content is Grid grid){var showBadge=selected&&entry.Available&&inputMethod=="controller"&&!entry.Id.StartsWith("window:",StringComparison.Ordinal)&&grid.ColumnDefinitions[0].Width.Value>0;badge.Visibility=showBadge?Visibility.Visible:Visibility.Hidden;grid.Children[0].Visibility=showBadge?Visibility.Hidden:grid.ColumnDefinitions[0].Width.Value>0?Visibility.Visible:Visibility.Collapsed;}if(!selected&&(entry.Id=="close"||page==0&&subpage==""&&entry.Id=="apps"))entry.Button.BorderBrush=Brushes.Transparent;
@@ -689,15 +689,15 @@ public partial class MainWindow : Window
         controllerDevices.UpdateConnections(frames.Select(frame=>frame.Connected&&!frame.ReadFailed).ToArray());var mask=0;for(var i=0;i<frames.Count;i++)if(frames[i].Connected&&!frames[i].ReadFailed)mask|=1<<i;
         var connectionsChanged=mask!=controllerMask;if(connectionsChanged){controllerMask=mask;nextBatteryRead=0;activeEpoch=0;feedbackService.Suspend();}connectedControllers=frames.Count(frame=>frame.Connected&&!frame.ReadFailed);var failed=frames.Any(frame=>frame.ReadFailed);
         var owner=slot is {} value&&value>=0&&value<frames.Count&&frames[value].Connected&&!frames[value].ReadFailed?(uint?)value:null;
-        var ownerChanged=owner!=activeSlot;if(ownerChanged){feedbackService.Suspend();activeSlot=owner;activeEpoch=0;nextBatteryRead=0;}
+        var ownerChanged=owner!=activeSlot;if(connectionsChanged)ResetControllerBadge();else if(ownerChanged){badgeBattery=null;badgeRenderState=null;UpdateControllerBadge();}if(ownerChanged){feedbackService.Suspend();activeSlot=owner;activeEpoch=0;nextBatteryRead=0;}
         if(mask==0&&failed){activeEpoch=0;nextBatteryRead=0;SetControllerStatus("Leitura do controle indisponível");feedbackService.Suspend();return;}
         if(connectionsChanged||ownerChanged||activeSlot is null)SetControllerStatus(activeSlot is {} selected?"Controle "+(selected+1)+" · Bateria não informada":connectedControllers switch{0=>"Nenhum controle conectado",1=>failed?"1 controle confirmado · outras leituras indisponíveis":"1 controle conectado · aguardando entrada",_=>failed?$"{connectedControllers} controles confirmados · outras leituras indisponíveis":$"{connectedControllers} controles conectados · aguardando entrada"});
         var context=InputContext;var confirmed=context.Visible&&context.Confirmed&&context.Active&&context.OwnForeground&&!context.Exiting&&!context.OwnedDialog;
         if(!confirmed){if(activeSlot is {} hiddenSlot)SetControllerStatus("Controle "+(hiddenSlot+1)+" · Bateria não informada");nextBatteryRead=0;feedbackService.Suspend();return;}
-        if(activeSlot is {} active&&now>=nextBatteryRead){nextBatteryRead=now+5000;var status=controllerDevices.Read(active);activeEpoch=status.ConnectionEpoch;SetControllerStatus("Controle "+(active+1)+" · "+BatteryText(status));}
+        PollControllerIdentity(now);if(activeSlot is {} active&&now>=nextBatteryRead){nextBatteryRead=now+5000;var status=controllerDevices.Read(active);badgeBattery=status;activeEpoch=status.ConnectionEpoch;SetControllerStatus("Controle "+(active+1)+" · "+BatteryText(status));}
         feedbackService.SetContext(new(context.Visible,confirmed,activeSlot,activeEpoch));
     }
-    private void SetControllerStatus(string text){controllerStatus=text;ControllerStatusLabel.Text=text.Replace(" · aguardando entrada","");ControllerStatusLabel.ToolTip=text;if(controllerStatusParagraph is not null){controllerStatusParagraph.Text=text;AutomationProperties.SetName(controllerStatusParagraph,text);}}
+    private void SetControllerStatus(string text){controllerStatus=text;ControllerStatusLabel.Text=text.Replace(" · aguardando entrada","");ControllerStatusLabel.ToolTip=text;UpdateControllerBadge();if(controllerStatusParagraph is not null){controllerStatusParagraph.Text=text;AutomationProperties.SetName(controllerStatusParagraph,text);}}
     private static string BatteryText(ControllerDeviceSnapshot status)=>!status.Connected?"Desconectado":status.BatteryType==ControllerBatteryType.Wired?"Com fio":status.BatteryType is ControllerBatteryType.Alkaline or ControllerBatteryType.NickelMetalHydride?status.BatteryLevel switch{ControllerBatteryLevel.Empty=>"Bateria esgotada",ControllerBatteryLevel.Low=>"Bateria baixa",ControllerBatteryLevel.Medium=>"Bateria média",ControllerBatteryLevel.Full=>"Bateria cheia",_=>"Bateria não informada"}:"Bateria não informada";
     private FeedbackDispatch RequestCue(FeedbackCue cue)
     {
