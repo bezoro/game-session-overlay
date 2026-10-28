@@ -4,8 +4,8 @@ Abra o painel por cima do jogo para alternar janelas, ajustar o áudio ou acessa
 
 ## Primeira execução
 
-1. Extraia o pacote. Não execute de dentro do ZIP. Se uma versão anterior estiver aberta, encerre pela bandeja.
-2. Execute **Instalar overlay.cmd**. O aplicativo é instalado em `%LOCALAPPDATA%\Programs\GameSessionOverlay`, cria um atalho no menu Iniciar e abre o painel. O ícone fica na bandeja do Windows, perto do relógio.
+1. Baixe o instalador **GameSessionOverlay-testing-Setup.exe** em [Releases](https://github.com/bezoro/game-session-overlay/releases). Se uma versão anterior estiver aberta, encerre pela bandeja.
+2. Execute o Setup do Game Session Overlay. O Velopack instala o aplicativo, cria atalhos e disponibiliza a desinstalação em Aplicativos do Windows.
 3. Em **Sistema**, escolha o monitor, o lado do painel e o tamanho da interface. Se usar Playnite, selecione sua pasta. Pressione **Salvar** para manter as alterações.
 
 Na próxima entrada no Windows, a overlay inicia oculta. Um toque curto no botão **Guide**, o X iluminado no centro do controle Xbox, abre o painel quando você solta o botão. Você também pode dar duplo clique no ícone da bandeja ou escolher **Abrir overlay** no menu do botão direito.
@@ -47,16 +47,16 @@ A opção selecionada mantém o contorno de foco. Ao acionar uma função, o bot
 A versão aparece no cabeçalho do painel e em **Sistema → Versão e atualizações**. O identificador também inclui o build e o commit para distinguir as alterações que você está testando.
 
 1. Na página de versões, escolha **Testes** para receber os novos builds aprovados nas verificações do projeto, ou **Estável** para as versões da branch principal.
-2. Como o repositório é privado, use **Conectar GitHub** uma vez. Essa etapa requer teclado para colar um token com acesso de leitura de Contents apenas a `bezoro/apollo-tv-overlay`. A credencial fica protegida pelo Windows para seu usuário e não é incluída em logs ou ajustes.
+2. O repositório é público. Não é necessário conectar uma conta ou informar token do GitHub.
 3. Use **Buscar atualizações**, escolha uma versão e leia as alterações.
 4. Selecione **Baixar atualização**. B / Esc cancela sem trocar a versão instalada.
 5. Depois da verificação do download, salve ou descarte os ajustes pendentes e selecione **Instalar e reiniciar**.
 
-A troca mantém a versão anterior. Se o novo aplicativo não confirmar que iniciou, o inicializador recupera a versão e os ajustes anteriores. Essa checagem não comprova o funcionamento físico do controle ou do streaming.
+Os pacotes anteriores ficam preservados em uma pasta de histórico separada do cache do Velopack. A reversão é uma escolha explícita na interface; não há detecção automática de falhas da aplicação.
 
-Para voltar manualmente, use **Voltar a uma versão anterior**, escolha uma versão local e confirme **Voltar e reiniciar**. Esse caminho funciona sem internet. Os ajustes compatíveis preservados para a versão escolhida também são recuperados. Tentativas que falharam ao iniciar não são oferecidas como versões locais de retorno.
+Para voltar manualmente, use **Voltar a uma versão anterior**, escolha uma versão local e confirme **Voltar e reiniciar**. Esse caminho funciona sem internet. Os ajustes compatíveis preservados para a versão escolhida também são recuperados. O histórico local lista versões que foram executadas e tiveram seu pacote preservado.
 
-As atualizações são publicadas após os testes dos canais configurados, sem substituir releases anteriores. A primeira versão com este recurso precisa ser instalada a partir do pacote. Depois dessa instalação e da conexão inicial, a navegação das atualizações pode ser feita pelo controle. Veja os [detalhes das atualizações](docs/updates.md).
+As atualizações são publicadas após os testes dos canais configurados, sem substituir releases anteriores. A primeira versão com este recurso precisa ser instalada a partir do pacote. Depois dessa instalação inicial, a navegação das atualizações pode ser feita pelo controle, sem autenticação. Veja os [detalhes das atualizações](docs/updates.md).
 
 ## Quando algo não funcionar
 
@@ -76,8 +76,8 @@ Você pode usar setas, Tab, Enter e Esc como alternativa ao controle. Para encer
 
 A inicialização comum não exige administrador. Você pode desativá-la em **Configurações do Windows → Aplicativos → Inicialização**. Se mover a pasta do aplicativo, abra a overlay uma vez no novo local para atualizar a entrada existente.
 
-Para instalar a inicialização elevada, abra PowerShell como administrador na pasta `%LOCALAPPDATA%\Programs\GameSessionOverlay` e execute `./startup-task.ps1 -Action Install`. Use a conta que vai utilizar a overlay. A instalação exige confirmação do Windows e só vale para os próximos logons. Para remover essa tarefa, execute `./startup-task.ps1 -Action Uninstall` também como administrador. A elevação não isola o controle do jogo.
+Para instalar a inicialização elevada, abra PowerShell como administrador na pasta `%LOCALAPPDATA%\GameSessionOverlay\current` e execute `./startup-task.ps1 -Action Install`. Use a conta que vai utilizar a overlay. A instalação exige confirmação do Windows e só vale para os próximos logons. Para remover essa tarefa, execute `./startup-task.ps1 -Action Uninstall` também como administrador. A elevação não isola o controle do jogo.
 
-Para remover o aplicativo, encerre pela bandeja, desative a inicialização ou remova a tarefa elevada e exclua a pasta do pacote. Seus ajustes e logs permanecem em `%LOCALAPPDATA%\Bezoro\GameSessionOverlay` até você excluí-los.
+Para remover o aplicativo, encerre pela bandeja e use **Configurações do Windows → Aplicativos → Game Session Overlay → Desinstalar**. Se houver uma tarefa elevada, remova-a também pelo script de inicialização. Seus ajustes e logs permanecem em `%LOCALAPPDATA%\Bezoro\GameSessionOverlay` até você excluí-los.
 
 Os limites conhecidos estão em [compatibilidade](docs/pilot-checklist.md) e [isolamento do controle](docs/controller-isolation.md). Informações de compilação e diagnóstico estão no [README](README.md).

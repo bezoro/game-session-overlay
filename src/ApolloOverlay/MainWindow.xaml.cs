@@ -379,7 +379,7 @@ public partial class MainWindow : Window
     private void Subpage(string name,string first)=>OpenView(new(name switch{"audio"=>OverlayRoute.WindowsAudio,"details"=>OverlayRoute.Details,"options"=>OverlayRoute.TargetOptions,"integrations"=>OverlayRoute.Integrations,"customize"=>OverlayRoute.Customize,"setup"=>OverlayRoute.Setup,_=>OverlayRoute.OperationResult},detail,first));
     internal void RefreshRows()
     {
-        automationRevision++;NoteAutomationTargets();HeaderIdentity.Text="Bezoro · "+AppBuild.Current.Display;HeaderIdentity.ToolTip=AppBuild.Current.BuildId+" · "+AppBuild.Current.Commit;
+        automationRevision++;NoteAutomationTargets();HeaderIdentity.Text="Game Session Overlay · "+AppBuild.Current.Display;HeaderIdentity.ToolTip=AppBuild.Current.BuildId+" · "+AppBuild.Current.Commit;
         if(Confirming){UpdatePersistentState();return;}
         var previous=entries.Select(e=>e.Id).ToArray();Rows.Children.Clear();Rows.RowDefinitions.Clear();Rows.ColumnDefinitions.Clear();Rows.ColumnDefinitions.Add(new());Rows.ColumnDefinitions.Add(new());CloseArea.Children.Clear();entries.Clear();operationText=null;
         entries.Add(new("settings",SettingsGear,()=>Page(2),true,"Abrir Sistema"));ContextCard.Visibility=view.Current.Route==OverlayRoute.Hub?Visibility.Visible:Visibility.Collapsed;

@@ -42,13 +42,26 @@ try {
 
 $identity = [ordered]@{ schemaVersion = 1; version = $version; buildId = $buildId; commit = $commit; channel = $channel }
 $identity | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $publishRoot 'build-info.json') -Encoding utf8NoBOM
-New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
-$packageName = "GameSessionOverlay-$buildId-win-x64.zip"
-$packagePath = Join-Path $OutputDirectory $packageName
-if (Test-Path -LiteralPath $packagePath) { throw 'This build has already been packaged. Use a new immutable build identity.' }
-[IO.Compression.ZipFile]::CreateFromDirectory($publishRoot, $packagePath)
-$package = Get-Item -LiteralPath $packagePath
-$identity.publishedAt = [DateTimeOffset]::UtcNow.ToString('O')
-$identity.package = [ordered]@{ name = $packageName; size = $package.Length; sha256 = (Get-FileHash -LiteralPath $packagePath -Algorithm SHA256).Hash.ToLowerInvariant() }
-$identity | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'overlay-release.json') -Encoding utf8NoBOM
-Write-Output "Package verified: $packageName; version=$version; build=$buildId; channel=$channel"
+if (Test-Path -LiteralPath $OutputDirectory) {
+    if (@(Get-ChildItem -LiteralPath $OutputDirectory -Force).Count -ne 0) { throw 'Velopack output must be a fresh directory; existing releases are never overwritten.' }
+} else { New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null }
+$notes = ([string]$env:RELEASE_NOTES).Trim()
+if ($notes.Length -gt 4000) { $notes = $notes.Substring(0, 4000) }
+if (-not $notes) { $notes = 'Atualização validada automaticamente no Windows.' }
+$notes = [Regex]::Replace($notes, '(?m)^[ \t]*(Version|Build|Commit|Channel):', '> $1:')
+$notes += "`n`nVersion: $version`nBuild: $buildId`nCommit: $commit`nChannel: $channel`n"
+$notesPath = Join-Path $OutputDirectory 'release-notes.md'
+[IO.File]::WriteAllText($notesPath, $notes)
+$dotnet = (Get-Command dotnet -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+$packageVersion = $version.Split('+')[0]
+$icon = Join-Path (Split-Path -Parent $PSScriptRoot) 'src/ApolloOverlay/Assets/overlay-controller.ico'
+$arguments = @('tool', 'run', 'vpk', '--', '[win]', 'pack', '--packId', 'GameSessionOverlay', '--packVersion', $packageVersion,
+    '--packDir', $publishRoot, '--mainExe', 'ApolloOverlay.exe', '--packTitle', 'Game Session Overlay', '--packAuthors', 'Bezoro',
+    '--channel', $channel, '--runtime', 'win-x64', '--outputDir', $OutputDirectory, '--icon', $icon, '--shortcuts', 'StartMenuRoot', '--releaseNotes', $notesPath,
+    '--noPortable', '--delta', 'None', '--skip-updates')
+if ($IsWindows) { $arguments += @('--instLocation', 'PerUser') }
+& $dotnet @arguments
+if ($LASTEXITCODE -ne 0) { throw "Official Velopack packaging failed with exit code $LASTEXITCODE" }
+Copy-Item -LiteralPath (Join-Path $publishRoot 'build-info.json') -Destination (Join-Path $OutputDirectory 'build-info.json')
+$verified = & (Join-Path $PSScriptRoot 'get-validated-velopack-release.ps1') -ArtifactDirectory $OutputDirectory -ExpectedVersion $version -ExpectedCommit $commit
+Write-Output "Official Velopack package verified: $([IO.Path]::GetFileName($verified.SetupPath)); version=$version; build=$buildId; channel=$channel"

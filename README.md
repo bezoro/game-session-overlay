@@ -1,12 +1,12 @@
-# Bezoro · Controle da sessão
+# Game Session Overlay
 
 Overlay nativa WPF/.NET 10 para Windows 11. Não requer administrador, SDK nem instalação no Windows quando executada pelo pacote self-contained.
 
 Para instalar, configurar para a TV e resolver problemas comuns, consulte o [guia de uso](<Guia de uso.md>).
 
-No pacote, execute **Instalar overlay.cmd**. A instalação mantém um inicializador permanente em `%LOCALAPPDATA%\Programs\GameSessionOverlay`, cria um atalho no menu Iniciar e guarda os executáveis em pastas separadas por versão. Ela inicia oculta no logon, respeitando uma inicialização que o usuário já tenha desativado. **Abrir overlay.cmd** continua disponível para executar o pacote de forma portátil.
+Instale pelo arquivo **GameSessionOverlay-testing-Setup.exe** ou pelo Setup do canal estável disponível em [Releases](https://github.com/bezoro/game-session-overlay/releases). O instalador e as atualizações usam **Velopack 1.2.161**. O aplicativo cria atalhos e um desinstalador do Windows. A execução inicial registra a inicialização oculta no logon, respeitando uma inicialização que o usuário já tenha desativado.
 
-A versão e o commit aparecem na interface. Em **Sistema → Versão e atualizações**, consulte o canal de testes ou estável, leia as alterações, baixe o pacote e selecione **Instalar e reiniciar**. O histórico permite voltar a uma versão local que iniciou corretamente. Os ajustes são preservados nas atualizações e têm cópias compatíveis para reversão. Consulte [atualizações](docs/updates.md) para os detalhes de publicação e acesso ao repositório privado.
+A versão aparece no cabeçalho e em **Sistema → Versão e atualizações**. Consulte o canal de testes ou estável, leia as alterações, baixe o pacote e selecione **Instalar e reiniciar**. O repositório é público, sem login ou token. O histórico preserva pacotes fora do cache temporário do atualizador, permitindo voltar manualmente a uma versão instalada e recuperar seus ajustes compatíveis. Consulte [atualizações](docs/updates.md).
 
 Depois, dê **duplo clique esquerdo no ícone da bandeja** ou use seu menu **Abrir overlay / Sair**. `ApolloOverlay.exe` inicia oculto; `--show` abre uma instância nova. Se já houver uma instância em execução, a mensagem orienta usar a bandeja.
 
@@ -64,7 +64,7 @@ dotnet publish src/ApolloOverlay/ApolloOverlay.csproj -c Release -r win-x64 --se
 
 `./scripts/verify.ps1 -OutputVersion native-vN` automatiza os checks e publica em diretório novo. O produtor e seus arquivos são revisados antes da cópia para entrega; não sobrescreva uma publicação revisada.
 
-O workflow [Windows checks](https://github.com/bezoro/apollo-tv-overlay/actions/workflows/windows-checks.yml) compila em Windows, executa testes da CLI e de comportamento, gera capturas WPF com dados de teste e monta o pacote self-contained. Os relatórios e as capturas ficam nos artefatos da execução, mesmo se uma suíte falhar. O pacote de uma execução com falhas é somente um artefato de diagnóstico. Testes que precisam de foco real podem falhar em runners sem desktop interativo; essas falhas não são convertidas em aprovação. Consulte o resultado da execução correspondente ao commit antes de usar o pacote.
+O workflow [Windows checks](https://github.com/bezoro/game-session-overlay/actions/workflows/windows-checks.yml) compila em Windows, executa testes da CLI e de comportamento, gera capturas WPF com dados de teste e monta o pacote self-contained. Os relatórios e as capturas ficam nos artefatos da execução, mesmo se uma suíte falhar. O pacote de uma execução com falhas é somente um artefato de diagnóstico. Testes que precisam de foco real podem falhar em runners sem desktop interativo; essas falhas não são convertidas em aprovação. Consulte o resultado da execução correspondente ao commit antes de usar o pacote.
 
 Compatibilidade com borderless depende do Windows. Fullscreen exclusivo, DX11/12/Vulkan específicos, Bluetooth/controle virtual, HDR, DPI misto, monitores virtuais, Game Bar/Steam Overlay e streaming Apollo/Aurora exigem os testes listados em `docs/pilot-checklist.md`. Ausência de hardware não equivale a aprovação física.
 

@@ -20,15 +20,18 @@ $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 
 if ($Action -eq 'Install') {
     if (-not $ExecutablePath) {
-        $candidate = Join-Path $PSScriptRoot 'ApolloOverlay.exe'
-        if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
-            $candidate = Join-Path (Split-Path -Parent $PSScriptRoot) 'ApolloOverlay.exe'
-        }
+        $candidate = @(
+            (Join-Path $PSScriptRoot 'Game Session Overlay.exe'),
+            (Join-Path (Split-Path -Parent $PSScriptRoot) 'Game Session Overlay.exe'),
+            (Join-Path $PSScriptRoot 'ApolloOverlay.exe'),
+            (Join-Path (Split-Path -Parent $PSScriptRoot) 'ApolloOverlay.exe')
+        ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+        if (-not $candidate) { throw 'Inicializador não encontrado. Informe ExecutablePath.' }
         $ExecutablePath = $candidate
     }
     $item = Get-Item -LiteralPath $ExecutablePath
-    if ($item.PSIsContainer -or $item.Name -ine 'ApolloOverlay.exe') {
-        throw 'ExecutablePath deve indicar o ApolloOverlay.exe do pacote em uma pasta permanente.'
+    if ($item.PSIsContainer -or $item.Name -inotmatch '^(ApolloOverlay|Game Session Overlay)\.exe$') {
+        throw 'ExecutablePath deve indicar o inicializador Game Session Overlay.exe da instalação.'
     }
 
     # Run only in the installing user's interactive session. Never store a password.

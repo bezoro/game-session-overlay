@@ -41,7 +41,7 @@ internal static class UpdateInterfaceTests
                     case "ready":
                         fixture.Review(); Click(window, "prepare-update"); Complete(window.UpdateTask); break;
                     case "error":
-                        fixture.Source.CheckFailure = new UnauthorizedAccessException("Fixture authentication refused");
+                        fixture.Source.CheckFailure = new UnauthorizedAccessException("Fixture server refused");
                         fixture.Open(); Click(window, "check-updates"); Complete(window.UpdateTask); break;
                 }
                 var root = (FrameworkElement)window.Content;
@@ -98,9 +98,9 @@ internal static class UpdateInterfaceTests
         test("updates UI authentication failure cannot claim the installed build is current", () =>
         {
             using var host = new Host(); var w = host.Window;
-            host.Source.CheckFailure = new UnauthorizedAccessException("Fixture authentication refused");
+            host.Source.CheckFailure = new UnauthorizedAccessException("Fixture server refused");
             host.Open(); Click(w, "check-updates"); Complete(w.UpdateTask);
-            Require(w.Feedback.Contains("Conecte o GitHub") && !w.Feedback.Contains("mais recente"), "Authentication refusal became an up-to-date result");
+            Require(w.Feedback.Contains("Não foi possível buscar atualizações") && !w.Feedback.Contains("mais recente"), "Authentication refusal became an up-to-date result");
             Require(w.Controller.Operation is { State: "Não confirmado", Action: "update" } && !w.ActionIds.Any(id => id.StartsWith("release:")), "Failure has no visible result or offers an unverified release");
             Require(w.IsLoaded == false && host.Source.Stages == 0, "Failed check initiated UI activation or installation");
         });

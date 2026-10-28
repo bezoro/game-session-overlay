@@ -51,7 +51,7 @@ jobs:
           if ((git rev-parse HEAD) -cne $env:SOURCE_COMMIT) { throw 'Checkout differs from the identified source commit.' }
           $short = $env:SOURCE_COMMIT.Substring(0, 7)
           $channel = if ($env:SOURCE_BRANCH -eq 'main') { 'stable' } else { 'testing' }
-          $version = if ($channel -eq 'stable') { "0.2.$($env:BUILD_NUMBER)+$short.a$($env:BUILD_ATTEMPT)" } else { "0.2.0-preview.$($env:BUILD_NUMBER).$($env:BUILD_ATTEMPT)+$short" }
+          $version = if ($channel -eq 'stable') { "0.$($env:BUILD_NUMBER).$($env:BUILD_ATTEMPT)+$short" } else { "0.2.0-preview.$($env:BUILD_NUMBER).$($env:BUILD_ATTEMPT)+$short" }
           "OVERLAY_VERSION=$version" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
           "OVERLAY_BUILD_ID=ci-$($env:BUILD_NUMBER)-a$($env:BUILD_ATTEMPT)-$short" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
           "OVERLAY_COMMIT=$($env:SOURCE_COMMIT)" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
@@ -62,11 +62,6 @@ jobs:
         run: |
           ./scripts/verify.ps1 -Stage Build -OutputVersion native-v1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Verify release packaging and immutable publication
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: |
-          ./scripts/test-release-pipeline.ps1
 
       # These suites exercise managed state, mocked native boundaries and settings on Windows.
       # They do not establish compatibility with a physical controller or interactive desktop.
@@ -136,20 +131,27 @@ jobs:
           & dotnet 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows/ApolloOverlay.Tests.dll' "$checks/behavior-report.json" 2>&1 | Tee-Object -FilePath "$checks/behavior.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Publish self-contained Windows package
+      - name: Build official Velopack installer and packages
         id: package
+        env:
+          RELEASE_NOTES: ${{ github.event.head_commit.message || github.event.pull_request.title }}
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 8
         run: |
           ./scripts/verify.ps1 -Stage Package -OutputVersion native-v1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Verify installed bootstrap and failed-update recovery
+      - name: Verify official Velopack feed and package integrity
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        run: |
+          ./scripts/test-velopack-package.ps1 -ReleasePath artifacts/velopack -OutputPath artifacts/check-native-v1/velopack-package-tests.json
+
+      - name: Verify official Velopack install and uninstall
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         timeout-minutes: 6
         run: |
           $ErrorActionPreference = 'Stop'
-          ./scripts/test-installed-update.ps1 -PublishPath artifacts/native-v1/publish -OutputPath artifacts/check-native-v1/installed-update-smoke.json
+          ./scripts/test-velopack-install.ps1 -ReleasePath artifacts/velopack -OutputPath artifacts/check-native-v1/velopack-install-smoke.json
 
       - name: Upload test reports and logs
         if: ${{ always() }}
@@ -165,16 +167,14 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: windows-package
-          path: |
-            artifacts/GameSessionOverlay-*.zip
-            artifacts/overlay-release.json
+          path: artifacts/velopack/
           if-no-files-found: warn
           retention-days: 14
 
   publish-update:
     name: Publish validated update
     needs: windows
-    if: ${{ false }} # Publishing paused while switching to the maintained updater.
+    if: ${{ needs.windows.result == 'success' && github.event_name == 'push' && github.repository_id == '1430327913' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/controller-overlay-polish') }}
     runs-on: windows-latest
     timeout-minutes: 10
     permissions:
@@ -193,7 +193,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
-          if ($env:UPDATE_STATUS_REPOSITORY -cne 'bezoro/apollo-tv-overlay' -or $env:UPDATE_STATUS_COMMIT -notmatch '^[a-f0-9]{40}$' -or $env:UPDATE_STATUS_RUN_URL -notmatch '^https://github\.com/bezoro/apollo-tv-overlay/actions/runs/[0-9]+$') { throw 'Invalid publication status target.' }
+          if ($env:UPDATE_STATUS_REPOSITORY -notmatch '^bezoro/[A-Za-z0-9_.-]+$' -or $env:UPDATE_STATUS_COMMIT -notmatch '^[a-f0-9]{40}$' -or $env:UPDATE_STATUS_RUN_URL -notmatch ('^https://github\.com/' + [Regex]::Escape($env:UPDATE_STATUS_REPOSITORY) + '/actions/runs/[0-9]+$')) { throw 'Invalid publication status target.' }
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28'; 'User-Agent' = 'GameSessionOverlay-release' }
           $body = @{ state = 'pending'; context = 'overlay/update-release'; target_url = $env:UPDATE_STATUS_RUN_URL; description = 'Preparando publicação da atualização validada.' } | ConvertTo-Json
           Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$($env:UPDATE_STATUS_REPOSITORY)/statuses/$($env:UPDATE_STATUS_COMMIT)" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
@@ -204,13 +204,21 @@ jobs:
           persist-credentials: false
           ref: ${{ github.sha }}
 
+      - name: Install the pinned SDK for the official release CLI
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore the pinned Velopack CLI
+        run: dotnet tool restore
+
       - name: Download the validated package
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: windows-package
           path: artifacts/release
 
-      - name: Publish immutable release and manifest
+      - name: Publish with the official Velopack CLI
         id: publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -227,11 +235,11 @@ jobs:
           PUBLICATION_OUTCOME: ${{ steps.publish.outcome }}
         run: |
           $ErrorActionPreference = 'Stop'
-          if ($env:UPDATE_STATUS_REPOSITORY -cne 'bezoro/apollo-tv-overlay' -or $env:UPDATE_STATUS_COMMIT -notmatch '^[a-f0-9]{40}$' -or $env:UPDATE_STATUS_RUN_URL -notmatch '^https://github\.com/bezoro/apollo-tv-overlay/actions/runs/[0-9]+$') { throw 'Invalid publication status target.' }
+          if ($env:UPDATE_STATUS_REPOSITORY -notmatch '^bezoro/[A-Za-z0-9_.-]+$' -or $env:UPDATE_STATUS_COMMIT -notmatch '^[a-f0-9]{40}$' -or $env:UPDATE_STATUS_RUN_URL -notmatch ('^https://github\.com/' + [Regex]::Escape($env:UPDATE_STATUS_REPOSITORY) + '/actions/runs/[0-9]+$')) { throw 'Invalid publication status target.' }
           $success = $env:PUBLICATION_OUTCOME -eq 'success'
           $description = 'Falha ao publicar atualização. Consulte os logs.'
           if ($success) {
-            $manifest = Get-Content -LiteralPath 'artifacts/release/overlay-release.json' -Raw | ConvertFrom-Json
+            $manifest = Get-Content -LiteralPath 'artifacts/release/build-info.json' -Raw | ConvertFrom-Json
             $description = "Versão publicada: $($manifest.version)"
           }
           if ($description.Length -gt 140) { $description = $description.Substring(0, 140) }

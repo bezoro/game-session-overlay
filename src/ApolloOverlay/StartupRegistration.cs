@@ -18,7 +18,7 @@ internal static class StartupRegistration
         Action<string> write, Action mark)
     {
         if (string.IsNullOrEmpty(executable) || !Path.IsPathFullyQualified(executable) ||
-            !Path.GetFileName(executable).Equals("ApolloOverlay.exe", StringComparison.OrdinalIgnoreCase) ||
+            !(Path.GetFileName(executable).Equals("ApolloOverlay.exe", StringComparison.OrdinalIgnoreCase)||Path.GetFileName(executable).Equals("Game Session Overlay.exe", StringComparison.OrdinalIgnoreCase)) ||
             executable.Contains('"'))
             return false;
 
@@ -48,5 +48,41 @@ internal static class StartupRegistration
         {
             return false;
         }
+    }
+
+    internal static void TryRemoveMatching(string executable)
+    {
+        try
+        {
+            using var run = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
+            var expected = "\"" + executable + "\" --startup";
+            if (run?.GetValue(RunValue) is string command && string.Equals(command, expected, StringComparison.OrdinalIgnoreCase))
+            {
+                run.DeleteValue(RunValue, false);
+                using var settings = Registry.CurrentUser.CreateSubKey(SettingsKey, writable: true);
+                settings?.SetValue(MarkerValue, 1, RegistryValueKind.DWord);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or SecurityException) { }
+        // Only remove this user's exact named task when its executable belongs to this installation.
+        object? serviceObject = null;
+        try
+        {
+            var type = Type.GetTypeFromProgID("Schedule.Service");
+            if (type is null) return;
+            serviceObject = Activator.CreateInstance(type);
+            if (serviceObject is null) return;
+            dynamic service = serviceObject; service.Connect();
+            dynamic folder = service.GetFolder("\\");
+            var sid = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value;
+            if (sid is null) return;
+            var taskName = "Bezoro Game Session Overlay - " + sid;
+            dynamic task = folder.GetTask(taskName);
+            dynamic actions = task.Definition.Actions;
+            if ((int)actions.Count == 1 && string.Equals((string)actions.Item(1).Path, executable, StringComparison.OrdinalIgnoreCase))
+                folder.DeleteTask(taskName, 0);
+        }
+        catch (Exception e) when (e is System.Runtime.InteropServices.COMException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or Microsoft.CSharp.RuntimeBinder.RuntimeBinderException) { }
+        finally { if (serviceObject is not null && System.Runtime.InteropServices.Marshal.IsComObject(serviceObject)) System.Runtime.InteropServices.Marshal.FinalReleaseComObject(serviceObject); }
     }
 }

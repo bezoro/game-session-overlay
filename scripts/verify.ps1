@@ -20,8 +20,9 @@ try {
  }
  if($Stage -in @('All','Package')){
   if(Test-Path -LiteralPath $publish){throw 'Publish directory exists; use a fresh native-vN.'}
+  Invoke-Checked @('tool','restore')
   Invoke-Checked @('publish','src/ApolloOverlay/ApolloOverlay.csproj','-c','Release','-r','win-x64','--self-contained','true','-o',$publish)
-  Copy-Item -LiteralPath (Join-Path $taskRoot 'README.md'),(Join-Path $taskRoot 'Guia de uso.md'),(Join-Path $taskRoot 'Abrir overlay.cmd'),(Join-Path $taskRoot 'Instalar overlay.cmd'),(Join-Path $taskRoot 'Iniciar-previa.cmd') -Destination $publish
+  Copy-Item -LiteralPath (Join-Path $taskRoot 'README.md'),(Join-Path $taskRoot 'Guia de uso.md'),(Join-Path $taskRoot 'Abrir overlay.cmd'),(Join-Path $taskRoot 'Iniciar-previa.cmd') -Destination $publish
   Copy-Item -LiteralPath (Join-Path $taskRoot 'scripts/startup-task.ps1') -Destination $publish
   Copy-Item -LiteralPath (Join-Path $taskRoot 'docs/pilot-checklist.md') -Destination (Join-Path $publish 'compatibilidade.md')
   Copy-Item -LiteralPath (Join-Path $taskRoot 'docs/third-party-icons.md') -Destination (Join-Path $publish 'third-party-icons.md')
@@ -46,7 +47,7 @@ try {
  $app=Join-Path $publish 'ApolloOverlay.exe'
  if($Stage -in @('All','Capture')){ & $app '--capture-native' (Join-Path $checks 'capture');if($LASTEXITCODE -ne 0){throw 'Native capture failed'} }
  if($Stage -in @('All','Native')){ & $app '--native-check' (Join-Path $checks 'native');if($LASTEXITCODE -ne 0){throw 'Native checks failed'} }
- if($Stage -in @('All','Package')){ & (Join-Path $PSScriptRoot 'build-release.ps1') -PublishDirectory $publish -OutputDirectory (Join-Path $taskRoot 'artifacts') }
+ if($Stage -in @('All','Package')){ & (Join-Path $PSScriptRoot 'build-release.ps1') -PublishDirectory $publish -OutputDirectory (Join-Path $taskRoot 'artifacts/velopack') }
  Write-Output "VERIFY SUCCESS stage=$Stage; output=$OutputVersion; source/publish/results remain separate review artifacts."
  exit 0
 } catch {Write-Error -Message $_ -ErrorAction Continue;exit 1}

@@ -25,8 +25,7 @@ public partial class MainWindow
     private string updateStatus = "Busque versões publicadas após os testes do projeto.";
     private TextBlock? updateProgressLabel;
     private TextBox? updateNotesText;
-    private DispatcherTimer? updateNoticeTimer;
-    internal Task UpdateTask { get; private set; } = Task.CompletedTask;
+        internal Task UpdateTask { get; private set; } = Task.CompletedTask;
 
     private void OpenUpdates() => OpenView(new(OverlayRoute.Updates, SelectedId: "check-updates"));
 
@@ -48,18 +47,8 @@ public partial class MainWindow
                 updateGeneration++; updateCandidates = []; updateStatus = "Canal alterado. Busque as versões disponíveis.";
                 RefreshRows();
             });
-        if (!diagnostic && !Controller.Platform.IsPreview)
-        {
-            AddRow("connect-updates", updateSource.HasCredential ? "Reconectar GitHub" : "Conectar GitHub",
-                "Repositório privado · conexão inicial com acesso de leitura", ConnectUpdates);
-            if (updateSource.HasCredential) AddRow("disconnect-updates", "Desconectar GitHub", "Remove a credencial deste usuário do Windows", () =>
-            {
-                try { updateSource.Disconnect(); updateCandidates = []; updateStatus = "GitHub desconectado. A versão instalada e o histórico foram mantidos."; RefreshRows(); }
-                catch (Exception e) when (UpdateFailure(e)) { ReportUpdateFailure("Não foi possível remover a credencial.", e); }
-            });
-        }
-        if (!ManagedInstall.IsManagedChild)
-            AddRow("install-overlay", "Instalar neste computador", "Pasta permanente, atalho e inicialização oculta · preserva seus ajustes", PrepareCurrentInstall, !diagnostic && !Controller.Platform.IsPreview);
+        if (!VelopackInstallation.IsInstalled)
+            Paragraph("Para atualizar, instale a versão inicial usando o Setup do Game Session Overlay.");
         if (updateCandidates.Count > 0)
         {
             Section("Versões disponíveis");
@@ -75,7 +64,7 @@ public partial class MainWindow
         Section("Voltar a uma versão anterior");
         try
         {
-            var history = (diagnostic || Controller.Platform.IsPreview ? Array.Empty<InstalledBuild>() : ManagedInstall.History()).Where(h => !h.Current && !h.LastStartFailed).OrderByDescending(h => h.InstalledAt).ToArray();
+            var history = (diagnostic || Controller.Platform.IsPreview ? Array.Empty<InstalledBuild>() : VelopackInstallation.History()).Where(h => !h.Current && !h.LastStartFailed).OrderByDescending(h => h.InstalledAt).ToArray();
             if (history.Length == 0) Paragraph("As versões já instaladas aparecerão aqui. A reversão local funciona sem internet.");
             const int pageSize=8;
             var pages=Math.Max(1,(history.Length+pageSize-1)/pageSize);
@@ -114,7 +103,7 @@ public partial class MainWindow
             Paragraph("Voltar para " + old.Version, 23);
             Paragraph("A versão atual continuará no histórico. A reversão recupera os ajustes preservados para essa versão quando houver uma cópia compatível.");
             updateProgressLabel=Paragraph("A versão anterior está disponível neste computador.");
-            AddRow("apply-rollback", "Voltar e reiniciar", "Retoma uma versão preservada neste computador", () => BeginUpdateCommit(() => ManagedInstall.PrepareRollback(old.BuildId)), !Controller.SettingsDirty && !diagnostic && !Controller.Platform.IsPreview);
+            AddRow("apply-rollback", "Voltar e reiniciar", "Retoma uma versão preservada neste computador", () => BeginUpdateCommit(async () => { var target=await VelopackInstallation.PrepareRollbackAsync(old.BuildId); await VelopackInstallation.ScheduleApplyAsync(target); }), !Controller.SettingsDirty && !diagnostic && !Controller.Platform.IsPreview);
         }
         else if (updateReview is {} candidate)
         {
@@ -125,13 +114,13 @@ public partial class MainWindow
             if (preparedUpdate is null)
                 AddRow("prepare-update", "Baixar atualização", "Você pode cancelar com B / Esc. A instalação atual será preservada.", () => UpdateTask = DownloadUpdateAsync(candidate), updateSource is not PreviewUpdateSource);
             else
-                AddRow("apply-update", "Instalar e reiniciar", "Mantém a versão atual no histórico · testa a inicialização da nova versão", () =>
+                AddRow("apply-update", "Instalar e reiniciar", "Mantém a versão atual no histórico · atualização pelo Velopack", () =>
                 {
                     var staged = preparedUpdate;
                     if (staged is null || staged.Build.BuildId != candidate.BuildId) return;
-                    BeginUpdateCommit(() => ManagedInstall.PrepareTransition(staged.Directory, staged.Build.BuildId, staged.Build.Version, staged.Build.Commit));
-                }, !Controller.SettingsDirty && !diagnostic && !Controller.Platform.IsPreview && ManagedInstall.IsManagedChild);
-            if (!ManagedInstall.IsManagedChild) Paragraph("Instale esta versão pelo botão Instalar neste computador antes de aplicar atualizações.");
+                    BeginUpdateCommit(() => VelopackInstallation.ScheduleApplyAsync(staged.Native??throw new InvalidDataException("Consulte e baixe novamente a versão escolhida.")));
+                }, !Controller.SettingsDirty && !diagnostic && !Controller.Platform.IsPreview && VelopackInstallation.IsInstalled);
+            if (!VelopackInstallation.IsInstalled) Paragraph("Use o instalador Setup para habilitar as atualizações neste computador.");
             if (candidate.Notes.Length > 0)
             {
                 AddRow("update-notes", "Ler alterações", "A / Enter para ler · setas rolam · ← / → volta às ações", () => updateNotesText?.Focus());
@@ -197,20 +186,18 @@ public partial class MainWindow
         }
     }
 
-    private void BeginUpdateCommit(Action prepare)
+    private void BeginUpdateCommit(Func<Task> prepare)
     {
         if (Controller.SettingsDirty) { FeedbackText("Salve ou descarte seus ajustes antes de trocar de versão."); RequestCue(FeedbackCue.Unavailable); return; }
         QueueHandoff(() => UpdateTask = CommitUpdateAsync(prepare));
     }
 
-    private void PrepareCurrentInstall() => BeginUpdateCommit(ManagedInstall.PrepareInstallCurrent);
-
-    private async Task CommitUpdateAsync(Action prepare)
+    private async Task CommitUpdateAsync(Func<Task> prepare)
     {
         busy = updateBusy = updateCommitting = true;
         foreach(var button in new[]{HomeTab,AppsTab,SettingsTab,SettingsGear,BackButton})button.IsEnabled=false;
         SetUpdateStatus("Preparando reinício. Aguarde…");
-        try { await Task.Run(prepare); if (!exiting) { updateCloseAuthorized=true; Close(); } }
+        try { await prepare(); if (!exiting) { updateCloseAuthorized=true; Close(); } }
         catch (Exception e) when (UpdateFailure(e)) { if (!exiting) ReportUpdateFailure("Não foi possível reiniciar na versão escolhida. A instalação atual foi preservada.", e); }
         finally { busy = updateBusy = updateCommitting = false; foreach(var button in new[]{HomeTab,AppsTab,SettingsTab,SettingsGear,BackButton})button.IsEnabled=true; if (!exiting) { UpdatePersistentState(); RefreshRows(); } }
     }
@@ -232,74 +219,31 @@ public partial class MainWindow
     private static bool UpdateFailure(Exception error) => error is IOException or InvalidDataException or UnauthorizedAccessException or HttpRequestException or JsonException or InvalidOperationException or ArgumentException or Win32Exception or TimeoutException or System.Security.SecurityException;
     private void ReportUpdateFailure(string message, Exception error)
     {
-        var reason = error is UnauthorizedAccessException ? "Conecte o GitHub com acesso de leitura ao repositório privado." : error is InvalidDataException or TimeoutException ? error.Message : "Confira a conexão, o espaço em disco e as permissões da pasta. Tente novamente.";
+        var reason = error is UnauthorizedAccessException ? "Confira se o repositório está público e se o GitHub está disponível." : error is InvalidDataException or TimeoutException ? error.Message : "Confira a conexão, o espaço em disco e as permissões da pasta. Tente novamente.";
         updateStatus = message + " " + reason; SetUpdateStatus(updateStatus); RetainOperation("Não confirmado", updateStatus, "update"); RequestCue(FeedbackCue.Unavailable);
     }
 
-    private async void ConnectUpdates()
-    {
-        if (ownedDialog || busy || exiting) return;
-        ownedDialog = true; feedbackService.Suspend(); input.Cancel();
-        string? token = null;
-        try
-        {
-            var dialog = new Window { Title = "Conectar GitHub", Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner, Width = 500, SizeToContent = SizeToContent.Height, MaxHeight = SystemParameters.WorkArea.Height, ResizeMode = ResizeMode.NoResize, ShowInTaskbar = false, Topmost = true, FontFamily = FontFamily, FontSize = 16 };
-            dialog.SetResourceReference(BackgroundProperty, ThemeSupport.Surface); dialog.SetResourceReference(ForegroundProperty, ThemeSupport.Text);
-            var panel = new StackPanel { Margin = new(24) };
-            panel.Children.Add(new TextBlock { Text = "Conectar ao repositório privado", FontSize = 23, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
-            panel.Children.Add(new TextBlock { Text = "Esta conexão inicial requer teclado. Cole um token do GitHub com acesso apenas a bezoro/apollo-tv-overlay e Contents em modo Read-only. A credencial fica protegida para seu usuário do Windows. As próximas atualizações podem ser feitas pelo controle.", TextWrapping = TextWrapping.Wrap, Margin = new(0,12,0,16) });
-            var password = new PasswordBox { MaxLength = 255, MinHeight = 42, Padding = new(8) };
-            AutomationProperties.SetName(password, "Token do GitHub com leitura do repositório"); panel.Children.Add(password);
-            var connect = new Button { Content = "Conectar", MinHeight = 44, Margin = new(0,16,0,8), IsDefault = true };
-            var cancel = new Button { Content = "Cancelar", MinHeight = 44, IsCancel = true };
-            connect.Click += (_, _) => { if (password.Password.Length == 0) return; token = password.Password; password.Clear(); dialog.DialogResult = true; };
-            panel.Children.Add(connect); panel.Children.Add(cancel); dialog.Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-            dialog.ContentRendered += (_, _) => password.Focus();
-            if (dialog.ShowDialog() != true || token is null) return;
-            SetUpdateStatus("Verificando acesso ao GitHub…");
-            using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(45));
-            await updateSource.ConnectAsync(token, cancellation.Token);
-            updateStatus = "GitHub conectado. Use Buscar atualizações para consultar as versões.";
-        }
-        catch (OperationCanceledException) { updateStatus = "A conexão com o GitHub não foi concluída. Tente novamente."; }
-        catch (Exception e) when (UpdateFailure(e)) { ReportUpdateFailure("Não foi possível conectar o GitHub.", e); }
-        finally
-        {
-            token = null; ownedDialog = false;
-            if (!exiting) { RevokeFocus("update-account-return"); var cycle = focusCycle; var focus = AcquireFocus(cycle); OpeningTask = focus; if (await focus && CurrentCycle(cycle)) { RefreshRows(); SetSelection(false); } }
-        }
-    }
+    internal void ShowUpdateHistoryWarning(){updateStatus="Não foi possível preservar o pacote atual para reversão. Repare a instalação pelo Setup antes de atualizar.";}
 
-    internal void ScheduleUpdateNotice()
-    {
-        if(!ManagedInstall.IsManagedChild)return;
-        ShowUpdateRecoveryNotice();
-        updateNoticeTimer=new DispatcherTimer{Interval=TimeSpan.FromSeconds(3)};
-        updateNoticeTimer.Tick+=(_,_)=>{updateNoticeTimer.Stop();if(!exiting)ShowUpdateRecoveryNotice();};
-        updateNoticeTimer.Start();
-    }
+    internal void ScheduleUpdateNotice()=>ShowUpdateRecoveryNotice();
 
     internal void ShowUpdateRecoveryNotice()
     {
-        if(!ManagedInstall.IsManagedChild)return;
-        try { if (ManagedInstall.ReadNotice() is {} notice) {
+        if(!VelopackInstallation.IsInstalled)return;
+        if(VelopackInstallation.ReadNotice() is {} notice) {
             updateStatus=notice;
             if(Controller.Operation is null or {Action:"update"}) {
-                var completed=notice.StartsWith("Atualização concluída",StringComparison.Ordinal)||notice.StartsWith("Instalação concluída",StringComparison.Ordinal)||notice.StartsWith("Versão anterior restaurada. Seus ajustes",StringComparison.Ordinal);
-                RetainOperation(completed?"Concluído":"Não confirmado", notice, "update"); FeedbackText(notice);
+                RetainOperation(notice.StartsWith("Versão anterior restaurada",StringComparison.Ordinal)?"Concluído":"Não confirmado",notice,"update");
+                FeedbackText(notice);
             }
-        } }
-        catch (Exception e) when (UpdateFailure(e)) { }
+        }
     }
 
-    private void DisposeUpdates() { updateNoticeTimer?.Stop(); updateGeneration++; updateCancellation?.Cancel(); if(!updateCommitting&&preparedUpdate is {} unused)updateSource.Discard(unused); updateSource.Dispose(); }
+    private void DisposeUpdates() { updateGeneration++; updateCancellation?.Cancel(); if(!updateCommitting&&preparedUpdate is {} unused)updateSource.Discard(unused); updateSource.Dispose(); }
 }
 
 internal sealed class PreviewUpdateSource : IUpdateSource
 {
-    public bool HasCredential => false;
-    public Task ConnectAsync(string token, CancellationToken cancellation) => Task.FromException(new InvalidOperationException("Conexão indisponível na prévia."));
-    public void Disconnect() { }
     public Task<IReadOnlyList<UpdateCandidate>> CheckAsync(string channel, CancellationToken cancellation) => Task.FromResult<IReadOnlyList<UpdateCandidate>>([]);
     public Task<PreparedUpdate> StageAsync(UpdateCandidate candidate, IProgress<UpdateProgress>? progress, CancellationToken cancellation) => Task.FromException<PreparedUpdate>(new InvalidOperationException("A prévia não instala atualizações."));
     public void Dispose() { }
