@@ -35,6 +35,8 @@ internal static class Native
     [DllImport("user32.dll",CharSet=CharSet.Unicode)] internal static extern int GetWindowText(nint hwnd,StringBuilder text,int count);
     [DllImport("user32.dll",CharSet=CharSet.Unicode)] internal static extern int GetClassName(nint hwnd,StringBuilder text,int count);
     [DllImport("user32.dll")] internal static extern bool SetForegroundWindow(nint hwnd);
+    [DllImport("kernel32.dll")] internal static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll",SetLastError=true)] internal static extern bool AttachThreadInput(uint current,uint foreground,bool attach);
     [DllImport("user32.dll")] internal static extern bool ShowWindow(nint hwnd,int command);
     [DllImport("user32.dll")] internal static extern bool ShowWindowAsync(nint hwnd,int command);
     [DllImport("user32.dll",SetLastError=true)] internal static extern bool PostMessage(nint hwnd,uint message,nint wparam,nint lparam);
