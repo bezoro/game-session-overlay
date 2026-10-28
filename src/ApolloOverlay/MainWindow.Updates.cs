@@ -138,7 +138,7 @@ public partial class MainWindow
         if (updateBusy || busy || diagnostic && updateSource is PreviewUpdateSource) return;
         var generation = ++updateGeneration;
         using var cancellation = new CancellationTokenSource(); updateCancellation = cancellation;
-        busy = updateBusy = true; updateStatus = "Buscando versões no GitHub…"; SetUpdateStatus(updateStatus);
+        busy = updateBusy = true; ClearPreviousUpdateResult(); updateStatus = "Buscando versões no GitHub…"; SetUpdateStatus(updateStatus);
         try
         {
             var releases = await updateSource.CheckAsync(updateChannel, cancellation.Token);
@@ -161,7 +161,7 @@ public partial class MainWindow
         if (updateBusy || busy) return;
         var generation = ++updateGeneration;
         using var cancellation = new CancellationTokenSource(); updateCancellation = cancellation;
-        busy = updateBusy = true; updateStatus = "Preparando download…"; SetUpdateStatus(updateStatus);
+        busy = updateBusy = true; ClearPreviousUpdateResult(); updateStatus = "Preparando download…"; SetUpdateStatus(updateStatus);
         try
         {
             var progress = new Progress<UpdateProgress>(value =>
@@ -223,6 +223,14 @@ public partial class MainWindow
     }
 
     private static bool UpdateFailure(Exception error) => error is IOException or InvalidDataException or UnauthorizedAccessException or HttpRequestException or JsonException or InvalidOperationException or ArgumentException or Win32Exception or TimeoutException or System.Security.SecurityException;
+    private void ClearPreviousUpdateResult()
+    {
+        // A new attempt supersedes only the result owned by this feature.
+        // Another action may still have a result the user needs to read.
+        if (Controller.Operation is not { Action: "update" }) return;
+        Controller.DismissOperation();
+        UpdatePersistentState();
+    }
     private void ReportUpdateFailure(string message, Exception error)
     {
         var reason = error is UnauthorizedAccessException ? "Confira se o repositório está público e se o GitHub está disponível." : error is InvalidDataException or TimeoutException ? error.Message : "Confira a conexão, o espaço em disco e as permissões da pasta. Tente novamente.";

@@ -105,6 +105,19 @@ internal static class UpdateInterfaceTests
             Require(w.Controller.Operation is { State: "Não confirmado", Action: "update" } && !w.ActionIds.Any(id => id.StartsWith("release:")), "Failure has no visible result or offers an unverified release");
             Require(w.IsLoaded == false && host.Source.Stages == 0, "Failed check initiated UI activation or installation");
         });
+        test("updates UI successful query retry resolves its own retained failure", () =>
+        {
+            using var host = new Host(); var w = host.Window;
+            host.Source.CheckFailure = new HttpRequestException("Fixture first query failed");
+            host.Open(); Click(w, "check-updates"); Complete(w.UpdateTask);
+            Require(w.Controller.Operation is { Action: "update", State: "Não confirmado" } && ResultVisible(w), "Fixture did not retain the first failure");
+            host.Source.CheckFailure = null;
+            host.Source.CheckCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            Click(w, "check-updates"); var pending = w.UpdateTask;
+            Require(!pending.IsCompleted && w.Controller.Operation is null && !ResultVisible(w), "Retry still presents its old failure as a current result");
+            host.Source.CheckCompletion.SetResult([Next]); Complete(pending);
+            Require(w.Controller.Operation is null && !ResultVisible(w) && w.Feedback.Contains("Há versões disponíveis"), "Successful query kept the old failure card");
+        });
         test("updates UI distinguishes an empty channel from a confirmed current version", () =>
         {
             using var host = new Host(); var w = host.Window; host.Source.Releases = [];
@@ -183,6 +196,39 @@ internal static class UpdateInterfaceTests
             Require(w.Feedback.Contains("Não foi possível preparar") && w.ActionIds.Contains("prepare-update") && !w.ActionIds.Contains("apply-update"), "Download refusal became a prepared installation");
             Require(w.Controller.Operation is { State: "Não confirmado" } && !w.TransitionPending, "Download failure has no honest result");
         });
+        test("updates UI successful download retry resolves its own retained failure", () =>
+        {
+            using var host = new Host(); var w = host.Window;
+            host.Source.StageFailure = new HttpRequestException("Fixture first download failed");
+            host.Review(); Click(w, "prepare-update"); Complete(w.UpdateTask);
+            Require(w.Controller.Operation is { Action: "update", State: "Não confirmado" } && ResultVisible(w), "Fixture did not retain the first download failure");
+            host.Source.StageFailure = null;
+            host.Source.StageCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            Click(w, "prepare-update"); var pending = w.UpdateTask;
+            Require(!pending.IsCompleted && w.Controller.Operation is null && !ResultVisible(w), "Download retry still presents its old failure as current");
+            host.Source.StageCompletion.SetResult(PreparedFixture()); Complete(pending);
+            Require(w.Controller.Operation is null && !ResultVisible(w) && w.Feedback.Contains("Download verificado") && w.ActionIds.Contains("apply-update"), "Verified retry kept the old failure card");
+        });
+        foreach (var download in new[] { false, true })
+        {
+            var isDownload = download;
+            test("updates UI preserves another action result across " + (isDownload ? "download" : "query"), () =>
+            {
+                using var host = new Host(); var w = host.Window;
+                if (isDownload) { host.Review(); host.Source.StageCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously); }
+                else { host.Open(); host.Source.CheckCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously); }
+                w.Controller.SetOperation("Parcial", "Fixture retained audio result", "audio"); w.RefreshRows();
+                var existing = w.Controller.Operation;
+                Click(w, isDownload ? "prepare-update" : "check-updates"); var pending = w.UpdateTask;
+                Require(ReferenceEquals(w.Controller.Operation, existing) && ResultVisible(w), "Starting an update operation cleared another action result");
+                w.Controller.SetOperation("Concluído", "Fixture newer unrelated result", "application-mute");
+                var newer = w.Controller.Operation;
+                if (isDownload) host.Source.StageCompletion!.SetResult(PreparedFixture());
+                else host.Source.CheckCompletion!.SetResult([Next]);
+                Complete(pending);
+                Require(ReferenceEquals(w.Controller.Operation, newer) && ResultVisible(w), "Finishing an update operation cleared or replaced another action result");
+            });
+        }
         test("updates UI query and download preserve unsaved settings and block restart", () =>
         {
             using var host = new Host(); var w = host.Window;
@@ -222,6 +268,8 @@ internal static class UpdateInterfaceTests
 
     private static void Require(bool value, string reason) { if (!value) throw new Exception(reason); }
     private static void Complete(Task task) => ReviewFixTests.Complete(task);
+    private static bool ResultVisible(MainWindow window) => ((Border)window.FindName("OperationPanel")).Visibility == Visibility.Visible;
+    private static PreparedUpdate PreparedFixture() => new("fixture-only-never-installed", new(Next.Version, Next.BuildId, Next.Commit, Next.Channel));
     private static void Pick(MainWindow window, string id)
     {
         for (var n = 0; n <= window.ActionIds.Count && window.SelectedAction != id; n++) window.Sequential(1);
@@ -265,9 +313,6 @@ internal static class UpdateInterfaceTests
         internal Exception? CheckFailure, StageFailure;
         internal CancellationToken LastCheckCancellation, LastStageCancellation;
         internal UpdateCandidate? Staged;
-        public bool HasCredential => true;
-        public Task ConnectAsync(string token, CancellationToken cancellation) => Task.FromException(new Exception("No credential dialog permitted in fixture"));
-        public void Disconnect() => throw new Exception("No credential mutation permitted in fixture");
         public Task<IReadOnlyList<UpdateCandidate>> CheckAsync(string channel, CancellationToken cancellation)
         {
             Checks++; Channels.Add(channel); LastCheckCancellation = cancellation;
