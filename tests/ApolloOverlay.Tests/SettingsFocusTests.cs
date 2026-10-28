@@ -9,6 +9,35 @@ internal static class SettingsFocusTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        test("Guide fallback activation still requires real WPF and native foreground", () =>
+        {
+            using var host = new Host(); var w = host.Window; host.Open(); var calls = 0;
+            w.FocusRequest = _ => { host.Other.Show(); host.Other.Activate(); Native.SetForegroundWindow(host.OtherHandle); return false; };
+            w.FocusFallbackRequest = (handle, _, token) => { calls++; token.ThrowIfCancellationRequested(); return Task.FromResult(Native.SetForegroundWindow(handle)); };
+            w.OpenPanel(); Complete(w.OpeningTask); host.RequireOwnedFocus();
+            Neutral(w); var before = w.SelectedAction; Frame(w, PadButtons.Down);
+            Require(calls == 1 && w.SelectedAction != before, "Fallback did not restore actual foreground navigation");
+        });
+        test("Guide fallback success cannot admit a genuinely foreign foreground", () =>
+        {
+            using var host = new Host(); var w = host.Window; host.Open(); var calls = 0;
+            w.FocusRequest = _ => { host.Other.Show(); host.Other.Activate(); Native.SetForegroundWindow(host.OtherHandle); return false; };
+            w.FocusFallbackRequest = (_, _, _) => { calls++; return Task.FromResult(true); };
+            w.OpenPanel(); Complete(w.OpeningTask); var before = w.SelectedAction; Neutral(w); Frame(w, PadButtons.Down);
+            Require(calls == 1 && Native.GetForegroundWindow() == host.OtherHandle && w.SelectedAction == before, "Fallback return fabricated input ownership");
+        });
+        test("Guide fallback cancellation prevents a late result from confirming a newer cycle", () =>
+        {
+            using var host = new Host(); var w = host.Window; host.Open();
+            var delayed = new TaskCompletionSource<bool>(); CancellationToken token = default;
+            w.FocusRequest = _ => { host.Other.Show(); host.Other.Activate(); Native.SetForegroundWindow(host.OtherHandle); return false; };
+            w.FocusFallbackRequest = (_, _, cancellation) => { token = cancellation; return delayed.Task; };
+            w.OpenPanel(); var old = w.OpeningTask;
+            w.FocusFallbackRequest = null; w.OpenPanel(); Complete(w.OpeningTask);
+            Require(token.IsCancellationRequested, "New explicit opening did not cancel old activation");
+            delayed.SetResult(true); Complete(old); var before = w.SelectedAction; Neutral(w); Frame(w, PadButtons.Down);
+            Require(w.SelectedAction == before && w.Feedback.Contains("não confirmou"), "Late fallback overwrote denied focus");
+        });
         test("settings focus accepts delayed foreground after one false native request", () =>
         {
             using var host = new Host(); var w = host.Window; host.Open();
