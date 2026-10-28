@@ -111,7 +111,7 @@ jobs:
           New-Item -ItemType Directory -Path $checks -Force | Out-Null
           $testDll = 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows10.0.19041.0/ApolloOverlay.Tests.dll'
           $failed = $false
-          foreach ($mode in @('review-captures', 'session-hub-captures', 'session-hub-focus-captures', 'update-captures')) {
+          foreach ($mode in @('review-captures', 'session-hub-captures', 'session-hub-focus-captures', 'update-captures', 'session-interface-captures')) {
             Write-Host "Capturing $mode"
             & dotnet $testDll "$checks/$mode" "--$mode" 2>&1 | Tee-Object -FilePath "$checks/$mode.log"
             if ($LASTEXITCODE -ne 0) { Write-Error "$mode failed with exit code $LASTEXITCODE" -ErrorAction Continue; $failed = $true }

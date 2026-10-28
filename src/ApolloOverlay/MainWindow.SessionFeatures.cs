@@ -34,6 +34,7 @@ public partial class MainWindow
     private ScreenCaptureItem? selectedCapture;
     private string artworkId="";
     private bool synchronizingFeatureSlider;
+    private string renderedFeatureShape="";
     private bool DesktopPresentation=>sessionProfiles?.Items.FirstOrDefault(profile=>profile.Id==sessionProfiles.ActiveId)?.Presentation=="Desktop";
     private void OpenPrimaryAudio()
     {
@@ -56,12 +57,12 @@ public partial class MainWindow
         icon.SetResourceReference(TextBlock.ForegroundProperty,ThemeSupport.SecondaryText);return icon;
     }
 
-    private void InitializeSessionFeatures()
+    private void InitializeSessionFeatures(ISessionMedia? media,ISystemAudioBackend? audioBackend,IApplicationAudio? mixer)
     {
-        sessionMedia=diagnostic||Controller.Platform.IsPreview?new PreviewSessionMedia():new SessionMedia();
-        systemAudio=new(diagnostic||Controller.Platform.IsPreview?new PreviewSystemAudioBackend():null);
+        sessionMedia=media??(diagnostic||Controller.Platform.IsPreview?new PreviewSessionMedia():new SessionMedia());
+        systemAudio=new(audioBackend??(diagnostic||Controller.Platform.IsPreview?new PreviewSystemAudioBackend():null));
         sessionProfiles=new(Controller.Diagnostics.Root);screenCaptures=new(Controller.Diagnostics.Root);
-        mixerAudio=diagnostic||Controller.Platform.IsPreview?new PreviewApplicationAudio():new ApplicationAudio(Controller.Platform.Valid);
+        mixerAudio=mixer??(diagnostic||Controller.Platform.IsPreview?new PreviewApplicationAudio():new ApplicationAudio(Controller.Platform.Valid));
         sessionMedia.Changed+=SessionMediaChanged;
     }
     private void SuspendSessionFeatures()
@@ -94,10 +95,12 @@ public partial class MainWindow
         var request=new CancellationTokenSource(5000);featureRead=request;var epoch=featureEpoch;
         featureTask=ReadSessionFeatures(epoch,request);
     }
+    internal void RefreshSessionFeatures(){nextFeatureRead=0;StartFeatureRead();}
     private async Task ReadSessionFeatures(long epoch,CancellationTokenSource request)
     {
         try
         {
+            var before=renderedFeatureShape;
             await systemAudio.RefreshAsync(request.Token);
             if(exiting||request.IsCancellationRequested||epoch!=featureEpoch||!IsVisible)return;
             if(view.Current.Route==OverlayRoute.Mixer)
@@ -110,12 +113,35 @@ public partial class MainWindow
                 }
             }
             UpdateSessionFeatureLabels();
-            if(view.Current.Route is OverlayRoute.AudioDevices or OverlayRoute.Mixer)RefreshRows();
+            if(view.Current.Route is OverlayRoute.AudioDevices or OverlayRoute.Mixer)
+            {
+                if(before!=FeatureViewShape()&&Keyboard.FocusedElement is not (Slider or TextBox)&&!IsMouseCaptureWithin)RefreshRows();
+                else UpdateMixerLabels();
+            }
         }
         catch(OperationCanceledException){}
         catch(Exception error)when(error is IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
         {if(!exiting&&epoch==featureEpoch)FeedbackText("Não foi possível atualizar todos os controles da sessão. Tente atualizar a lista.");}
         finally{if(ReferenceEquals(featureRead,request))featureRead=null;request.Dispose();}
+    }
+    private string FeatureViewShape()=>view.Current.Route+"|"+(view.Current.Route==OverlayRoute.AudioDevices?
+        string.Join("|",systemAudio.Current.Outputs.Select(item=>item.Id+":"+item.Name)):
+        string.Join("|",Controller.Apps.Where(item=>!item.Protected).DistinctBy(item=>(item.Pid,item.Started)).Take(12).Select(WindowId))+"|"+
+        (mixerTarget is {} target?mixerStates.GetValueOrDefault(WindowId(target))?.CanSetVolume+":"+mixerStates.GetValueOrDefault(WindowId(target))?.CanSetMute:""));
+    private void UpdateMixerLabels()
+    {
+        if(view.Current.Route==OverlayRoute.AudioDevices)
+        {
+            foreach(var output in systemAudio.Current.Outputs)SetEntryDescription("output:"+output.Id,output.Id==systemAudio.Current.ConsoleOutputId&&output.Id==systemAudio.Current.MediaOutputId?"Em uso para jogos e mídia":"Usar para jogos e mídia");
+            SetEntryDescription("device-refresh",systemAudio.Current.Status);return;
+        }
+        if(view.Current.Route!=OverlayRoute.Mixer)return;
+        foreach(var window in Controller.Apps.Where(item=>!item.Protected).Take(12))
+        {var state=mixerStates.GetValueOrDefault(WindowId(window));SetEntryDescription("mix:"+WindowId(window),state?.CanSetVolume==true?$"{state.VolumeMaximum:P0}"+(state.MuteState==ApplicationMuteState.Muted?" · sem som":""):"Consultar áudio deste aplicativo");}
+        if(mixerTarget is not {} target||mixerStates.GetValueOrDefault(WindowId(target)) is not {} selected)return;
+        SetFeatureEntry("mixer-volume",selected.CanSetVolume?$"Volume · {selected.VolumeMaximum:P0}":"Volume não informado","← / → ajusta o volume",selected.CanSetVolume);
+        SetFeatureEntry("mixer-mute",selected.MuteState==ApplicationMuteState.Muted?"Ativar áudio":"Silenciar aplicativo",target.ProcessName,selected.CanSetMute);
+        SyncSessionSlider("mixer-volume",selected.VolumeMaximum);
     }
     private void SessionMediaChanged(SessionMediaSnapshot snapshot)
     {
@@ -150,7 +176,7 @@ public partial class MainWindow
     {
         Section("Áudio da sessão");
         var gameVolume=AddRow("session-volume",GameVolumeTitle,GameVolumeDescription,ToggleGameAudio,appAudio.CanSetMute);
-        if(appAudio.CanSetVolume)AddSessionSlider(gameVolume,appAudio.VolumeMaximum!.Value,value=>SetGameVolume(value));
+        AddSessionSlider(gameVolume,appAudio.VolumeMaximum??0,value=>SetGameVolume(value));SyncSessionSlider("session-volume",appAudio.VolumeMaximum);
         var first=Rows.RowDefinitions.Count;
         var outputVolume=AddRow("windows-volume",audio.Current.Available?$"Saída · {audio.Current.Volume:P0}":"Saída indisponível",systemAudio.Current.OutputName,()=>AudioAction(audio.Set(muted:!audio.Current.Muted,expectedEndpoint:audio.Current.EndpointId)),audio.Current.Available,row:narrow?null:first,column:0);
         if(audio.Current.Available)AddSessionSlider(outputVolume,audio.Current.Volume,value=>AudioAction(audio.Set(value,expectedEndpoint:audio.Current.EndpointId)));
@@ -238,8 +264,8 @@ public partial class MainWindow
             if(state?.CanSetVolume==true)AddSessionSlider(volume,state.VolumeMaximum!.Value,value=>ChangeMixerVolume(target,value));
             AddRow("mixer-mute",state?.MuteState==ApplicationMuteState.Muted?"Ativar áudio":"Silenciar aplicativo",target.ProcessName,()=>
             {
-                if(state is null)return;
-                StartSessionAction("mixer-mute",async token=>{var change=await mixerAudio.SetMutedAsync(target,state.MuteState!=ApplicationMuteState.Muted,featureEpoch,token);mixerStates[WindowId(target)]=change.Snapshot;return change.Result;},RefreshRows);
+                if(mixerStates.GetValueOrDefault(WindowId(target)) is not {CanSetMute:true} current)return;
+                StartSessionAction("mixer-mute",async token=>{var change=await mixerAudio.SetMutedAsync(target,current.MuteState!=ApplicationMuteState.Muted,featureEpoch,token);mixerStates[WindowId(target)]=change.Snapshot;return change.Result;},RefreshRows);
             },state?.CanSetMute==true);
         }
         Section("Aplicativos");
@@ -274,7 +300,8 @@ public partial class MainWindow
     }
     private void SyncSessionSlider(string id,float? value)
     {
-        if(value is null||entries.FirstOrDefault(entry=>entry.Id==id)?.Button.Resources["SessionSlider"] is not Slider slider||slider.IsMouseCaptureWithin)return;
+        if(entries.FirstOrDefault(entry=>entry.Id==id)?.Button.Resources["SessionSlider"] is not Slider slider)return;
+        slider.IsEnabled=value is not null;if(value is null||slider.IsMouseCaptureWithin)return;
         synchronizingFeatureSlider=true;try{slider.Value=value.Value;}finally{synchronizingFeatureSlider=false;}
     }
     private bool HandleSessionSliderKey(KeyEventArgs args)
@@ -292,7 +319,7 @@ public partial class MainWindow
         {
             var chosen=output;var current=systemAudio.Current;
             AddRow("output:"+output.Id,output.Name,output.Id==current.ConsoleOutputId&&output.Id==current.MediaOutputId?"Em uso para jogos e mídia":"Usar para jogos e mídia",()=>
-                StartSessionAction("audio-output",token=>systemAudio.SelectOutputAsync(current.ConsoleOutputId,current.MediaOutputId,chosen.Id,token),RefreshRows));
+            {var expected=systemAudio.Current;StartSessionAction("audio-output",token=>systemAudio.SelectOutputAsync(expected.ConsoleOutputId,expected.MediaOutputId,chosen.Id,token),RefreshRows);});
         }
         AddRow("microphone",MicrophoneTitle,systemAudio.Current.MicrophoneName,ToggleMicrophone,systemAudio.Current.MicrophoneMuted is not null);
         AddRow("back","Voltar","Áudio da sessão",Back);

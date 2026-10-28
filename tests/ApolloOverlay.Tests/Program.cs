@@ -21,6 +21,8 @@ static class Program
         if(args.Length==2&&args[1]=="--window-activation"){WindowActivationTests.Run(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--mouse-keyboard"){MouseKeyboardTests.Run(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--agent-updates"){AgentUpdateTests.Run(Case);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--session-interface"){SessionInterfaceTests.Run(Case);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--session-interface-captures"){SessionInterfaceTests.Capture(args[0]);return 0;}
         if(args.Length==2&&args[1]=="--session-utilities"){SessionUtilityTests.Run(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--update-captures"){UpdateInterfaceTests.Capture(args[0]);return 0;}
         if(args.Length==2&&args[1]=="--review-captures"){ReviewFixTests.Capture(args[0]);return 0;}
@@ -137,6 +139,7 @@ static class Program
         MouseKeyboardTests.Run(Case);
         AgentUpdateTests.Run(Case);
         SessionUtilityTests.Run(Case);
+        SessionInterfaceTests.Run(Case);
         PremiumInterfaceTests.Run(Case);
         SessionHubTests.Run(Case);
         SessionHubServiceTests.Run(Case);
