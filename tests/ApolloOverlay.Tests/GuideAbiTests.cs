@@ -64,7 +64,8 @@ internal static unsafe class GuideAbiTests
     }
     private static void CompleteFixture(Task task)
     {
-        while(!task.IsCompleted){var frame=new System.Windows.Threading.DispatcherFrame();System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle,()=>frame.Continue=false);System.Windows.Threading.Dispatcher.PushFrame(frame);}task.GetAwaiter().GetResult();
+        var until=Environment.TickCount64+5000;
+        while(!task.IsCompleted){if(Environment.TickCount64>=until)throw new TimeoutException("Fixture did not settle within five seconds.");var frame=new System.Windows.Threading.DispatcherFrame();System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle,()=>frame.Continue=false);System.Windows.Threading.Dispatcher.PushFrame(frame);}task.GetAwaiter().GetResult();
     }
     internal static void LateSendAfterCleanup()
     {
@@ -140,6 +141,16 @@ internal static unsafe class GuideAbiTests
     }
     internal static void HandoffTests(Action<string,Action> test)
     {
+        test("guide focus and fade fixtures restore the previous synchronization context on failure",()=>{
+            var previous=System.Threading.SynchronizationContext.Current;var marker=new System.Threading.SynchronizationContext();
+            try{
+                System.Threading.SynchronizationContext.SetSynchronizationContext(marker);
+                foreach(var suite in new Action<Action<string,Action>>[]{FocusOpenRed,FadeHandoffChecks,FocusChecks}){
+                    var threw=false;try{suite((_,_)=>throw new InvalidOperationException("fixture stop"));}catch(InvalidOperationException error)when(error.Message=="fixture stop"){threw=true;}
+                    Require(threw&&ReferenceEquals(System.Threading.SynchronizationContext.Current,marker),"Suite failed to restore prior context after a registration failure");
+                }
+            }finally{System.Threading.SynchronizationContext.SetSynchronizationContext(previous);}
+        });
         KnownHeldDismiss(test);
         DismissCancellation(test);
         test("actual WPF System AltY survives AltUp until YUp and100ms",SystemKeyBaseline);
@@ -151,6 +162,17 @@ internal static unsafe class GuideAbiTests
         test("release covers all digital bits both sticks and trigger threshold",()=>{foreach(var frame in new[]{new PadFrame(true,(PadButtons)0x8000),new(true,(PadButtons)0x80),new(true,(PadButtons)0x40),new(true,0,12000),new(true,0,Y:-12000),new(true,0,RX:12000),new(true,0,RY:-12000),new(true,0,LT:30),new(true,0,RT:30)}){var g=new ReleaseGate();var pads=new PadFrame[4];pads[2]=frame;g.Update(new(pads,0),0,true,18000);Require(g.Update(new(pads,1000),1000,true,18000)==ReleaseState.Waiting);}var ok=new ReleaseGate();var allowed=new PadFrame[]{new(true,0,11999,-11999,11999,-11999,29,29),default,default,default};ok.Update(new(allowed,0),0,true,18000);Require(ok.Update(new(allowed,100),100,true,18000)==ReleaseState.Ready);});
         test("release keyboard Guide validity and held reset stability",()=>{foreach(var guide in new[]{false,true}){var g=new ReleaseGate();g.Update(Neutral(0),0,true,18000);Require(g.Update(Neutral(90) with{KeysNeutral=guide,GuideHeld=guide},90,true,18000)==ReleaseState.Waiting);g.Update(Neutral(91),91,true,18000);Require(g.Update(Neutral(190),190,true,18000)==ReleaseState.Waiting);Require(g.Update(Neutral(191),191,true,18000)==ReleaseState.Ready);}var invalid=new ReleaseGate();Require(invalid.Update(Neutral(0) with{GuideValid=false},0,true,18000)==ReleaseState.Cancelled);});
         test("release topology error stale snapshot and focus loss cancel safely",()=>{var g=new ReleaseGate();var pads=new PadFrame[]{new(true,0),default,default,default};g.Prime(new(pads,0,GuideConnections:1));Require(g.Update(Neutral(1),1,true,18000)==ReleaseState.Cancelled);g.Reset();g.Update(Neutral(0),0,true,18000);pads[1]=new(true,0);Require(g.Update(new(pads,100),100,true,18000)==ReleaseState.Waiting);Require(g.Update(new(pads,199),199,true,18000)==ReleaseState.Waiting);Require(g.Update(new(pads,200),200,true,18000)==ReleaseState.Ready);Require(new ReleaseGate().Update(Neutral(0),81,true,18000)==ReleaseState.Cancelled);Require(new ReleaseGate().Update(Neutral(0),0,false,18000)==ReleaseState.Cancelled);pads[0]=new(false,0,ReadFailed:true);Require(new ReleaseGate().Update(new(pads,1),1,true,18000)==ReleaseState.Cancelled);});
+        test("stale observed connected controller disappearing cancels external action",()=>{
+            using var p=new HandoffPlatform();var w=Host(p);try{
+                var previous=new PadFrame[]{new(true,PadButtons.A),default,default,default};
+                w.HandoffSampleFixture=new(previous,Environment.TickCount64-1000);
+                Button(w,"taskview").RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                Require(w.TransitionPending,"Fixture did not queue the external action");
+                w.AdvanceHandoff(Neutral(0),0);w.AdvanceHandoff(Neutral(100),100);w.AdvanceHandoff(Neutral(300),300);
+                Require(!w.TransitionPending&&p.Globals==0&&p.Switches==0,"Disconnection erased stale known connection and dispatched an effect");
+                Require(w.Controller.Operation is {State:"Cancelado",Dispatched:false},"Uncertain handoff did not retain cancellation");
+            }finally{w.Close();}
+        });
         foreach(var key in new[]{System.Windows.Input.Key.Escape,System.Windows.Input.Key.Enter})test("WPF "+key+" waits actual routed KeyUp then100ms once",()=>{using var p=new HandoffPlatform();var w=Host(p);try{Key(w,key,true);w.AdvanceHandoff(Neutral(0),0);w.AdvanceHandoff(Neutral(100),100);Require(w.IsVisible&&p.Switches==0&&w.TransitionPending);Key(w,key,false);w.AdvanceHandoff(Neutral(200),200);w.AdvanceHandoff(Neutral(299),299);Require(w.IsVisible&&p.Switches==0);w.AdvanceHandoff(Neutral(300),300);Require(!w.IsVisible&&p.Switches==1&&!w.TransitionPending);w.AdvanceHandoff(Neutral(400),400);Require(p.Switches==1);}finally{w.Close();}});
         test("WPF TaskView has no target switch and sends only after release",()=>{using var p=new HandoffPlatform{Context=null};var w=Host(p);try{Button(w,"taskview").RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));Require(w.TransitionPending&&p.Globals==0&&p.Switches==0);w.AdvanceHandoff(Neutral(0) with{KeysNeutral=false},0);w.AdvanceHandoff(Neutral(100),100);Require(p.Globals==0&&w.IsVisible);w.AdvanceHandoff(Neutral(200),200);Require(p.Globals==1&&p.LastKeys=="Win+Tab"&&p.Switches==0&&!w.IsVisible);}finally{w.Close();}});
         test("WPF return uses Anchor while Steam tile uses captured BigPicture context",()=>{using var p=new HandoffPlatform{Menu=true};p.Context=p.BigPicture;var w=Host(p);try{Button(w,"session-card").RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));Commit(w);Require(p.LastTarget?.Same(p.Game)==true);w.ShowDiagnostic();w.Controller.CaptureReturn();w.RefreshRows();var tile=Button(w,"steam-overlay");var labels=(System.Windows.Controls.StackPanel)((System.Windows.Controls.Grid)tile.Content).Children[1];Require(((System.Windows.Controls.TextBlock)labels.Children[0]).Text=="Menu do Steam Big Picture");tile.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));Require(p.Menus==0);Commit(w);Require(p.Menus==1&&p.LastTarget?.Same(p.BigPicture)==true&&p.LastKeys=="F1");}finally{w.Close();}});
@@ -166,7 +188,10 @@ internal static unsafe class GuideAbiTests
     private static MainWindow Host(HandoffPlatform platform){var w=new MainWindow(renderOnly:true,platform:platform);w.Controller.Select(platform.Game);w.Controller.CaptureReturn();w.RefreshRows();w.ShowDiagnostic();return w;}
     internal static void FocusOpenRed(Action<string,Action> test)
     {
+        var previousContext=System.Threading.SynchronizationContext.Current;
         System.Threading.SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());
+        try
+        {
         var app=System.Windows.Application.Current??new System.Windows.Application{ShutdownMode=System.Windows.ShutdownMode.OnExplicitShutdown};ThemeSupport.FollowSystem(app);
         foreach(var accepted in new[]{false,true})test("Normal OpenPanel "+(accepted?"accepted without foreground":"refused")+" cannot navigate",()=>{
             using var p=new HandoffPlatform();var other=new System.Windows.Window{Width=100,Height=100};var w=new MainWindow(renderOnly:true,platform:p);try{
@@ -174,6 +199,8 @@ internal static unsafe class GuideAbiTests
                 Require(w.SelectedAction==selected,"Unconfirmed foreground still admitted overlay navigation; requestAccepted="+accepted);Require(!w.TransitionPending&&p.Switches==0,"Unconfirmed opening dispatched action");
             }finally{w.Close();other.Close();}
         });
+        }
+        finally{System.Threading.SynchronizationContext.SetSynchronizationContext(previousContext);}
     }
     internal static void GuideReleaseRed(Action<string,Action> test)
     {
@@ -210,9 +237,37 @@ internal static unsafe class GuideAbiTests
     {
         var w=new MainWindow(renderOnly:true,platform:p);w.Controller.Select(p.Game);w.FocusForeground=()=>new System.Windows.Interop.WindowInteropHelper(w).Handle;w.FocusRequest=_=>true;w.RefreshFocusFixture=()=>Task.CompletedTask;return w;
     }
+    internal static void FadeHandoffChecks(Action<string,Action> test)
+    {
+        var previousContext=System.Threading.SynchronizationContext.Current;
+        System.Threading.SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());
+        try
+        {
+        foreach(var scenario in new[]{"during", "at-end", "neutral", "read-failed"})test("fade protects foreground handoff: "+scenario,()=>{
+            using var p=new HandoffPlatform();var w=Host(p);var frames=new PadFrame[]{new(true,0),default,default,default};
+            try{
+                w.PhysicalKeyReader=_=>0;w.ForceFadeFixture=true;w.FadeFramesFixture=()=>frames;
+                Require(Native.GetForegroundWindow()==new System.Windows.Interop.WindowInteropHelper(w).Handle,"Owned fade fixture lacks foreground");
+                w.BeginFadeFixture();Require(w.FadePending&&w.IsVisible,"Fade was not started");
+                if(scenario=="during"){w.ReviewTick(new PadFrame[]{new(true,PadButtons.A),default,default,default});frames=new PadFrame[]{new(true,0),default,default,default};}
+                if(scenario=="at-end")frames=new PadFrame[]{new(true,PadButtons.A),default,default,default};
+                if(scenario=="read-failed")frames=new PadFrame[]{new(false,0,ReadFailed:true),default,default,default};
+                var deadline=System.Diagnostics.Stopwatch.StartNew();while(w.FadePending&&deadline.ElapsedMilliseconds<5000){PumpFocus();Thread.Sleep(1);}
+                Require(!w.FadePending,"Fade did not finish");
+                if(scenario=="neutral")Require(!w.IsVisible,"Neutral fade did not hide");
+                else Require(w.IsVisible,"Fade ceded focus after new or unreadable input");
+                Require(p.Switches==0,"Fade unexpectedly requested an external switch");
+            }finally{w.Close();}
+        });
+        }
+        finally{System.Threading.SynchronizationContext.SetSynchronizationContext(previousContext);}
+    }
     internal static void FocusChecks(Action<string,Action> test)
     {
-        System.Threading.SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());FocusOpenRed(test);
+        var previousContext=System.Threading.SynchronizationContext.Current;
+        System.Threading.SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());
+        try
+        {FocusOpenRed(test);
         test("game Steam context return reopen confirms each opening and retains Anchor",()=>{using var p=new HandoffPlatform();var w=OpeningHost(p);var requests=0;w.FocusRequest=_=>{requests++;return true;};try{
             w.OpenPanel();FinishFocus(w.OpeningTask);w.Toggle();Commit(w);Require(!w.IsVisible,"Owned context-change setup did not dismiss");p.Context=p.BigPicture;
             w.OpenPanel();FinishFocus(w.OpeningTask);Require(w.Controller.Session.Anchor?.Same(p.Game)==true&&w.Controller.ReturnTarget?.Same(p.BigPicture)==true,"BigPicture context/Anchor mismatch");Button(w,"session-card").RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));Commit(w);Require(!w.IsVisible&&p.LastTarget?.Same(p.Game)==true);p.Context=p.Game;
@@ -245,10 +300,23 @@ internal static unsafe class GuideAbiTests
         test("tray left double-click and menu callbacks dispatch once; disposed queue inert",()=>{var opens=0;var exits=0;var tray=new TrayHost(System.Windows.Threading.Dispatcher.CurrentDispatcher,()=>opens++,()=>exits++,visible:false);tray.OnDoubleClick(null,new(System.Windows.Forms.MouseButtons.Left,1,0,0,0));tray.OnDoubleClick(null,new(System.Windows.Forms.MouseButtons.Right,2,0,0,0));PumpFocus();Require(opens==0);tray.OnDoubleClick(null,new(System.Windows.Forms.MouseButtons.Left,2,0,0,0));PumpFocus();Require(opens==1);((System.Windows.Forms.ToolStripMenuItem)tray.Menu.Items[0]).PerformClick();((System.Windows.Forms.ToolStripMenuItem)tray.Menu.Items[1]).PerformClick();PumpFocus();Require(opens==2&&exits==1&&tray.Menu.Items[0].Text=="Abrir overlay"&&tray.Menu.Items[1].Text=="Sair");tray.OnDoubleClick(null,new(System.Windows.Forms.MouseButtons.Left,2,0,0,0));tray.Dispose();tray.Dispose();PumpFocus();Require(opens==2&&exits==1);});
         test("tray Sair closes hidden owned host without focus or external effects",()=>{using var p=new HandoffPlatform();var w=OpeningHost(p);var requests=0;w.FocusRequest=_=>{requests++;return true;};w.ExitFromTray();Require(p.Disposed&&!w.IsVisible&&requests==0&&p.Switches==0);});
         test("packaged custom icon embedded and exact32px frame exists in executable",()=>{using var stream=System.Windows.Application.GetResourceStream(new Uri("/ApolloOverlay;component/Assets/overlay-controller.ico",UriKind.Relative))!.Stream;using var data=new MemoryStream();stream.CopyTo(data);var bytes=data.ToArray();Require(Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes))=="c509ee949898ef1100ea251c228915245bb37a917cda94c9d08b3a292709d20a");using var reader=new BinaryReader(new MemoryStream(bytes));reader.BaseStream.Position=4;var count=reader.ReadUInt16();Require(count==8);byte[]? frame=null;for(var i=0;i<count;i++){var width=reader.ReadByte();reader.ReadBytes(7);var length=reader.ReadInt32();var offset=reader.ReadInt32();if(width==32)frame=bytes.AsSpan(offset,length).ToArray();}Require(frame is not null);var exe=File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory,"ApolloOverlay.exe"));Require(exe.AsSpan().IndexOf(frame!)>=0,"Published executable missing exact custom32px PNG frame");});
+        }
+        finally{System.Threading.SynchronizationContext.SetSynchronizationContext(previousContext);}
     }
     internal static void KnownHeldDismiss(Action<string,Action> test)
     {
         var app=System.Windows.Application.Current??new System.Windows.Application{ShutdownMode=System.Windows.ShutdownMode.OnExplicitShutdown};ThemeSupport.FollowSystem(app);
+        test("stale known held input becoming unreadable requires explicit local dismissal",()=>{
+            using var p=new HandoffPlatform();var w=Host(p);try{
+                w.HandoffSampleFixture=new(new PadFrame[]{new(true,PadButtons.A),default,default,default},Environment.TickCount64-1000);
+                w.Toggle();var failed=new PadFrame[]{new(false,0,ReadFailed:true),default,default,default};
+                w.AdvanceHandoff(new(failed,0),0);w.AdvanceHandoff(new(failed,1000),1000);
+                Require(w.IsVisible&&w.TransitionPending&&p.Switches==0,"Stale active input was forgotten when reading failed");
+                Key(w,System.Windows.Input.Key.Escape,true);Key(w,System.Windows.Input.Key.Escape,false);
+                w.AdvanceHandoff(new(failed,2000),2000);w.AdvanceHandoff(new(failed,2100),2100);
+                Require(!w.IsVisible&&!w.TransitionPending&&p.Switches==0&&p.Globals==0,"Explicit local recovery dispatched an external effect");
+            }finally{w.Close();}
+        });
         foreach(var held in new[]{"Escape","CommonButton","Stick","Trigger"})test("Guide failure cannot hide dismiss while known "+held+" remains held",()=>{
             using var p=new HandoffPlatform();var w=Host(p);try{
                 var pads=new PadFrame[4];if(held=="Escape")Key(w,System.Windows.Input.Key.Escape,true);else{w.Toggle();pads[0]=held switch{"CommonButton"=>new(true,PadButtons.B),"Stick"=>new(true,0,X:25000),_=>new(true,0,LT:255)};}
@@ -402,3 +470,4 @@ internal static unsafe class GuideAbiTests
     [UnmanagedCallersOnly(CallConvs=[typeof(CallConvStdcall)])] private static void Stop(nint self,ulong token) {Calls.Add(token==123 ? "stop" : "bad-token");}
     [UnmanagedCallersOnly(CallConvs=[typeof(CallConvStdcall)])] private static byte Unregister(nint self,ulong token) {Calls.Add(token==123 ? "unregister" : "bad-token");return removal ? (byte)1 : (byte)0;}
 }
+

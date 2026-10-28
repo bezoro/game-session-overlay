@@ -1,8 +1,8 @@
 namespace ApolloOverlay;
 
 public enum OverlayTab { Hub,Apps,System }
-public enum OverlayRoute { Hub,Apps,System,TargetOptions,Details,WindowsAudio,Integrations,Customize,Setup,OperationResult,Confirmation }
-public sealed record OverlayViewFrame(OverlayRoute Route,WindowRef? Target=null,string SelectedId="",double ScrollOffset=0,bool ChooseSession=false,int SetupStep=0);
+public enum OverlayRoute { Hub,Apps,System,TargetOptions,Details,WindowsAudio,Integrations,Customize,Setup,OperationResult,Confirmation,PlayniteBrowser,Updates,UpdateReview }
+public sealed record OverlayViewFrame(OverlayRoute Route,WindowRef? Target=null,string SelectedId="",double ScrollOffset=0,bool ChooseSession=false,int SetupStep=0,string? BrowserFolder=null,int BrowserPage=0);
 public sealed class OverlayViewState
 {
     private readonly List<OverlayViewFrame> parents=[];
@@ -25,3 +25,4 @@ public sealed class OverlayViewState
     }
     private static OverlayViewFrame Default(OverlayTab tab)=>new(tab switch{OverlayTab.Apps=>OverlayRoute.Apps,OverlayTab.System=>OverlayRoute.System,_=>OverlayRoute.Hub},SelectedId:tab switch{OverlayTab.Apps=>"refresh-apps",OverlayTab.System=>"display",_=>"session-card"});
 }
+

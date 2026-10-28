@@ -90,7 +90,18 @@ public partial class MainWindow
     }
     internal async Task StartAutomation(string? pipeName=null,AutomationGrant? grant=null)
     {
-        Controller.CaptureReturn();if(automationGrantTarget is not null)Controller.Select(automationGrantTarget);await Controller.Refresh();RefreshRows();automationHost=new(new WindowAutomation(this),System.IO.Path.Combine(Controller.Diagnostics.Root,"automation",System.Diagnostics.Process.GetCurrentProcess().SessionId.ToString()),pipeName,grant);
+        Controller.CaptureReturn();if(automationGrantTarget is not null)Controller.Select(automationGrantTarget);await Controller.Refresh();RefreshRows();
+        try
+        {
+            automationHost=new(new WindowAutomation(this),System.IO.Path.Combine(Controller.Diagnostics.Root,"automation",System.Diagnostics.Process.GetCurrentProcess().SessionId.ToString()),pipeName,grant);
+        }
+        catch(Exception error) when(error is System.IO.IOException or System.IO.InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException or System.Security.SecurityException)
+        {
+            // Never discard or replace an unreadable ledger: older effects may already have occurred.
+            if(grant is not null)throw new InvalidOperationException("Ponte de automação indisponível; histórico preservado.",error);
+            Controller.Diagnostics.Log("automation-start",ResultKind.Unavailable);
+            RetainOperation("Indisponível","Automação indisponível. O histórico foi preservado; a overlay continua disponível.");
+        }
     }
     internal AutomationGrant ResolveAutomationGrant(int pid,long started,long handle,bool shutdown)
     {
@@ -99,9 +110,12 @@ public partial class MainWindow
     }
     private sealed class WindowAutomation(MainWindow window):IAutomationBackend
     {
+        public async Task<AutomationReply> Update(AutomationRequest request,CancellationToken token,Func<bool> continuing)=>await await window.Dispatcher.InvokeAsync(()=>window.AgentUpdate(request,token,continuing),DispatcherPriority.Normal,token);
+        public async Task CommitUpdate(AutomationRequest request,CancellationToken token,Func<bool> continuing)=>await await window.Dispatcher.InvokeAsync(()=>window.CommitAgentUpdate(request,token,continuing),DispatcherPriority.Normal,token);
         public async Task<AutomationSnapshot> Snapshot(CancellationToken token,bool refreshTargets=false)=>await await window.Dispatcher.InvokeAsync(async()=>{if(refreshTargets&&!window.busy){await window.Controller.Refresh();token.ThrowIfCancellationRequested();if(!window.busy)window.RefreshRows();}return window.AutomationSnapshot();},DispatcherPriority.Normal,token);
         public async Task<AutomationReply> Execute(AutomationRequest request,CancellationToken token,Action<AutomationReply> phase,Func<bool> continuing)=>await await window.Dispatcher.InvokeAsync(()=>window.AutomationExecute(request,token,phase,continuing),DispatcherPriority.Normal,token);
         public async Task Shutdown(CancellationToken token,Func<bool> continuing)=>await window.Dispatcher.InvokeAsync(()=>{token.ThrowIfCancellationRequested();if(continuing())window.ExitFromTray();},DispatcherPriority.Normal,token);
         public async Task<bool> Cancel(string id,string? grantedTarget,CancellationToken token)=>await window.Dispatcher.InvokeAsync(()=>{token.ThrowIfCancellationRequested();if(window.steamOwner is not{} owner||owner.Id!=id||grantedTarget is not null&&TargetId(owner.Target)!=grantedTarget)return false;window.CancelSteamOwner("Cancelamento solicitado pela CLI; nenhum novo atalho enviado.");return true;},DispatcherPriority.Normal,token);
     }
 }
+

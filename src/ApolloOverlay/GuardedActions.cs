@@ -53,13 +53,18 @@ public sealed class GuardedActions(IWindowEffects effects,Action<SteamSequenceEv
         }
         return new(ResultKind.Unknown,"Ativação não confirmada; nenhum atalho foi enviado.");
     }
-    public async Task<ActionResult> Shortcut(WindowRef window,string keys)
+    public Task<ActionResult> Shortcut(WindowRef window,string keys)=>Shortcut(window,keys,CancellationToken.None,()=>true);
+    public async Task<ActionResult> SteamMenu(WindowRef window,CancellationToken cancellation,Func<bool> continuing,Func<bool> canUse)
     {
-        if(keys is "Shift+Tab" or "Ctrl+Tab")return await Shortcut(window,keys,CancellationToken.None,()=>true);
-        var focused=await Switch(window);
-        if(focused.Kind!=ResultKind.Completed) return focused;
-        if(!effects.Valid(window) || !effects.IsForeground(window)) return new(ResultKind.Failed,"O alvo mudou antes do envio; atalho bloqueado.");
-        return Outcome.Keys(effects.SendKeys(keys),4);
+        bool Allowed()=>!cancellation.IsCancellationRequested&&continuing()&&canUse();
+        if(!Allowed())return new(ResultKind.Cancelled,"Contexto ou solicitação indisponível; nenhum F1 enviado.");
+        if(!effects.RequestFocus(window))return new(ResultKind.Failed,"O Windows recusou o foco do Big Picture.");
+        for(var i=0;i<6;i++){
+            if(!Allowed())return new(ResultKind.Cancelled,"Foco já solicitado; F1 cancelado antes do envio.");
+            if(effects.IsForeground(window)){if(!Allowed()||!effects.IsForeground(window))return new(ResultKind.Cancelled,"Alvo mudou antes do F1.");return Outcome.Keys(effects.SendKeys("F1"),2);}
+            await effects.Wait(50);
+        }
+        return new(ResultKind.Unknown,"Foco Big Picture não confirmado; nenhum F1 enviado.");
     }
     private async Task<ActionResult> SteamSequence(WindowRef window,CancellationToken cancellation,Func<bool> continuing)
     {
@@ -128,6 +133,15 @@ public sealed class GuardedActions(IWindowEffects effects,Action<SteamSequenceEv
     }
     public async Task<ActionResult> Shortcut(WindowRef window,string keys,CancellationToken cancellation,Func<bool> continuing)
     {
+        if(keys is not ("Shift+Tab" or "Ctrl+Tab"))
+        {
+            if(cancellation.IsCancellationRequested||!continuing())return new(ResultKind.Cancelled,"Cancelado antes do foco; nenhum atalho enviado.");
+            var focus=await Switch(window);
+            if(cancellation.IsCancellationRequested||!continuing())return new(ResultKind.Cancelled,"Foco já solicitado; atalho cancelado antes do envio.");
+            if(focus.Kind!=ResultKind.Completed)return focus;
+            if(!effects.Valid(window)||!effects.IsForeground(window))return new(ResultKind.Failed,"O alvo mudou antes do envio; atalho bloqueado.");
+            return Outcome.Keys(effects.SendKeys(keys),4);
+        }
         var focused=await FocusStable(window,cancellation,continuing);
         if(focused.Kind!=ResultKind.Completed)return focused;
         if(cancellation.IsCancellationRequested||!continuing()||!effects.Valid(window)||!effects.IsForeground(window))return new(ResultKind.Cancelled,"Cancelado antes do envio; nenhum atalho enviado.");

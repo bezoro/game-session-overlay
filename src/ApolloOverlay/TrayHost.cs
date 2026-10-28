@@ -14,7 +14,7 @@ internal sealed class TrayHost:IDisposable
         this.dispatcher=dispatcher;this.open=open;this.exit=exit;
         using var resource=Application.GetResourceStream(new Uri("/ApolloOverlay;component/Assets/overlay-controller.ico",UriKind.Relative))?.Stream??throw new InvalidOperationException("Ícone da bandeja ausente.");
         artwork=new Drawing.Icon(resource);Menu=new Forms.ContextMenuStrip();Menu.Items.Add("Abrir overlay",null,(_,_)=>Dispatch(open));Menu.Items.Add("Sair",null,(_,_)=>Dispatch(exit));
-        icon=new Forms.NotifyIcon{Icon=artwork,Text="Bezoro · Controle da sessão",ContextMenuStrip=Menu};icon.MouseDoubleClick+=OnDoubleClick;icon.BalloonTipClicked+=OnResultClick;icon.Visible=visible;
+        icon=new Forms.NotifyIcon{Icon=artwork,Text=("Game Session Overlay · "+AppBuild.Current.Display).Length>127?("Game Session Overlay · "+AppBuild.Current.Display)[..127]:"Game Session Overlay · "+AppBuild.Current.Display,ContextMenuStrip=Menu};icon.MouseDoubleClick+=OnDoubleClick;icon.BalloonTipClicked+=OnResultClick;icon.Visible=visible;
     }
     internal void OnDoubleClick(object? sender,Forms.MouseEventArgs args){if(args.Button==Forms.MouseButtons.Left&&args.Clicks==2)Dispatch(open);}
     private void OnResultClick(object? sender,EventArgs args)=>Dispatch(open);

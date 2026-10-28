@@ -13,6 +13,8 @@ public interface IAutomationBackend
     Task<AutomationReply> Execute(AutomationRequest request,CancellationToken token,Action<AutomationReply> phase,Func<bool> continuing);
     Task Shutdown(CancellationToken token,Func<bool> continuing);
     Task<bool> Cancel(string id,string? grantedTarget,CancellationToken token)=>Task.FromResult(false);
+    Task<AutomationReply> Update(AutomationRequest request,CancellationToken token,Func<bool> continuing)=>Task.FromResult(AutomationReply.Error("Unsupported","Atualização por CLI indisponível nesta instância."));
+    Task CommitUpdate(AutomationRequest request,CancellationToken token,Func<bool> continuing)=>Task.FromException(new InvalidOperationException("Atualização por CLI indisponível nesta instância."));
 }
 public sealed record AutomationGrant(string TargetId,bool Shutdown);
 internal sealed class AutomationLedger
@@ -24,7 +26,9 @@ internal sealed class AutomationLedger
     {
         this.clock=clock??(()=>Environment.TickCount64);path=Path.Combine(root,"automation-ledger.json");Directory.CreateDirectory(root);
         if(!File.Exists(path))return;if(new FileInfo(path).Length>1024*1024)throw new InvalidDataException("Ledger outside bounds.");
-        var saved=JsonSerializer.Deserialize(File.ReadAllBytes(path),AutomationJson.Default.AutomationRecords)??throw new InvalidDataException();
+        var saved=JsonSerializer.Deserialize(File.ReadAllBytes(path),AutomationJson.Default.AutomationRecords)??throw new InvalidDataException("Ledger vazio.");
+        if(saved.Records is null || saved.Records.Any(record => record is null || string.IsNullOrEmpty(record.Id) || record.Canonical is null || record.Reply is null))
+            throw new InvalidDataException("Ledger inválido; histórico preservado.");
         foreach(var record in saved.Records.TakeLast(256))records[record.Id]=record.Terminal?record:record with{Terminal=true,Reply=record.Reply with{Outcome="Unknown",Reason="Instância reiniciada após intenção persistida; efeito desconhecido, sem reenvio.",Terminal=true,Dispatched=null}};
         Save();
     }
@@ -66,8 +70,9 @@ public sealed class AutomationHost:IDisposable
         }catch(Exception e)when(e is OperationCanceledException or IOException or ObjectDisposedException or UnauthorizedAccessException){pipe.Dispose();}
     }
     private bool Granted(AutomationRequest request)=>grant is not null&&(request.Verb=="shutdown"?grant.Shutdown:request.Verb=="execute"&&request.ActionId is "focus" or "steam-overlay"&&request.TargetId==grant.TargetId&&request.Preset.Length==0&&request.Intent=="activate");
-    private static bool Query(string verb)=>verb is "status" or "targets" or "actions" or "trace" or "result";
-    private static bool Valid(AutomationRequest r)=>r.Version==1&&r.RequestId is{Length:<=256}&&r.ActionId is{Length:<=256}&&r.TargetId is{Length:<=128}&&r.Preset is{Length:<=64}&&r.Intent is "activate" or "left" or "right"&&r.Verb is "status" or "targets" or "actions" or "trace" or "result" or "execute" or "cancel" or "shutdown";
+    private static bool Query(string verb)=>verb is "status" or "targets" or "actions" or "trace" or "result" or "update-status";
+    private static bool UpdateCommand(string verb)=>verb is "update-check" or "update-download" or "update-rollback" or "update-cancel" or "update-apply";
+    private static bool Valid(AutomationRequest r)=>r.Version==1&&r.RequestId is{Length:<=256}&&r.ActionId is{Length:<=256}&&r.TargetId is{Length:<=128}&&r.Preset is{Length:<=64}&&r.BuildId is{Length:<=96}&&r.JobId is{Length:<=256}&&r.Channel is "" or "testing" or "stable"&&r.Intent is "activate" or "left" or "right"&&(Query(r.Verb)||UpdateCommand(r.Verb)||r.Verb is "execute" or "cancel" or "shutdown");
     private async Task Serve(NamedPipeServerStream pipe,bool restricted)
     {
         if(Interlocked.Increment(ref connections)>8){Interlocked.Decrement(ref connections);lock(gate)servers.Remove(pipe);pipe.Dispose();return;}
@@ -80,6 +85,7 @@ public sealed class AutomationHost:IDisposable
             var request=JsonSerializer.Deserialize(await AutomationFrames.Read(pipe,AutomationFrames.RequestLimit,life.Token),AutomationJson.Default.AutomationRequest);
             if(request is null||!Valid(request)){await Reply(AutomationReply.Error("Rejected","Protocolo ou intenção inválida."));return;}
             if(Query(request.Verb)){
+                if(request.Verb=="update-status"){var state=await backend.Update(request,life.Token,()=>AutomationPipeSecurity.Alive(pipe));await Reply(state with{Instance=Instance,Pid=Environment.ProcessId,Started=process.StartTime.ToUniversalTime().Ticks,Session=process.SessionId});return;}
                 if(request.Verb=="result"){AutomationRecord? record;lock(gate)record=ledger.Find(request.RequestId);await Reply(record?.Reply??AutomationReply.Error("Unavailable","ID não retido."));return;}
                 if(request.Verb=="trace"){await Reply(new(){Outcome="Completed",Trace=File.Exists(Path.Combine(root,"automation-trace.jsonl"))?File.ReadLines(Path.Combine(root,"automation-trace.jsonl")).TakeLast(24).ToArray():[]});return;}
                 var snapshot=await backend.Snapshot(life.Token,request.Verb=="targets");snapshot=snapshot with{Instance=Instance,Pid=Environment.ProcessId,Started=process.StartTime.ToUniversalTime().Ticks,SourceRevision=source};if(restricted)snapshot=snapshot with{Actions=snapshot.Actions.Select(a=>a.Id is "focus" or "steam-overlay"?a:a with{Available=false,Capability="Denied",Reason="Ponte restrita à concessão explícita."}).ToArray()};await Reply(new(){Outcome="Completed",Snapshot=snapshot});return;
@@ -89,8 +95,8 @@ public sealed class AutomationHost:IDisposable
             }
             if(request.Preset.Length>0){await Reply(AutomationReply.Error("Unsupported","Preset diagnóstico não integrado; nenhum foco/atalho enviado.",request.RequestId));return;}
             if(restricted&&!Granted(request)){await Reply(AutomationReply.Error("Denied","Ponte permite somente o alvo e capacidades concedidos nesta execução.",request.RequestId));return;}
-            if(request.DryRun){await Reply(await backend.Execute(request,life.Token,_=>{},()=>AutomationPipeSecurity.Alive(pipe)));return;}
-            if(request.Verb=="execute"){var preflight=await backend.Execute(request with{DryRun=true},life.Token,_=>{},()=>AutomationPipeSecurity.Alive(pipe));if(preflight.Outcome!="DryRun"){await Reply(preflight with{RequestId=request.RequestId});return;}}
+            if(request.DryRun){await Reply(UpdateCommand(request.Verb)?await backend.Update(request,life.Token,()=>AutomationPipeSecurity.Alive(pipe)):await backend.Execute(request,life.Token,_=>{},()=>AutomationPipeSecurity.Alive(pipe)));return;}
+            if(request.Verb=="execute"||UpdateCommand(request.Verb)){var preflight=UpdateCommand(request.Verb)?await backend.Update(request with{DryRun=true},life.Token,()=>AutomationPipeSecurity.Alive(pipe)):await backend.Execute(request with{DryRun=true},life.Token,_=>{},()=>AutomationPipeSecurity.Alive(pipe));if(preflight.Outcome!="DryRun"){await Reply(preflight with{RequestId=request.RequestId});return;}}
             if(request.RequestId!=ticket||request.DeadlineUtc<=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()){await Reply(AutomationReply.Error("Rejected","Ticket incorreto ou expirado.",request.RequestId));return;}
             var canonical=JsonSerializer.Serialize(request,AutomationJson.Default.AutomationRequest);string accepted;
             lock(gate){if(active is not null)accepted="Busy";else{accepted=ledger.Accept(request.RequestId,connection,canonical);if(accepted=="Accepted"){active=life;activeRequest=request;}}}
@@ -101,6 +107,18 @@ public sealed class AutomationHost:IDisposable
             monitor=Watch();
             async Task Watch(){try{while(true){var bytes=await AutomationFrames.Read(pipe,AutomationFrames.RequestLimit,reading.Token);var command=JsonSerializer.Deserialize(bytes,AutomationJson.Default.AutomationRequest);if(command?.Verb=="cancel"&&command.RequestId==request.RequestId){life.Cancel();return;}if(command?.RequestId!=request.RequestId||JsonSerializer.Serialize(command,AutomationJson.Default.AutomationRequest)!=canonical){life.Cancel();return;}AutomationRecord? duplicate;lock(gate)duplicate=ledger.Find(request.RequestId);if(duplicate is not null)await Reply(duplicate.Reply);}}catch(Exception e)when(e is IOException or OperationCanceledException or ObjectDisposedException or JsonException){if(!reading.IsCancellationRequested)life.Cancel();}}
             AutomationReply result;
+            if(request.Verb=="update-apply"){
+                var commitAttempted=false;
+                try{
+                    result=await backend.Update(request,life.Token,()=>AutomationPipeSecurity.Alive(pipe));result=result with{RequestId=request.RequestId,Instance=Instance,Pid=Environment.ProcessId,Started=process.StartTime.ToUniversalTime().Ticks,Session=process.SessionId};
+                    lock(gate)ledger.Update(request.RequestId,result);Trace(request,"UpdateApplyRequested",result);await Reply(result);
+                    if(result.Outcome!="UpdateApplyRequested")return;
+                    await Task.Delay(50,life.Token);life.Token.ThrowIfCancellationRequested();if(!AutomationPipeSecurity.Alive(pipe))return;
+                    commitAttempted=true;await backend.CommitUpdate(request,life.Token,()=>!life.IsCancellationRequested&&AutomationPipeSecurity.Alive(pipe));return;
+                }finally{
+                    result=AutomationReply.Error(commitAttempted?"Unknown":"Cancelled",commitAttempted?"Reinício pode ter sido solicitado; confirme a versão em uma nova conexão.":"Cancelado antes de aplicar a atualização.",request.RequestId);lock(gate)ledger.Update(request.RequestId,result);Trace(request,"Result",result);reading.Cancel();
+                }
+            }
             if(request.Verb=="shutdown"){
                 var commitAttempted=false;
                 try{
@@ -110,10 +128,12 @@ public sealed class AutomationHost:IDisposable
                     result=AutomationReply.Error(commitAttempted?"Unknown":"Cancelled",commitAttempted?"Fechamento pode ter sido solicitado; cliente deve observar a saída exata.":"Cancelado antes de solicitar o fechamento.",request.RequestId);lock(gate)ledger.Update(request.RequestId,result);Trace(request,"Result",result);reading.Cancel();
                 }
             }
-            try{result=await backend.Execute(request,life.Token,phase=>{lock(gate)ledger.Update(request.RequestId,phase with{Terminal=false});Trace(request,"Phase",phase);},()=>!life.IsCancellationRequested&&AutomationPipeSecurity.Alive(pipe));}
+            try{result=UpdateCommand(request.Verb)?await backend.Update(request,life.Token,()=>!life.IsCancellationRequested&&AutomationPipeSecurity.Alive(pipe)):await backend.Execute(request,life.Token,phase=>{lock(gate)ledger.Update(request.RequestId,phase with{Terminal=false});Trace(request,"Phase",phase);},()=>!life.IsCancellationRequested&&AutomationPipeSecurity.Alive(pipe));}
             catch(OperationCanceledException){result=AutomationReply.Error("Cancelled","Cancelado; consulte evidência de envio.",request.RequestId);}
             catch(Exception e)when(e is InvalidOperationException or System.ComponentModel.Win32Exception){result=AutomationReply.Error("Failed",e.GetType().Name,request.RequestId);}
-            result=result with{RequestId=request.RequestId};lock(gate)ledger.Update(request.RequestId,result);Trace(request,"Result",result);reading.Cancel();await Reply(result);
+            // The acceptance request is complete; the independent job is tracked by
+            // Update.JobId/Terminal and the persisted update receipt, not a pipe ticket.
+            result=result with{RequestId=request.RequestId,Terminal=UpdateCommand(request.Verb)&&result.Outcome=="Requested"||result.Terminal};lock(gate)ledger.Update(request.RequestId,result);Trace(request,"Result",result);reading.Cancel();await Reply(result);
         }catch(Exception e)when(e is IOException or JsonException or InvalidDataException or OperationCanceledException or UnauthorizedAccessException or ObjectDisposedException){life.Cancel();}
         finally{life.Cancel();lock(gate){ledger.Retire(connection);if(ReferenceEquals(active,life)){active=null;activeRequest=null;}servers.Remove(pipe);}pipe.Dispose();Interlocked.Decrement(ref connections);if(monitor is not null)try{await monitor;}catch(OperationCanceledException){}}
     }
@@ -133,3 +153,4 @@ public sealed class AutomationHost:IDisposable
     }
     public void Dispose(){lock(gate){if(disposed)return;disposed=true;stopping.Cancel();active?.Cancel();foreach(var pipe in servers.ToArray())pipe.Dispose();servers.Clear();}}
 }
+

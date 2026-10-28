@@ -1,0 +1,248 @@
+name: Windows checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - codex/controller-overlay-polish
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Build, tests and package
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Install the SDK specified by global.json
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: global.json
+
+      - name: Stamp immutable build identity
+        env:
+          SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          SOURCE_BRANCH: ${{ github.ref_name }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          BUILD_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:SOURCE_COMMIT -notmatch '^[a-f0-9]{40}$' -or $env:BUILD_NUMBER -notmatch '^[0-9]+$' -or $env:BUILD_ATTEMPT -notmatch '^[0-9]+$') { throw 'Invalid build identity inputs.' }
+          if ((git rev-parse HEAD) -cne $env:SOURCE_COMMIT) { throw 'Checkout differs from the identified source commit.' }
+          $short = $env:SOURCE_COMMIT.Substring(0, 7)
+          $channel = if ($env:SOURCE_BRANCH -eq 'main') { 'stable' } else { 'testing' }
+          $version = if ($channel -eq 'stable') { "0.$($env:BUILD_NUMBER).$($env:BUILD_ATTEMPT)+$short" } else { "0.2.0-preview.$($env:BUILD_NUMBER).$($env:BUILD_ATTEMPT)+$short" }
+          "OVERLAY_VERSION=$version" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+          "OVERLAY_BUILD_ID=ci-$($env:BUILD_NUMBER)-a$($env:BUILD_ATTEMPT)-$short" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+          "OVERLAY_COMMIT=$($env:SOURCE_COMMIT)" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+          "OVERLAY_CHANNEL=$channel" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+
+      - name: Build solution
+        id: build
+        run: |
+          ./scripts/verify.ps1 -Stage Build -OutputVersion native-v1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # These suites exercise managed state, mocked native boundaries and settings on Windows.
+      # They do not establish compatibility with a physical controller or interactive desktop.
+      - name: Run non-interactive behavior suites
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 8
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $checks = 'artifacts/check-native-v1'
+          New-Item -ItemType Directory -Path $checks -Force | Out-Null
+          $testDll = 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows/ApolloOverlay.Tests.dll'
+          $failed = $false
+          foreach ($suite in @('guide-settings', 'guide-release-red', 'session-hub-services', 'steam-sequence', 'steam-effects-handshake')) {
+            Write-Host "Running $suite"
+            & dotnet $testDll "$checks/suite-$suite.json" "--$suite" 2>&1 | Tee-Object -FilePath "$checks/$suite.log"
+            if ($LASTEXITCODE -ne 0) { Write-Error "$suite failed with exit code $LASTEXITCODE" -ErrorAction Continue; $failed = $true }
+          }
+          if ($failed) { exit 1 }
+
+      - name: Run CLI tests and shutdown roundtrip
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 5
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $checks = 'artifacts/check-native-v1'
+          New-Item -ItemType Directory -Path $checks -Force | Out-Null
+          $cliTests = 'tests/ApolloOverlay.Cli.Tests/bin/Release/net10.0-windows/ApolloOverlay.Cli.Tests.exe'
+          $cli = 'tools/ApolloOverlay.Cli/bin/Release/net10.0-windows/ApolloOverlay.Cli.exe'
+          $failed = $false
+          & $cliTests 2>&1 | Tee-Object -FilePath "$checks/cli-tests.log"
+          if ($LASTEXITCODE -ne 0) { Write-Error "CLI tests failed with exit code $LASTEXITCODE" -ErrorAction Continue; $failed = $true }
+          & $cliTests '--roundtrip' $cli 2>&1 | Tee-Object -FilePath "$checks/cli-roundtrip.log"
+          if ($LASTEXITCODE -ne 0) { Write-Error "CLI roundtrip failed with exit code $LASTEXITCODE" -ErrorAction Continue; $failed = $true }
+          if ($failed) { exit 1 }
+
+      # These render the app's own WPF tree with fixtures and synthetic palettes.
+      # Images are review artifacts, not a physical TV or streaming compatibility test.
+      - name: Capture WPF interface fixtures
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 8
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $checks = 'artifacts/check-native-v1'
+          New-Item -ItemType Directory -Path $checks -Force | Out-Null
+          $testDll = 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows/ApolloOverlay.Tests.dll'
+          $failed = $false
+          foreach ($mode in @('review-captures', 'session-hub-captures', 'session-hub-focus-captures', 'update-captures')) {
+            Write-Host "Capturing $mode"
+            & dotnet $testDll "$checks/$mode" "--$mode" 2>&1 | Tee-Object -FilePath "$checks/$mode.log"
+            if ($LASTEXITCODE -ne 0) { Write-Error "$mode failed with exit code $LASTEXITCODE" -ErrorAction Continue; $failed = $true }
+          }
+          if ($failed) { exit 1 }
+
+      # Several WPF fixtures require a real interactive foreground window. Failure on a
+      # hosted runner without an interactive desktop is reported, not treated as a pass.
+      - name: Run full WPF behavior suite
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 12
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $checks = 'artifacts/check-native-v1'
+          New-Item -ItemType Directory -Path $checks -Force | Out-Null
+          & dotnet 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows/ApolloOverlay.Tests.dll' "$checks/behavior-report.json" 2>&1 | Tee-Object -FilePath "$checks/behavior.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build official Velopack installer and packages
+        id: package
+        env:
+          RELEASE_NOTES: ${{ github.event.head_commit.message || github.event.pull_request.title }}
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 8
+        run: |
+          ./scripts/verify.ps1 -Stage Package -OutputVersion native-v1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify official Velopack feed and package integrity
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        run: |
+          ./scripts/test-velopack-package.ps1 -ReleasePath artifacts/velopack -OutputPath artifacts/check-native-v1/velopack-package-tests.json
+
+      - name: Verify official Velopack install and uninstall
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        timeout-minutes: 6
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./scripts/test-velopack-install.ps1 -ReleasePath artifacts/velopack -OutputPath artifacts/check-native-v1/velopack-install-smoke.json
+
+      - name: Upload test reports and logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: windows-test-reports
+          path: artifacts/check-native-v1/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Windows package
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: windows-package
+          path: artifacts/velopack/
+          if-no-files-found: warn
+          retention-days: 14
+
+  publish-update:
+    name: Publish validated update
+    needs: windows
+    if: ${{ needs.windows.result == 'success' && github.event_name == 'push' && github.repository_id == '1430327913' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/controller-overlay-polish') }}
+    runs-on: windows-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      statuses: write
+    env:
+      UPDATE_STATUS_REPOSITORY: ${{ github.repository }}
+      UPDATE_STATUS_COMMIT: ${{ github.sha }}
+      UPDATE_STATUS_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Report update publication pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:UPDATE_STATUS_REPOSITORY -notmatch '^bezoro/[A-Za-z0-9_.-]+$' -or $env:UPDATE_STATUS_COMMIT -notmatch '^[a-f0-9]{40}$' -or $env:UPDATE_STATUS_RUN_URL -notmatch ('^https://github\.com/' + [Regex]::Escape($env:UPDATE_STATUS_REPOSITORY) + '/actions/runs/[0-9]+$')) { throw 'Invalid publication status target.' }
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28'; 'User-Agent' = 'GameSessionOverlay-release' }
+          $body = @{ state = 'pending'; context = 'overlay/update-release'; target_url = $env:UPDATE_STATUS_RUN_URL; description = 'Preparando publicação da atualização validada.' } | ConvertTo-Json
+          Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$($env:UPDATE_STATUS_REPOSITORY)/statuses/$($env:UPDATE_STATUS_COMMIT)" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+
+      - name: Checkout the validated source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Install the pinned SDK for the official release CLI
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore the pinned Velopack CLI
+        run: dotnet tool restore
+
+      - name: Download the validated package
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: windows-package
+          path: artifacts/release
+
+      - name: Publish with the official Velopack CLI
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_NOTES: ${{ github.event.head_commit.message }}
+        run: |
+          ./scripts/publish-release.ps1 -ArtifactDirectory artifacts/release -Repository $env:RELEASE_REPOSITORY -Commit $env:RELEASE_COMMIT
+
+      - name: Report update publication result
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLICATION_OUTCOME: ${{ steps.publish.outcome }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:UPDATE_STATUS_REPOSITORY -notmatch '^bezoro/[A-Za-z0-9_.-]+$' -or $env:UPDATE_STATUS_COMMIT -notmatch '^[a-f0-9]{40}$' -or $env:UPDATE_STATUS_RUN_URL -notmatch ('^https://github\.com/' + [Regex]::Escape($env:UPDATE_STATUS_REPOSITORY) + '/actions/runs/[0-9]+$')) { throw 'Invalid publication status target.' }
+          $success = $env:PUBLICATION_OUTCOME -eq 'success'
+          $description = 'Falha ao publicar atualização. Consulte os logs.'
+          if ($success) {
+            $manifest = Get-Content -LiteralPath 'artifacts/release/build-info.json' -Raw | ConvertFrom-Json
+            $description = "Versão publicada: $($manifest.version)"
+          }
+          if ($description.Length -gt 140) { $description = $description.Substring(0, 140) }
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28'; 'User-Agent' = 'GameSessionOverlay-release' }
+          $body = @{ state = $(if ($success) { 'success' } else { 'failure' }); context = 'overlay/update-release'; target_url = $env:UPDATE_STATUS_RUN_URL; description = $description } | ConvertTo-Json
+          Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$($env:UPDATE_STATUS_REPOSITORY)/statuses/$($env:UPDATE_STATUS_COMMIT)" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null

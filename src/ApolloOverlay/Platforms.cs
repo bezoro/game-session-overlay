@@ -33,6 +33,7 @@ public interface IPlatform : IDisposable
     Task<ActionResult> TaskView()=>Task.FromResult(new ActionResult(ResultKind.Unavailable,"Visão de tarefas indisponível nesta plataforma."));
     bool CanSteamMenu(WindowRef? window)=>false;
     Task<ActionResult> SteamMenu(WindowRef window)=>Task.FromResult(new ActionResult(ResultKind.Unavailable,"Menu Big Picture não confirmado."));
+    Task<ActionResult> SteamMenu(WindowRef window,CancellationToken cancellation,Func<bool> continuing)=>cancellation.IsCancellationRequested||!continuing()?Task.FromResult(new ActionResult(ResultKind.Cancelled,"Cancelado antes do envio.")):IsPreview?SteamMenu(window):Task.FromResult(new ActionResult(ResultKind.Unavailable,"Esta plataforma não oferece menu cancelável."));
     ActionResult Launch(bool playnite,string? path);
 }
 
@@ -58,13 +59,21 @@ public sealed class PreviewPlatform : IPlatform
     public void Dispose() { }
 }
 
-public sealed class WindowsPlatform : IPlatform,IWindowEffects
+public interface IWindowIconNotifications
+{
+    // Raised off the UI thread only after the window identity was revalidated.
+    event Action<WindowRef>? IconAvailable;
+}
+
+public sealed class WindowsPlatform : IPlatform,IWindowEffects,IWindowIconNotifications
 {
     public ShortcutDispatch? LastShortcutDispatch{get;private set;}
     public int SteamOwnedKeys{get;private set;}
     private long shortcutRevision;
     private bool disposed;
     private readonly Func<Native.Input[],uint> keySender;
+    private readonly WindowIconCache icons;
+    public event Action<WindowRef>? IconAvailable { add => icons.Available += value; remove => icons.Available -= value; }
     public bool IsPreview=>false;
     private readonly Dictionary<nint,long> generations=[];
     private long sequence;
@@ -77,6 +86,7 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
     {
         this.keySender=keySender;
         this.allowOwnedFixture=allowOwnedFixture;
+        icons=new WindowIconCache(LoadIcon);
         destroyCallback=(_,_,hwnd,obj,child,_,_)=> {lock(generations){if (hwnd!=0 && obj==0 && child==0 && generations.ContainsKey(hwnd)) generations[hwnd]=++sequence;} };
         hook=Native.SetWinEventHook(0x8001,0x8001,0,destroyCallback,0,0,0); // EVENT_OBJECT_DESTROY, OUTOFCONTEXT on this dispatcher.
     }
@@ -107,7 +117,7 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
         return windows;
     }
     private bool Relevant(nint hwnd){if(!Native.IsWindowVisible(hwnd)||Native.GetWindow(hwnd,4)!=0||(Native.GetWindowLongPtr(hwnd,-20).ToInt64()&0x80)!=0)return false;Native.GetWindowThreadProcessId(hwnd,out var pid);if(pid==Environment.ProcessId&&!allowOwnedFixture)return false;var type=new StringBuilder(128);Native.GetClassName(hwnd,type,type.Capacity);if(type.ToString() is "Progman" or "WorkerW" or "Shell_TrayWnd" or "Shell_SecondaryTrayWnd")return false;return Native.DwmGetWindowAttribute(hwnd,14,out var cloaked,4)!=0||cloaked==0;}
-    public bool Valid(WindowRef window){if(disposed)return false;var current=Read(window.Handle);return current is not null&&window.Same(current)&&Relevant(window.Handle)&&(!current.Protected||current.ProcessName.Equals("explorer",StringComparison.OrdinalIgnoreCase))&&hook!=0;}
+    public bool Valid(WindowRef window){if(Volatile.Read(ref disposed))return false;var current=Read(window.Handle);return current is not null&&window.Same(current)&&Relevant(window.Handle)&&(!current.Protected||current.ProcessName.Equals("explorer",StringComparison.OrdinalIgnoreCase))&&hook!=0;}
     public IReadOnlyList<DisplayRef> Displays()
     {
         var displays=new List<DisplayRef>();
@@ -128,9 +138,26 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
     }
     public bool HasSteamLaunchContext(WindowRef? window)=>window is not null&&SteamLaunchContext.Observe(window,Valid);
     public Task<ActionResult> Switch(WindowRef window)=>new GuardedActions(this).Switch(window);
-    public ImageSource? Icon(WindowRef window)
+    public ImageSource? Icon(WindowRef window)=>icons.Get(window);
+    [DllImport("user32.dll", SetLastError=true)] private static extern nint CopyIcon(nint icon);
+    [DllImport("user32.dll")] private static extern bool DestroyIcon(nint icon);
+    private ImageSource? LoadIcon(WindowRef window)
     {
-        if(!Valid(window))return null;try{Native.SendMessageTimeout(window.Handle,0x7F,2,0,2,100,out var icon);var handle=icon==0?Native.GetClassLongPtr(window.Handle,-14):(nint)icon;if(handle==0)return null;var image=Imaging.CreateBitmapSourceFromHIcon(handle,System.Windows.Int32Rect.Empty,BitmapSizeOptions.FromWidthAndHeight(48,48));image.Freeze();return image;}catch(Exception e)when(e is Win32Exception or ArgumentException or InvalidOperationException){return null;}
+        if(!Valid(window))return null;
+        nint owned=0;
+        try
+        {
+            Native.SendMessageTimeout(window.Handle,0x7F,2,0,2,100,out var icon);
+            var borrowed=icon==0?Native.GetClassLongPtr(window.Handle,-14):(nint)icon;
+            if(borrowed==0||!Valid(window))return null;
+            owned=CopyIcon(borrowed);
+            if(owned==0)return null;
+            var image=Imaging.CreateBitmapSourceFromHIcon(owned,System.Windows.Int32Rect.Empty,BitmapSizeOptions.FromWidthAndHeight(48,48));
+            image.Freeze();
+            return Valid(window)?image:null;
+        }
+        catch(Exception e)when(e is Win32Exception or ArgumentException or InvalidOperationException){return null;}
+        finally{if(owned!=0)DestroyIcon(owned);}
     }
     public Task<ActionResult> Close(WindowRef window,CancellationToken cancellation)=>new GuardedActions(this).Close(window,cancellation);
     public Task<ActionResult> Minimize(WindowRef window,CancellationToken cancellation)=>new GuardedActions(this).Minimize(window,cancellation);
@@ -138,7 +165,7 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
     public bool IsMinimized(WindowRef window)=>Valid(window)&&Native.IsIconic(window.Handle);
     public bool RequestMinimize(WindowRef window)=>!disposed&&!window.Protected&&Valid(window)&&Native.ShowWindowAsync(window.Handle,6);
     public Task<ActionResult> Shortcut(WindowRef window,string keys)=>keys is "Win+G" or "Shift+Tab" or "Ctrl+Tab"?new GuardedActions(this).Shortcut(window,keys):Task.FromResult(new ActionResult(ResultKind.Unavailable,"Atalho não permitido neste caminho."));
-    public Task<ActionResult> Shortcut(WindowRef window,string keys,CancellationToken cancellation,Func<bool> continuing)=>keys is "Shift+Tab" or "Ctrl+Tab"?new GuardedActions(this).Shortcut(window,keys,cancellation,continuing):Task.FromResult(new ActionResult(ResultKind.Unavailable,"Somente o atalho Steam configurado aceita este caminho."));
+    public Task<ActionResult> Shortcut(WindowRef window,string keys,CancellationToken cancellation,Func<bool> continuing)=>keys is "Win+G" or "Shift+Tab" or "Ctrl+Tab"?new GuardedActions(this).Shortcut(window,keys,cancellation,continuing):Task.FromResult(new ActionResult(ResultKind.Unavailable,"Atalho não permitido."));
     public Task<ActionResult> Shortcut(WindowRef window,string keys,CancellationToken cancellation,Func<bool> continuing,Action<ShortcutDispatch> progress)=>keys is "Shift+Tab" or "Ctrl+Tab"?new GuardedActions(this,_=>progress(LastShortcutDispatch!.Value)).Shortcut(window,keys,cancellation,continuing):Task.FromResult(new ActionResult(ResultKind.Unavailable,"Atalho não permitido."));
     public Task<ActionResult> Focus(WindowRef window,CancellationToken cancellation,Func<bool> continuing)=>new GuardedActions(this).FocusStable(window,cancellation,continuing);
     public WindowObservation ObserveWindow(WindowRef window)=>ClosureObservation.Classify(window,Probe(window.Handle));
@@ -193,13 +220,8 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
             var folder=Directory.GetParent(path);while(folder is not null){if(File.Exists(Path.Combine(folder.FullName,"steam.exe"))){var relative=Path.GetRelativePath(folder.FullName,path);return relative.StartsWith("bin"+Path.DirectorySeparatorChar+"cef"+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase);}folder=folder.Parent;}return false;
         }catch(Exception e)when(e is Win32Exception or InvalidOperationException or ArgumentException or IOException or UnauthorizedAccessException){return false;}
     }
-    public async Task<ActionResult> SteamMenu(WindowRef window)
-    {
-        if(!CanSteamMenu(window))return new(ResultKind.Unavailable,"Janela Big Picture não confirmada; nenhum F1 enviado.");
-        if(Native.IsIconic(window.Handle))Native.ShowWindow(window.Handle,9);if(disposed||!Native.SetForegroundWindow(window.Handle))return new(ResultKind.Failed,"O Windows recusou o foco do Big Picture.");
-        for(var i=0;i<6;i++){if(!CanSteamMenu(window))return new(ResultKind.Cancelled,"Big Picture mudou ou overlay encerrou; nenhum F1 enviado.");if(IsForeground(window)){if(!CanSteamMenu(window))return new(ResultKind.Cancelled,"Alvo mudou antes do F1.");return Outcome.Keys(SendKeys("F1"),2);}await Wait(50);}
-        return new(ResultKind.Unknown,"Foco Big Picture não confirmado; nenhum F1 enviado.");
-    }
+    public Task<ActionResult> SteamMenu(WindowRef window)=>SteamMenu(window,CancellationToken.None,()=>true);
+    public Task<ActionResult> SteamMenu(WindowRef window,CancellationToken cancellation,Func<bool> continuing)=>new GuardedActions(this).SteamMenu(window,cancellation,continuing,()=>!disposed&&CanSteamMenu(window));
     public ActionResult Launch(bool playnite,string? path)
     {
         if(disposed)return new(ResultKind.Cancelled,"Overlay encerrada; nenhuma inicialização enviada.");
@@ -213,5 +235,6 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects
             return new(ResultKind.Requested,playnite ? "Inicialização do Playnite solicitada; modo e foco ainda não confirmados." : "URI do Steam enviada; Big Picture ainda não confirmado.");
         } catch (Exception e) when (e is Win32Exception or InvalidOperationException or IOException) { return new(ResultKind.Failed,"O Windows não aceitou a inicialização. Verifique a instalação em Ajustes."); }
     }
-    public void Dispose() { if(disposed)return;disposed=true;if (hook!=0) Native.UnhookWinEvent(hook); GC.KeepAlive(destroyCallback); }
+    public void Dispose() { if(disposed)return;Volatile.Write(ref disposed,true);icons.Dispose();if (hook!=0) Native.UnhookWinEvent(hook); GC.KeepAlive(destroyCallback); }
 }
+

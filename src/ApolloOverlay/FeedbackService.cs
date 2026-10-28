@@ -25,14 +25,7 @@ internal sealed class PcmFeedbackSound : IFeedbackSound
     {
         if(!cues.TryGetValue(cue,out var resource))
         {
-            const int rate=16000,samples=640;
-            var stream=new MemoryStream();
-            using(var writer=new BinaryWriter(stream,System.Text.Encoding.ASCII,true))
-            {
-                writer.Write("RIFF"u8);writer.Write(36+samples*2);writer.Write("WAVEfmt "u8);writer.Write(16);writer.Write((short)1);writer.Write((short)1);writer.Write(rate);writer.Write(rate*2);writer.Write((short)2);writer.Write((short)16);writer.Write("data"u8);writer.Write(samples*2);
-                var frequency=cue switch{FeedbackCue.Navigation=>640,FeedbackCue.Confirmation=>880,FeedbackCue.Unavailable=>300,_=>720};
-                for(var i=0;i<samples;i++){var envelope=Math.Sin(Math.PI*i/(samples-1));writer.Write((short)(Math.Sin(2*Math.PI*frequency*i/rate)*envelope*900));}
-            }
+            var stream=new MemoryStream(FeedbackTone.Wave(cue),writable:false);
             stream.Position=0;var player=new SoundPlayer(stream);player.Load();resource=(stream,player);cues.Add(cue,resource);
         }
         resource.Player.Play();

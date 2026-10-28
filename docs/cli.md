@@ -1,6 +1,71 @@
 # CLI da overlay
 
-`ApolloOverlay.Cli.exe` conversa com a instância em execução. Não inicia nem eleva a GUI, não repete pedidos e não aceita teclas, caminhos de executáveis ou scripts arbitrários.
+`gso.cmd` e `ApolloOverlay.Cli.exe` vêm no aplicativo instalado e conversam com a instância em execução, mesmo com a overlay oculta. Não iniciam nem elevam a GUI, não repetem pedidos e não aceitam teclas, caminhos de executáveis ou scripts arbitrários.
+
+## Atualizar pelo terminal ou por um agente
+
+Instale uma vez pelo Setup atual para receber a CLI e a API de atualização. Uma instalação antiga sem esses componentes precisa desse primeiro passo. Depois, os comandos usam o mesmo atualizador Velopack da interface. A consulta e o download das publicações públicas não exigem login ou token do GitHub.
+
+No PowerShell, encontre a CLI da instalação atual:
+
+```powershell
+$install = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\GameSessionOverlay').InstallLocation
+$gso = Join-Path $install 'current\gso.cmd'
+& $gso version
+& $gso update check --channel testing
+& $gso update --channel testing
+```
+
+Execute no mesmo usuário, sessão e nível de elevação da overlay. Se ela estiver elevada, o terminal ou agente também precisa estar elevado. A janela pode permanecer oculta; os comandos de atualização não dependem de foco nem de navegação na interface. O instalador não adiciona `gso` ao PATH: use o caminho encontrado acima ou execute `gso.cmd` da pasta `current`.
+
+| Comando | Resultado |
+|---|---|
+| `gso version` | Identidade da instância que está executando agora. |
+| `gso update status` | Versão atual, instalação, operação, progresso, catálogo e histórico. |
+| `gso update check --channel testing` | Consulta as publicações do canal, sem instalar. Aceita também `stable`. |
+| `gso update` | Consulta o canal selecionado, baixa a versão escolhida e solicita aplicação com reinício. |
+| `gso update install --build BUILD_ID --channel testing` | Seleciona uma publicação exata do catálogo, inclusive uma anterior. Sem `--build`, escolhe a publicação mais recente do canal. |
+| `gso history` | Lista as versões preservadas localmente para retorno. |
+| `gso rollback BUILD_ID` | Prepara a versão preservada indicada e solicita aplicação com reinício. |
+| `gso update cancel JOB_ID` | Solicita cancelamento da preparação correspondente. Não desfaz uma aplicação já solicitada. |
+
+Cada resposta é um objeto JSON. `Update.Version`, `BuildId`, `Commit` e `Channel` descrevem o binário da instância consultada; `Pid`, `Started`, `Session` e `Instance` identificam essa execução. `Update.TargetBuildId` e `TargetVersion` descrevem o destino preparado. `JobId`, `Phase`, `Progress`, `Terminal`, `Available` e `History` permitem acompanhar o trabalho. Salve ou descarte ajustes pendentes antes de trocar de versão.
+
+Ao iniciar uma preparação, `Terminal: true` no nível externo encerra apenas a solicitação de início. O job continua com `Update.Terminal: false` e é acompanhado por `update status`. Seu progresso e resultado ficam no recibo próprio, sem ocupar permanentemente o histórico de solicitações da CLI.
+
+Uma resposta `Outcome: Requested` à atualização ou ao rollback confirma o pedido ao Velopack e a saída da instância anterior. **Ela ainda não confirma que a nova versão iniciou.** O processo da CLI termina para permitir a substituição dos binários. Consulte a instalação novamente com uma nova execução de `gso version`; apenas uma resposta fresca `Completed`, com o `Update.BuildId` esperado e uma nova identidade de processo, confirma o destino em execução. A consulta pode retornar `Unavailable` durante o reinício. Não há um `--wait` que atravesse a substituição dos executáveis.
+
+Um agente pode usar este fluxo, sem reenviar a mutação:
+
+```powershell
+$before = (& $gso version | ConvertFrom-Json)
+if ($LASTEXITCODE -ne 0 -or $before.Outcome -ne 'Completed') { throw 'Instância atual indisponível.' }
+$requested = (& $gso update --channel testing | ConvertFrom-Json)
+if ($LASTEXITCODE -ne 0) { throw $requested.Reason }
+if ($requested.Outcome -eq 'Requested') {
+    $target = $requested.Update.TargetBuildId
+    $confirmed = $false
+    $limit = [Diagnostics.Stopwatch]::StartNew()
+    do {
+        Start-Sleep -Milliseconds 500
+        $after = (& $gso version | ConvertFrom-Json)
+        if ($LASTEXITCODE -eq 0 -and $after.Outcome -eq 'Completed' -and
+            $after.Update.BuildId -eq $target -and
+            ($after.Pid -ne $before.Pid -or $after.Started -ne $before.Started)) {
+            $confirmed = $true
+            break
+        }
+    } while ($limit.Elapsed.TotalSeconds -lt 60)
+    if (-not $confirmed) { throw 'Destino ainda não confirmado. Consulte version/status; não repita a instalação automaticamente.' }
+    $after
+} else {
+    $requested
+}
+```
+
+`--timeout 5..600` limita o tempo de preparação da CLI, em segundos; o padrão é 180. `--dry-run` valida um pedido de mudança sem executá-lo. Para acompanhamento ou cancelamento de uma preparação em andamento, use outro terminal com `update status` ou `update cancel JOB_ID`. Um resultado `Unknown` exige observar `version` e `update status` antes de decidir o próximo passo. O wrapper preserva o código de saída da CLI; código zero também pode acompanhar `Requested` e não substitui a confirmação da versão.
+
+## Ações da sessão
 
 ```powershell
 ApolloOverlay.Cli.exe status

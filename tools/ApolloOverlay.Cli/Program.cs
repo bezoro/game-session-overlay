@@ -11,7 +11,8 @@ internal static class Program
 {
     public static async Task<int> Main(string[] args)
     {
-        if(args.Length==0||args[0] is "--help" or "help"){Console.WriteLine("ApolloOverlay.Cli status|targets|actions|trace|result ID|execute ACTION [--target ID] [--intent activate|left|right] [--revision N] [--dry-run]|cancel ID|shutdown [--bridge] [--pipe LOCAL_NAME]. No implicit launch/elevation/retry.");return 0;}
+        if(args.Length>0&&args[0] is "version" or "update" or "history" or "rollback")return await UpdateCommands.Run(args);
+        if(args.Length==0||args[0] is "--help" or "help"){Console.WriteLine("gso version|history|update [install|check|status|cancel JOB_ID] [--build BUILD_ID] [--channel testing|stable] [--dry-run] [--timeout 5..600]|rollback BUILD_ID. gso status|targets|actions|trace|result ID|execute ACTION [--target ID] [--intent activate|left|right] [--revision N] [--dry-run]|cancel ID|shutdown [--bridge] [--pipe LOCAL_NAME]. Saída JSON; sem lançamento, elevação ou reenvio implícitos. Confirme a versão após atualizar com uma nova execução de gso version.");return 0;}
         using var cancellation=new CancellationTokenSource(10000);Console.CancelKeyPress+=(_,e)=>{e.Cancel=true;cancellation.Cancel();};AutomationRequest request=new(){Verb=args[0],DeadlineUtc=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()+10000};var pipe=AutomationPipeSecurity.DefaultName;var bridge=false;
         try{
             var index=1;if(request.Verb is "execute" or "result" or "cancel"){if(args.Length<2)throw new ArgumentException("Expected action/ID.");request=request.Verb=="execute"?request with{ActionId=args[1]}:request with{RequestId=args[1]};index=2;}
@@ -23,19 +24,19 @@ internal static class Program
         catch(OperationCanceledException){return Print(AutomationReply.Error("Unknown","Prazo/cancelamento; consulte result/trace antes de nova ação."));}
         catch(Exception e)when(e is ArgumentException or FormatException or IndexOutOfRangeException or OverflowException or JsonException){return Print(AutomationReply.Error("Rejected",e.Message));}
     }
-    private static int Print(AutomationReply reply){Console.WriteLine(JsonSerializer.Serialize(reply,AutomationJson.Default.AutomationReply));return reply.Outcome is "Completed" or "Requested" or "Simulated" or "DryRun" or "Snapshot"?0:reply.Outcome=="Unknown"?3:1;}
-    private static async Task<AutomationReply> Send(string name,AutomationRequest request,CancellationToken token)
+    internal static int Print(AutomationReply reply){Console.WriteLine(JsonSerializer.Serialize(reply,AutomationJson.Default.AutomationReply));return reply.Outcome is "Completed" or "Requested" or "Simulated" or "DryRun" or "Snapshot"?0:reply.Outcome=="Unknown"?3:1;}
+    internal static async Task<AutomationReply> Send(string name,AutomationRequest request,CancellationToken token)
     {
         using var stream=new NamedPipeClientStream(".",name,PipeDirection.InOut,PipeOptions.Asynchronous);await stream.ConnectAsync(1000,token);
         var handshake=JsonSerializer.Deserialize(await AutomationFrames.Read(stream,AutomationFrames.ResponseLimit,token),AutomationJson.Default.AutomationReply)??throw new InvalidDataException();
         if(handshake.Outcome!="Handshake"||!AutomationPipeSecurity.ServerAllowed(stream,handshake,name.EndsWith(".bridge",StringComparison.Ordinal)))return AutomationReply.Error("Denied","Identidade/elevação do servidor não confirmada.");
         using var server=Process.GetProcessById(handshake.Pid);if(server.StartTime.ToUniversalTime().Ticks!=handshake.Started)return AutomationReply.Error("Denied","Instância mudou.");
-        if(request.Verb is "execute" or "shutdown")request=request with{RequestId=handshake.Ticket,DeadlineUtc=Math.Min(request.DeadlineUtc>0?request.DeadlineUtc:handshake.ExpiresUtc,handshake.ExpiresUtc)};
+        if(request.Verb is "execute" or "shutdown" or "update-check" or "update-download" or "update-rollback" or "update-cancel" or "update-apply")request=request with{RequestId=handshake.Ticket,DeadlineUtc=Math.Min(request.DeadlineUtc>0?request.DeadlineUtc:handshake.ExpiresUtc,handshake.ExpiresUtc)};
         using var deadline=CancellationTokenSource.CreateLinkedTokenSource(token);
-        if(request.Verb=="shutdown")deadline.CancelAfter(TimeSpan.FromMilliseconds(Math.Max(0,request.DeadlineUtc-DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())));
+        if(request.Verb is "shutdown" or "update-apply")deadline.CancelAfter(TimeSpan.FromMilliseconds(Math.Max(0,request.DeadlineUtc-DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())));
         token=deadline.Token;
         ShutdownProcess? observation=null;
-        try{if(request.Verb=="shutdown")observation=ShutdownProcess.Open(handshake.Pid,handshake.Started);}
+        try{if(request.Verb is "shutdown" or "update-apply")observation=ShutdownProcess.Open(handshake.Pid,handshake.Started);}
         catch(Exception e)when(e is Win32Exception or InvalidDataException){return AutomationReply.Error("Denied","Não foi possível fixar a observação da instância; shutdown não enviado.",request.RequestId);}
         using var observed=observation;
         await AutomationFrames.Write(stream,AutomationFrames.Encode(request),AutomationFrames.RequestLimit,token);
@@ -44,6 +45,11 @@ internal static class Program
         catch(Exception e)when(e is IOException or OperationCanceledException){return AutomationReply.Error("Unknown","Resposta não confirmada; não reenviar automaticamente.",request.RequestId);}
         if(request.Verb=="shutdown"&&response.Outcome=="ShutdownRequested"){
             return await ObserveShutdown(response,observed!.WaitForExit,token);
+        }
+        if(request.Verb=="update-apply"&&response.Outcome=="UpdateApplyRequested"){
+            var exited=await ObserveShutdown(response,observed!.WaitForExit,token);
+            return exited with{Outcome=exited.Outcome=="Completed"?"Requested":"Unknown",Terminal=false,
+                Reason=exited.Outcome=="Completed"?"A instância anterior encerrou. Atualização solicitada ao Velopack; confirme a nova versão com gso version após o reinício.":"Saída não confirmada. Consulte gso update status antes de qualquer novo pedido."};
         }
         return response;
     }
