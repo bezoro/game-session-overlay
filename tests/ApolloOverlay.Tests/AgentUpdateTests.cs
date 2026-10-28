@@ -10,7 +10,7 @@ using ApolloOverlay.Automation;
 
 internal static class AgentUpdateTests
 {
-    private static readonly UpdateCandidate Next = new(42, "9.9.9+agent-fixture", "agent-next", new string('a', 40), "testing",
+    private static readonly UpdateCandidate Next = new(42, "9.9.9+agent-fixture", "agent-next", new string('a', 40), AppBuild.Current.Channel,
         DateTimeOffset.UtcNow, "Fixture release", 24, "fixture.nupkg", 1234, new string('b', 64));
     private static PreparedUpdate Prepared(UpdateCandidate? candidate = null)
     {
@@ -65,11 +65,12 @@ internal static class AgentUpdateTests
         });
         test("agent updates selected channel stays separate from running compiled identity", () =>
         {
-            using var host = new Host(); host.Source.Releases = [Next with { Channel = "stable" }];
-            host.Send(Request("update-check") with { Channel = "stable" }); host.Finish();
+            var selectedChannel = AppBuild.Current.Channel == "stable" ? "testing" : "stable";
+            using var host = new Host(); host.Source.Releases = [Next with { Channel = selectedChannel }];
+            host.Send(Request("update-check") with { Channel = selectedChannel }); host.Finish();
             var status = host.Status();
-            Require(status.SelectedChannel == "stable" && status.Channel == AppBuild.Current.Channel && host.Source.Channel == "stable", "Channel preference replaced running build identity");
-            Require(host.Send(Request("update-download", Next.BuildId) with { Channel = "testing" }).Outcome == "Unavailable", "Catalog from another channel was used");
+            Require(status.SelectedChannel == selectedChannel && status.Channel == AppBuild.Current.Channel && host.Source.Channel == selectedChannel, "Channel preference replaced running build identity");
+            Require(host.Send(Request("update-download", Next.BuildId) with { Channel = AppBuild.Current.Channel }).Outcome == "Unavailable", "Catalog from another channel was used");
             Require(host.Send(Request("update-download", "foreign-build")).Outcome == "Unavailable" && host.Source.Stages == 0, "Foreign build bypassed exact catalog selection");
         });
         test("agent updates download dry-run preserves receipt and never stages a package", () =>
@@ -188,7 +189,7 @@ internal static class AgentUpdateTests
         {
             var target = Prepared().Build; var state = new AutomationUpdateState { Phase = "Restarting", JobId = "job", TargetBuildId = target.BuildId, TargetVersion = target.Version, Terminal = false };
             Require(MainWindow.ResolveAgentUpdateReceipt(state, target, target, true, true) is { Phase: "Completed", Progress: 100, Terminal: true }, "Exact installed new process did not confirm target");
-            foreach (var mismatch in new[] { target with { Version = "1.0.0" }, target with { BuildId = "other" }, target with { Commit = "other" }, target with { Channel = "stable" } })
+            foreach (var mismatch in new[] { target with { Version = "1.0.0" }, target with { BuildId = "other" }, target with { Commit = "other" }, target with { Channel = target.Channel == "stable" ? "testing" : "stable" } })
                 Require(MainWindow.ResolveAgentUpdateReceipt(state, target, mismatch, true, true) is { Phase: "Interrupted", Terminal: true }, "Mismatched identity falsely confirmed completion");
             Require(MainWindow.ResolveAgentUpdateReceipt(state, target, target, false, true).Phase == "Interrupted", "Portable process confirmed installation");
             Require(MainWindow.ResolveAgentUpdateReceipt(state, target, target, true, false).Phase == "Restarting", "Old process claimed its own replacement completed");

@@ -131,6 +131,21 @@ jobs:
           & dotnet 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows/ApolloOverlay.Tests.dll' "$checks/behavior-report.json" 2>&1 | Tee-Object -FilePath "$checks/behavior.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      # PR identities use testing; exercise the stable channel before merging too.
+      # Package publication below rebuilds with the workflow's original channel.
+      - name: Run update fixtures with stable build identity
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 3
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $checks = 'artifacts/check-native-v1'
+          New-Item -ItemType Directory -Path $checks -Force | Out-Null
+          & dotnet build 'tests/ApolloOverlay.Tests/ApolloOverlay.Tests.csproj' -c Release --no-restore -p:OverlayChannel=stable 2>&1 | Tee-Object -FilePath "$checks/stable-update-build.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & dotnet 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows/ApolloOverlay.Tests.dll' "$checks/stable-agent-updates.json" '--agent-updates' 2>&1 | Tee-Object -FilePath "$checks/stable-agent-updates.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Build official Velopack installer and packages
         id: package
         env:
