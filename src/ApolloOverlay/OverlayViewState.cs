@@ -1,7 +1,7 @@
 namespace ApolloOverlay;
 
 public enum OverlayTab { Hub,Apps,System }
-public enum OverlayRoute { Hub,Apps,System,TargetOptions,Details,WindowsAudio,Integrations,Customize,Setup,OperationResult,Confirmation,PlayniteBrowser,Updates,UpdateReview }
+public enum OverlayRoute { Hub,Apps,System,TargetOptions,Details,WindowsAudio,Integrations,Customize,Setup,OperationResult,Confirmation,PlayniteBrowser,Updates,UpdateReview,Mixer,AudioDevices,Profiles,ProfileEdit,Media,Keyboard,Captures,CaptureDetail }
 public sealed record OverlayViewFrame(OverlayRoute Route,WindowRef? Target=null,string SelectedId="",double ScrollOffset=0,bool ChooseSession=false,int SetupStep=0,string? BrowserFolder=null,int BrowserPage=0);
 public sealed class OverlayViewState
 {

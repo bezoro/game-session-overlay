@@ -30,6 +30,7 @@ public partial class MainWindow
     private void BuildCurrentView()
     {
         controllerStatusParagraph=null;
+        if(BuildSessionFeatureView())return;
         switch(view.Current.Route){
             case OverlayRoute.Updates:BuildUpdates();break;
             case OverlayRoute.UpdateReview:BuildUpdateReview();break;
@@ -52,6 +53,7 @@ public partial class MainWindow
         RegisterFixed("session-card",SessionCardButton,()=>{if(target is null||!valid)ChooseSession();else RunEffect(()=>Controller.Switch(target),()=>Controller.Platform.Valid(target));},true,valid?target!.Title:"Escolher uma janela em Aplicativos");
         RegisterFixed("session-options",SessionOptionsButton,()=>{if(target is not null)OpenOptions(target);else ChooseSession();},true,"Opções da janela da sessão");
         AutomationProperties.SetName(SessionCardButton,valid?target!.Title+" · Retomar janela":"Escolher janela");AutomationProperties.SetHelpText(SessionCardButton,valid?"A / Enter retoma esta janela. X abre opções.":"Escolher uma janela em Aplicativos");
+        BuildSessionDashboard();
         var windowCount=Controller.Apps.Count;
         var windowSummary=windowCount switch{0=>"Nenhuma janela encontrada",1=>"1 janela disponível",_=>$"{windowCount} janelas disponíveis"};
         AddRow("apps","Aplicativos abertos",windowSummary,()=>Page(1));
@@ -116,10 +118,15 @@ public partial class MainWindow
     }
     private void BuildWindowsAudio()
     {
-        var state=audio.Current;Paragraph("Ajuste a saída de áudio do Windows. Para o som de um aplicativo, abra as opções da janela.");
+        var state=audio.Current;Paragraph("Volume do Windows e controles de áudio da sessão.");
         AddRow("volume-down","Diminuir volume","− 5% · saída padrão do Windows",()=>AdjustVolume(-.05f),state.Available);
-        AddRow("volume","Volume · "+(state.Available?state.Volume.ToString("P0"):"indisponível"),"+ 5% · ← / → ajusta",()=>AdjustVolume(.05f),state.Available);
-        AddRow("mute",state.Muted?"Ativar som":"Silenciar","Silencia ou ativa a saída do Windows",()=>AudioAction(audio.Set(muted:!audio.Current.Muted)),state.Available);AddRow("back","Voltar",state.Status,Back);
+        var volume=AddRow("volume","Volume · "+(state.Available?state.Volume.ToString("P0"):"indisponível"),"+ 5% · ← / → ajusta",()=>AdjustVolume(.05f),state.Available);
+        if(state.Available)AddSessionSlider(volume,state.Volume,value=>AudioAction(audio.Set(value,expectedEndpoint:audio.Current.EndpointId)));
+        AddRow("mute",state.Muted?"Ativar som":"Silenciar","Silencia ou ativa a saída do Windows",()=>AudioAction(audio.Set(muted:!audio.Current.Muted)),state.Available);
+        AddRow("microphone",MicrophoneTitle,systemAudio.Current.MicrophoneName,ToggleMicrophone,systemAudio.Current.MicrophoneMuted is not null);
+        AddRow("session-mixer","Mixer de aplicativos","Jogo, conversa e música separados",()=>OpenFeature(OverlayRoute.Mixer,"mixer-refresh"));
+        AddRow("audio-devices","Saída de áudio",systemAudio.Current.OutputName,()=>OpenFeature(OverlayRoute.AudioDevices,"device-refresh"));
+        AddRow("back","Voltar",state.Status,Back);
     }
     private void BuildResult()
     {

@@ -22,13 +22,16 @@ public sealed class SystemAudioDevices(ISystemAudioBackend? backend = null)
     private readonly ISystemAudioBackend backend = backend ?? new CoreSystemAudioBackend();
     private readonly SemaphoreSlim gate = new(1, 1);
     public SystemAudioSnapshot Current { get; private set; } = SystemAudioSnapshot.Empty;
+    public void InvalidateObservation()=>Current=Current with{MicrophoneMuted=null,Status="Atualizando os dispositivos de áudio…"};
     public async Task<SystemAudioSnapshot> RefreshAsync(CancellationToken cancellation = default)
     {
         if (!await gate.WaitAsync(0, cancellation)) return Current;
-        try { Current = await Task.Run(backend.Read, cancellation); return Current; }
+        var work=Task.Run(backend.Read,CancellationToken.None);
+        try { Current = await work.WaitAsync(TimeSpan.FromSeconds(2),cancellation); return Current; }
+        catch(TimeoutException){return Current=SystemAudioSnapshot.Empty with{Status="O áudio demorou a responder. Tente atualizar novamente."};}
         catch (Exception error) when (error is COMException or InvalidCastException or InvalidOperationException or UnauthorizedAccessException)
         { return Current = SystemAudioSnapshot.Empty with { Status = "Dispositivos de áudio indisponíveis. Tente atualizar a lista." }; }
-        finally { gate.Release(); }
+        finally { ReleaseWhenDrained(work); }
     }
     public Task<ActionResult> SetMicrophoneMutedAsync(string expectedId, bool muted, CancellationToken cancellation = default) =>
         Mutate(keep => backend.SetMicrophoneMuted(expectedId, muted, keep), cancellation);
@@ -39,18 +42,23 @@ public sealed class SystemAudioDevices(ISystemAudioBackend? backend = null)
     private async Task<ActionResult> Mutate(Func<Func<bool>, ActionResult> action, CancellationToken cancellation)
     {
         if (!await gate.WaitAsync(0, cancellation)) return new(ResultKind.Unavailable, "Outra operação de áudio está em andamento.");
-        var started = false;
+        using var deadline=CancellationTokenSource.CreateLinkedTokenSource(cancellation);deadline.CancelAfter(3000);
+        Task<(ActionResult Result,SystemAudioSnapshot Snapshot)>? work=null;
         try
         {
-            cancellation.ThrowIfCancellationRequested();
-            var result = await Task.Run(() => { started = true; return action(() => !cancellation.IsCancellationRequested); }, cancellation);
-            Current = await Task.Run(backend.Read);
-            return result;
+            deadline.Token.ThrowIfCancellationRequested();
+            work=Task.Run(()=>{var result=action(()=>!deadline.IsCancellationRequested);return(result,deadline.IsCancellationRequested?Current:backend.Read());},CancellationToken.None);
+            var observed=await work.WaitAsync(deadline.Token);Current=observed.Snapshot;return observed.Result;
         }
-        catch (OperationCanceledException) { return new(started ? ResultKind.Unknown : ResultKind.Cancelled, started ? "Operação interrompida. Confira o dispositivo antes de repetir." : "Nenhuma alteração de áudio enviada."); }
+        catch (OperationCanceledException) { return new(work is not null ? ResultKind.Unknown : ResultKind.Cancelled, work is not null ? "Operação interrompida. Confira o dispositivo antes de repetir." : "Nenhuma alteração de áudio enviada."); }
         catch (Exception error) when (error is COMException or InvalidCastException or InvalidOperationException or UnauthorizedAccessException)
-        { return new(started ? ResultKind.Unknown : ResultKind.Unavailable, "Não foi possível confirmar a alteração. Atualize a lista antes de tentar novamente."); }
-        finally { gate.Release(); }
+        { return new(work is not null ? ResultKind.Unknown : ResultKind.Unavailable, "Não foi possível confirmar a alteração. Atualize a lista antes de tentar novamente."); }
+        finally { if(work is null)gate.Release();else ReleaseWhenDrained(work); }
+    }
+    private void ReleaseWhenDrained(Task work)
+    {
+        if(work.IsCompleted){_ = work.Exception;gate.Release();return;}
+        _=work.ContinueWith(completed=>{_ = completed.Exception;gate.Release();},CancellationToken.None,TaskContinuationOptions.ExecuteSynchronously,TaskScheduler.Default);
     }
 }
 
@@ -92,6 +100,7 @@ internal sealed class CoreSystemAudioBackend : ISystemAudioBackend
                     var iid = typeof(IAudioEndpointVolume).GUID; Check(capture.Activate(ref iid, 23, 0, out activated));
                     Check(((IAudioEndpointVolume)activated).GetMute(out var state)); muted = state;
                 }
+                catch(Exception error)when(error is COMException or InvalidCastException){muted=null;}
                 finally { Release(activated); Release(capture); }
             }
             return new(choices.ToArray(), Default(enumerator, 0, 0), Default(enumerator, 0, 1), microphone, name, muted, "Saídas para jogos e mídia; microfone padrão de comunicação.");
