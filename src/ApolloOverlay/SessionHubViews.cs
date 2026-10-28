@@ -31,6 +31,8 @@ public partial class MainWindow
     {
         controllerStatusParagraph=null;
         switch(view.Current.Route){
+            case OverlayRoute.Updates:BuildUpdates();break;
+            case OverlayRoute.UpdateReview:BuildUpdateReview();break;
             case OverlayRoute.OperationResult:BuildResult();break;
             case OverlayRoute.WindowsAudio:BuildWindowsAudio();break;
             case OverlayRoute.TargetOptions:BuildOptions();break;
@@ -133,6 +135,7 @@ public partial class MainWindow
     }
     private void BuildSystem()
     {
+        Section("Aplicativo");AddRow("updates","Versão e atualizações",AppBuild.Current.Display+" · atualizar ou voltar de versão",OpenUpdates);
         Section("Exibição e aparência");AddDisplay();AddRow("side","Lado · "+(Controller.Settings.PanelSide=="Right"?"Direito":"Esquerdo"),"Escolha o lado do painel",()=>Change(Controller.Settings with{PanelSide=Controller.Settings.PanelSide=="Left"?"Right":"Left"}));AddScale();
         AddRow("motion",Controller.Settings.ReducedMotion?"Animações reduzidas":"Animações suaves","Ajustar movimento do painel",()=>Change(Controller.Settings with{ReducedMotion=!Controller.Settings.ReducedMotion}));
         Section("Controle");controllerStatusParagraph=Paragraph(controllerStatus);AddRow("deadzone","Deadzone · "+Controller.Settings.Deadzone,"Ajustar sensibilidade do analógico",()=>Change(Controller.Settings with{Deadzone=Controller.Settings.Deadzone<12000?12000:Controller.Settings.Deadzone<18000?18000:Controller.Settings.Deadzone<24000?24000:12000}));AddGuideToggle();AddGuideLimit();

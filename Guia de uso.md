@@ -4,8 +4,8 @@ Abra o painel por cima do jogo para alternar janelas, ajustar o áudio ou acessa
 
 ## Primeira execução
 
-1. Extraia o pacote para uma pasta permanente. Não execute de dentro do ZIP.
-2. Abra **Abrir overlay.cmd**. O painel aparece e o ícone fica na bandeja do Windows, perto do relógio.
+1. Extraia o pacote. Não execute de dentro do ZIP. Se uma versão anterior estiver aberta, encerre pela bandeja.
+2. Execute **Instalar overlay.cmd**. O aplicativo é instalado em `%LOCALAPPDATA%\Programs\GameSessionOverlay`, cria um atalho no menu Iniciar e abre o painel. O ícone fica na bandeja do Windows, perto do relógio.
 3. Em **Sistema**, escolha o monitor, o lado do painel e o tamanho da interface. Se usar Playnite, selecione sua pasta. Pressione **Salvar** para manter as alterações.
 
 Na próxima entrada no Windows, a overlay inicia oculta. Um toque curto no botão **Guide**, o X iluminado no centro do controle Xbox, abre o painel quando você solta o botão. Você também pode dar duplo clique no ícone da bandeja ou escolher **Abrir overlay** no menu do botão direito.
@@ -42,6 +42,22 @@ A opção selecionada mantém o contorno de foco. Ao acionar uma função, o bot
 
 **Áudio do Windows** controla a saída padrão do PC. **Áudio do aplicativo**, nas opções da janela, afeta as sessões de áudio identificadas daquele aplicativo. Nenhum deles garante alterar o volume físico da TV.
 
+## Atualizar e voltar a uma versão anterior
+
+A versão aparece no cabeçalho do painel e em **Sistema → Versão e atualizações**. O identificador também inclui o build e o commit para distinguir as alterações que você está testando.
+
+1. Na página de versões, escolha **Testes** para receber os novos builds aprovados nas verificações do projeto, ou **Estável** para as versões da branch principal.
+2. Como o repositório é privado, use **Conectar GitHub** uma vez. Essa etapa requer teclado para colar um token com acesso de leitura de Contents apenas a `bezoro/apollo-tv-overlay`. A credencial fica protegida pelo Windows para seu usuário e não é incluída em logs ou ajustes.
+3. Use **Buscar atualizações**, escolha uma versão e leia as alterações.
+4. Selecione **Baixar atualização**. B / Esc cancela sem trocar a versão instalada.
+5. Depois da verificação do download, salve ou descarte os ajustes pendentes e selecione **Instalar e reiniciar**.
+
+A troca mantém a versão anterior. Se o novo aplicativo não confirmar que iniciou, o inicializador recupera a versão e os ajustes anteriores. Essa checagem não comprova o funcionamento físico do controle ou do streaming.
+
+Para voltar manualmente, use **Voltar a uma versão anterior**, escolha uma versão local e confirme **Voltar e reiniciar**. Esse caminho funciona sem internet. Os ajustes compatíveis preservados para a versão escolhida também são recuperados. Tentativas que falharam ao iniciar não são oferecidas como versões locais de retorno.
+
+As atualizações são publicadas após os testes dos canais configurados, sem substituir releases anteriores. A primeira versão com este recurso precisa ser instalada a partir do pacote. Depois dessa instalação e da conexão inicial, a navegação das atualizações pode ser feita pelo controle. Veja os [detalhes das atualizações](docs/updates.md).
+
 ## Quando algo não funcionar
 
 | Situação | O que tentar |
@@ -60,7 +76,7 @@ Você pode usar setas, Tab, Enter e Esc como alternativa ao controle. Para encer
 
 A inicialização comum não exige administrador. Você pode desativá-la em **Configurações do Windows → Aplicativos → Inicialização**. Se mover a pasta do aplicativo, abra a overlay uma vez no novo local para atualizar a entrada existente.
 
-Para instalar a inicialização elevada, abra PowerShell como administrador na pasta do pacote e execute `./startup-task.ps1 -Action Install`. Use a conta que vai utilizar a overlay. A instalação exige confirmação do Windows e só vale para os próximos logons. Para remover essa tarefa, execute `./startup-task.ps1 -Action Uninstall` também como administrador. A elevação não isola o controle do jogo.
+Para instalar a inicialização elevada, abra PowerShell como administrador na pasta `%LOCALAPPDATA%\Programs\GameSessionOverlay` e execute `./startup-task.ps1 -Action Install`. Use a conta que vai utilizar a overlay. A instalação exige confirmação do Windows e só vale para os próximos logons. Para remover essa tarefa, execute `./startup-task.ps1 -Action Uninstall` também como administrador. A elevação não isola o controle do jogo.
 
 Para remover o aplicativo, encerre pela bandeja, desative a inicialização ou remova a tarefa elevada e exclua a pasta do pacote. Seus ajustes e logs permanecem em `%LOCALAPPDATA%\Bezoro\GameSessionOverlay` até você excluí-los.
 

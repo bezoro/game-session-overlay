@@ -16,6 +16,8 @@ static class Program
     [STAThread] public static int Main(string[] args)
     {
         if(args.Length is not (1 or 2)) {Console.Error.WriteLine("Expected report path");return 2;}
+        if(args.Length==2&&args[1]=="--updates"){UpdateSourceTests.Run(Case);ManagedInstallTests.Run(Case);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--update-captures"){UpdateInterfaceTests.Capture(args[0]);return 0;}
         if(args.Length==2&&args[1]=="--review-captures"){ReviewFixTests.Capture(args[0]);return 0;}
         if(args.Length==2&&args[1]=="--busy-pad"){SessionHubTests.BusyControllerChecks(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--guide-settings"){GuideAbiTests.GuideSettingsChecks(Case,Path.GetDirectoryName(Path.GetFullPath(args[0]))!);return Finish(args[0]);}
@@ -121,6 +123,10 @@ static class Program
         GuideAbiTests.SteamLaunchRegression(Case);
         Case("Guide defaults on and preserves explicit disabled backup",()=>{True(UserSettings.Parse("{}").GuideXInputEnabled);True(!UserSettings.Parse("{\"GuideXInputEnabled\":false}").GuideXInputEnabled);True(UserSettings.Parse("{\"GuideXInputEnabled\":true}").GuideXInputEnabled);var path=Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[0]))!,"guide-settings.json");UserSettings.Save(path,new(GuideXInputEnabled:false));UserSettings.Save(path,new(GuideXInputEnabled:true));True(UserSettings.Load(path,out _).GuideXInputEnabled);True(!UserSettings.Parse(File.ReadAllText(path+".previous")).GuideXInputEnabled);});
         GuideAbiTests.GuideSettingsChecks(Case,Path.GetDirectoryName(Path.GetFullPath(args[0]))!);
+        UpdateCredentialTests.Run(Case);
+        UpdateInterfaceTests.Run(Case);
+        UpdateSourceTests.Run(Case);
+        ManagedInstallTests.Run(Case);
         InterfaceFeedbackTests.Run(Case);
         PremiumInterfaceTests.Run(Case);
         SessionHubTests.Run(Case);

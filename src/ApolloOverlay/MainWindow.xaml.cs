@@ -117,9 +117,9 @@ public partial class MainWindow : Window
     }
     private sealed record Entry(string Id,Button Button,Action Run,bool Available,string Reason);
     private readonly List<Entry> entries=[];private NavState navigation=new("session-card");private int page;private string subpage="";private WindowRef? detail;
-    public MainWindow(bool pilotRequested=false,bool renderOnly=false,IPlatform? platform=null,LocalDiagnostics? diagnostics=null,IApplicationAudio? appAudioService=null,IControllerDevices? devices=null,IFeedbackService? feedback=null)
+    public MainWindow(bool pilotRequested=false,bool renderOnly=false,IPlatform? platform=null,LocalDiagnostics? diagnostics=null,IApplicationAudio? appAudioService=null,IControllerDevices? devices=null,IFeedbackService? feedback=null,IUpdateSource? updates=null)
     {
-        diagnostic=renderOnly;InitializeComponent();Controller=new(platform??(renderOnly?new PreviewPlatform():null),diagnostics);input=new(Controller.Settings);InitializeIconUpdates();
+        diagnostic=renderOnly;updateSource=updates??(renderOnly||platform?.IsPreview==true?new PreviewUpdateSource():new GitHubUpdateSource());InitializeComponent();Controller=new(platform??(renderOnly?new PreviewPlatform():null),diagnostics);input=new(Controller.Settings);if(!diagnostic&&!Controller.Platform.IsPreview)updateChannel=UpdateChannelSettings.Read(Controller.Diagnostics.Root);InitializeIconUpdates();
         controllerDevices=devices??(diagnostic||Controller.Platform.IsPreview?new PreviewControllerDevices():new ControllerDevices());
         applicationAudio=appAudioService??(diagnostic||Controller.Platform.IsPreview?new PreviewApplicationAudio():new ApplicationAudio(Controller.Platform.Valid));
         feedbackService=feedback??(diagnostic||Controller.Platform.IsPreview?new PreviewFeedbackService():new FeedbackService(controllerDevices));applicationAudio.Changed+=ApplicationAudioChanged;feedbackService.Changed+=FeedbackStatusChanged;feedbackService.Configure(Controller.Settings.SoundFeedbackEnabled,Controller.Settings.HapticFeedbackEnabled);
@@ -177,8 +177,8 @@ public partial class MainWindow : Window
         if(message is 0x7E or 0x2E0 && IsVisible&&!placing)Dispatcher.BeginInvoke(()=>Place());return 0;
     }
     internal void Toggle()=>Toggle(false);
-    private void Toggle(bool trustedDismiss){CancelSteamOwner("Reabertura solicitada; nenhum novo atalho enviado.");if(busy&&steamOwner is null){effectCancellation?.Cancel();return;}if(fadingOut)OpenPanel();else if(IsVisible)HidePanel(true,trustedDismiss);else if(!TransitionPending)OpenPanel();}
-    internal void OpenPanel(){CancelSteamOwner("Painel reaberto; solicitação anterior cancelada.");if(exiting||closeRequested)return;if(busy&&steamOwner is null){if(effectCancellation is not null){effectCancellation.Cancel();if(!IsVisible||fadingOut)OpeningTask=OpenPanelCore();else FeedbackText("Solicitação cancelada; aguardando o resultado.");}return;}OpeningTask=OpenPanelCore();}
+    private void Toggle(bool trustedDismiss){if(updateBusy){CancelUpdateInteraction();if(!IsVisible&&!updateCommitting)OpeningTask=OpenPanelCore();return;}CancelSteamOwner("Reabertura solicitada; nenhum novo atalho enviado.");if(busy&&steamOwner is null){effectCancellation?.Cancel();return;}if(fadingOut)OpenPanel();else if(IsVisible)HidePanel(true,trustedDismiss);else if(!TransitionPending)OpenPanel();}
+    internal void OpenPanel(){if(!diagnostic&&!Controller.Platform.IsPreview)ShowUpdateRecoveryNotice();CancelSteamOwner("Painel reaberto; solicitação anterior cancelada.");if(exiting||closeRequested)return;if(updateBusy&&!updateCommitting){OpeningTask=OpenPanelCore();return;}if(busy&&steamOwner is null){if(effectCancellation is not null){effectCancellation.Cancel();if(!IsVisible||fadingOut)OpeningTask=OpenPanelCore();else FeedbackText("Solicitação cancelada; aguardando o resultado.");}return;}OpeningTask=OpenPanelCore();}
     private async Task OpenPanelCore()
     {
         var wasVisible=IsVisible;fadeGeneration++;fadingOut=false;CancelOpenAnimation();RevokeFocus("request");var cycle=focusCycle;CancelHandoff();CancelHold();input.Cancel();if(!wasVisible)Controller.CaptureReturn();
@@ -206,11 +206,12 @@ public partial class MainWindow : Window
             await Task.Delay(50);
         }return false;
     }
-    internal void ExitFromTray(){if(!exiting)Close();}
+    internal void ExitFromTray(){if(updateCommitting&&!updateCloseAuthorized){FeedbackText("A troca de versão está sendo preparada. Aguarde o reinício.");return;}if(!exiting)Close();}
     private bool closeRequested,closeFinalizing;private Task? closeDrain;
     internal Task ClosingTask=>closeDrain??Task.CompletedTask;
     private void OnClosing(object? sender,System.ComponentModel.CancelEventArgs args)
     {
+        if(updateCommitting&&!updateCloseAuthorized){args.Cancel=true;FeedbackText("Aguarde a preparação da troca de versão.");return;}
         if(exiting)return;
         if(closeFinalizing){Cleanup();return;}
         if(closeRequested){args.Cancel=true;return;}
@@ -287,7 +288,7 @@ public partial class MainWindow : Window
         Hide();CancelOpenAnimation();audio.SetVisible(false);UpdatePolling();
         if(restore&&wasForeground&&stillForeground&&!fadeInterrupted&&PhysicalKeysNeutral()&&returnTarget is {} target&&Controller.Platform.Valid(target)){var result=await Controller.Platform.Switch(target);if(result.Kind!=ResultKind.Completed&&result.Kind!=ResultKind.Simulated&&!exiting){if(!Controller.Platform.IsPreview)Controller.Diagnostics.Log("focus-return",result.Kind);FeedbackText(result.Message);}}
     }
-    private void Cleanup(){if(exiting)return;effectCancellation?.Cancel();fadeGeneration++;fadingOut=false;CancelSteamOwner("Overlay encerrada.");automationHost?.Dispose();exiting=true;operationGeneration++;RevokeFocus("cleanup");CancelHandoff();heldKeys.Clear();SystemParameters.StaticPropertyChanged-=OnSystemParametersChanged;timer.Stop();timer.Tick-=Tick;guideConnection?.Dispose();guideConnection=null;guideBackend=null;guideToggleRequested=false;pending?.Cancel();ResultNotificationRequest=null;applicationAudio.Changed-=ApplicationAudioChanged;feedbackService.Changed-=FeedbackStatusChanged;applicationAudio.Dispose();feedbackService.Dispose();controllerDevices.Dispose();audio.Dispose();source?.RemoveHook(WindowMessage);tray?.Dispose();DisposeIconUpdates();Controller.Dispose();}
+    private void Cleanup(){if(exiting)return;DisposeUpdates();effectCancellation?.Cancel();fadeGeneration++;fadingOut=false;CancelSteamOwner("Overlay encerrada.");automationHost?.Dispose();exiting=true;operationGeneration++;RevokeFocus("cleanup");CancelHandoff();heldKeys.Clear();SystemParameters.StaticPropertyChanged-=OnSystemParametersChanged;timer.Stop();timer.Tick-=Tick;guideConnection?.Dispose();guideConnection=null;guideBackend=null;guideToggleRequested=false;pending?.Cancel();ResultNotificationRequest=null;applicationAudio.Changed-=ApplicationAudioChanged;feedbackService.Changed-=FeedbackStatusChanged;applicationAudio.Dispose();feedbackService.Dispose();controllerDevices.Dispose();audio.Dispose();source?.RemoveHook(WindowMessage);tray?.Dispose();DisposeIconUpdates();Controller.Dispose();}
     private void FeedbackText(string text)
     {
         StatusLabel.TextWrapping=TextWrapping.NoWrap;StatusLabel.TextTrimming=TextTrimming.CharacterEllipsis;StatusLabel.Text=text;
@@ -369,16 +370,16 @@ public partial class MainWindow : Window
     private void SaveView()=>view.Remember(navigation.Id,ContentScroll.VerticalOffset);
     private void SyncView()
     {
-        page=(int)view.Tab;detail=view.Current.Target;subpage=view.Current.Route switch{OverlayRoute.WindowsAudio=>"audio",OverlayRoute.Details=>"details",OverlayRoute.TargetOptions=>"options",OverlayRoute.Integrations=>"integrations",OverlayRoute.Customize=>"customize",OverlayRoute.Setup=>"setup",OverlayRoute.OperationResult=>"operation",OverlayRoute.Confirmation=>"confirmation",OverlayRoute.PlayniteBrowser=>"playnite-browser",_=>""};navigation=new(view.Current.SelectedId);
+        page=(int)view.Tab;detail=view.Current.Target;subpage=view.Current.Route switch{OverlayRoute.WindowsAudio=>"audio",OverlayRoute.Details=>"details",OverlayRoute.TargetOptions=>"options",OverlayRoute.Integrations=>"integrations",OverlayRoute.Customize=>"customize",OverlayRoute.Setup=>"setup",OverlayRoute.OperationResult=>"operation",OverlayRoute.Confirmation=>"confirmation",OverlayRoute.PlayniteBrowser=>"playnite-browser",OverlayRoute.Updates=>"updates",OverlayRoute.UpdateReview=>"update-review",_=>""};navigation=new(view.Current.SelectedId);
     }
     private void OpenView(OverlayViewFrame next){if(busy||TransitionPending||Confirming)return;SaveView();view.Open(next);SyncView();RefreshRows();ContentScroll.ScrollToVerticalOffset(next.ScrollOffset);}
     internal void OpenOptions(WindowRef target)=>OpenView(new(OverlayRoute.TargetOptions,target,"application-mute"));
     private void ChooseSession()=>OpenView(new(OverlayRoute.Apps,SelectedId:Controller.Apps.FirstOrDefault() is {} w?WindowId(w):"refresh-apps",ChooseSession:true));
-    internal void Page(int index){if(TransitionPending||Confirming)return;if((index+3)%3!=page&&interfaceActionDepth==0)RequestCue(FeedbackCue.Navigation);if(view.Current.Route==OverlayRoute.PlayniteBrowser)CancelPlayniteScan();SaveView();view.SwitchTab((OverlayTab)((index+3)%3));SyncView();RefreshRows();ContentScroll.ScrollToVerticalOffset(view.Current.ScrollOffset);}
+    internal void Page(int index){if(TransitionPending||Confirming||updateCommitting)return;if(updateBusy)CancelUpdateInteraction();if((index+3)%3!=page&&interfaceActionDepth==0)RequestCue(FeedbackCue.Navigation);if(view.Current.Route==OverlayRoute.PlayniteBrowser)CancelPlayniteScan();SaveView();view.SwitchTab((OverlayTab)((index+3)%3));SyncView();RefreshRows();ContentScroll.ScrollToVerticalOffset(view.Current.ScrollOffset);}
     private void Subpage(string name,string first)=>OpenView(new(name switch{"audio"=>OverlayRoute.WindowsAudio,"details"=>OverlayRoute.Details,"options"=>OverlayRoute.TargetOptions,"integrations"=>OverlayRoute.Integrations,"customize"=>OverlayRoute.Customize,"setup"=>OverlayRoute.Setup,_=>OverlayRoute.OperationResult},detail,first));
     internal void RefreshRows()
     {
-        automationRevision++;NoteAutomationTargets();
+        automationRevision++;NoteAutomationTargets();HeaderIdentity.Text="Bezoro · "+AppBuild.Current.Display;HeaderIdentity.ToolTip=AppBuild.Current.BuildId+" · "+AppBuild.Current.Commit;
         if(Confirming){UpdatePersistentState();return;}
         var previous=entries.Select(e=>e.Id).ToArray();Rows.Children.Clear();Rows.RowDefinitions.Clear();Rows.ColumnDefinitions.Clear();Rows.ColumnDefinitions.Add(new());Rows.ColumnDefinitions.Add(new());CloseArea.Children.Clear();entries.Clear();operationText=null;
         entries.Add(new("settings",SettingsGear,()=>Page(2),true,"Abrir Sistema"));ContextCard.Visibility=view.Current.Route==OverlayRoute.Hub?Visibility.Visible:Visibility.Collapsed;
@@ -388,7 +389,7 @@ public partial class MainWindow : Window
         ContextIcon.Source=target is null?null:Controller.Platform.Icon(target);ContextIcon.Visibility=ContextIcon.Source is null?Visibility.Collapsed:Visibility.Visible;ContextGlyph.Visibility=ContextIcon.Source is null?Visibility.Visible:Visibility.Collapsed;SessionAudioLabel.Text=target is null?"Selecione uma janela para ver o áudio":!valid?"Janela indisponível":AudioFor(target)?AudioBadge():"Estado não confirmado";ControllerStatusLabel.Text=controllerStatus;
         BackButton.Visibility=view.Depth>0?Visibility.Visible:Visibility.Collapsed;if(view.Depth>0)RegisterFixed("back-header",BackButton,Back,true,"Voltar ao contexto anterior");UpdateHints();
         foreach(var pair in new[]{(HomeTab,0),(AppsTab,1),(SettingsTab,2)}){var selected=pair.Item2==page;pair.Item1.BorderThickness=new(0,0,0,2);if(selected)pair.Item1.SetResourceReference(BorderBrushProperty,ThemeSupport.Success);else pair.Item1.BorderBrush=Brushes.Transparent;pair.Item1.SetResourceReference(BackgroundProperty,selected?ThemeSupport.Control:ThemeSupport.Card);pair.Item1.SetResourceReference(ForegroundProperty,selected?ThemeSupport.Text:ThemeSupport.SecondaryText);AutomationProperties.SetName(pair.Item1,(pair.Item2 switch{0=>"Sessão",1=>"Aplicativos",_=>"Sistema"})+(selected?" · selecionada":""));AutomationProperties.SetItemStatus(pair.Item1,selected?"Selecionada":"Não selecionada");}
-        PageTitle.Text=view.Current.Route switch{OverlayRoute.WindowsAudio=>"Áudio do Windows",OverlayRoute.Details=>"Detalhes da janela",OverlayRoute.TargetOptions=>"Opções da janela",OverlayRoute.Integrations=>"Integrações",OverlayRoute.Customize=>"Acesso rápido",OverlayRoute.Setup=>"Seu painel, do seu jeito",OverlayRoute.OperationResult=>"Resultado da operação",OverlayRoute.Apps=>view.Current.ChooseSession?"Escolher janela":"Aplicativos",OverlayRoute.System=>"Sistema",OverlayRoute.PlayniteBrowser=>"Escolher Playnite",_=>"Controle da sessão"};
+        PageTitle.Text=view.Current.Route switch{OverlayRoute.WindowsAudio=>"Áudio do Windows",OverlayRoute.Details=>"Detalhes da janela",OverlayRoute.TargetOptions=>"Opções da janela",OverlayRoute.Integrations=>"Integrações",OverlayRoute.Customize=>"Acesso rápido",OverlayRoute.Setup=>"Seu painel, do seu jeito",OverlayRoute.OperationResult=>"Resultado da operação",OverlayRoute.Apps=>view.Current.ChooseSession?"Escolher janela":"Aplicativos",OverlayRoute.System=>"Sistema",OverlayRoute.PlayniteBrowser=>"Escolher Playnite",OverlayRoute.Updates=>"Versão e atualizações",OverlayRoute.UpdateReview=>rollbackReview is null?"Atualizar overlay":"Voltar de versão",_=>"Controle da sessão"};
         BuildCurrentView();UpdatePersistentState();navigation=navigation with{Id=Navigation.Preserve(navigation.Id,previous,entries.Select(e=>e.Id).ToArray())};SaveView();TrackApplicationAudio();revealPending=true;SetSelection(false);automationHost?.ObserveSnapshot(AutomationSnapshot());
     }
     private string GuideDescription()=>Controller.Platform.IsPreview?"Prévia · conexão Guide não é consultada":!Controller.Settings.GuideXInputEnabled?"Desativado · abra pelo duplo clique na bandeja":guideBackend?.Active==true?guideBackend.Status:guideConnection?.Status??"Controle ou leitura Guide indisponível";
@@ -430,8 +431,8 @@ public partial class MainWindow : Window
     internal void Move(NavDirection direction)
     {
         if(!NavigationAllowed||busy||TransitionPending)return;if(Confirming){MoveConfirmation(direction is NavDirection.Up or NavDirection.Left?-1:1);return;}
-        var reader=subpage=="operation"?operationText:subpage=="details"?detailsText:null;
-        if(reader?.IsKeyboardFocusWithin==true){if(direction==NavDirection.Up)reader.LineUp();else if(direction==NavDirection.Down)reader.LineDown();else{navigation=new(subpage=="operation"?direction==NavDirection.Left?"operation-text":"dismiss-operation":direction==NavDirection.Left?"window-information":"switch-detail");SetSelection();}return;}
+        var reader=subpage=="operation"?operationText:subpage=="details"?detailsText:subpage=="update-review"?updateNotesText:null;
+        if(reader?.IsKeyboardFocusWithin==true){if(direction==NavDirection.Up)reader.LineUp();else if(direction==NavDirection.Down)reader.LineDown();else{navigation=new(subpage=="operation"?direction==NavDirection.Left?"operation-text":"dismiss-operation":subpage=="update-review"?direction==NavDirection.Left?"update-notes":preparedUpdate is null?"prepare-update":"apply-update":direction==NavDirection.Left?"window-information":"switch-detail");SetSelection();}return;}
         if(AdjustGuideLimit(direction))return;if(subpage=="audio"&&navigation.Id=="volume"&&direction is NavDirection.Left or NavDirection.Right){AdjustVolume(direction==NavDirection.Left?-.05f:.05f);return;}
         var before=navigation.Id;var layout=entries.Select((entry,index)=>{var element=FocusTarget(entry);if(element.IsArrangeValid&&element.ActualHeight>0){var point=element.TranslatePoint(new Point(element.ActualWidth/2,element.ActualHeight/2),(UIElement)Content);return(entry.Id,point.X,point.Y);}return(entry.Id,0d,index*60d);}).ToArray();
         navigation=navigation with{Id=Navigation.Spatial(navigation.Id,layout,direction)};SetSelection();if(before!=navigation.Id)RequestCue(FeedbackCue.Navigation);
@@ -443,6 +444,7 @@ public partial class MainWindow : Window
     internal void Back()=>Back(false);
     private void Back(bool trustedDismiss)
     {
+        if(CancelUpdateInteraction())return;
         if(interfaceActionDepth==0&&NavigationAllowed)RequestCue(FeedbackCue.Cancellation);
         if(view.Current.Route==OverlayRoute.PlayniteBrowser)CancelPlayniteScan();
         if(TransitionPending){if(handoffDismiss){ReaffirmDismiss(trustedDismiss);return;}CancelHandoff();input.Cancel();if(page==0&&subpage=="")HidePanel(true);else FeedbackText("Transição cancelada.");return;}
@@ -455,7 +457,7 @@ public partial class MainWindow : Window
     {
         if(fadingOut){fadeInterrupted=true;e.Handled=true;return;}
         inputMethod="keyboard";UpdateHints();
-        if((operationText?.IsKeyboardFocusWithin==true||detailsText?.IsKeyboardFocusWithin==true)&&e.Key is Key.Left or Key.Right){if(NavigationAllowed&&navigationKeysArmed)Move(e.Key==Key.Left?NavDirection.Left:NavDirection.Right);e.Handled=true;return;}
+        if((operationText?.IsKeyboardFocusWithin==true||detailsText?.IsKeyboardFocusWithin==true||updateNotesText?.IsKeyboardFocusWithin==true)&&e.Key is Key.Left or Key.Right){if(NavigationAllowed&&navigationKeysArmed)Move(e.Key==Key.Left?NavDirection.Left:NavDirection.Right);e.Handled=true;return;}
         if(e.OriginalSource is Slider or TextBox&&e.Key is not Key.Escape)return;
         if(e.Key==Key.Tab&&navigation.Id=="guide-limit"&&!Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)&&entries.FirstOrDefault(x=>x.Id=="guide-limit")?.Button.Content is Grid limitGrid&&limitGrid.Children[1] is StackPanel limitTexts&&limitTexts.Children.OfType<Slider>().FirstOrDefault() is {} editor){editor.Focus();e.Handled=true;return;}
         var key=NormalizeKey(e.Key,e.SystemKey,e.ImeProcessedKey,e.DeadCharProcessedKey);var firstPress=key!=Key.None&&heldKeys.Add(key);if(Confirming&&closeSource!=0&&firstPress&&key!=Key.Escape){CancelHold();FeedbackText("Origem da pressão mudou; fechamento cancelado.");e.Handled=true;return;}if(key==Key.None&&TransitionPending){RejectHandoff("Transição cancelada; tecla não identificada.");e.Handled=true;return;}if(TransitionPending){if(e.Key==Key.Escape&&firstPress&&!e.IsRepeat)Back(trustedDismiss:true);e.Handled=true;return;}
