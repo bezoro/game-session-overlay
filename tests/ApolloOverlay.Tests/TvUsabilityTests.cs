@@ -55,6 +55,23 @@ internal static class TvUsabilityTests
 
     internal static void Run(Action<string, Action> test)
     {
+        test("TV fixture refresh completes while the Dispatcher synchronization context is installed", () =>
+        {
+            var previous = SynchronizationContext.Current;
+            MainWindow? window = null;
+            try
+            {
+                SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
+                window = ReviewFixTests.Window();
+                Require(window.Controller.Apps.Count == 1, "Dispatcher fixture did not finish refreshing applications");
+            }
+            finally
+            {
+                try { window?.Close(); }
+                finally { SynchronizationContext.SetSynchronizationContext(previous); }
+            }
+        });
+
         test("TV direction and A together move without activating the newly selected action", () =>
         {
             var window = Window();
@@ -79,11 +96,13 @@ internal static class TvUsabilityTests
         foreach (var when in new[] { "during", "at-end" })
             test("TV fade does not cede focus after controller disconnect " + when, () =>
             {
-                SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
-                var window = Window();
-                var frames = new PadFrame[] { new(true, PadButtons.None), default, default, default };
+                var previous = SynchronizationContext.Current;
+                MainWindow? window = null;
                 try
                 {
+                    SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
+                    window = Window();
+                    var frames = new PadFrame[] { new(true, PadButtons.None), default, default, default };
                     window.ForceFadeFixture = true;
                     window.FadeFramesFixture = () => frames;
                     window.ReviewTick(frames);
@@ -101,7 +120,11 @@ internal static class TvUsabilityTests
                     Require(!window.FadePending && window.IsVisible, "Disconnect allowed the fade to hand off focus");
                     Require(Native.GetForegroundWindow() == new WindowInteropHelper(window).Handle, "Disconnect ceded foreground focus");
                 }
-                finally { window.Close(); }
+                finally
+                {
+                    try { window?.Close(); }
+                    finally { SynchronizationContext.SetSynchronizationContext(previous); }
+                }
             });
 
         test("TV unavailable session card opens window picker", () =>

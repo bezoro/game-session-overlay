@@ -67,12 +67,24 @@ public sealed class OverlayController : IDisposable
         var result=await Platform.Switch(target);if(!disposed)Recent.ConfirmSwitch(target,result,Platform.Foreground(),Platform.Valid);return result;
     }
     public void Save(){if(Platform.IsPreview){Status="Prévia · nada foi salvo; alterações apenas nesta sessão.";return;}Diagnostics.Save(Settings);SavedSettings=Settings;Status="Ajustes salvos em AppData.";}
-    public async Task<ActionResult> Launch(bool playnite)
+    internal WindowRef? LaunchTarget(bool playnite)=>Apps.FirstOrDefault(w=>playnite?w.ProcessName.Equals("Playnite.FullscreenApp",StringComparison.OrdinalIgnoreCase):w.ProcessName.Equals("steam",StringComparison.OrdinalIgnoreCase));
+    public async Task<ActionResult> Launch(bool playnite,CancellationToken cancellation=default,Func<bool>? continuing=null)
     {
-        if(disposed)return new(ResultKind.Cancelled,"Overlay encerrada; nenhuma inicialização enviada.");
-        var existing=Apps.FirstOrDefault(w=>playnite?w.ProcessName.Equals("Playnite.FullscreenApp",StringComparison.OrdinalIgnoreCase):w.ProcessName.Equals("steam",StringComparison.OrdinalIgnoreCase));
-        if(playnite&&existing is not null&&Platform.Valid(existing))return await Platform.Switch(existing);
-        if(!playnite&&existing is not null&&Platform.Valid(existing)){var focused=await Platform.Switch(existing);if(disposed)return new(ResultKind.Cancelled,"Overlay encerrada durante a ativação; nenhuma inicialização enviada.");if(focused.Kind!=ResultKind.Completed&&focused.Kind!=ResultKind.Simulated)return focused;}
+        bool Allowed()=>!disposed&&!cancellation.IsCancellationRequested&&(continuing?.Invoke()??true);
+        if(!Allowed())return new(ResultKind.Cancelled,"Solicitação cancelada; nenhuma inicialização enviada.");
+        var existing=LaunchTarget(playnite);
+        if(playnite&&existing is not null&&Platform.Valid(existing))
+        {
+            var focused=await Platform.Switch(existing);
+            return Allowed()?focused:new(ResultKind.Unknown,"Ativação solicitada antes do cancelamento; verifique a janela.");
+        }
+        if(!playnite&&existing is not null&&Platform.Valid(existing))
+        {
+            var focused=await Platform.Switch(existing);
+            if(!Allowed())return new(ResultKind.Cancelled,"Foco já solicitado; inicialização cancelada antes do envio.");
+            if(focused.Kind!=ResultKind.Completed&&focused.Kind!=ResultKind.Simulated)return focused;
+        }
+        if(!Allowed())return new(ResultKind.Cancelled,"Solicitação cancelada antes da inicialização.");
         if(!playnite&&!SteamAvailable&&!Platform.IsPreview)return new(ResultKind.Unavailable,"Steam não instalada ou protocolo indisponível.");
         return Platform.Launch(playnite,Settings.PlaynitePath);
     }

@@ -56,7 +56,7 @@ internal static class WindowIconCacheTests
             try
             {
                 window.Controller.CaptureReturn();
-                window.Controller.Refresh().GetAwaiter().GetResult();
+                ReviewFixTests.Complete(window.Controller.Refresh());
                 window.ShowDiagnostic();
                 window.Page(1);
                 var id = window.ActionIds.Single(item => item.StartsWith("window:", StringComparison.Ordinal));

@@ -64,7 +64,8 @@ internal static unsafe class GuideAbiTests
     }
     private static void CompleteFixture(Task task)
     {
-        while(!task.IsCompleted){var frame=new System.Windows.Threading.DispatcherFrame();System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle,()=>frame.Continue=false);System.Windows.Threading.Dispatcher.PushFrame(frame);}task.GetAwaiter().GetResult();
+        var until=Environment.TickCount64+5000;
+        while(!task.IsCompleted){if(Environment.TickCount64>=until)throw new TimeoutException("Fixture did not settle within five seconds.");var frame=new System.Windows.Threading.DispatcherFrame();System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle,()=>frame.Continue=false);System.Windows.Threading.Dispatcher.PushFrame(frame);}task.GetAwaiter().GetResult();
     }
     internal static void LateSendAfterCleanup()
     {
@@ -151,6 +152,17 @@ internal static unsafe class GuideAbiTests
         test("release covers all digital bits both sticks and trigger threshold",()=>{foreach(var frame in new[]{new PadFrame(true,(PadButtons)0x8000),new(true,(PadButtons)0x80),new(true,(PadButtons)0x40),new(true,0,12000),new(true,0,Y:-12000),new(true,0,RX:12000),new(true,0,RY:-12000),new(true,0,LT:30),new(true,0,RT:30)}){var g=new ReleaseGate();var pads=new PadFrame[4];pads[2]=frame;g.Update(new(pads,0),0,true,18000);Require(g.Update(new(pads,1000),1000,true,18000)==ReleaseState.Waiting);}var ok=new ReleaseGate();var allowed=new PadFrame[]{new(true,0,11999,-11999,11999,-11999,29,29),default,default,default};ok.Update(new(allowed,0),0,true,18000);Require(ok.Update(new(allowed,100),100,true,18000)==ReleaseState.Ready);});
         test("release keyboard Guide validity and held reset stability",()=>{foreach(var guide in new[]{false,true}){var g=new ReleaseGate();g.Update(Neutral(0),0,true,18000);Require(g.Update(Neutral(90) with{KeysNeutral=guide,GuideHeld=guide},90,true,18000)==ReleaseState.Waiting);g.Update(Neutral(91),91,true,18000);Require(g.Update(Neutral(190),190,true,18000)==ReleaseState.Waiting);Require(g.Update(Neutral(191),191,true,18000)==ReleaseState.Ready);}var invalid=new ReleaseGate();Require(invalid.Update(Neutral(0) with{GuideValid=false},0,true,18000)==ReleaseState.Cancelled);});
         test("release topology error stale snapshot and focus loss cancel safely",()=>{var g=new ReleaseGate();var pads=new PadFrame[]{new(true,0),default,default,default};g.Prime(new(pads,0,GuideConnections:1));Require(g.Update(Neutral(1),1,true,18000)==ReleaseState.Cancelled);g.Reset();g.Update(Neutral(0),0,true,18000);pads[1]=new(true,0);Require(g.Update(new(pads,100),100,true,18000)==ReleaseState.Waiting);Require(g.Update(new(pads,199),199,true,18000)==ReleaseState.Waiting);Require(g.Update(new(pads,200),200,true,18000)==ReleaseState.Ready);Require(new ReleaseGate().Update(Neutral(0),81,true,18000)==ReleaseState.Cancelled);Require(new ReleaseGate().Update(Neutral(0),0,false,18000)==ReleaseState.Cancelled);pads[0]=new(false,0,ReadFailed:true);Require(new ReleaseGate().Update(new(pads,1),1,true,18000)==ReleaseState.Cancelled);});
+        test("stale observed connected controller disappearing cancels external action",()=>{
+            using var p=new HandoffPlatform();var w=Host(p);try{
+                var previous=new PadFrame[]{new(true,PadButtons.A),default,default,default};
+                w.HandoffSampleFixture=new(previous,Environment.TickCount64-1000);
+                Button(w,"taskview").RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                Require(w.TransitionPending,"Fixture did not queue the external action");
+                w.AdvanceHandoff(Neutral(0),0);w.AdvanceHandoff(Neutral(100),100);w.AdvanceHandoff(Neutral(300),300);
+                Require(!w.TransitionPending&&p.Globals==0&&p.Switches==0,"Disconnection erased stale known connection and dispatched an effect");
+                Require(w.Controller.Operation is {State:"Cancelado",Dispatched:false},"Uncertain handoff did not retain cancellation");
+            }finally{w.Close();}
+        });
         foreach(var key in new[]{System.Windows.Input.Key.Escape,System.Windows.Input.Key.Enter})test("WPF "+key+" waits actual routed KeyUp then100ms once",()=>{using var p=new HandoffPlatform();var w=Host(p);try{Key(w,key,true);w.AdvanceHandoff(Neutral(0),0);w.AdvanceHandoff(Neutral(100),100);Require(w.IsVisible&&p.Switches==0&&w.TransitionPending);Key(w,key,false);w.AdvanceHandoff(Neutral(200),200);w.AdvanceHandoff(Neutral(299),299);Require(w.IsVisible&&p.Switches==0);w.AdvanceHandoff(Neutral(300),300);Require(!w.IsVisible&&p.Switches==1&&!w.TransitionPending);w.AdvanceHandoff(Neutral(400),400);Require(p.Switches==1);}finally{w.Close();}});
         test("WPF TaskView has no target switch and sends only after release",()=>{using var p=new HandoffPlatform{Context=null};var w=Host(p);try{Button(w,"taskview").RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));Require(w.TransitionPending&&p.Globals==0&&p.Switches==0);w.AdvanceHandoff(Neutral(0) with{KeysNeutral=false},0);w.AdvanceHandoff(Neutral(100),100);Require(p.Globals==0&&w.IsVisible);w.AdvanceHandoff(Neutral(200),200);Require(p.Globals==1&&p.LastKeys=="Win+Tab"&&p.Switches==0&&!w.IsVisible);}finally{w.Close();}});
         test("WPF return uses Anchor while Steam tile uses captured BigPicture context",()=>{using var p=new HandoffPlatform{Menu=true};p.Context=p.BigPicture;var w=Host(p);try{Button(w,"session-card").RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));Commit(w);Require(p.LastTarget?.Same(p.Game)==true);w.ShowDiagnostic();w.Controller.CaptureReturn();w.RefreshRows();var tile=Button(w,"steam-overlay");var labels=(System.Windows.Controls.StackPanel)((System.Windows.Controls.Grid)tile.Content).Children[1];Require(((System.Windows.Controls.TextBlock)labels.Children[0]).Text=="Menu do Steam Big Picture");tile.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));Require(p.Menus==0);Commit(w);Require(p.Menus==1&&p.LastTarget?.Same(p.BigPicture)==true&&p.LastKeys=="F1");}finally{w.Close();}});
@@ -269,6 +281,17 @@ internal static unsafe class GuideAbiTests
     internal static void KnownHeldDismiss(Action<string,Action> test)
     {
         var app=System.Windows.Application.Current??new System.Windows.Application{ShutdownMode=System.Windows.ShutdownMode.OnExplicitShutdown};ThemeSupport.FollowSystem(app);
+        test("stale known held input becoming unreadable requires explicit local dismissal",()=>{
+            using var p=new HandoffPlatform();var w=Host(p);try{
+                w.HandoffSampleFixture=new(new PadFrame[]{new(true,PadButtons.A),default,default,default},Environment.TickCount64-1000);
+                w.Toggle();var failed=new PadFrame[]{new(false,0,ReadFailed:true),default,default,default};
+                w.AdvanceHandoff(new(failed,0),0);w.AdvanceHandoff(new(failed,1000),1000);
+                Require(w.IsVisible&&w.TransitionPending&&p.Switches==0,"Stale active input was forgotten when reading failed");
+                Key(w,System.Windows.Input.Key.Escape,true);Key(w,System.Windows.Input.Key.Escape,false);
+                w.AdvanceHandoff(new(failed,2000),2000);w.AdvanceHandoff(new(failed,2100),2100);
+                Require(!w.IsVisible&&!w.TransitionPending&&p.Switches==0&&p.Globals==0,"Explicit local recovery dispatched an external effect");
+            }finally{w.Close();}
+        });
         foreach(var held in new[]{"Escape","CommonButton","Stick","Trigger"})test("Guide failure cannot hide dismiss while known "+held+" remains held",()=>{
             using var p=new HandoffPlatform();var w=Host(p);try{
                 var pads=new PadFrame[4];if(held=="Escape")Key(w,System.Windows.Input.Key.Escape,true);else{w.Toggle();pads[0]=held switch{"CommonButton"=>new(true,PadButtons.B),"Stick"=>new(true,0,X:25000),_=>new(true,0,LT:255)};}

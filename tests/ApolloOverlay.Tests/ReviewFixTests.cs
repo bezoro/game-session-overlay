@@ -12,7 +12,18 @@ internal static class ReviewFixTests
 {
     internal static void Require(bool value,string message){if(!value)throw new Exception(message);}
     internal static Button Button(MainWindow w,string id){if(id=="return")id="session-card";if(id=="close"&&!w.ActionIds.Contains(id)&&w.Controller.Session.Anchor is {} target)w.OpenOptions(target);return PremiumInterfaceTests.Descendants<Button>((DependencyObject)w.Content).First(b=>Equals(b.Tag,id));}
-    internal static MainWindow Window(){var w=new MainWindow(renderOnly:true,platform:new PreviewPlatform(new(101,42,100,"Janela de teste","fixture")));w.InputContextReader=()=>new(true,true,true,true);w.PhysicalKeyReader=_=>0;w.Controller.CaptureReturn();w.Controller.Refresh().GetAwaiter().GetResult();w.RefreshRows();return w;}
+    internal static void Complete(Task task)
+    {
+        var deadline=System.Diagnostics.Stopwatch.StartNew();
+        while(!task.IsCompleted&&deadline.ElapsedMilliseconds<5000){
+            var frame=new System.Windows.Threading.DispatcherFrame();
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,()=>frame.Continue=false);
+            System.Windows.Threading.Dispatcher.PushFrame(frame);Thread.Sleep(1);
+        }
+        if(!task.IsCompleted)throw new TimeoutException("Dispatcher operation exceeded 5 seconds.");
+        task.GetAwaiter().GetResult();
+    }
+    internal static MainWindow Window(){var w=new MainWindow(renderOnly:true,platform:new PreviewPlatform(new(101,42,100,"Janela de teste","fixture")));try{w.InputContextReader=()=>new(true,true,true,true);w.PhysicalKeyReader=_=>0;w.Controller.CaptureReturn();Complete(w.Controller.Refresh());w.RefreshRows();return w;}catch{w.Close();throw;}}
     internal static void Capture(string output,bool focused=false)
     {
         Directory.CreateDirectory(output);var app=Application.Current??new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};

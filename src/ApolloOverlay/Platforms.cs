@@ -33,6 +33,7 @@ public interface IPlatform : IDisposable
     Task<ActionResult> TaskView()=>Task.FromResult(new ActionResult(ResultKind.Unavailable,"Visão de tarefas indisponível nesta plataforma."));
     bool CanSteamMenu(WindowRef? window)=>false;
     Task<ActionResult> SteamMenu(WindowRef window)=>Task.FromResult(new ActionResult(ResultKind.Unavailable,"Menu Big Picture não confirmado."));
+    Task<ActionResult> SteamMenu(WindowRef window,CancellationToken cancellation,Func<bool> continuing)=>cancellation.IsCancellationRequested||!continuing()?Task.FromResult(new ActionResult(ResultKind.Cancelled,"Cancelado antes do envio.")):IsPreview?SteamMenu(window):Task.FromResult(new ActionResult(ResultKind.Unavailable,"Esta plataforma não oferece menu cancelável."));
     ActionResult Launch(bool playnite,string? path);
 }
 
@@ -164,7 +165,7 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects,IWindowIconNotifi
     public bool IsMinimized(WindowRef window)=>Valid(window)&&Native.IsIconic(window.Handle);
     public bool RequestMinimize(WindowRef window)=>!disposed&&!window.Protected&&Valid(window)&&Native.ShowWindowAsync(window.Handle,6);
     public Task<ActionResult> Shortcut(WindowRef window,string keys)=>keys is "Win+G" or "Shift+Tab" or "Ctrl+Tab"?new GuardedActions(this).Shortcut(window,keys):Task.FromResult(new ActionResult(ResultKind.Unavailable,"Atalho não permitido neste caminho."));
-    public Task<ActionResult> Shortcut(WindowRef window,string keys,CancellationToken cancellation,Func<bool> continuing)=>keys is "Shift+Tab" or "Ctrl+Tab"?new GuardedActions(this).Shortcut(window,keys,cancellation,continuing):Task.FromResult(new ActionResult(ResultKind.Unavailable,"Somente o atalho Steam configurado aceita este caminho."));
+    public Task<ActionResult> Shortcut(WindowRef window,string keys,CancellationToken cancellation,Func<bool> continuing)=>keys is "Win+G" or "Shift+Tab" or "Ctrl+Tab"?new GuardedActions(this).Shortcut(window,keys,cancellation,continuing):Task.FromResult(new ActionResult(ResultKind.Unavailable,"Atalho não permitido."));
     public Task<ActionResult> Shortcut(WindowRef window,string keys,CancellationToken cancellation,Func<bool> continuing,Action<ShortcutDispatch> progress)=>keys is "Shift+Tab" or "Ctrl+Tab"?new GuardedActions(this,_=>progress(LastShortcutDispatch!.Value)).Shortcut(window,keys,cancellation,continuing):Task.FromResult(new ActionResult(ResultKind.Unavailable,"Atalho não permitido."));
     public Task<ActionResult> Focus(WindowRef window,CancellationToken cancellation,Func<bool> continuing)=>new GuardedActions(this).FocusStable(window,cancellation,continuing);
     public WindowObservation ObserveWindow(WindowRef window)=>ClosureObservation.Classify(window,Probe(window.Handle));
@@ -219,13 +220,8 @@ public sealed class WindowsPlatform : IPlatform,IWindowEffects,IWindowIconNotifi
             var folder=Directory.GetParent(path);while(folder is not null){if(File.Exists(Path.Combine(folder.FullName,"steam.exe"))){var relative=Path.GetRelativePath(folder.FullName,path);return relative.StartsWith("bin"+Path.DirectorySeparatorChar+"cef"+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase);}folder=folder.Parent;}return false;
         }catch(Exception e)when(e is Win32Exception or InvalidOperationException or ArgumentException or IOException or UnauthorizedAccessException){return false;}
     }
-    public async Task<ActionResult> SteamMenu(WindowRef window)
-    {
-        if(!CanSteamMenu(window))return new(ResultKind.Unavailable,"Janela Big Picture não confirmada; nenhum F1 enviado.");
-        if(Native.IsIconic(window.Handle))Native.ShowWindow(window.Handle,9);if(disposed||!Native.SetForegroundWindow(window.Handle))return new(ResultKind.Failed,"O Windows recusou o foco do Big Picture.");
-        for(var i=0;i<6;i++){if(!CanSteamMenu(window))return new(ResultKind.Cancelled,"Big Picture mudou ou overlay encerrou; nenhum F1 enviado.");if(IsForeground(window)){if(!CanSteamMenu(window))return new(ResultKind.Cancelled,"Alvo mudou antes do F1.");return Outcome.Keys(SendKeys("F1"),2);}await Wait(50);}
-        return new(ResultKind.Unknown,"Foco Big Picture não confirmado; nenhum F1 enviado.");
-    }
+    public Task<ActionResult> SteamMenu(WindowRef window)=>SteamMenu(window,CancellationToken.None,()=>true);
+    public Task<ActionResult> SteamMenu(WindowRef window,CancellationToken cancellation,Func<bool> continuing)=>new GuardedActions(this).SteamMenu(window,cancellation,continuing,()=>!disposed&&CanSteamMenu(window));
     public ActionResult Launch(bool playnite,string? path)
     {
         if(disposed)return new(ResultKind.Cancelled,"Overlay encerrada; nenhuma inicialização enviada.");

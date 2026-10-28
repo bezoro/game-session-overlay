@@ -126,6 +126,7 @@ static class Program
         SessionHubServiceTests.Run(Case);
         ReviewFixTests.Run(Case);
         NavigationTests.Run(Case);
+        GuardedActionCancellationTests.Run(Case);
         TvUsabilityTests.Run(Case);
         WindowIconCacheTests.Run(Case);
         PlayniteBrowserTests.Run(Case);
