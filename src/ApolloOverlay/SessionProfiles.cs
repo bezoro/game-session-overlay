@@ -5,13 +5,14 @@ namespace ApolloOverlay;
 
 public sealed record SessionProfile(string Id, string Name, string? DisplayId, int ScalePercent, string Side,
     string? OutputId = null, string? OutputName = null, int? VolumePercent = null, string Presentation = "TV", string? GameKey = null);
-public sealed record SessionProfileDocument(int Version, string ActiveId, SessionProfile[] Profiles);
+public sealed record SessionProfileDocument(int Version, string ActiveId, SessionProfile[] Profiles, string? AppliedPresentation=null);
 
 public sealed class SessionProfiles
 {
     private readonly string path;
     private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true, WriteIndented = true };
     public string ActiveId { get; private set; } = "";
+    public string AppliedPresentation { get; private set; } = "TV";
     public string? RecoveryNotice { get; private set; }
     private SessionProfile[] profiles = [new("tv", "TV", null, 115, "Left"), new("desktop", "Computador", null, 100, "Left",Presentation:"Desktop")];
     public IReadOnlyList<SessionProfile> Items => Array.AsReadOnly(profiles);
@@ -27,8 +28,10 @@ public sealed class SessionProfiles
             if (stored is not { Version: 1, Profiles.Length: >= 2 and <= 24 } || stored.ActiveId is null ||
                 stored.Profiles.Any(profile => !Valid(profile)) || stored.Profiles.Select(profile => profile.Id).Distinct().Count() != stored.Profiles.Length ||
                 !stored.Profiles.Any(profile => profile.Id == "tv") || !stored.Profiles.Any(profile => profile.Id == "desktop")) throw new InvalidDataException();
+            if(stored.AppliedPresentation is not(null or "TV" or "Desktop"))throw new InvalidDataException();
             profiles = stored.Profiles;
             ActiveId = profiles.Any(profile => profile.Id == stored.ActiveId) ? stored.ActiveId : "";
+            AppliedPresentation=stored.AppliedPresentation??profiles.FirstOrDefault(profile=>profile.Id==ActiveId)?.Presentation??"TV";
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or InvalidDataException or ArgumentException)
         { RecoveryNotice = "O arquivo de perfis não pôde ser lido. Seus ajustes atuais foram preservados; salve novamente os perfis para recuperá-los."; }
@@ -45,19 +48,21 @@ public sealed class SessionProfiles
         if (!Valid(profile)) throw new ArgumentException("O perfil tem valores inválidos.");
         var next = profiles.Where(item => item.Id != profile.Id).Append(profile).OrderBy(item => item.Id == "tv" ? 0 : item.Id == "desktop" ? 1 : 2).ToArray();
         if (next.Length > 24) throw new InvalidOperationException("O limite é de 24 perfis.");
-        Write(next, ActiveId); profiles = next;
+        Write(next, ActiveId, AppliedPresentation); profiles = next;
     }
-    public void SetActive(string id)
+    public void SetActive(string id,string? presentation=null)
     {
         if (id.Length>0&&!profiles.Any(profile => profile.Id == id)) throw new ArgumentException("Perfil não encontrado.");
-        Write(profiles, id); ActiveId = id;
+        var applied=presentation??profiles.FirstOrDefault(profile=>profile.Id==id)?.Presentation??"TV";
+        if(applied is not("TV" or "Desktop"))throw new ArgumentException("Apresentação inválida.");
+        Write(profiles, id, applied); ActiveId = id;AppliedPresentation=applied;
     }
-    private void Write(SessionProfile[] next, string active)
+    private void Write(SessionProfile[] next, string active,string presentation)
     {
         var root = Path.GetDirectoryName(path)!;
         Directory.CreateDirectory(root); LocalUpdateHistory.RejectLink(root);
         if (File.Exists(path)) LocalUpdateHistory.RejectLink(path);
-        LocalUpdateHistory.AtomicBytes(path, JsonSerializer.SerializeToUtf8Bytes(new SessionProfileDocument(1, active, next), Json));
+        LocalUpdateHistory.AtomicBytes(path, JsonSerializer.SerializeToUtf8Bytes(new SessionProfileDocument(1, active, next,presentation), Json));
     }
     public static UserSettings ApplyLayout(UserSettings current, SessionProfile profile) => SessionHubSettings.Copy(current with
     { DisplayId = profile.DisplayId, UiScalePercent = profile.ScalePercent, PanelSide = profile.Side });

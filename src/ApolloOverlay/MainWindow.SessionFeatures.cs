@@ -29,13 +29,13 @@ public partial class MainWindow
     private UserSettings? profileBefore,profileApplied;
     private SystemAudioSnapshot? profileAudioBefore,profileAudioApplied;
     private AudioSnapshot? profileMasterBefore,profileMasterApplied;
-    private string profileActiveBefore="",profileActiveApplied="",artworkGameKey="";
+    private string profileActiveBefore="",profileActiveApplied="",profilePresentationBefore="TV",artworkGameKey="";
     private ScreenCaptureItem[] captureItems=[];
     private ScreenCaptureItem? selectedCapture;
     private string artworkId="";
     private bool synchronizingFeatureSlider;
     private string renderedFeatureShape="";
-    private bool DesktopPresentation=>sessionProfiles?.Items.FirstOrDefault(profile=>profile.Id==sessionProfiles.ActiveId)?.Presentation=="Desktop";
+    private bool DesktopPresentation=>sessionProfiles?.AppliedPresentation=="Desktop";
     private void OpenPrimaryAudio()
     {
         if(!NavigationAllowed||TransitionPending||Confirming||view.Current.Route==OverlayRoute.WindowsAudio)return;

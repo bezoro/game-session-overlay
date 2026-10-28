@@ -28,6 +28,15 @@ internal static class SessionUtilityTests
             foreach(var invalid in new[]{profiles.Items[0] with{Id="../outside"},profiles.Items[0] with{Name=" "},profiles.Items[0] with{ScalePercent=99},profiles.Items[0] with{Side="Unknown"},profiles.Items[0] with{VolumePercent=101},profiles.Items[0] with{Presentation="Other"}})
             {var rejected=false;try{profiles.Save(invalid);}catch(ArgumentException){rejected=true;}Require(rejected&&before.SequenceEqual(File.ReadAllBytes(path)),"Invalid profile overwrote stored settings");}
         });
+        test("saving an active profile draft does not apply its new presentation",()=>
+        {
+            using var directory=new DirectoryFixture();var profiles=new SessionProfiles(directory.Root);profiles.SetActive("desktop");
+            profiles.Save(profiles.Items.Single(profile=>profile.Id=="desktop") with{Presentation="TV"});
+            var restored=new SessionProfiles(directory.Root);
+            Require(restored.Items.Single(profile=>profile.Id=="desktop").Presentation=="TV"&&restored.AppliedPresentation=="Desktop","Saving a draft silently changed the applied presentation");
+            restored.SetActive("tv");restored.SetActive("desktop","Desktop");
+            Require(new SessionProfiles(directory.Root).AppliedPresentation=="Desktop","Undo could not restore the actual earlier presentation");
+        });
         test("profiles preserve corrupt evidence until an explicit save",()=>
         {
             using var directory=new DirectoryFixture();var path=Path.Combine(directory.Root,"session-profiles.json");File.WriteAllText(path,"{");

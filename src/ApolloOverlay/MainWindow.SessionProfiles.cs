@@ -53,7 +53,7 @@ public partial class MainWindow
             var before=Controller.Settings;var state=await systemAudio.RefreshAsync(token);
             if(profile.OutputId is {} output&&!state.Outputs.Any(device=>device.Id==output))return new(ResultKind.Unavailable,"A saída deste perfil está desconectada. Seus ajustes atuais foram mantidos.");
             profileBefore=before;profileApplied=before;profileAudioBefore=state;profileAudioApplied=state;
-            profileMasterBefore=profileMasterApplied=null;profileActiveBefore=sessionProfiles.ActiveId;profileActiveApplied=profile.Id;
+            profileMasterBefore=profileMasterApplied=null;profileActiveBefore=sessionProfiles.ActiveId;profilePresentationBefore=sessionProfiles.AppliedPresentation;profileActiveApplied=profile.Id;
             if(profile.OutputId is {} selected)
             {
                 var changed=await systemAudio.SelectOutputAsync(state.ConsoleOutputId,state.MediaOutputId,selected,token);profileAudioApplied=systemAudio.Current;
@@ -102,7 +102,7 @@ public partial class MainWindow
             }
             token.ThrowIfCancellationRequested();
             var layout=SessionProfiles.RestoreUnchangedLayout(before,applied,Controller.Settings);Controller.Change(layout);ApplySettings();Controller.Save();
-            if(!Controller.Platform.IsPreview&&sessionProfiles.ActiveId==profileActiveApplied)sessionProfiles.SetActive(profileActiveBefore);
+            if(!Controller.Platform.IsPreview&&sessionProfiles.ActiveId==profileActiveApplied)sessionProfiles.SetActive(profileActiveBefore,profilePresentationBefore);
             Place();
             profileBefore=null;profileApplied=null;profileMasterBefore=profileMasterApplied=null;
             return new(skipped?ResultKind.Partial:diagnostic||Controller.Platform.IsPreview?ResultKind.Simulated:ResultKind.Completed,
