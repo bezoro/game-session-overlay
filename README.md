@@ -61,7 +61,7 @@ Com .NET SDK 10 instalado:
 
 ```powershell
 dotnet build ApolloOverlay.sln -c Release
-dotnet tests/ApolloOverlay.Tests/bin/Release/net10.0-windows/ApolloOverlay.Tests.dll artifacts/behavior-report.json
+dotnet tests/ApolloOverlay.Tests/bin/Release/net10.0-windows10.0.19041.0/ApolloOverlay.Tests.dll artifacts/behavior-report.json
 dotnet publish src/ApolloOverlay/ApolloOverlay.csproj -c Release -r win-x64 --self-contained true -o artifacts/minha-publicacao-nova/publish
 ```
 

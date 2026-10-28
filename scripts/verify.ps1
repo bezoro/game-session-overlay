@@ -35,7 +35,7 @@ function Publish-PackagedCli([string]$Destination) {
 try {
  if($Stage -in @('All','Build')){Invoke-Checked @('build','ApolloOverlay.sln','-c','Release')}
  if($Stage -in @('All','Behavior')){
-  Invoke-Checked @('tests/ApolloOverlay.Tests/bin/Release/net10.0-windows/ApolloOverlay.Tests.dll',(Join-Path $checks 'behavior-report.json'))
+  Invoke-Checked @('tests/ApolloOverlay.Tests/bin/Release/net10.0-windows10.0.19041.0/ApolloOverlay.Tests.dll',(Join-Path $checks 'behavior-report.json'))
   $cliTests=Join-Path $taskRoot 'tests/ApolloOverlay.Cli.Tests/bin/Release/net10.0-windows/ApolloOverlay.Cli.Tests.exe'
   & $cliTests
   if($LASTEXITCODE -ne 0){throw "CLI tests exit $LASTEXITCODE"}
@@ -63,7 +63,7 @@ try {
   Copy-Item -LiteralPath $publish -Destination $isolated -Recurse
   $binding=@()
   foreach($file in Get-ChildItem -LiteralPath $publish -Recurse -File){$relative=[IO.Path]::GetRelativePath($publish,$file.FullName);$copy=Join-Path $isolated $relative;$expected=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash;$actual=(Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash;if($expected -ne $actual){throw "Payload copy differs: $relative"};$binding+=@{relativePath=$relative;sha256=$actual}}
-  Get-ChildItem -LiteralPath (Join-Path $taskRoot 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows') -File | Where-Object Name -Like 'ApolloOverlay.Tests.*' | Copy-Item -Destination $isolated
+  Get-ChildItem -LiteralPath (Join-Path $taskRoot 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows10.0.19041.0') -File | Where-Object Name -Like 'ApolloOverlay.Tests.*' | Copy-Item -Destination $isolated
   $trace=Join-Path $checks 'dotnet-host-trace.txt'
   $oldTrace=$env:DOTNET_HOST_TRACE;$oldFile=$env:DOTNET_HOST_TRACEFILE;$oldVerbosity=$env:DOTNET_HOST_TRACE_VERBOSITY
   try{$env:DOTNET_HOST_TRACE='1';$env:DOTNET_HOST_TRACEFILE=$trace;$env:DOTNET_HOST_TRACE_VERBOSITY='4'; & $dotnet (Join-Path $isolated 'ApolloOverlay.Tests.dll') (Join-Path $checks 'published-behavior-report.json');$testExit=$LASTEXITCODE}

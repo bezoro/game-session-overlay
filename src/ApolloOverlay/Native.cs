@@ -17,7 +17,7 @@ internal static class Native
     [StructLayout(LayoutKind.Sequential)] internal struct XVibration { public ushort Left,Right; }
     [StructLayout(LayoutKind.Sequential)] internal struct XCapabilities { public byte Type,SubType; public ushort Flags; public Gamepad Pad; public XVibration Vibration; }
     // INPUT is 40 bytes on x64: union starts at offset 8 and is 32 bytes.
-    [StructLayout(LayoutKind.Explicit,Size=40)] internal struct Input { [FieldOffset(0)] public uint Type; [FieldOffset(8)] public ushort Key; [FieldOffset(12)] public uint Flags; }
+    [StructLayout(LayoutKind.Explicit,Size=40)] internal struct Input { [FieldOffset(0)] public uint Type; [FieldOffset(8)] public ushort Key; [FieldOffset(10)] public ushort Scan; [FieldOffset(12)] public uint Flags; }
     [DllImport("user32.dll")] internal static extern nint GetForegroundWindow();
     [DllImport("user32.dll")] internal static extern short GetAsyncKeyState(int key);
     [DllImport("user32.dll")] internal static extern bool EnumWindows(EnumWindow callback,nint parameter);

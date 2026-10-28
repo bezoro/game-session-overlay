@@ -10,6 +10,8 @@ internal interface IApplicationAudioSession
     int State(out int state);
     int ReadMute(out bool muted);
     int WriteMute(bool muted);
+    int ReadVolume(out float volume) { volume = 0; return unchecked((int)0x80004001); }
+    int WriteVolume(float volume) => unchecked((int)0x80004001);
 }
 internal sealed record ApplicationAudioCatalogSnapshot(IReadOnlyList<IApplicationAudioSession> Sessions,int Gaps);
 internal interface IApplicationAudioCatalog : IDisposable
@@ -25,6 +27,7 @@ public sealed class ApplicationAudio : IApplicationAudio
         public required WindowRef Target;
         public required long Generation,Epoch;
         public required bool Mutation,DesiredMute;
+        public float? DesiredVolume;
         public required long Deadline;
         public readonly object Gate=new();
         public readonly TaskCompletionSource<ApplicationAudioChange> Completion=new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -93,9 +96,9 @@ public sealed class ApplicationAudio : IApplicationAudio
         }
         Finish(work,change);
     }
-    private Task<ApplicationAudioChange> Submit(WindowRef window,long context,bool mutation,bool desired,CancellationToken cancellation)
+    private Task<ApplicationAudioChange> Submit(WindowRef window,long context,bool mutation,bool desired,CancellationToken cancellation,float? volume=null)
     {
-        var work=new Work{Target=window,Generation=context,Epoch=0,Mutation=mutation,DesiredMute=desired,Deadline=clock()+(mutation?2000:1500),Snapshot=Empty(window,context,"Consulta ainda não confirmada.")};
+        var work=new Work{Target=window,Generation=context,Epoch=0,Mutation=mutation,DesiredMute=desired,DesiredVolume=volume,Deadline=clock()+(mutation?2000:1500),Snapshot=Empty(window,context,"Consulta ainda não confirmada.")};
         lock(gate)
         {
             work.Epoch=epoch;
@@ -114,6 +117,12 @@ public sealed class ApplicationAudio : IApplicationAudio
     }
     public async Task<ApplicationAudioSnapshot> RefreshAsync(WindowRef window,long context,CancellationToken cancellation=default)=>(await Submit(window,context,false,false,cancellation).ConfigureAwait(false)).Snapshot;
     public Task<ApplicationAudioChange> SetMutedAsync(WindowRef window,bool desiredMute,long context,CancellationToken cancellation=default)=>Submit(window,context,true,desiredMute,cancellation);
+    public Task<ApplicationAudioChange> SetVolumeAsync(WindowRef window,float volume,long context,CancellationToken cancellation=default)
+    {
+        if (!float.IsFinite(volume) || volume is < 0 or > 1)
+            return Task.FromResult(new ApplicationAudioChange(new(ResultKind.Unavailable,"Escolha um volume entre 0 e 100%."),Empty(window,context,"Volume inválido."),0,0,0,false));
+        return Submit(window,context,true,false,cancellation,volume);
+    }
     private void QueueObservation()
     {
         long owner;
@@ -190,6 +199,7 @@ public sealed class ApplicationAudio : IApplicationAudio
     private (ApplicationAudioSnapshot Snapshot,List<IApplicationAudioSession> Sessions) Observe(Work work,ApplicationAudioCatalogSnapshot discovery)
     {
         var sessions=new List<IApplicationAudioSession>();var muted=0;var audible=0;var unread=0;var gaps=discovery.Gaps;
+        var volumes=new List<float>();
         foreach(var session in discovery.Sessions)
         {
             if(!Continuing(work)){gaps++;break;}
@@ -203,11 +213,13 @@ public sealed class ApplicationAudio : IApplicationAudio
             sessions.Add(session);
             if(!Continuing(work)||session.ReadMute(out var value)!=0){unread++;gaps++;}
             else if(value)muted++;else audible++;
+            if(Continuing(work)&&session.ReadVolume(out var volume)==0&&float.IsFinite(volume)&&volume is >=0 and <=1)volumes.Add(volume);
         }
         var availability=sessions.Count==0?(gaps>0?ApplicationAudioAvailability.Unknown:ApplicationAudioAvailability.Unavailable):gaps>0?ApplicationAudioAvailability.Partial:ApplicationAudioAvailability.Available;
         var mute=sessions.Count==0||unread>0?ApplicationMuteState.Unknown:muted>0&&audible>0?ApplicationMuteState.Mixed:muted>0?ApplicationMuteState.Muted:ApplicationMuteState.Audible;
         var reason=sessions.Count==0?(gaps>0?"Descoberta incompleta; nenhuma sessão do processo foi identificada com segurança.":"Nenhuma sessão de áudio identificada para este processo."):gaps>0?$"{sessions.Count} sessão(ões) identificada(s); descoberta parcial. Sessões futuras não são afetadas.":$"{sessions.Count} sessão(ões) identificada(s) deste processo. Sessões futuras não são afetadas.";
-        return(new(work.Target,work.Generation,Interlocked.Increment(ref revision),availability,mute,sessions.Count,gaps,reason),sessions);
+        return(new ApplicationAudioSnapshot(work.Target,work.Generation,Interlocked.Increment(ref revision),availability,mute,sessions.Count,gaps,reason)
+            {VolumeSessions=volumes.Count,VolumeMinimum=volumes.Count>0?volumes.Min():null,VolumeMaximum=volumes.Count>0?volumes.Max():null},sessions);
     }
     private void Execute(Work work)
     {
@@ -223,6 +235,10 @@ public sealed class ApplicationAudio : IApplicationAudio
         {
             Complete(work,new(new(observed.Snapshot.Availability switch{ApplicationAudioAvailability.Available=>ResultKind.Completed,ApplicationAudioAvailability.Partial=>ResultKind.Partial,ApplicationAudioAvailability.Unavailable=>ResultKind.Unavailable,_=>ResultKind.Unknown},observed.Snapshot.Reason),observed.Snapshot,0,0,0,false));return;
         }
+        if(work.DesiredVolume is not null&&!observed.Snapshot.CanSetVolume)
+        {
+            Complete(work,new(new(ResultKind.Unavailable,"O volume não foi confirmado em todas as sessões identificadas. Nenhuma alteração enviada."),observed.Snapshot,0,0,0,false));return;
+        }
         var keys=observed.Sessions.Select(s=>s.Key).ToHashSet(StringComparer.Ordinal);
         foreach(var session in observed.Sessions)
         {
@@ -233,10 +249,12 @@ public sealed class ApplicationAudio : IApplicationAudio
                 if(!Continuing(work)||!valid(work.Target)||!Continuing(work))break;
                 work.Attempted++;work.Dispatched=true;
             }
-            var hr=session.WriteMute(work.DesiredMute);
+            var hr=work.DesiredVolume is {} desiredVolume?session.WriteVolume(desiredVolume):session.WriteMute(work.DesiredMute);
             if(hr==0)Interlocked.Increment(ref work.Succeeded);
             if(!Continuing(work))break;
-            if(hr==0&&session.ReadMute(out var muted)==0&&muted==work.DesiredMute)Interlocked.Increment(ref work.Verified);
+            if(hr==0&&(work.DesiredVolume is {} desired
+                ?session.ReadVolume(out var actual)==0&&float.IsFinite(actual)&&Math.Abs(actual-desired)<.005f
+                :session.ReadMute(out var muted)==0&&muted==work.DesiredMute))Interlocked.Increment(ref work.Verified);
         }
         if(!Continuing(work)){Invalidate(work,"Observação cancelada ou prazo encerrado após a descoberta.");return;}
         if(!valid(work.Target))
@@ -245,9 +263,11 @@ public sealed class ApplicationAudio : IApplicationAudio
         }
         var after=Observe(work,catalog.Discover(()=>Continuing(work)));
         var same=keys.SetEquals(after.Sessions.Select(s=>s.Key));
-        var finalMatches=after.Snapshot.MuteState==(work.DesiredMute?ApplicationMuteState.Muted:ApplicationMuteState.Audible);
+        var finalMatches=work.DesiredVolume is {} finalVolume
+            ?after.Snapshot.CanSetVolume&&after.Snapshot.VolumeMinimum is {} minimum&&after.Snapshot.VolumeMaximum is {} maximum&&Math.Abs(minimum-finalVolume)<.005f&&Math.Abs(maximum-finalVolume)<.005f
+            :after.Snapshot.MuteState==(work.DesiredMute?ApplicationMuteState.Muted:ApplicationMuteState.Audible);
         var complete=same&&finalMatches&&observed.Snapshot.Availability==ApplicationAudioAvailability.Available&&after.Snapshot.Availability==ApplicationAudioAvailability.Available&&work.Verified==keys.Count&&work.Succeeded==keys.Count;
-        var reason=complete?$"Estado {(work.DesiredMute?"sem som":"com som")} confirmado nas {work.Verified} sessão(ões) identificada(s) deste processo. Sessões futuras não são afetadas.":$"Estado parcial ou não confirmado: {work.Verified}/{keys.Count} sessão(ões) verificadas; {work.Attempted} envio(s). Não haverá repetição automática.";
+        var reason=complete?(work.DesiredVolume is {} level?$"Volume de {level:P0} confirmado nas {work.Verified} sessão(ões) identificadas deste processo. Sessões futuras não são afetadas.":$"Estado {(work.DesiredMute?"sem som":"com som")} confirmado nas {work.Verified} sessão(ões) identificada(s) deste processo. Sessões futuras não são afetadas."):$"Estado parcial ou não confirmado: {work.Verified}/{keys.Count} sessão(ões) verificadas; {work.Attempted} envio(s). Não haverá repetição automática.";
         if(!complete&&!finalMatches)reason="A observação final não corresponde ao estado solicitado. "+reason;
         var final=after.Snapshot with{Availability=complete?ApplicationAudioAvailability.Available:after.Sessions.Count>0?ApplicationAudioAvailability.Partial:ApplicationAudioAvailability.Unknown,Reason=reason};
         work.Snapshot=final;

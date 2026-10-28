@@ -40,6 +40,8 @@ internal sealed class CoreAudioSessionCatalog : IApplicationAudioCatalog
         public int State(out int state)=>control.GetState(out state);
         public int ReadMute(out bool muted)=>volume.GetMute(out muted);
         public int WriteMute(bool muted){var context=Guid.Empty;return volume.SetMute(muted,ref context);}
+        public int ReadVolume(out float value)=>volume.GetMasterVolume(out value);
+        public int WriteVolume(float value){var context=Guid.Empty;return volume.SetMasterVolume(value,ref context);}
         public void Dispose(){callback.Stop();if(registered)try{control.UnregisterAudioSessionNotification(callback);}catch(COMException) { }registered=false;Release(acquired);}
     }
     private readonly IHubDeviceEnumerator enumerator;
