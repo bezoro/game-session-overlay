@@ -454,6 +454,12 @@ public partial class MainWindow : Window
         if(reader?.IsKeyboardFocusWithin==true){if(direction==NavDirection.Up)reader.LineUp();else if(direction==NavDirection.Down)reader.LineDown();else{navigation=new(subpage=="operation"?direction==NavDirection.Left?"operation-text":"dismiss-operation":subpage=="update-review"?direction==NavDirection.Left?"update-notes":preparedUpdate is null?"prepare-update":"apply-update":direction==NavDirection.Left?"window-information":"switch-detail");SetSelection();}return;}
         if(view.Current.Route==OverlayRoute.Hub&&(navigation.Id=="session-card"&&direction==NavDirection.Right||navigation.Id=="session-options"&&direction==NavDirection.Left))
         {navigation=new(navigation.Id=="session-card"?"session-options":"session-card");SetSelection();RequestCue(FeedbackCue.Navigation);return;}
+        if(view.Current.Route==OverlayRoute.Hub)
+        {
+            var next=(navigation.Id,direction) switch
+            {("session-volume",NavDirection.Down)=>"windows-volume",("windows-volume",NavDirection.Up)=>"session-volume",("windows-volume",NavDirection.Down)=>"microphone",("microphone",NavDirection.Up)=>"windows-volume",("microphone",NavDirection.Right)=>"session-mixer",("session-mixer",NavDirection.Left)=>"microphone",("session-mixer",NavDirection.Up)=>"windows-volume",_=>null};
+            if(next is not null&&entries.Any(entry=>entry.Id==next)){navigation=new(next);SetSelection();RequestCue(FeedbackCue.Navigation);return;}
+        }
         if(AdjustSessionFeature(direction)||AdjustGuideLimit(direction))return;if(subpage=="audio"&&navigation.Id=="volume"&&direction is NavDirection.Left or NavDirection.Right){AdjustVolume(direction==NavDirection.Left?-.05f:.05f);return;}
         var before=navigation.Id;var layout=entries.Select((entry,index)=>{var element=FocusTarget(entry);if(element.IsArrangeValid&&element.ActualHeight>0){var point=element.TranslatePoint(new Point(element.ActualWidth/2,element.ActualHeight/2),(UIElement)Content);return(entry.Id,point.X,point.Y);}return(entry.Id,0d,index*60d);}).ToArray();
         navigation=navigation with{Id=Navigation.Spatial(navigation.Id,layout,direction)};SetSelection();if(before!=navigation.Id)RequestCue(FeedbackCue.Navigation);

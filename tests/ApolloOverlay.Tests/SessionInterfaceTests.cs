@@ -84,7 +84,7 @@ internal static class SessionInterfaceTests
             using var backend=new ProfileAudioFixture();
             using var host=new Host(root=>{var profiles=new SessionProfiles(root);profiles.Save(profiles.Items[0] with{OutputId="second",OutputName="Second output"});},backend,false);
             var w=host.Window;host.Open();Navigate(w,"profiles");Pick(w,"profile:tv");w.ActivateEntry();Release(w);Complete(w.OperationTask);
-            Require(w.Controller.Settings.UiScalePercent==115&&!w.Controller.SettingsDirty&&w.ActionIds.Contains("profile-undo"),"Profile was not applied and saved");
+            Require(w.Controller.Settings.UiScalePercent==115&&!w.Controller.SettingsDirty&&w.ActionIds.Contains("profile-undo"),$"Profile was not applied and saved: scale={w.Controller.Settings.UiScalePercent}; dirty={w.Controller.SettingsDirty}; pending={w.TransitionPending}; operation={w.Controller.Operation}; feedback={w.Feedback}; selected={w.SelectedAction}");
             Pick(w,"profile-undo");w.ActivateEntry();Release(w);
             try
             {
