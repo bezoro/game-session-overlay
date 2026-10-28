@@ -47,7 +47,7 @@ public partial class MainWindow
     private void ApplySessionProfile(SessionProfile profile)
     {
         if(Controller.SettingsDirty){FeedbackText("Salve ou descarte os ajustes antes de aplicar um perfil.");return;}
-        StartSessionAction("profile-apply",async token=>
+        StartAudioAction("profile-apply",async token=>
         {
             if(profile.DisplayId is {} id&&!Controller.RefreshDisplays().Any(display=>display.Id==id))return new(ResultKind.Unavailable,"O monitor deste perfil está desconectado. Ajuste o perfil antes de aplicar.");
             var before=Controller.Settings;var state=await systemAudio.RefreshAsync(token);
@@ -82,7 +82,7 @@ public partial class MainWindow
     private void UndoSessionProfile()
     {
         if(profileBefore is not {} before||profileApplied is not {} applied||Controller.SettingsDirty)return;
-        StartSessionAction("profile-undo",async token=>
+        StartAudioAction("profile-undo",async token=>
         {
             var current=await systemAudio.RefreshAsync(token);var skipped=false;
             if(profileMasterBefore is {} oldVolume&&profileMasterApplied is {} expectedVolume)

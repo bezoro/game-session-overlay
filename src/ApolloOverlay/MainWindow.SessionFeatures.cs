@@ -18,6 +18,7 @@ public partial class MainWindow
     private CancellationTokenSource? featureRead;
     private long featureEpoch,nextFeatureRead;
     private Task featureTask=Task.CompletedTask;
+    private Task audioObservation=Task.CompletedTask;
     internal Task FeatureTask=>featureTask;
     private readonly Dictionary<string,ApplicationAudioSnapshot> mixerStates=[];
     private WindowRef? mixerTarget;
@@ -93,7 +94,7 @@ public partial class MainWindow
         if(exiting||!IsVisible||featureRead is not null||!NavigationAllowed)return;
         nextFeatureRead=Environment.TickCount64+2500;
         var request=new CancellationTokenSource(5000);featureRead=request;var epoch=featureEpoch;
-        featureTask=ReadSessionFeatures(epoch,request);
+        audioObservation=featureTask=ReadSessionFeatures(epoch,request);
     }
     internal void RefreshSessionFeatures(){nextFeatureRead=0;StartFeatureRead();}
     private async Task ReadSessionFeatures(long epoch,CancellationTokenSource request)
@@ -216,6 +217,8 @@ public partial class MainWindow
         if(!NavigationAllowed||busy||TransitionPending)return;
         QueueHandoff(()=>OperationTask=RunSessionAction(id,action,completed));
     }
+    private void StartAudioAction(string id,Func<CancellationToken,Task<ActionResult>> action,Action? completed=null)=>
+        StartSessionAction(id,async token=>{await audioObservation.WaitAsync(token);token.ThrowIfCancellationRequested();return await action(token);},completed);
     private async Task RunSessionAction(string id,Func<CancellationToken,Task<ActionResult>> action,Action? completed)
     {
         if(exiting||busy)return;
@@ -237,7 +240,7 @@ public partial class MainWindow
     private void ToggleMicrophone()
     {
         var state=systemAudio.Current;if(state.MicrophoneMuted is not {} muted)return;
-        StartSessionAction("microphone",token=>systemAudio.SetMicrophoneMutedAsync(state.MicrophoneId,!muted,token));
+        StartAudioAction("microphone",token=>systemAudio.SetMicrophoneMutedAsync(state.MicrophoneId,!muted,token));
     }
     private bool AdjustSessionFeature(NavDirection direction)
     {
@@ -321,7 +324,7 @@ public partial class MainWindow
         {
             var chosen=output;var current=systemAudio.Current;
             AddRow("output:"+output.Id,output.Name,output.Id==current.ConsoleOutputId&&output.Id==current.MediaOutputId?"Em uso para jogos e mídia":"Usar para jogos e mídia",()=>
-            {var expected=systemAudio.Current;StartSessionAction("audio-output",token=>systemAudio.SelectOutputAsync(expected.ConsoleOutputId,expected.MediaOutputId,chosen.Id,token),RefreshRows);});
+            {var expected=systemAudio.Current;StartAudioAction("audio-output",token=>systemAudio.SelectOutputAsync(expected.ConsoleOutputId,expected.MediaOutputId,chosen.Id,token),RefreshRows);});
         }
         AddRow("microphone",MicrophoneTitle,systemAudio.Current.MicrophoneName,ToggleMicrophone,systemAudio.Current.MicrophoneMuted is not null);
         AddRow("back","Voltar","Áudio da sessão",Back);
