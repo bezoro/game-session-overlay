@@ -19,7 +19,7 @@ Na próxima entrada no Windows, a overlay inicia oculta. Um toque curto no botã
 | B | Voltar; na tela Sessão, ocultar o painel |
 | LB / RB | Trocar de aba |
 | X | Abrir opções da janela em Sessão e Aplicativos |
-| Guide | Abrir ou ocultar o painel |
+| Guide | Abrir ou ocultar o painel; se estiver sem foco, tentar ativá-lo novamente |
 | Esquerda / direita sobre Volume | Ajustar em passos de 5% |
 
 Solte os botões e os analógicos ao voltar ao jogo. O painel espera a soltura para devolver o foco. Se você mover a seleção e apertar A ao mesmo tempo, apenas a seleção muda; aperte A novamente para acionar a opção.
@@ -64,7 +64,7 @@ As atualizações são publicadas após os testes dos canais configurados, sem s
 | --- | --- |
 | Guide não abre o painel | Abra pela bandeja, confira Guide em Sistema e faça um toque curto, soltando dentro do limite configurado. A leitura de Guide é experimental. |
 | Steam ou Game Bar abre junto | Desative a abertura pelo botão Guide nas configurações desses aplicativos. |
-| Painel não recebe comandos | Solte os botões e abra novamente pela bandeja para pedir foco ao Windows. |
+| Painel não recebe comandos | Solte os botões e toque Guide para tentar recuperar o foco. B / Esc continua permitindo ocultar o painel. Como alternativa, abra novamente pela bandeja. |
 | Painel não aparece sobre o jogo | Teste o jogo em janela sem bordas. Tela cheia exclusiva não tem compatibilidade garantida. |
 | Painel aparece na tela errada | Escolha o monitor em Sistema e salve. Confira novamente após conectar ou remover telas. |
 | Playnite não aparece | Em Sistema, escolha a unidade e as pastas até encontrar a instalação. Selecione **Usar Playnite desta pasta** e salve. |

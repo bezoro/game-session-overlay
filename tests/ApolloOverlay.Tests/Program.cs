@@ -17,6 +17,7 @@ static class Program
     {
         if(args.Length is not (1 or 2)) {Console.Error.WriteLine("Expected report path");return 2;}
         if(args.Length==2&&args[1]=="--updates"){UpdateSourceTests.Run(Case);LocalUpdateHistoryTests.Run(Case);return Finish(args[0]);}
+        if(args.Length==2&&args[1]=="--settings-focus"){SettingsFocusTests.Run(Case);return Finish(args[0]);}
         if(args.Length==2&&args[1]=="--update-captures"){UpdateInterfaceTests.Capture(args[0]);return 0;}
         if(args.Length==2&&args[1]=="--review-captures"){ReviewFixTests.Capture(args[0]);return 0;}
         if(args.Length==2&&args[1]=="--busy-pad"){SessionHubTests.BusyControllerChecks(Case);return Finish(args[0]);}
@@ -127,6 +128,7 @@ static class Program
         UpdateSourceTests.Run(Case);
         LocalUpdateHistoryTests.Run(Case);
         InterfaceFeedbackTests.Run(Case);
+        SettingsFocusTests.Run(Case);
         PremiumInterfaceTests.Run(Case);
         SessionHubTests.Run(Case);
         SessionHubServiceTests.Run(Case);
