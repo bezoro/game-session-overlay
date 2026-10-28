@@ -174,7 +174,7 @@ jobs:
   publish-update:
     name: Publish validated update
     needs: windows
-    if: ${{ needs.windows.result == 'success' && github.event_name == 'push' && github.repository == 'bezoro/apollo-tv-overlay' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/controller-overlay-polish') }}
+    if: ${{ false }} # Publishing paused while switching to the maintained updater.
     runs-on: windows-latest
     timeout-minutes: 10
     permissions:
