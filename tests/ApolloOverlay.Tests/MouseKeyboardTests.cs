@@ -43,7 +43,7 @@ internal static class MouseKeyboardTests
             void Refused(string gesture)
             {
                 Require(requests == 1, gesture + " requested native focus again: " + requests);
-                Require(w.Controller.Settings == before, gesture + " changed settings without admitted focus");
+                Require(SessionHubSettings.Equivalent(w.Controller.Settings,before), gesture + " changed settings without admitted focus");
                 Require(Native.GetForegroundWindow() == host.OtherHandle, gesture + " stole native foreground: " + FocusState(w));
                 Require(!w.TransitionPending, gesture + " queued an outgoing action without admitted focus");
             }
