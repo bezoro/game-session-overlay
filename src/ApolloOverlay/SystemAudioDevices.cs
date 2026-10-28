@@ -22,7 +22,7 @@ public sealed class SystemAudioDevices(ISystemAudioBackend? backend = null)
     private readonly ISystemAudioBackend backend = backend ?? new CoreSystemAudioBackend();
     private readonly SemaphoreSlim gate = new(1, 1);
     public SystemAudioSnapshot Current { get; private set; } = SystemAudioSnapshot.Empty;
-    public void InvalidateObservation()=>Current=Current with{MicrophoneMuted=null,Status="Atualizando os dispositivos de áudio…"};
+    public void InvalidateObservation()=>Current=Current with{MicrophoneMuted=null,ConsoleOutputId="",MediaOutputId="",Status="Atualizando os dispositivos de áudio…"};
     public async Task<SystemAudioSnapshot> RefreshAsync(CancellationToken cancellation = default)
     {
         if (!await gate.WaitAsync(0, cancellation)) return Current;
@@ -50,9 +50,9 @@ public sealed class SystemAudioDevices(ISystemAudioBackend? backend = null)
             work=Task.Run(()=>{var result=action(()=>!deadline.IsCancellationRequested);return(result,deadline.IsCancellationRequested?Current:backend.Read());},CancellationToken.None);
             var observed=await work.WaitAsync(deadline.Token);Current=observed.Snapshot;return observed.Result;
         }
-        catch (OperationCanceledException) { return new(work is not null ? ResultKind.Unknown : ResultKind.Cancelled, work is not null ? "Operação interrompida. Confira o dispositivo antes de repetir." : "Nenhuma alteração de áudio enviada."); }
+        catch (OperationCanceledException) { if(work is not null)InvalidateObservation();return new(work is not null ? ResultKind.Unknown : ResultKind.Cancelled, work is not null ? "Operação interrompida. Confira o dispositivo antes de repetir." : "Nenhuma alteração de áudio enviada."); }
         catch (Exception error) when (error is COMException or InvalidCastException or InvalidOperationException or UnauthorizedAccessException)
-        { return new(work is not null ? ResultKind.Unknown : ResultKind.Unavailable, "Não foi possível confirmar a alteração. Atualize a lista antes de tentar novamente."); }
+        { if(work is not null)InvalidateObservation();return new(work is not null ? ResultKind.Unknown : ResultKind.Unavailable, "Não foi possível confirmar a alteração. Atualize a lista antes de tentar novamente."); }
         finally { if(work is null)gate.Release();else ReleaseWhenDrained(work); }
     }
     private void ReleaseWhenDrained(Task work)

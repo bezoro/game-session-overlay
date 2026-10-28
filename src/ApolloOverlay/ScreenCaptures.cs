@@ -97,7 +97,7 @@ public sealed class ScreenCaptures
             System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(header[16..20]) != item.Width || System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(header[20..24]) != item.Height)
             throw new InvalidDataException("A imagem não corresponde à captura selecionada.");
         input.Position = 0; var image = new BitmapImage(); image.BeginInit(); image.CacheOption = BitmapCacheOption.OnLoad;
-        image.DecodePixelWidth = Math.Clamp(maximumWidth, 64, 1920); image.StreamSource = input; image.EndInit(); image.Freeze(); return image;
+        image.DecodePixelWidth = Math.Min(item.Width,Math.Clamp(maximumWidth, 64, 1920)); image.StreamSource = input; image.EndInit(); image.Freeze(); return image;
     }, cancellation);
 }
 
