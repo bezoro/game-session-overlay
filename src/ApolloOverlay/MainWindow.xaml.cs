@@ -145,6 +145,7 @@ public partial class MainWindow : Window
         HoldCloseButton.LostMouseCapture+=(_,_)=>{if(pointerDown){CancelHold();FeedbackText("Pressão cancelada: captura do mouse perdida.");}};
         PreviewMouseDown+=OnLocalPreviewMouseDown;PreviewMouseUp+=OnLocalPreviewMouseUp;
         ((FrameworkElement)Content).SizeChanged+=(_,e)=>UpdateCompactChrome(e.NewSize.Height);
+        ContentScroll.ScrollChanged+=(_,args)=>{if(args.ViewportHeightChange!=0)_ = UpdateSessionArtwork();};
         Rows.LayoutUpdated+=(_,_)=>{if(revealPending&&Rows.IsArrangeValid&&ContentScroll.ViewportHeight>0){revealPending=false;if(Keyboard.FocusedElement is FrameworkElement editor&&editor is TextBox or Slider&&Rows.IsAncestorOf(editor))editor.BringIntoView();else SetSelection(false);}};
         Rows.SizeChanged+=(_,e)=>{var compact=e.NewSize.Width<390;if(compact!=narrow){narrow=compact;if(!Confirming&&view.Current.Route==OverlayRoute.Hub){var offset=ContentScroll.VerticalOffset;RefreshRows();ContentScroll.ScrollToVerticalOffset(offset);}}};
         PreviewKeyDown+=OnKeyDown;PreviewKeyUp+=(_,e)=>{var key=NormalizeKey(e.Key,e.SystemKey,e.ImeProcessedKey,e.DeadCharProcessedKey);if(key!=Key.None)heldKeys.Remove(key);else if(TransitionPending)RejectHandoff("Transição cancelada; tecla não identificada.");if(!navigationKeysArmed&&heldKeys.Count==0&&PhysicalKeysNeutral())navigationKeysArmed=true;if(e.Key is Key.Enter or Key.Space){keyboardDown=false;e.Handled=true;}};
@@ -380,7 +381,7 @@ public partial class MainWindow : Window
         else if(!compact&&HeaderArea.Parent is StackPanel headerStack){headerStack.Children.Remove(HeaderArea);((Grid)Sidebar.Child).Children.Add(HeaderArea);}
         if(compact&&OperationPanel.Parent is Grid grid){grid.Children.Remove(OperationPanel);ContentStack.Children.Add(OperationPanel);}
         else if(!compact&&OperationPanel.Parent is StackPanel stack){stack.Children.Remove(OperationPanel);((Grid)Sidebar.Child).Children.Add(OperationPanel);}
-        PlaceCompactStatus();revealPending=true;UpdateHints();
+        PlaceCompactStatus();revealPending=true;UpdateHints();_ = UpdateSessionArtwork();
     }
     private void ReleasePointer(){pointerDown=false;pointerCaptured=false;if(HoldCloseButton.IsMouseCaptured)HoldCloseButton.ReleaseMouseCapture();}
     private void CancelHold(){nextConfirmationScroll=0;var restore=view.Current.Route==OverlayRoute.Confirmation;ReleasePointer();closeHold.Cancel();HeaderArea.Visibility=Visibility.Visible;TabArea.Visibility=Visibility.Visible;closeSource=null;keyboardDown=false;ConfirmPanel.Visibility=Visibility.Collapsed;ContentScroll.Visibility=Visibility.Visible;CloseArea.Visibility=Visibility.Visible;if(restore&&view.Back()){SyncView();RefreshRows();ContentScroll.ScrollToVerticalOffset(view.Current.ScrollOffset);}UpdatePersistentState();UpdateHints();}
@@ -400,7 +401,7 @@ public partial class MainWindow : Window
         if(Confirming){UpdatePersistentState();return;}
         var previous=entries.Select(e=>e.Id).ToArray();Rows.Children.Clear();Rows.RowDefinitions.Clear();Rows.ColumnDefinitions.Clear();Rows.ColumnDefinitions.Add(new());Rows.ColumnDefinitions.Add(new());CloseArea.Children.Clear();entries.Clear();operationText=null;
         entries.Add(new("settings",SettingsGear,()=>Page(2),true,"Abrir Sistema"));ContextCard.Visibility=view.Current.Route==OverlayRoute.Hub?Visibility.Visible:Visibility.Collapsed;
-        var target=Controller.Session.Anchor;var valid=target is not null&&Controller.Platform.Valid(target);
+        var target=Controller.Session.Anchor;var valid=target is not null&&Controller.Platform.Valid(target);_ = UpdateSessionArtwork();
         SessionKicker.Visibility=Visibility.Collapsed;SessionCardButton.Padding=new Thickness(14,narrow?10:12,14,narrow?10:12);TargetLabel.Text=target?.Title??"Escolha uma janela";TargetLabel.ToolTip=target?.Title;AutomationProperties.SetName(ContextCard,target?.Title??"Nenhuma janela selecionada");
         SessionEvidence.Text=target?.ProcessName??"Aplicativos";ContextStatus.Text=target is null?"Sem seleção":valid?"Disponível":"Janela indisponível";ContextStatusDot.Opacity=valid?1:.3;
         ContextIcon.Source=target is null?null:Controller.Platform.Icon(target);ContextIcon.Visibility=ContextIcon.Source is null?Visibility.Collapsed:Visibility.Visible;ContextGlyph.Visibility=ContextIcon.Source is null?Visibility.Visible:Visibility.Collapsed;ContextStatus.Visibility=valid?Visibility.Collapsed:Visibility.Visible;ContextStatusDot.Visibility=Visibility.Collapsed;SessionEvidence.Visibility=target is not null&&target.Title.Equals(target.ProcessName,StringComparison.OrdinalIgnoreCase)?Visibility.Collapsed:Visibility.Visible;SessionAudioLabel.Text=target is null?"Selecione uma janela para ver o áudio":!valid?"Janela indisponível":AudioFor(target)?AudioBadge():"Estado não confirmado";ControllerStatusLabel.Text=controllerStatus.Replace(" · aguardando entrada","");

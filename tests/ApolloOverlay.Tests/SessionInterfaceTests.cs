@@ -32,6 +32,19 @@ internal static class SessionInterfaceTests
                 Require(version.Visibility==Visibility.Visible&&version.Text.StartsWith("v"),"Compact page hid build version");
             });
         }
+        foreach(var clear in new[]{false,true})
+        {
+            var clearing=clear;
+            test("session artwork immediately clears on "+(clearing?"clearing":"changing")+" the selected game",()=>
+            {
+                using var host=new Host(root=>{var captures=new ScreenCaptures(root,new CaptureFixture());var saved=captures.CaptureAsync(new("fixture",0,0,120,80,true),"Fixture game","fixture");Complete(saved);Require(saved.Result.Item is not null,"Fixture capture was not saved");});
+                var w=host.Window;host.Open();Navigate(w,"gallery");Complete(w.ArtworkTask);
+                var artwork=(Border)w.FindName("SessionArtwork");Require(artwork.Background is not null,"Fixture session artwork did not load");
+                if(clearing)w.Controller.ClearSelection();
+                else{var platform=(PremiumInterfaceTests.FixturePlatform)w.Controller.Platform;platform.Window=new(202,84,200,"Other game","other-game");w.Controller.Select(platform.Window);}
+                w.RefreshRows();Require(artwork.Background is null&&artwork.Visibility==Visibility.Collapsed,"The previous game's artwork survived a session change");
+            });
+        }
         test("session directional audio navigation reaches microphone without changing volume",()=>
         {
             using var host=new Host();var w=host.Window;host.Open();Pick(w,"session-volume");w.Move(NavDirection.Down);
@@ -172,6 +185,10 @@ internal static class SessionInterfaceTests
         public Task<ApplicationAudioChange> SetVolumeAsync(WindowRef value,float volume,long epoch,CancellationToken cancellation=default){VolumeWrites++;target=value;generation=epoch;Volume=volume;return Task.FromResult(new ApplicationAudioChange(new(ResultKind.Simulated,"Fixture volume"),Snapshot(),1,1,1,true));}
         public Task<ApplicationAudioChange> SetMutedAsync(WindowRef value,bool muted,long epoch,CancellationToken cancellation=default){MuteWrites++;target=value;generation=epoch;Muted=muted;return Task.FromResult(new ApplicationAudioChange(new(ResultKind.Simulated,"Fixture mute"),Snapshot(),1,1,1,true));}
         public void Suspend(){}public void Dispose(){Changed=null;}
+    }
+    private sealed class CaptureFixture:IScreenCaptureBackend
+    {
+        public CapturePixels Capture(DisplayRef display){var pixels=new byte[120*80*4];for(var i=3;i<pixels.Length;i+=4)pixels[i]=255;return new(120,80,pixels);}
     }
     private sealed class ProfileAudioFixture:ISystemAudioBackend,IDisposable
     {

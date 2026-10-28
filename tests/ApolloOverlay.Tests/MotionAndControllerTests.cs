@@ -43,8 +43,19 @@ internal static class MotionAndControllerTests
             Require(label.Text=="Xbox One"&&battery.Text=="76%"&&icon.Data is not null,"Model or measured charge not presented");
             var xbox=icon.Data!.ToString();var peer=AutomationProperties.GetName((DependencyObject)w.FindName("ControllerInfoBar"));
             Require(peer.Contains("76 por cento")&&peer.Contains("Windows"),"Badge has no accessible charge or source");
-            Disconnect(w,1);host.Source.Items=[new("ps5","PlayStation 5",ControllerFamily.PlayStation5,true,null,true)];Connect(w,2);Complete(w.ControllerBadgeTask);
+            Disconnect(w,1);host.Source.Items=[new("ps5","PlayStation 5",ControllerFamily.PlayStation5,true,null,true)];Connect(w,2);Complete(w.ControllerBadgeTask);Connect(w,3);Complete(w.ControllerBadgeTask);
             Require(label.Text=="PlayStation 5"&&battery.Text=="—"&&icon.Data.ToString()!=xbox,"PlayStation fallback guessed a charge or reused the Xbox icon");
+        });
+        test("controller badge keeps a long model and charging icon inside a compact header",()=>
+        {
+            using var host=new Host();var w=host.Window;w.Width=360;w.Height=480;
+            host.Source.Items=[new("long","Controle sem fio com nome de fabricante muito longo",ControllerFamily.PlayStation5,true,24,true)];
+            Connect(w,0);Complete(w.ControllerBadgeTask);w.UpdateLayout();
+            var badge=(FrameworkElement)w.FindName("ControllerInfoBar");var gear=(FrameworkElement)w.FindName("SettingsGear");
+            var power=(System.Windows.Shapes.Path)w.FindName("ControllerPowerGlyph");var label=(TextBlock)w.FindName("ControllerModelLabel");
+            var right=badge.TranslatePoint(new(badge.ActualWidth,0),w).X;var gearLeft=gear.TranslatePoint(new(),w).X;
+            Require(right<=gearLeft+1&&label.ActualWidth>0&&label.TextTrimming==TextTrimming.CharacterEllipsis,"Long controller model overlapped the system button or disappeared");
+            Require(power.Visibility==Visibility.Visible&&power.Data is not null,"Charging state has no vector icon");
         });
         test("controller badge does not assign ambiguous models and makes no hidden metadata requests",()=>
         {

@@ -30,7 +30,7 @@ public partial class MainWindow
     private UserSettings? profileBefore,profileApplied;
     private SystemAudioSnapshot? profileAudioBefore,profileAudioApplied;
     private AudioSnapshot? profileMasterBefore,profileMasterApplied;
-    private string profileActiveBefore="",profileActiveApplied="",profilePresentationBefore="TV",artworkGameKey="";
+    private string profileActiveBefore="",profileActiveApplied="",profilePresentationBefore="TV";
     private ScreenCaptureItem[] captureItems=[];
     private ScreenCaptureItem? selectedCapture;
     private string artworkId="";

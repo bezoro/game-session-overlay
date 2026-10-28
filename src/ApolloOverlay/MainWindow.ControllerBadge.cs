@@ -55,7 +55,9 @@ public partial class MainWindow
         ControllerBatteryLabel.Text=percent is {} value?$"{value}%":wired?"USB":category switch{ControllerBatteryLevel.Empty=>"Vazia",ControllerBatteryLevel.Low=>"Baixa",ControllerBatteryLevel.Medium=>"Média",ControllerBatteryLevel.Full=>"Cheia",_=>"—"};
         BatteryFill.Width=percent is {} amount?14d*amount/100:category is {} level?14d*(int)level/3:0;
         BatteryFill.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty,percent is <=20||category is ControllerBatteryLevel.Empty or ControllerBatteryLevel.Low?ThemeSupport.Critical:ThemeSupport.SecondaryText);
-        ControllerPowerGlyph.Text=known?.Charging==true?"ϟ":wired?"⌁":"";
+        ControllerPowerGlyph.Visibility=known?.Charging==true||wired?Visibility.Visible:Visibility.Collapsed;
+        ControllerPowerGlyph.Data=known?.Charging==true?Geometry.Parse("M6,0 L1,7 H4 L3,12 L9,4 H6 Z"):wired?Geometry.Parse("M4,12 V1 M2,3 L4,1 L6,3 M4,9 L1,6 V4 M4,8 L8,5 V3"):null;
+        if(known?.Charging==true)ControllerPowerGlyph.SetResourceReference(System.Windows.Shapes.Path.FillProperty,ThemeSupport.SecondaryText);else ControllerPowerGlyph.Fill=Brushes.Transparent;
         var source=known is null?"Modelo não associado ao controle ativo.":"Identificação informada pelo Windows; em streaming pode corresponder ao controle virtual.";
         var battery=percent is {} charge?$"Bateria {charge} por cento"+(known?.Charging==true?", carregando":""):wired?"Alimentação por USB ou dispositivo virtual; carga da bateria não informada":category is not null?"Bateria "+ControllerBatteryLabel.Text.ToLowerInvariant():"Bateria não informada pelo dispositivo";
         var description=ControllerModelLabel.Text+" · "+battery+". "+source+" "+(connectedControllers>0?controllerStatus:"Navegação por XInput deste dispositivo não confirmada.");

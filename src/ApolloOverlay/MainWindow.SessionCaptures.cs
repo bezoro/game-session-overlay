@@ -67,7 +67,7 @@ public partial class MainWindow
     private async Task LoadCaptureImage(ScreenCaptureItem capture,Image image)
     {
         try{var source=await screenCaptures.ReadImageAsync(capture);if(!exiting&&selectedCapture?.Id==capture.Id&&view.Current.Route==OverlayRoute.CaptureDetail)image.Source=source;}
-        catch(Exception error)when(error is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException){if(!exiting)FeedbackText("A imagem foi removida ou não pôde ser lida. Atualize a galeria.");}
+        catch(Exception error)when(error is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException or FormatException){if(!exiting)FeedbackText("A imagem foi removida ou não pôde ser lida. Atualize a galeria.");}
     }
     private void OpenCaptureFolder()
     {
@@ -81,19 +81,39 @@ public partial class MainWindow
             return Task.FromResult(new ActionResult(ResultKind.Requested,"Pasta de capturas solicitada ao Windows."));
         });
     }
-    private async Task UpdateSessionArtwork()
+    private WindowRef? artworkTarget;
+    private Task artworkRead=Task.CompletedTask;
+    private string artworkPendingId="";
+    private long artworkGeneration;
+    internal Task ArtworkTask=>artworkRead;
+    private void ClearSessionArtwork()
     {
-        var game=Controller.Session.Anchor?.ProcessName??"";
-        if(artworkGameKey!=game){artworkGameKey=game;artworkId="";SessionArtwork.Background=null;SessionArtwork.Visibility=Visibility.Collapsed;}
-        if(Controller.Session.Anchor is not {} target)return;
-        var image=captureItems.FirstOrDefault(item=>item.GameKey.Equals(target.ProcessName,StringComparison.OrdinalIgnoreCase));
-        if(image is null||image.Id==artworkId)return;
+        artworkGeneration++;artworkPendingId="";artworkId="";
+        SessionArtwork.Background=null;SessionArtwork.Visibility=Visibility.Collapsed;
+    }
+    private bool ArtworkFits=>!compactChrome&&ContentScroll.ViewportHeight>=320;
+    private Task UpdateSessionArtwork()
+    {
+        if(exiting)return Task.CompletedTask;
+        var target=Controller.Session.Anchor;
+        if(target is null?artworkTarget is not null:artworkTarget?.Same(target)!=true)
+        {artworkTarget=target;ClearSessionArtwork();}
+        var image=target is null?null:captureItems.FirstOrDefault(item=>item.GameKey.Equals(target.ProcessName,StringComparison.OrdinalIgnoreCase));
+        if(image is null){if(artworkId.Length>0||artworkPendingId.Length>0)ClearSessionArtwork();return Task.CompletedTask;}
+        if(image.Id==artworkId){SessionArtwork.Visibility=ArtworkFits?Visibility.Visible:Visibility.Collapsed;return Task.CompletedTask;}
+        if(image.Id==artworkPendingId)return artworkRead;
+        artworkPendingId=image.Id;var generation=++artworkGeneration;
+        return artworkRead=ReadSessionArtwork(image,target!,generation);
+    }
+    private async Task ReadSessionArtwork(ScreenCaptureItem image,WindowRef target,long generation)
+    {
         try
         {
             var source=await screenCaptures.ReadImageAsync(image,640);
-            if(exiting||Controller.Session.Anchor?.Same(target)!=true)return;
-            SessionArtwork.Background=new ImageBrush(source){Stretch=Stretch.UniformToFill};SessionArtwork.Visibility=Visibility.Visible;artworkId=image.Id;
+            if(exiting||generation!=artworkGeneration||Controller.Session.Anchor?.Same(target)!=true)return;
+            SessionArtwork.Background=new ImageBrush(source){Stretch=Stretch.UniformToFill};SessionArtwork.Visibility=ArtworkFits?Visibility.Visible:Visibility.Collapsed;artworkId=image.Id;
         }
-        catch(Exception error)when(error is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException){}
+        catch(Exception error)when(error is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException or FormatException){}
+        finally{if(generation==artworkGeneration)artworkPendingId="";}
     }
 }
