@@ -17,6 +17,12 @@ internal static class GuardedActionCancellationTests
         var until=Environment.TickCount64+5000;
         while(!condition()){if(Environment.TickCount64>=until)throw new TimeoutException("Expected effect phase did not arrive.");var frame=new DispatcherFrame();Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle,()=>frame.Continue=false);Dispatcher.PushFrame(frame);}
     }
+    private static void WithDispatcher(Action action)
+    {
+        var previous=SynchronizationContext.Current;
+        try{SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));action();}
+        finally{SynchronizationContext.SetSynchronizationContext(previous);}
+    }
     private sealed class PendingEffects:IWindowEffects
     {
         internal readonly TaskCompletionSource Waiter=new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -65,10 +71,19 @@ internal static class GuardedActionCancellationTests
     }
     internal static void Run(Action<string,Action> test)
     {
+        void Case(string name,Action action)=>test(name,()=>WithDispatcher(action));
+        Case("effect test fixture restores previous synchronization context on failure",()=>{
+            var previous=SynchronizationContext.Current;var marker=new SynchronizationContext();
+            try{
+                SynchronizationContext.SetSynchronizationContext(marker);var threw=false;
+                try{WithDispatcher(()=>throw new InvalidOperationException("fixture stop"));}catch(InvalidOperationException error)when(error.Message=="fixture stop"){threw=true;}
+                Require(threw&&ReferenceEquals(SynchronizationContext.Current,marker),"Fixture did not restore the previous context");
+            }finally{SynchronizationContext.SetSynchronizationContext(previous);}
+        });
         foreach(var menu in new[]{false,true})foreach(var cancel in new[]{false,true})
         {
             var isMenu=menu;var cancelRequest=cancel;
-            test((isMenu?"F1":"Win+G")+(cancelRequest?" cancellation":" continuing-context loss")+" after focus sends no keys",()=>{
+            Case((isMenu?"F1":"Win+G")+(cancelRequest?" cancellation":" continuing-context loss")+" after focus sends no keys",()=>{
                 var effects=new PendingEffects();using var cts=new CancellationTokenSource();var allowed=true;
                 var actions=new GuardedActions(effects);
                 var request=isMenu?actions.SteamMenu(Target,cts.Token,()=>allowed,()=>effects.ValidTarget):actions.Shortcut(Target,"Win+G",cts.Token,()=>allowed);
@@ -78,19 +93,19 @@ internal static class GuardedActionCancellationTests
                 Require(effects.Sends==0&&request.Result.Kind==ResultKind.Cancelled,"Cancelled focus emitted keys or reported a successful send");
             });
         }
-        foreach(var menu in new[]{false,true})test((menu?"F1":"Win+G")+" sends once when focus and request remain valid",()=>{
+        foreach(var menu in new[]{false,true})Case((menu?"F1":"Win+G")+" sends once when focus and request remain valid",()=>{
             var effects=new PendingEffects{Foreground=true};var actions=new GuardedActions(effects);
             var request=menu?actions.SteamMenu(Target,CancellationToken.None,()=>true,()=>true):actions.Shortcut(Target,"Win+G",CancellationToken.None,()=>true);Complete(request);
             Require(effects.FocusRequests==1&&effects.Sends==1&&effects.Keys==(menu?"F1":"Win+G")&&request.Result.Kind==ResultKind.Requested,"Valid shortcut did not send exactly once");
         });
-        foreach(var cancel in new[]{false,true})test("Steam launch aborts after focus when "+(cancel?"cancelled":"context lost"),()=>{
+        foreach(var cancel in new[]{false,true})Case("Steam launch aborts after focus when "+(cancel?"cancelled":"context lost"),()=>{
             using var platform=new PendingLauncher();using var controller=new OverlayController(platform);using var cts=new CancellationTokenSource();var allowed=true;
             Complete(controller.Refresh());var request=controller.Launch(false,cts.Token,()=>allowed);Require(platform.Switches==1&&!request.IsCompleted,"Focus fixture did not suspend");
             if(cancel)cts.Cancel();else allowed=false;
             platform.Focus.SetResult(new(ResultKind.Completed,"fixture focus"));Complete(request);
             Require(platform.Launches==0&&request.Result.Kind==ResultKind.Cancelled,"Steam URI was dispatched after cancellation or context loss");
         });
-        foreach(var scenario in new[]{"valid target","focus returns to overlay","new controller input"})test("UI shortcut guard after target focus: "+scenario,()=>{
+        foreach(var scenario in new[]{"valid target","focus returns to overlay","new controller input"})Case("UI shortcut guard after target focus: "+scenario,()=>{
             using var platform=new TwoPhaseShortcut();var window=new MainWindow(renderOnly:true,platform:platform);var own=true;var frames=new PadFrame[4];
             window.InputContextReader=()=>new(true,true,own,own);window.PhysicalKeyReader=_=>0;window.FocusForeground=()=>own?0:platform.Game.Handle;window.EffectFramesFixture=()=>frames;
             try{
@@ -106,7 +121,7 @@ internal static class GuardedActionCancellationTests
                 Require(platform.Sends==(scenario=="valid target"?1:0),"Shortcut was sent after loss of target focus or new input");
             }finally{platform.First.TrySetResult();platform.Second.TrySetResult();window.Close();}
         });
-        test("Back cancels a pending operation without dismissing the visible panel after a late result",()=>{
+        Case("Back cancels a pending operation without dismissing the visible panel after a late result",()=>{
             var completion=new TaskCompletionSource<ActionResult>(TaskCreationOptions.RunContinuationsAsynchronously);
             var platform=new PremiumInterfaceTests.FixturePlatform{Next=completion.Task};var window=PremiumInterfaceTests.FixtureWindow(platform);
             try{

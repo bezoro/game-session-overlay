@@ -193,7 +193,7 @@ public partial class MainWindow : Window
     private void RevokeFocus(string reason,bool supersede=true){CancelPlayniteScan();feedbackService.Suspend();applicationAudio.Suspend();audioGeneration++;audioTarget=null;nextBatteryRead=0;CancelOpenAnimation();if(supersede)focusCycle++;focusConfirmed=false;navigationKeysArmed=false;input.Cancel();CancelHold();TraceFocus(reason,ResultKind.Cancelled);}
     private bool NavigationAllowed
     {
-        get{var context=InputContext;if(!context.Confirmed||!context.Visible||context.OwnedDialog||context.Exiting)return false;if(context.Active&&context.OwnForeground)return true;RevokeFocus("lost");FeedbackText("Foco perdido. Abra novamente com duplo clique na bandeja; B ou Esc dispensa o painel.");return false;}
+        get{var context=InputContext;if(!context.Confirmed||!context.Visible||context.OwnedDialog||context.Exiting)return false;if(context.Active&&context.OwnForeground)return true;RevokeFocus("lost");FeedbackFocusUnavailable("Foco perdido. Abra novamente com duplo clique na bandeja; B ou Esc dispensa o painel.");return false;}
     }
     private async Task<bool> AcquireFocus(long cycle)
     {
@@ -202,7 +202,7 @@ public partial class MainWindow : Window
         for(var attempt=0;attempt<=6;attempt++){
             if(!CurrentCycle(cycle)||ownedDialog)return false;
             if(IsActive&&OwnForeground){focusConfirmed=true;navigationKeysArmed=heldKeys.Count==0&&PhysicalKeysNeutral();input.Cancel();TrackApplicationAudio();TraceFocus("confirmed",ResultKind.Completed);return true;}
-            if(!requested||attempt==6){TraceFocus("unconfirmed",requested?ResultKind.Unknown:ResultKind.Failed);FeedbackText("O Windows não confirmou o foco. Tente duplo clique na bandeja; B ou Esc dispensa o painel.");return false;}
+            if(!requested||attempt==6){TraceFocus("unconfirmed",requested?ResultKind.Unknown:ResultKind.Failed);FeedbackFocusUnavailable("O Windows não confirmou o foco. Tente duplo clique na bandeja; B ou Esc dispensa o painel.");return false;}
             await Task.Delay(50);
         }return false;
     }
@@ -288,7 +288,23 @@ public partial class MainWindow : Window
         if(restore&&wasForeground&&stillForeground&&!fadeInterrupted&&PhysicalKeysNeutral()&&returnTarget is {} target&&Controller.Platform.Valid(target)){var result=await Controller.Platform.Switch(target);if(result.Kind!=ResultKind.Completed&&result.Kind!=ResultKind.Simulated&&!exiting){if(!Controller.Platform.IsPreview)Controller.Diagnostics.Log("focus-return",result.Kind);FeedbackText(result.Message);}}
     }
     private void Cleanup(){if(exiting)return;effectCancellation?.Cancel();fadeGeneration++;fadingOut=false;CancelSteamOwner("Overlay encerrada.");automationHost?.Dispose();exiting=true;operationGeneration++;RevokeFocus("cleanup");CancelHandoff();heldKeys.Clear();SystemParameters.StaticPropertyChanged-=OnSystemParametersChanged;timer.Stop();timer.Tick-=Tick;guideConnection?.Dispose();guideConnection=null;guideBackend=null;guideToggleRequested=false;pending?.Cancel();ResultNotificationRequest=null;applicationAudio.Changed-=ApplicationAudioChanged;feedbackService.Changed-=FeedbackStatusChanged;applicationAudio.Dispose();feedbackService.Dispose();controllerDevices.Dispose();audio.Dispose();source?.RemoveHook(WindowMessage);tray?.Dispose();DisposeIconUpdates();Controller.Dispose();}
-    private void FeedbackText(string text)=>StatusLabel.Text=text;
+    private void FeedbackText(string text)
+    {
+        StatusLabel.TextWrapping=TextWrapping.NoWrap;StatusLabel.TextTrimming=TextTrimming.CharacterEllipsis;StatusLabel.Text=text;
+    }
+    private void FeedbackFocusUnavailable(string text)
+    {
+        FeedbackText(text);
+        if(!compactChrome||exiting||!IsVisible||Dispatcher.HasShutdownStarted)return;
+        StatusLabel.TextWrapping=TextWrapping.Wrap;StatusLabel.TextTrimming=TextTrimming.None;
+        var cycle=focusCycle;
+        // Layout and selection may still be settling. Do not reveal an old failure
+        // after a later open, recovered focus, dismissal or replacement message.
+        Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle,()=>{
+            if(exiting||!IsVisible||!compactChrome||focusCycle!=cycle||focusConfirmed||StatusLabel.Text!=text)return;
+            StatusLabel.BringIntoView();
+        });
+    }
     private void RetainOperation(string state,string message,string action="",WindowRef? target=null,bool dispatched=false){Controller.SetOperation(state,message,action,target,dispatched);UpdatePersistentState();}
     private void UpdatePersistentState()
     {
@@ -339,7 +355,7 @@ public partial class MainWindow : Window
     private void UpdateCompactChrome(double height)
     {
         var compact=height>0&&height<650;if(compact==compactChrome)return;compactChrome=compact;
-        if(pointerDown)CancelHold();HeaderIdentity.Visibility=compact?Visibility.Collapsed:Visibility.Visible;ControllerStatusLabel.Visibility=compact?Visibility.Collapsed:Visibility.Visible;DirtyLabel.Visibility=compact?Visibility.Collapsed:Visibility.Visible;HeaderArea.Margin=new(0,0,0,compact?8:12);DirtyStrip.Margin=new(0,compact?8:12,0,0);DirtyStrip.Padding=new(12,compact?6:8,12,compact?6:8);TabArea.Margin=new(0,0,0,compact?8:16);
+        if(pointerDown)CancelHold();HeaderIdentity.Visibility=compact?Visibility.Collapsed:Visibility.Visible;ControllerStatusLabel.Visibility=compact?Visibility.Collapsed:Visibility.Visible;DirtyLabel.Visibility=compact?Visibility.Collapsed:Visibility.Visible;HeaderArea.Margin=new(0,0,0,compact?8:12);DirtyStrip.Margin=new(0,compact?8:12,0,0);DirtyStrip.Padding=new(12,compact?6:8,12,compact?6:8);TabArea.Margin=new(0,0,0,compact?8:16);Sidebar.Padding=compact?new(20,14,20,14):new(24,22,24,22);FooterArea.Margin=new(0,compact?6:10,0,0);FooterDivider.Margin=new(0,0,0,compact?4:8);if(!compact){StatusLabel.TextWrapping=TextWrapping.NoWrap;StatusLabel.TextTrimming=TextTrimming.CharacterEllipsis;}
         // Tabs and Save/Discard stay fixed. The header and status move into the
         // existing scroller so selected cards have room without shrinking text.
         if(compact&&HeaderArea.Parent is Grid headerGrid){headerGrid.Children.Remove(HeaderArea);ContentStack.Children.Insert(0,HeaderArea);}

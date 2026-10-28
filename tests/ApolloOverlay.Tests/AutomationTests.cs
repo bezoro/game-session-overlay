@@ -24,6 +24,9 @@ internal static class AutomationTests
     {
         Prerequisites(test);
         test("corrupt automation ledger leaves overlay usable and evidence intact",()=>{
+            var previous=SynchronizationContext.Current;
+            try{
+            SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext(System.Windows.Threading.Dispatcher.CurrentDispatcher));
             foreach(var invalid in new[]{"{", "{}", "{\"Records\":[null]}", "{\"Records\":[{}]}", new string(' ',1024*1024+1)}){
                 var root=Temp();var ledgerRoot=Path.Combine(root,"automation",Process.GetCurrentProcess().SessionId.ToString());Directory.CreateDirectory(ledgerRoot);
                 var path=Path.Combine(ledgerRoot,"automation-ledger.json");File.WriteAllText(path,invalid);
@@ -39,6 +42,7 @@ internal static class AutomationTests
                     Require(refused&&File.ReadAllText(path)==invalid,"Explicit bridge failed open or changed evidence");
                 }finally{window.Close();}
             }
+            }finally{SynchronizationContext.SetSynchronizationContext(previous);}
         });
         test("automation ledger retained duplicates and altered payload reject",()=>{var ledger=new AutomationLedger(Temp());var id=ledger.Issue("one");Require(ledger.Accept(id,"one","payload")=="Accepted","Intent not accepted");Require(ledger.Accept(id,"one","payload")=="Duplicate","Duplicate redispatched");Require(ledger.Accept(id,"one","changed")=="Rejected"&&ledger.Accept(id,"other","payload")=="Rejected","Payload or connection transferred");});
         test("automation retired watermark rejects evicted result without effects",()=>{var ledger=new AutomationLedger(Temp());string first="";var effects=0;for(var i=0;i<257;i++){var id=ledger.Issue("c"+i);if(i==0)first=id;if(ledger.Accept(id,"c"+i,"same")=="Accepted")effects++;ledger.Update(id,AutomationReply.Error("Completed","",id));}Require(ledger.Find(first) is null&&ledger.Accept(first,"c0","same")=="Rejected"&&effects==257,"Evicted ID became executable");});
