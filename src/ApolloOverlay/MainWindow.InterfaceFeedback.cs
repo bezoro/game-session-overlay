@@ -83,9 +83,16 @@ public partial class MainWindow
     private void TestFeedback()
     {
         var sent = RequestCue(FeedbackCue.Test);
-        FeedbackText(sent.SoundRequested || sent.HapticRequested
-            ? "Teste solicitado. Confira o som e a vibração ativados; Salvar mantém seus ajustes."
-            : sent.Reason);
+        var controllerSource = dispatchSource > 0 || dispatchSource is null && inputMethod == "controller";
+        FeedbackText((sent.SoundRequested, sent.HapticRequested) switch
+        {
+            (true, true) => "Teste solicitado. Confira o som e a vibração no controle ativo.",
+            (true, false) => "Teste solicitado. Confira o som na saída de áudio ativa.",
+            (false, true) => "Teste solicitado. Confira a vibração no controle ativo.",
+            _ => Controller.Settings.HapticFeedbackEnabled && !Controller.Settings.SoundFeedbackEnabled && !controllerSource
+                ? "Use A no controle ativo para testar a vibração."
+                : sent.Reason
+        });
     }
 
     private string FeedbackDescription()
@@ -95,7 +102,7 @@ public partial class MainWindow
         if (Controller.Settings.SoundFeedbackEnabled && !feedbackService.Status.SoundAvailable)
             return feedbackService.Status.Reason;
         return Controller.Settings.SoundFeedbackEnabled
-            ? "Ouvir navegação, confirmação e retorno · testar vibração se ativada"
-            : "Testar um pulso curto no controle ativo";
+            ? "Ouvir navegação, confirmação e retorno · use o controle para testar vibração"
+            : "Use A para testar um pulso curto no controle ativo";
     }
 }

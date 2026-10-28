@@ -47,6 +47,18 @@ internal static class InterfaceFeedbackTests
             }
             finally { w.Close(); }
         });
+        test("interface haptics-only pointer test explains that the controller is required", () =>
+        {
+            var w = Fixture(out var feedback);
+            try
+            {
+                w.Controller.Change(w.Controller.Settings with { HapticFeedbackEnabled = true }); w.Page(2);
+                feedback.Response = new(false, false, "Prior status must not be presented as a new pulse");
+                Click(ReviewFixTests.Button(w, "test-feedback"));
+                Require(w.Feedback == "Use A no controle ativo para testar a vibração.", "Test falsely claimed a pulse or kept an unrelated status");
+            }
+            finally { w.Close(); }
+        });
         test("interface fixed footer actions use the same acknowledgement as rows", () =>
         {
             var w = Fixture(out var feedback);
@@ -177,12 +189,13 @@ internal static class InterfaceFeedbackTests
     private sealed class RecordingFeedback : IFeedbackService
     {
         internal readonly List<FeedbackCue> Cues = [];
+        internal FeedbackDispatch Response = new(true, false, "Fixture requested");
         internal readonly List<FeedbackSource> Sources = [];
         public event Action<FeedbackStatus>? Changed { add { } remove { } }
         public FeedbackStatus Status => new(true, false, "Fixture feedback");
         public void Configure(bool sound, bool haptics) { }
         public void SetContext(FeedbackContext context) { }
-        public FeedbackDispatch Request(FeedbackCue cue, FeedbackSource source) { Cues.Add(cue); Sources.Add(source); return new(true, false, "Fixture requested"); }
+        public FeedbackDispatch Request(FeedbackCue cue, FeedbackSource source) { Cues.Add(cue); Sources.Add(source); return Response; }
         public void Suspend() { }
         public void Dispose() { }
     }
