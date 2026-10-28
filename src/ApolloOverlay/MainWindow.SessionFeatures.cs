@@ -153,17 +153,19 @@ public partial class MainWindow
         if(view.Current.Route==OverlayRoute.Media&&!busy&&!TransitionPending)RefreshRows();
     }
     private SessionMediaItem? CurrentMedia=>sessionMedia.Current.Items.FirstOrDefault(item=>item.Id==selectedMedia)??sessionMedia.Current.Items.FirstOrDefault(item=>item.Id==sessionMedia.Current.CurrentId);
-    private string GameVolumeTitle=>appAudio.CanSetVolume?$"Jogo · {appAudio.VolumeMaximum:P0}":"Som do jogo";
-    private string GameVolumeDescription=>appAudio.CanSetVolume?"← / → volume · A silencia ou ativa":appAudio.CanSetMute?"A silencia ou ativa · volume não informado":"Abra o jogo e inicie o áudio para ajustar";
+    private static string VolumeRange(ApplicationAudioSnapshot state)=>state.VolumeMaximum-state.VolumeMinimum>.01f?$"{state.VolumeMinimum:P0}–{state.VolumeMaximum:P0}":$"{state.VolumeMaximum:P0}";
+    private string GameVolumeTitle=>appAudio.CanSetMute?"Jogo · "+(appAudio.MuteState==ApplicationMuteState.Muted?"sem som":appAudio.MuteState==ApplicationMuteState.Mixed?"áudio misto":appAudio.CanSetVolume?VolumeRange(appAudio):"som ativo"):"Som do jogo";
+    private string GameVolumeDescription=>(appAudio.Availability==ApplicationAudioAvailability.Partial?"Áudio parcial · ":"")+(appAudio.CanSetVolume?"← / → volume · A "+(appAudio.MuteState==ApplicationMuteState.Muted?"ativa":"silencia"):appAudio.CanSetMute?"A "+(appAudio.MuteState==ApplicationMuteState.Muted?"ativa":"silencia")+" · volume não informado":"Abra o jogo e inicie o áudio para ajustar");
+    private string WindowsVolumeTitle=>audio.Current.Available?audio.Current.Muted?"Saída · sem som":$"Saída · {audio.Current.Volume:P0}":"Saída indisponível";
     private string MicrophoneTitle=>systemAudio.Current.MicrophoneMuted switch{true=>"Microfone · sem som",false=>"Microfone · ligado",_=>"Microfone indisponível"};
     private void UpdateSessionFeatureLabels()
     {
         SetFeatureEntry("session-volume",GameVolumeTitle,GameVolumeDescription,appAudio.CanSetMute);
-        SetFeatureEntry("windows-volume",audio.Current.Available?$"Saída · {audio.Current.Volume:P0}":"Saída indisponível",systemAudio.Current.OutputName,audio.Current.Available);
+        SetFeatureEntry("windows-volume",WindowsVolumeTitle,systemAudio.Current.OutputName,audio.Current.Available);
         SetFeatureEntry("microphone",MicrophoneTitle,systemAudio.Current.MicrophoneName,systemAudio.Current.MicrophoneMuted is not null);
         var media=CurrentMedia;
         SyncSessionSlider("session-volume",appAudio.VolumeMaximum);SyncSessionSlider("windows-volume",audio.Current.Available?audio.Current.Volume:null);
-        SetEntryDescription("session-media",media is null?"Reprodução nos aplicativos compatíveis":(media.Playing?"Tocando · ":"Pausado · ")+(media.Title.Length>0?media.Title:media.Application));
+        SetEntryDescription("session-media",media is null?"Reprodução nos aplicativos compatíveis":(media.Playing?"Tocando · ":"Pausado · ")+(media.Title.Length>0?media.Title:"Reprodução de mídia"));
     }
     private void SetFeatureEntry(string id,string title,string description,bool available)
     {
@@ -178,7 +180,7 @@ public partial class MainWindow
         var gameVolume=AddRow("session-volume",GameVolumeTitle,GameVolumeDescription,ToggleGameAudio,appAudio.CanSetMute);
         AddSessionSlider(gameVolume,appAudio.VolumeMaximum??0,value=>SetGameVolume(value));SyncSessionSlider("session-volume",appAudio.VolumeMaximum);
         var first=Rows.RowDefinitions.Count;
-        var outputVolume=AddRow("windows-volume",audio.Current.Available?$"Saída · {audio.Current.Volume:P0}":"Saída indisponível",systemAudio.Current.OutputName,()=>AudioAction(audio.Set(muted:!audio.Current.Muted,expectedEndpoint:audio.Current.EndpointId)),audio.Current.Available,row:narrow?null:first,column:0);
+        var outputVolume=AddRow("windows-volume",WindowsVolumeTitle,systemAudio.Current.OutputName,()=>AudioAction(audio.Set(muted:!audio.Current.Muted,expectedEndpoint:audio.Current.EndpointId)),audio.Current.Available,row:narrow?null:first,column:0);
         if(audio.Current.Available)AddSessionSlider(outputVolume,audio.Current.Volume,value=>AudioAction(audio.Set(value,expectedEndpoint:audio.Current.EndpointId)));
         AddRow("microphone",MicrophoneTitle,systemAudio.Current.MicrophoneName,ToggleMicrophone,systemAudio.Current.MicrophoneMuted is not null,row:narrow?null:first,column:1);
         AddRow("session-mixer","Mixer de aplicativos","Jogo, conversa e música separados",()=>OpenFeature(OverlayRoute.Mixer,"mixer-refresh"));
