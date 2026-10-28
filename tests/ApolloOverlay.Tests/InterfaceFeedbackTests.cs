@@ -24,6 +24,16 @@ internal static class InterfaceFeedbackTests
             }
             finally { w.Close(); }
         });
+        test("interface header settings button remains actionable with acknowledgement", () =>
+        {
+            var w = Fixture(out var feedback);
+            try
+            {
+                Click((Button)w.FindName("SettingsGear"));
+                Require(w.ActionIds.Contains("sound-feedback") && feedback.Cues.SequenceEqual(new[] { FeedbackCue.Confirmation }), "Header settings lost its action or emitted multiple cues");
+            }
+            finally { w.Close(); }
+        });
         test("interface self test emits only its sample and explains the request", () =>
         {
             var w = Fixture(out var feedback);
