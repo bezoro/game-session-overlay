@@ -77,7 +77,7 @@ internal static class SessionInterfaceTests
             Pick(w,"profile-undo");w.ActivateEntry();Release(w);
             try
             {
-                Require(backend.RestoreEntered.Wait(2000),"Undo did not enter the output restoration");w.Back();Complete(w.OperationTask);
+                var entered=Task.Run(()=>backend.RestoreEntered.Wait(2000));Complete(entered);Require(entered.Result,"Undo did not enter the output restoration");w.Back();Complete(w.OperationTask);
                 Require(w.Controller.Settings.UiScalePercent==115&&!w.Controller.SettingsDirty&&w.ActionIds.Contains("profile-undo")&&new SessionProfiles(host.Root).ActiveId=="tv","Cancelled undo persisted layout or discarded its restore record");
             }
             finally{backend.ReleaseRestore.Set();}
