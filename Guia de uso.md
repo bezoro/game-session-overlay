@@ -70,7 +70,11 @@ As atualizações são publicadas após os testes dos canais configurados, sem s
 | Playnite não aparece | Em Sistema, escolha a unidade e as pastas até encontrar a instalação. Selecione **Usar Playnite desta pasta** e salve. |
 | Resultado de uma ação ficou incerto | Use **Ler** para ver a mensagem completa e confira a janela antes de repetir a ação. |
 
-Você pode usar setas, Tab, Enter e Esc como alternativa ao controle. Para encerrar a overlay, abra o menu do ícone da bandeja e escolha **Sair**.
+Você também pode usar mouse e teclado: clique nos botões e abas, use a roda para rolar, setas para navegar, Tab/Shift+Tab para avançar ou voltar, Enter/Espaço para selecionar e Esc para voltar ou ocultar. Nos leitores de detalhes, Tab/Shift+Tab retorna às ações; no ajuste do limite do Guide, Tab entra no slider e as setas alteram o valor.
+
+Se a janela estiver ativa, mas sem foco confirmado, o primeiro clique ou tecla de navegação tenta recuperar o controle do painel sem executar a opção sob ele. Solte e selecione novamente. Se o Windows não ativar a janela, tente abri-la pela bandeja. Para encerrar a overlay, abra o menu do ícone da bandeja e escolha **Sair**.
+
+O instalador inclui também uma [CLI para agentes e terminais](docs/cli.md), com consulta de versão, atualização e retorno a versões preservadas.
 
 ## Inicialização e remoção
 

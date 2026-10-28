@@ -84,11 +84,45 @@ function Verify-History($Selected) {
     Require ([IO.Path]::GetFileName($record.asset.fileName) -ceq $record.asset.fileName) 'Invalid history package filename.'
     Require ((Get-FileHash -LiteralPath (Join-Path $directory $record.asset.fileName) -Algorithm SHA256).Hash -ieq $Selected.Asset.SHA256) 'Retained rollback package differs from its official feed.'
 }
-function Start-VerifiedApp($Selected, [string]$ExpectedDllHash, [string]$Label) {
+function Verify-PackagedCli($Selected, [Diagnostics.Process]$App, $Ready, [string]$Label) {
+    $cliPath = Join-Path $installRoot 'current/ApolloOverlay.Cli.exe'
+    Require ((Test-Path -LiteralPath $cliPath) -and (Test-Path -LiteralPath (Join-Path $installRoot 'current/gso.cmd'))) 'Installed package lacks its CLI or gso wrapper.'
+    $watch = [Diagnostics.Stopwatch]::StartNew(); $lastReply = $null
+    do {
+        $start = [Diagnostics.ProcessStartInfo]::new($cliPath); $start.UseShellExecute = $false; $start.WorkingDirectory = Split-Path -Parent $cliPath
+        $start.RedirectStandardOutput = $true; $start.RedirectStandardError = $true; $start.ArgumentList.Add('version')
+        $client = [Diagnostics.Process]::Start($start)
+        try {
+            $clientSession = $client.SessionId
+            $stdout = $client.StandardOutput.ReadToEndAsync(); $stderr = $client.StandardError.ReadToEndAsync()
+            if (-not $client.WaitForExit(12000)) { Stop-Owned $client; throw 'Installed CLI version query timed out.' }
+            $output = $stdout.GetAwaiter().GetResult(); $errorOutput = $stderr.GetAwaiter().GetResult()
+            Require ($output.Length -le 2097152) 'Installed CLI response exceeded the proof bound.'
+            if ($errorOutput) { [IO.File]::WriteAllText((Join-Path $evidence "cli-$Label-stderr.log"), $errorOutput.Substring(0, [Math]::Min(16384, $errorOutput.Length))) }
+            if ($output) {
+                [IO.File]::WriteAllText((Join-Path $evidence "cli-$Label-version.json"), $output)
+                $lastReply = $output | ConvertFrom-Json
+                if ($lastReply.Outcome -eq 'Completed') {
+                    Require ($client.ExitCode -eq 0 -and $lastReply.Pid -eq $App.Id -and $lastReply.Started -eq $Ready.started -and
+                        $lastReply.Session -eq $App.SessionId -and $clientSession -eq $App.SessionId -and -not [string]::IsNullOrWhiteSpace($lastReply.Instance)) 'Installed CLI receipt does not identify the exact live WPF instance and session.'
+                    Require ($lastReply.Update.Version -ceq $Selected.Build.version -and $lastReply.Update.BuildId -ceq $Selected.Build.buildId -and
+                        $lastReply.Update.Commit -ceq $Selected.Build.commit -and $lastReply.Update.Channel -ceq $Selected.Build.channel -and
+                        $lastReply.Update.Installed -eq $true) 'Installed CLI reported a different running build or installation.'
+                    return $lastReply
+                }
+            }
+        } finally { $client.Dispose() }
+        Start-Sleep -Milliseconds 200
+    } while ($watch.Elapsed.TotalSeconds -lt 30)
+    throw "Installed CLI did not return a fresh Completed version receipt: $($lastReply.Outcome) $($lastReply.Reason)"
+}
+function Start-VerifiedApp($Selected, [string]$ExpectedDllHash, [string]$Label, [bool]$StartStub = $true) {
     $readyPath = Join-Path $dataRoot 'ready.json'
-    if (Test-Path -LiteralPath $readyPath) { Remove-Item -LiteralPath $readyPath -Force }
-    Require ((Run-Owned (Join-Path $installRoot 'Game Session Overlay.exe') @('--velopack-proof', $dataRoot, '--show') 30) -eq 0) 'Official execution stub returned failure.'
-    Await { Test-Path -LiteralPath $readyPath } 30 'Published installed app did not confirm initialized startup.'
+    if ($StartStub) {
+        if (Test-Path -LiteralPath $readyPath) { Remove-Item -LiteralPath $readyPath -Force }
+        Require ((Run-Owned (Join-Path $installRoot 'Game Session Overlay.exe') @('--velopack-proof', $dataRoot, '--show') 30) -eq 0) 'Official execution stub returned failure.'
+    }
+    Await { Test-Path -LiteralPath $readyPath } 45 'Published installed app did not confirm initialized startup.'
     $ready = Get-Content -LiteralPath $readyPath -Raw | ConvertFrom-Json
     $apps = Owned-Apps
     Require ($apps.Count -eq 1) 'Installed execution did not leave exactly one app process.'
@@ -100,8 +134,9 @@ function Start-VerifiedApp($Selected, [string]$ExpectedDllHash, [string]$Label) 
     Require ($spec.package.metadata.version -ceq $Selected.PackageVersion) 'Installed SDK specification has the wrong version.'
     Require ((Get-FileHash -LiteralPath (Join-Path $installRoot 'current/ApolloOverlay.dll') -Algorithm SHA256).Hash -eq $ExpectedDllHash) 'Installed executable payload differs from its official package.'
     Verify-History $Selected
+    $cli = Verify-PackagedCli $Selected $app $ready $Label
     Copy-Item -LiteralPath $readyPath -Destination (Join-Path $evidence "ready-$Label.json")
-    return [pscustomobject]@{ Process = $app; Ready = $ready; DllHash = $ExpectedDllHash }
+    return [pscustomobject]@{ Process = $app; Ready = $ready; DllHash = $ExpectedDllHash; Cli = $cli }
 }
 function Apply-NativePackage($Selected, [Diagnostics.Process]$Running, [string]$PriorDllHash, [string]$Label) {
     $cache = Join-Path $installRoot 'packages'
@@ -124,6 +159,30 @@ function Apply-NativePackage($Selected, [Diagnostics.Process]$Running, [string]$
         Require ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ieq $Selected.Asset.SHA256) 'Applied package is missing or altered in the SDK cache.'
         return [pscustomobject]@{ WaitedForPid = $oldPid; WaitedForStarted = $oldCreated; CloseMethod = $closeMethod; CachePath = $target }
     } finally { $updater.Dispose() }
+}
+function Rollback-PackagedCli($Selected, $Running) {
+    $readyPath = Join-Path $dataRoot 'ready.json'
+    if (Test-Path -LiteralPath $readyPath) { Remove-Item -LiteralPath $readyPath -Force }
+    $cliPath = Join-Path $installRoot 'current/ApolloOverlay.Cli.exe'
+    $start = [Diagnostics.ProcessStartInfo]::new($cliPath); $start.UseShellExecute = $false; $start.WorkingDirectory = Split-Path -Parent $cliPath
+    $start.RedirectStandardOutput = $true; $start.RedirectStandardError = $true
+    foreach ($argument in @('rollback', $Selected.Build.buildId, '--timeout', '90')) { $start.ArgumentList.Add($argument) }
+    $client = [Diagnostics.Process]::Start($start)
+    try {
+        $stdout = $client.StandardOutput.ReadToEndAsync(); $stderr = $client.StandardError.ReadToEndAsync()
+        if (-not $client.WaitForExit(100000)) { Stop-Owned $client; throw 'Installed CLI rollback timed out; the mutation will not be repeated.' }
+        $output = $stdout.GetAwaiter().GetResult(); $errorOutput = $stderr.GetAwaiter().GetResult()
+        Require ($output.Length -le 2097152) 'Installed CLI rollback response exceeded the proof bound.'
+        [IO.File]::WriteAllText((Join-Path $evidence 'cli-rollback-B-to-A.json'), $output)
+        if ($errorOutput) { [IO.File]::WriteAllText((Join-Path $evidence 'cli-rollback-stderr.log'), $errorOutput.Substring(0, [Math]::Min(16384, $errorOutput.Length))) }
+        $reply = $output | ConvertFrom-Json
+        Require ($client.ExitCode -eq 0 -and $reply.Outcome -ceq 'Requested' -and $reply.Terminal -eq $false) "Installed CLI did not confirm a rollback request: $($reply.Outcome) $($reply.Reason)"
+        Require ($reply.Pid -eq $Running.Process.Id -and $reply.Started -eq $Running.Ready.started -and $reply.Session -eq $Running.Cli.Session -and
+            $reply.Update.TargetBuildId -ceq $Selected.Build.buildId -and $reply.Update.TargetVersion -ceq $Selected.Build.version) 'Rollback receipt does not identify the exact old instance and requested A build.'
+        $oldInstance = Get-Process -Id $Running.Process.Id -ErrorAction SilentlyContinue
+        Require (-not $oldInstance -or $oldInstance.StartTime.ToUniversalTime().Ticks -ne $Running.Ready.started) 'CLI returned Requested before the exact old GUI exited.'
+        return $reply
+    } finally { $client.Dispose() }
 }
 $failure = $null
 try {
@@ -159,6 +218,9 @@ try {
         & $dotnet publish (Join-Path (Split-Path -Parent $PSScriptRoot) 'src/ApolloOverlay/ApolloOverlay.csproj') -c Release -r win-x64 --self-contained true --no-restore -o $publishB 2>&1 |
             Tee-Object -FilePath (Join-Path $evidence 'variant-build.log')
         if ($LASTEXITCODE -ne 0) { throw 'Temporary self-contained WPF build failed.' }
+        & (Join-Path $PSScriptRoot 'verify.ps1') -Stage CliPackage -CliDestination $publishB |
+            Tee-Object -FilePath (Join-Path $evidence 'variant-cli-package.log')
+        if ($LASTEXITCODE -ne 0) { throw 'Temporary CLI packaging failed.' }
         & (Join-Path $PSScriptRoot 'build-release.ps1') -PublishDirectory $publishB -OutputDirectory $releasesB |
             Tee-Object -FilePath (Join-Path $evidence 'variant-package.log')
         $variant = & (Join-Path $PSScriptRoot 'get-validated-velopack-release.ps1') -ArtifactDirectory $releasesB -ExpectedVersion $versionB -ExpectedCommit $release.Build.commit
@@ -175,13 +237,17 @@ try {
     Require ((Get-FileHash -LiteralPath $settings -Algorithm SHA256).Hash -eq $settingsHash) 'Upgrade altered user settings.'
     $cases.Add(@{ name = 'official native updater waits for exact A PID and applies B; stable stub starts verified B'; passed = $true; pid = $upgraded.Process.Id; started = $upgraded.Ready.started; wait = $upgrade; version = $variant.Build.version; dllSha256 = $hashB; settingsSha256 = $settingsHash })
 
-    $rollback = Apply-NativePackage $release $upgraded.Process $hashB 'rollback-B-to-A'
-    $restored = Start-VerifiedApp $release $hashA 'A-restored'
+    $rollback = Rollback-PackagedCli $release $upgraded
+    $restored = Start-VerifiedApp $release $hashA 'A-restored' $false
     Require (-not ($restored.Process.Id -eq $upgraded.Process.Id -and $restored.Ready.started -eq $upgraded.Ready.started)) 'Rollback retained the B process identity.'
     Verify-History $variant
-    Require ((Get-FileHash -LiteralPath $settings -Algorithm SHA256).Hash -eq $settingsHash) 'Native rollback altered user settings.'
+    Require ((Get-FileHash -LiteralPath $settings -Algorithm SHA256).Hash -eq $settingsHash) 'CLI rollback altered user settings.'
     Require ((Get-FileHash -LiteralPath $release.PackagePath -Algorithm SHA256).Hash -ieq $release.Asset.SHA256) 'Proof changed the actual published A package.'
-    $cases.Add(@{ name = 'official native downgrade restores exact A payload and preserves A/B history and settings'; passed = $true; pid = $restored.Process.Id; started = $restored.Ready.started; wait = $rollback; version = $release.Build.version; dllSha256 = $hashA; settingsSha256 = $settingsHash })
+    $cases.Add(@{ name = 'packaged CLI rollback requests exact A; application SDK flow applies and restarts verified A with history and settings preserved'; passed = $true; pid = $restored.Process.Id; started = $restored.Ready.started; requestedOutcome = $rollback.Outcome; requestedBuildId = $rollback.Update.TargetBuildId; version = $release.Build.version; dllSha256 = $hashA; settingsSha256 = $settingsHash })
+    $cases.Add(@{ name = 'packaged CLI version obtains fresh exact WPF identity before upgrade and after both replacements'; passed = $true;
+        initial = @{ pid = $initial.Cli.Pid; started = $initial.Cli.Started; session = $initial.Cli.Session; instance = $initial.Cli.Instance; version = $initial.Cli.Update.Version; buildId = $initial.Cli.Update.BuildId };
+        upgraded = @{ pid = $upgraded.Cli.Pid; started = $upgraded.Cli.Started; session = $upgraded.Cli.Session; instance = $upgraded.Cli.Instance; version = $upgraded.Cli.Update.Version; buildId = $upgraded.Cli.Update.BuildId };
+        restored = @{ pid = $restored.Cli.Pid; started = $restored.Cli.Started; session = $restored.Cli.Session; instance = $restored.Cli.Instance; version = $restored.Cli.Update.Version; buildId = $restored.Cli.Update.BuildId } })
     Stop-Owned $restored.Process
     Require ((Run-Owned (Join-Path $installRoot 'Update.exe') @('uninstall', '--silent', '--rootDir', $installRoot, '--log', (Join-Path $evidence 'uninstall.log')) 60) -eq 0) 'Official uninstaller returned failure.'
     Await { -not (Test-Path -LiteralPath $expectedApp) -and -not (Test-Path -LiteralPath $uninstallKey) } 30 'Official uninstall did not remove application files and registration.'

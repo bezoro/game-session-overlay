@@ -1,4 +1,4 @@
-param([ValidatePattern('^native-v[0-9]+$')][string]$OutputVersion='native-v1',[ValidateSet('All','Build','Behavior','PublishedBehavior','Capture','Native','Package')][string]$Stage='All')
+param([ValidatePattern('^native-v[0-9]+$')][string]$OutputVersion='native-v1',[ValidateSet('All','Build','Behavior','PublishedBehavior','Capture','Native','Package','CliPackage')][string]$Stage='All',[string]$CliDestination)
 $ErrorActionPreference='Stop'
 $PSNativeCommandUseErrorActionPreference=$false
 $taskRoot=Split-Path -Parent $PSScriptRoot
@@ -8,6 +8,30 @@ $checks=Join-Path $taskRoot "artifacts/check-$OutputVersion"
 $publish=Join-Path $taskRoot "artifacts/$OutputVersion/publish"
 New-Item -ItemType Directory -Path $checks -Force | Out-Null
 function Invoke-Checked([string[]]$Arguments){ & $dotnet @Arguments; if($LASTEXITCODE -ne 0){throw "dotnet exit $LASTEXITCODE"} }
+function Publish-PackagedCli([string]$Destination) {
+ $destinationRoot=(Get-Item -LiteralPath $Destination -ErrorAction Stop).FullName
+ foreach($required in @('ApolloOverlay.exe','ApolloOverlay.dll','ApolloOverlay.runtimeconfig.json','coreclr.dll','System.Private.CoreLib.dll','hostfxr.dll','hostpolicy.dll')){
+  if(!(Test-Path -LiteralPath (Join-Path $destinationRoot $required) -PathType Leaf)){throw "CLI requires the existing self-contained GUI payload: $required"}
+ }
+ $protected=@{}
+ foreach($name in @('ApolloOverlay.exe','ApolloOverlay.dll','coreclr.dll','System.Private.CoreLib.dll','hostfxr.dll','hostpolicy.dll')){$protected[$name]=(Get-FileHash -LiteralPath (Join-Path $destinationRoot $name) -Algorithm SHA256).Hash}
+ $cliOutput=Join-Path ([IO.Path]::GetTempPath()) ('overlay-cli-publish-'+[Guid]::NewGuid().ToString('N'))
+ try{
+  Invoke-Checked @('publish','tools/ApolloOverlay.Cli/ApolloOverlay.Cli.csproj','-c','Release','-r','win-x64','--self-contained','true','-o',$cliOutput)
+  foreach($required in @('ApolloOverlay.Cli.exe','ApolloOverlay.Cli.dll','ApolloOverlay.Cli.deps.json','ApolloOverlay.Cli.runtimeconfig.json')){
+   if(!(Test-Path -LiteralPath (Join-Path $cliOutput $required) -PathType Leaf)){throw "Published CLI is missing: $required"}
+  }
+  $guiConfig=Get-Content -LiteralPath (Join-Path $destinationRoot 'ApolloOverlay.runtimeconfig.json') -Raw | ConvertFrom-Json
+  $cliConfig=Get-Content -LiteralPath (Join-Path $cliOutput 'ApolloOverlay.Cli.runtimeconfig.json') -Raw | ConvertFrom-Json
+  $guiCore=@($guiConfig.runtimeOptions.includedFrameworks | Where-Object name -EQ 'Microsoft.NETCore.App')
+  $cliCore=@($cliConfig.runtimeOptions.includedFrameworks | Where-Object name -EQ 'Microsoft.NETCore.App')
+  if($guiCore.Count -ne 1 -or $cliCore.Count -ne 1 -or $guiCore[0].version -cne $cliCore[0].version){throw 'GUI and CLI require different self-contained .NET runtimes.'}
+  if([Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $destinationRoot 'ApolloOverlay.dll')).ProductVersion -cne [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $cliOutput 'ApolloOverlay.Cli.dll')).ProductVersion){throw 'GUI and CLI were not compiled with the same application version.'}
+  Get-ChildItem -LiteralPath $cliOutput -File | Where-Object Name -Like 'ApolloOverlay.Cli.*' | Copy-Item -Destination $destinationRoot
+  Copy-Item -LiteralPath (Join-Path $taskRoot 'gso.cmd') -Destination $destinationRoot
+  foreach($name in $protected.Keys){if((Get-FileHash -LiteralPath (Join-Path $destinationRoot $name) -Algorithm SHA256).Hash -cne $protected[$name]){throw "CLI packaging overwrote a GUI or framework file: $name"}}
+ }finally{if(Test-Path -LiteralPath $cliOutput){Remove-Item -LiteralPath $cliOutput -Recurse -Force}}
+}
 try {
  if($Stage -in @('All','Build')){Invoke-Checked @('build','ApolloOverlay.sln','-c','Release')}
  if($Stage -in @('All','Behavior')){
@@ -18,10 +42,15 @@ try {
   & $cliTests '--roundtrip' (Join-Path $taskRoot 'tools/ApolloOverlay.Cli/bin/Release/net10.0-windows/ApolloOverlay.Cli.exe')
   if($LASTEXITCODE -ne 0){throw "CLI roundtrip exit $LASTEXITCODE"}
  }
+ if($Stage -eq 'CliPackage'){
+  if(!$CliDestination){throw 'CliDestination is required for the isolated CLI packaging stage.'}
+  Publish-PackagedCli $CliDestination
+ }
  if($Stage -in @('All','Package')){
   if(Test-Path -LiteralPath $publish){throw 'Publish directory exists; use a fresh native-vN.'}
   Invoke-Checked @('tool','restore')
   Invoke-Checked @('publish','src/ApolloOverlay/ApolloOverlay.csproj','-c','Release','-r','win-x64','--self-contained','true','-o',$publish)
+  Publish-PackagedCli $publish
   Copy-Item -LiteralPath (Join-Path $taskRoot 'README.md'),(Join-Path $taskRoot 'Guia de uso.md'),(Join-Path $taskRoot 'Abrir overlay.cmd'),(Join-Path $taskRoot 'Iniciar-previa.cmd') -Destination $publish
   Copy-Item -LiteralPath (Join-Path $taskRoot 'scripts/startup-task.ps1') -Destination $publish
   Copy-Item -LiteralPath (Join-Path $taskRoot 'docs/pilot-checklist.md') -Destination (Join-Path $publish 'compatibilidade.md')

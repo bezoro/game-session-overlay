@@ -110,6 +110,8 @@ public partial class MainWindow
     }
     private sealed class WindowAutomation(MainWindow window):IAutomationBackend
     {
+        public async Task<AutomationReply> Update(AutomationRequest request,CancellationToken token,Func<bool> continuing)=>await await window.Dispatcher.InvokeAsync(()=>window.AgentUpdate(request,token,continuing),DispatcherPriority.Normal,token);
+        public async Task CommitUpdate(AutomationRequest request,CancellationToken token,Func<bool> continuing)=>await await window.Dispatcher.InvokeAsync(()=>window.CommitAgentUpdate(request,token,continuing),DispatcherPriority.Normal,token);
         public async Task<AutomationSnapshot> Snapshot(CancellationToken token,bool refreshTargets=false)=>await await window.Dispatcher.InvokeAsync(async()=>{if(refreshTargets&&!window.busy){await window.Controller.Refresh();token.ThrowIfCancellationRequested();if(!window.busy)window.RefreshRows();}return window.AutomationSnapshot();},DispatcherPriority.Normal,token);
         public async Task<AutomationReply> Execute(AutomationRequest request,CancellationToken token,Action<AutomationReply> phase,Func<bool> continuing)=>await await window.Dispatcher.InvokeAsync(()=>window.AutomationExecute(request,token,phase,continuing),DispatcherPriority.Normal,token);
         public async Task Shutdown(CancellationToken token,Func<bool> continuing)=>await window.Dispatcher.InvokeAsync(()=>{token.ThrowIfCancellationRequested();if(continuing())window.ExitFromTray();},DispatcherPriority.Normal,token);

@@ -262,7 +262,7 @@ public partial class MainWindow
         }
     }
 
-    private void DisposeUpdates() { updateGeneration++; updateCancellation?.Cancel(); if(!updateCommitting&&preparedUpdate is {} unused)updateSource.Discard(unused); updateSource.Dispose(); }
+    private void DisposeUpdates() { DisposeAgentUpdates(); updateGeneration++; updateCancellation?.Cancel(); if(!updateCommitting&&preparedUpdate is {} unused)updateSource.Discard(unused); updateSource.Dispose(); }
 }
 
 internal sealed class PreviewUpdateSource : IUpdateSource

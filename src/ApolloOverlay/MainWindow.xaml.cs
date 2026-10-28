@@ -28,6 +28,7 @@ public partial class MainWindow : Window
     internal Func<OverlayInputContext>? InputContextReader {private get;set;}
     private OverlayInputContext InputContext=>InputContextReader?.Invoke()??new(focusConfirmed,IsVisible,IsActive,OwnForeground,ownedDialog,exiting);
     internal Func<int,short> PhysicalKeyReader {private get;set;}=Native.GetAsyncKeyState;
+    internal Func<ModifierKeys> KeyboardModifiersReader {private get;set;}=static()=>Keyboard.Modifiers;
     internal Func<nint,uint> DpiReader {private get;set;}=Native.GetDpiForWindow;
     internal Func<nint> FocusForeground {private get;set;}=Native.GetForegroundWindow;
     internal Func<nint,bool> FocusRequest {private get;set;}=Native.SetForegroundWindow;
@@ -46,6 +47,7 @@ public partial class MainWindow : Window
     internal bool FadePending=>fadingOut;
     internal void BeginFadeFixture()=>HideNow(false);
     private bool pointerDown,pointerCaptured,narrow;private string inputMethod="keyboard";
+    private MouseButton? recoveryMouseRelease;
     private readonly bool diagnostic;private HwndSource? source;private TrayHost? tray;private bool busy,exiting,opening,keyboardDown;private int? closeSource,dispatchSource;private CancellationTokenSource? pending;
     private XInputGuideBackend? guideBackend;private GuideConnection? guideConnection;private bool guideToggleRequested;
     private CancellationTokenSource? effectCancellation;private WindowRef? effectFocusTarget;private bool effectFocusTransferred;private int effectPadConnections,effectGuideConnections;
@@ -138,7 +140,7 @@ public partial class MainWindow : Window
         HoldCloseButton.PreviewMouseLeftButtonUp+=(_,e)=>{e.Handled=true;pointerDown=false;if(Confirming&&closeSource==-1)AdvancePointerHold(false,true,true,Environment.TickCount64);ReleasePointer();};
         HoldCloseButton.MouseLeave+=(_,_)=>{if(pointerDown){CancelHold();FeedbackText("Pressão cancelada: o ponteiro saiu do botão.");}};
         HoldCloseButton.LostMouseCapture+=(_,_)=>{if(pointerDown){CancelHold();FeedbackText("Pressão cancelada: captura do mouse perdida.");}};
-        PreviewMouseDown+=(_,_)=>{inputMethod="mouse";UpdateHints();};
+        PreviewMouseDown+=OnLocalPreviewMouseDown;PreviewMouseUp+=OnLocalPreviewMouseUp;
         ((FrameworkElement)Content).SizeChanged+=(_,e)=>UpdateCompactChrome(e.NewSize.Height);
         Rows.LayoutUpdated+=(_,_)=>{if(revealPending&&Rows.IsArrangeValid&&ContentScroll.ViewportHeight>0){revealPending=false;if(Keyboard.FocusedElement is FrameworkElement editor&&editor is TextBox or Slider&&Rows.IsAncestorOf(editor))editor.BringIntoView();else SetSelection(false);}};
         Rows.SizeChanged+=(_,e)=>{var compact=e.NewSize.Width<390;if(compact!=narrow){narrow=compact;if(!Confirming&&view.Current.Route==OverlayRoute.Hub){var offset=ContentScroll.VerticalOffset;RefreshRows();ContentScroll.ScrollToVerticalOffset(offset);}}};
@@ -456,16 +458,50 @@ public partial class MainWindow : Window
         if(view.Back()){SyncView();RefreshRows();ContentScroll.ScrollToVerticalOffset(view.Current.ScrollOffset);SetSelection(false);return;}
         if(page!=0){Page(0);return;}HidePanel(true);
     }
+    private bool CanRecoverLocalFocus=>!focusConfirmed&&IsVisible&&IsActive&&OwnForeground&&!ownedDialog&&!Confirming&&!TransitionPending&&!busy&&!opening&&!exiting&&!closeRequested;
+    private void OnLocalPreviewMouseDown(object sender,MouseButtonEventArgs e)
+    {
+        inputMethod="mouse";UpdateHints();
+        recoveryMouseRelease=null;
+        if(fadingOut){fadeInterrupted=true;recoveryMouseRelease=e.ChangedButton;e.Handled=true;return;}
+        if(!CanRecoverLocalFocus)return;
+        // The activation click confirms the panel, never the button underneath it.
+        recoveryMouseRelease=e.ChangedButton;e.Handled=true;OpenPanel();
+    }
+    private void OnLocalPreviewMouseUp(object sender,MouseButtonEventArgs e)
+    {
+        if(recoveryMouseRelease!=e.ChangedButton)return;
+        recoveryMouseRelease=null;e.Handled=true;
+    }
+    private static bool LocalRecoveryKey(Key key)=>key is Key.Tab or Key.Up or Key.Down or Key.Left or Key.Right or Key.Enter or Key.Space or Key.PageUp or Key.PageDown or Key.X;
     private void OnKeyDown(object sender,KeyEventArgs e)
     {
         if(fadingOut){fadeInterrupted=true;e.Handled=true;return;}
         inputMethod="keyboard";UpdateHints();
-        if((operationText?.IsKeyboardFocusWithin==true||detailsText?.IsKeyboardFocusWithin==true||updateNotesText?.IsKeyboardFocusWithin==true)&&e.Key is Key.Left or Key.Right){if(NavigationAllowed&&navigationKeysArmed)Move(e.Key==Key.Left?NavDirection.Left:NavDirection.Right);e.Handled=true;return;}
-        if(e.OriginalSource is Slider or TextBox&&e.Key is not Key.Escape)return;
-        if(e.Key==Key.Tab&&navigation.Id=="guide-limit"&&!Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)&&entries.FirstOrDefault(x=>x.Id=="guide-limit")?.Button.Content is Grid limitGrid&&limitGrid.Children[1] is StackPanel limitTexts&&limitTexts.Children.OfType<Slider>().FirstOrDefault() is {} editor){editor.Focus();e.Handled=true;return;}
+        var recoveryKey=NormalizeKey(e.Key,e.SystemKey,e.ImeProcessedKey,e.DeadCharProcessedKey);
+        if(!e.IsRepeat&&LocalRecoveryKey(recoveryKey)&&(KeyboardModifiersReader()&(ModifierKeys.Alt|ModifierKeys.Control|ModifierKeys.Windows))==ModifierKeys.None&&CanRecoverLocalFocus)
+        {
+            // Keep this key in the release baseline while the explicit request runs.
+            // Repeats cannot activate a control until the recovery key is released.
+            heldKeys.Add(recoveryKey);e.Handled=true;OpenPanel();return;
+        }
+        var modifiers=KeyboardModifiersReader();
+        var readerFocused=operationText?.IsKeyboardFocusWithin==true||detailsText?.IsKeyboardFocusWithin==true||updateNotesText?.IsKeyboardFocusWithin==true;
+        if(readerFocused&&((e.Key is Key.Left or Key.Right)&&modifiers==ModifierKeys.None||e.Key==Key.Tab&&(modifiers&(ModifierKeys.Control|ModifierKeys.Alt|ModifierKeys.Windows))==ModifierKeys.None))
+        {
+            if(NavigationAllowed&&navigationKeysArmed){if(e.Key==Key.Tab)Sequential(modifiers.HasFlag(ModifierKeys.Shift)?-1:1);else Move(e.Key==Key.Left?NavDirection.Left:NavDirection.Right);}
+            e.Handled=true;return;
+        }
+        if(e.OriginalSource is Slider&&e.Key==Key.Tab&&(modifiers&(ModifierKeys.Control|ModifierKeys.Alt|ModifierKeys.Windows))==ModifierKeys.None)
+        {
+            if(NavigationAllowed&&navigationKeysArmed&&!busy&&!TransitionPending&&!ownedDialog&&!Confirming){if(modifiers.HasFlag(ModifierKeys.Shift))SetSelection(false);else Sequential(1);}
+            e.Handled=true;return;
+        }
+        if(e.OriginalSource is Slider or TextBox&&e.Key is not Key.Escape){if(!NavigationAllowed||!navigationKeysArmed||busy||TransitionPending||ownedDialog)e.Handled=true;return;}
+        if(e.Key==Key.Tab&&navigation.Id=="guide-limit"&&!KeyboardModifiersReader().HasFlag(ModifierKeys.Shift)&&entries.FirstOrDefault(x=>x.Id=="guide-limit")?.Button.Content is Grid limitGrid&&limitGrid.Children[1] is StackPanel limitTexts&&limitTexts.Children.OfType<Slider>().FirstOrDefault() is {} editor){if(NavigationAllowed&&navigationKeysArmed&&!busy&&!TransitionPending&&!ownedDialog&&!Confirming)editor.Focus();e.Handled=true;return;}
         var key=NormalizeKey(e.Key,e.SystemKey,e.ImeProcessedKey,e.DeadCharProcessedKey);var firstPress=key!=Key.None&&heldKeys.Add(key);if(Confirming&&closeSource!=0&&firstPress&&key!=Key.Escape){CancelHold();FeedbackText("Origem da pressão mudou; fechamento cancelado.");e.Handled=true;return;}if(key==Key.None&&TransitionPending){RejectHandoff("Transição cancelada; tecla não identificada.");e.Handled=true;return;}if(TransitionPending){if(e.Key==Key.Escape&&firstPress&&!e.IsRepeat)Back(trustedDismiss:true);e.Handled=true;return;}
         if(ownedDialog){e.Handled=true;return;}if(e.Key is Key.Enter or Key.Space){if(!NavigationAllowed||!navigationKeysArmed){e.Handled=true;return;}if(Confirming&&navigation.Id=="confirm-cancel"){Back();e.Handled=true;return;}keyboardDown=true;if(Confirming&&closeSource!=0){CancelHold();FeedbackText("Origem da pressão mudou; fechamento cancelado.");}else if(!e.IsRepeat&&!Confirming){dispatchSource=0;ActivateEntry();dispatchSource=null;}e.Handled=true;return;}
-        if(e.Key==Key.Escape){Back();e.Handled=true;return;}if(!NavigationAllowed||!navigationKeysArmed){e.Handled=true;return;}if(Confirming){if(e.Key==Key.PageUp)ConfirmScroll.PageUp();else if(e.Key==Key.PageDown)ConfirmScroll.PageDown();else if(e.Key==Key.Tab)Sequential(Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)?-1:1);else if(e.Key is Key.Up or Key.Down or Key.Left or Key.Right)Move(e.Key is Key.Up or Key.Left?NavDirection.Up:NavDirection.Down);e.Handled=true;return;}switch(e.Key){case Key.Up:Move(NavDirection.Up);break;case Key.Down:Move(NavDirection.Down);break;case Key.Left:Move(NavDirection.Left);break;case Key.Right:Move(NavDirection.Right);break;case Key.Tab:Sequential(Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)?-1:1);break;case Key.PageUp:Page(page-1);break;case Key.PageDown:Page(page+1);break;case Key.X:Details();break;default:return;}e.Handled=true;
+        if(e.Key==Key.Escape){if(firstPress&&!e.IsRepeat)Back();e.Handled=true;return;}if(!NavigationAllowed||!navigationKeysArmed){e.Handled=true;return;}if(Confirming){if(e.Key==Key.PageUp)ConfirmScroll.PageUp();else if(e.Key==Key.PageDown)ConfirmScroll.PageDown();else if(e.Key==Key.Tab)Sequential(KeyboardModifiersReader().HasFlag(ModifierKeys.Shift)?-1:1);else if(e.Key is Key.Up or Key.Down or Key.Left or Key.Right)Move(e.Key is Key.Up or Key.Left?NavDirection.Up:NavDirection.Down);e.Handled=true;return;}switch(e.Key){case Key.Up:Move(NavDirection.Up);break;case Key.Down:Move(NavDirection.Down);break;case Key.Left:Move(NavDirection.Left);break;case Key.Right:Move(NavDirection.Right);break;case Key.Tab:Sequential(KeyboardModifiersReader().HasFlag(ModifierKeys.Shift)?-1:1);break;case Key.PageUp:Page(page-1);break;case Key.PageDown:Page(page+1);break;case Key.X:Details();break;default:return;}e.Handled=true;
     }
     internal void PollGuideStatus(XInputGuideBackend backend)
     {

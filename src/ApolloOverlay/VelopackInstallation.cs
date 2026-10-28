@@ -13,6 +13,7 @@ public static class VelopackInstallation
     public const string PackageId = "GameSessionOverlay";
     public const string LauncherName = "Game Session Overlay.exe";
     private static LocalUpdateHistory Retained = new();
+    private static string? proofDataRoot;
     public static bool FirstRun { get; private set; }
     public static string? Notice { get; private set; }
     public static bool IsInstalled => VelopackLocator.IsCurrentSet && VelopackLocator.Current.CurrentlyInstalledVersion is not null;
@@ -26,7 +27,7 @@ public static class VelopackInstallation
         if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true" || string.IsNullOrEmpty(temporary) ||
             !path.StartsWith(Path.GetFullPath(temporary).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("A prova de atualização exige dados isolados no diretório temporário do runner.");
-        Retained = new(path);
+        Retained = new(path);proofDataRoot=path;
     }
     public static void Initialize(string[]? args = null, Action? beforeUninstall = null)
     {
@@ -79,7 +80,7 @@ public static class VelopackInstallation
         await RecordCurrentAsync(cancellation).ConfigureAwait(false);
         Retained.SnapshotSettings(AppBuild.Current.BuildId);
         if (target.IsRollback) Retained.QueueSettingsRestore(build);
-        try { target.Manager.WaitExitThenApplyUpdates(target.Asset, silent: false, restart: true, restartArgs: ["--show"]); }
+        try { target.Manager.WaitExitThenApplyUpdates(target.Asset, silent: false, restart: true, restartArgs: proofDataRoot is {} proof?["--velopack-proof",proof,"--show"]:["--show"]); }
         catch { if (target.IsRollback) Retained.CancelSettingsRestore(); throw; }
     }
 }

@@ -15,6 +15,7 @@ internal static class ShutdownTests
         if(args is ["--roundtrip",var cli])return await Roundtrip(cli);
         var failures=0;var total=0;
         async Task Test(string name,Func<Task> body){total++;try{await body();Console.WriteLine("PASS "+name);}catch(Exception e){failures++;Console.Error.WriteLine("FAIL "+name+": "+e.GetType().Name+" "+e.Message);}}
+        if(args is ["--update-tests"]){await UpdateCommandTests.Run(Test);Console.WriteLine($"TOTAL {total-failures}/{total}");return failures==0?0:1;}
         await Test("access denied observing acknowledged shutdown is Unknown without crash or retry",async()=>{
             var calls=0;var result=await Program.ObserveShutdown(Ack,_=>{calls++;throw new Win32Exception(5);},CancellationToken.None);
             Require(result is{Outcome:"Unknown",Terminal:true,RequestId:"fixed-request"}&&calls==1,"Access failure was retried or claimed completion");
@@ -60,6 +61,7 @@ internal static class ShutdownTests
                 Require(result.Outcome=="Completed","Query-only native handle failed to observe exit");Console.WriteLine($"OWNED-EXIT pid={child.Id}; started={ticks}; outcome={result.Outcome}; stdout={await output}; stderr={await error}");
             }finally{if(!child.HasExited){await child.StandardInput.WriteLineAsync("exit");await child.StandardInput.FlushAsync();using var cleanup=new CancellationTokenSource(3000);await child.WaitForExitAsync(cleanup.Token);}}
         });
+        await UpdateCommandTests.Run(Test);
         Console.WriteLine($"TOTAL {total-failures}/{total}");return failures==0?0:1;
     }
     private static async Task<int> Server(string name)
