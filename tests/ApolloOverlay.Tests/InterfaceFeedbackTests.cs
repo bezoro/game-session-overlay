@@ -200,7 +200,7 @@ internal static class InterfaceFeedbackTests
         var app = Application.Current ?? new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         if (app.TryFindResource(ThemeSupport.Card) is null) ThemeSupport.ForceForValidation(app, false);
         feedback = new();
-        var w = new MainWindow(renderOnly: true, feedback: feedback);
+        var w = new MainWindow(renderOnly: true, platform: new PreviewPlatform(new(101, 42, 100, "Fixture game", "fixture")), feedback: feedback);
         w.InputContextReader = () => new(true, true, true, true); w.PhysicalKeyReader = _ => 0;
         w.Controller.CaptureReturn(); ReviewFixTests.Complete(w.Controller.Refresh()); w.RefreshRows();
         return w;
