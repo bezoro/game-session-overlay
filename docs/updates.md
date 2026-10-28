@@ -13,9 +13,11 @@ Os canais são:
 | Canal | Origem | Publicação |
 | --- | --- | --- |
 | Estável | Push em `main` | Release normal |
-| Testes | Push em `codex/controller-overlay-polish` | Prerelease |
+| Testes | Execução manual de Windows checks na `main`, com `channel: testing` | Prerelease |
 
 Somente compilações aprovadas nas verificações do Windows são publicadas. Pull requests executam as verificações com permissões de leitura e não publicam versões. O repositório é identificado também pelo ID `1430327913`, que continua válido após uma mudança de nome.
+
+A opção manual `validate` executa as verificações sem publicar. O canal de testes usa a `main` já integrada; executar o workflow em outra branch nunca publica uma versão.
 
 ## Identificar a versão
 

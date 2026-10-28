@@ -25,3 +25,13 @@ Checks automáticos usam janelas próprias e dados de contexto reais dessas jane
 
 Os testes de serviços usam catálogos/COM/vibração/áudio sintéticos. Testes de foco e leitura usam apenas janelas próprias fora da área visível; capturas renderizam somente a árvore visual própria. Isso não estabelece compatibilidade com hardware, DPI físico, áudio externo ou posição nativa em todos os monitores.
 
+
+## Áudio, ambiente e ferramentas da sessão
+
+- No Playnite fullscreen, abrir pelo Guide, verificar o foco real e percorrer as ações. Voltar com B/Guide e conferir que o launcher retoma. Repetir sem Apollo e pela bandeja. A navegação em aplicativos que leem XInput em segundo plano ainda pode ser compartilhada.
+- Com dois aplicativos reproduzindo áudio, ajustar somente um pelo mixer. Alterar volume/mudo por outro aplicativo enquanto a overlay está aberta; o slider selecionado deve manter foco e refletir a leitura nova.
+- Silenciar/ativar o microfone de comunicação e confirmar no Windows. Alternar saída jogos/mídia, remover um dispositivo e verificar os resultados sem substituir silenciosamente a saída.
+- Aplicar TV/Computador e um perfil personalizado. Alterar um valor depois e desfazer: a mudança posterior deve permanecer. Desconectar o monitor/saída de um perfil e confirmar a recusa informativa.
+- Abrir música/vídeo compatível com SMTC, testar fontes separadas e comandos disponíveis. Conferir a reprodução no aplicativo; aceitação da API não comprova mudança de faixa.
+- Em um editor de teste, inserir texto pelo teclado virtual, com acentos e emoji. Conferir destino, ausência de Enter automático, perda de foco e cancelamento. Testar também edição pelo mouse/teclado e saída do campo por Tab.
+- Capturar o monitor deliberadamente, confirmar que a overlay desaparece da imagem, abrir a galeria/pasta e verificar o PNG. Testar HDR e conteúdo protegido separadamente; tela preta ou cores diferentes não devem ser tratadas como aprovação.

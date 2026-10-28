@@ -50,8 +50,8 @@ public partial class MainWindow
     }
     private FrameworkElement? SessionFeatureIcon(string id)
     {
-        var glyph=id switch
-        {"session-volume" or "windows-volume" or "session-mixer" or "mixer-volume"=>"\uE767","microphone"=>"\uE720","session-profiles" or "profile-new"=>"\uE765","session-media" or "media-toggle"=>"\uE768","media-next"=>"\uE893","media-previous"=>"\uE892","session-keyboard"=>"\uE92E","session-capture"=>"\uE114","session-gallery" or "capture-folder"=>"\uE8B7",_=>""};
+        var glyph=id.StartsWith("output:",StringComparison.Ordinal)?"\uE767":id.StartsWith("capture:",StringComparison.Ordinal)?"\uE8B7":id switch
+        {"session-volume" or "windows-volume" or "session-mixer" or "mixer-volume"=>"\uE767","microphone"=>"\uE720","session-profiles" or "profile-new"=>"\uE765","session-media" or "media-toggle"=>"\uE768","media-next"=>"\uE893","media-previous"=>"\uE892","session-keyboard" or "keyboard-editor"=>"\uE92E","keyboard-target"=>"\uE737","session-capture"=>"\uE114","session-gallery" or "capture-folder"=>"\uE8B7",_=>""};
         if(glyph.Length==0)return null;
         var icon=new TextBlock{Text=glyph,FontFamily=new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),FontSize=24,VerticalAlignment=VerticalAlignment.Center,HorizontalAlignment=HorizontalAlignment.Left};
         icon.SetResourceReference(TextBlock.ForegroundProperty,ThemeSupport.SecondaryText);return icon;
@@ -292,7 +292,7 @@ public partial class MainWindow
     private void AddSessionSlider(Button button,float value,Action<float> commit)
     {
         var slider=new Slider{Minimum=0,Maximum=1,Value=Math.Clamp(value,0,1),SmallChange=.05,LargeChange=.1,TickFrequency=.05,IsSnapToTickEnabled=true,Focusable=true,Margin=new(0,8,0,0),MinHeight=24};
-        button.Resources["SessionSlider"]=slider;
+        slider.Style=(Style)FindResource("SessionVolumeSlider");button.Resources["SessionSlider"]=slider;
         System.Windows.Automation.AutomationProperties.SetName(slider,"Volume em porcentagem");
         slider.ValueChanged+=(_,_)=>{if(!synchronizingFeatureSlider&&slider.IsKeyboardFocusWithin&&!slider.IsMouseCaptureWithin&&NavigationAllowed&&!busy&&!TransitionPending)commit((float)slider.Value);};
         slider.PreviewMouseLeftButtonUp+=(_,_)=>{if(NavigationAllowed&&!busy&&!TransitionPending)commit((float)slider.Value);};

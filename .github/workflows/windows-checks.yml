@@ -5,8 +5,13 @@ on:
   push:
     branches:
       - main
-      - codex/controller-overlay-polish
   workflow_dispatch:
+    inputs:
+      channel:
+        description: Publicar o código da main no canal de testes após validação
+        type: choice
+        options: [validate, testing]
+        default: validate
 
 permissions:
   contents: read
@@ -45,12 +50,13 @@ jobs:
           SOURCE_BRANCH: ${{ github.ref_name }}
           BUILD_NUMBER: ${{ github.run_number }}
           BUILD_ATTEMPT: ${{ github.run_attempt }}
+          REQUESTED_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || '' }}
         run: |
           $ErrorActionPreference = 'Stop'
           if ($env:SOURCE_COMMIT -notmatch '^[a-f0-9]{40}$' -or $env:BUILD_NUMBER -notmatch '^[0-9]+$' -or $env:BUILD_ATTEMPT -notmatch '^[0-9]+$') { throw 'Invalid build identity inputs.' }
           if ((git rev-parse HEAD) -cne $env:SOURCE_COMMIT) { throw 'Checkout differs from the identified source commit.' }
           $short = $env:SOURCE_COMMIT.Substring(0, 7)
-          $channel = if ($env:SOURCE_BRANCH -eq 'main') { 'stable' } else { 'testing' }
+          $channel = if ($env:SOURCE_BRANCH -eq 'main' -and $env:REQUESTED_CHANNEL -ne 'testing') { 'stable' } else { 'testing' }
           $version = if ($channel -eq 'stable') { "0.$($env:BUILD_NUMBER).$($env:BUILD_ATTEMPT)+$short" } else { "0.2.0-preview.$($env:BUILD_NUMBER).$($env:BUILD_ATTEMPT)+$short" }
           "OVERLAY_VERSION=$version" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
           "OVERLAY_BUILD_ID=ci-$($env:BUILD_NUMBER)-a$($env:BUILD_ATTEMPT)-$short" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
@@ -189,7 +195,7 @@ jobs:
   publish-update:
     name: Publish validated update
     needs: windows
-    if: ${{ needs.windows.result == 'success' && github.event_name == 'push' && github.repository_id == '1430327913' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/controller-overlay-polish') }}
+    if: ${{ needs.windows.result == 'success' && github.repository_id == '1430327913' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.channel == 'testing')) }}
     runs-on: windows-latest
     timeout-minutes: 10
     permissions:

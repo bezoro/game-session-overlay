@@ -68,6 +68,20 @@ internal static class SessionInterfaceTests
             Require(w.SelectedAction=="profile-name"&&AutomationProperties.GetName(ReviewFixTests.Button(w,"profile-name")).Contains("Sala de jogos"),"Profile name or editing origin was lost");
             Require(!File.Exists(Path.Combine(host.Root,"session-profiles.json")),"Editing persisted a profile before Save");
         });
+        test("session cancelled profile undo preserves layout and its undo record",()=>
+        {
+            using var backend=new ProfileAudioFixture();
+            using var host=new Host(root=>{var profiles=new SessionProfiles(root);profiles.Save(profiles.Items[0] with{OutputId="second",OutputName="Second output"});},backend,false);
+            var w=host.Window;host.Open();Navigate(w,"profiles");Pick(w,"profile:tv");w.ActivateEntry();Release(w);Complete(w.OperationTask);
+            Require(w.Controller.Settings.UiScalePercent==115&&!w.Controller.SettingsDirty&&w.ActionIds.Contains("profile-undo"),"Profile was not applied and saved");
+            Pick(w,"profile-undo");w.ActivateEntry();Release(w);
+            try
+            {
+                Require(backend.RestoreEntered.Wait(2000),"Undo did not enter the output restoration");w.Back();Complete(w.OperationTask);
+                Require(w.Controller.Settings.UiScalePercent==115&&!w.Controller.SettingsDirty&&w.ActionIds.Contains("profile-undo")&&new SessionProfiles(host.Root).ActiveId=="tv","Cancelled undo persisted layout or discarded its restore record");
+            }
+            finally{backend.ReleaseRestore.Set();}
+        });
         test("session media invokes only the identified source and observes its result",()=>
         {
             using var host=new Host();var w=host.Window;host.Open();Navigate(w,"media");Pick(w,"media-toggle");w.ActivateEntry();Release(w);Complete(w.OperationTask);
@@ -102,7 +116,7 @@ internal static class SessionInterfaceTests
     }
     private static void Choose(MainWindow w,string id){Pick(w,id);w.ActivateEntry();w.UpdateLayout();}
     private static void Pick(MainWindow w,string id)
-    {for(var i=0;i<=w.ActionIds.Count&&w.SelectedAction!=id;i++)w.Sequential(1);Require(w.SelectedAction==id,"Action unreachable: "+id);}
+    {for(var i=0;i<=w.ActionIds.Count&&w.SelectedAction!=id;i++)w.Sequential(1);Require(w.SelectedAction==id,"Action unreachable: "+id);w.UpdateLayout();}
     private static void TapKey(UIElement element,Key key)
     {
         var source=PresentationSource.FromVisual(element)??throw new Exception("Window has no source");
@@ -122,11 +136,12 @@ internal static class SessionInterfaceTests
         private readonly SynchronizationContext? previous=SynchronizationContext.Current;
         internal readonly string Root=Path.Combine(Path.GetTempPath(),"SessionInterface",Guid.NewGuid().ToString("N"));
         internal readonly AudioFixture Audio=new(),Mixer=new();internal readonly MediaFixture Media=new();internal MainWindow Window{get;}
-        internal Host()
+        internal Host(Action<string>? initialize=null,ISystemAudioBackend? backend=null,bool preview=true)
         {
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
             var app=Application.Current??new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};if(app.TryFindResource(ThemeSupport.Card) is null)ThemeSupport.ForceForValidation(app,false);
-            Window=new(renderOnly:true,platform:new PremiumInterfaceTests.FixturePlatform(),diagnostics:new(Root),appAudioService:Audio,media:Media,systemAudioBackend:new PreviewSystemAudioBackend(),mixerAudioService:Mixer);
+            initialize?.Invoke(Root);
+            Window=new(renderOnly:true,platform:new PremiumInterfaceTests.FixturePlatform(preview),diagnostics:new(Root),appAudioService:Audio,media:Media,systemAudioBackend:backend??new PreviewSystemAudioBackend(),mixerAudioService:Mixer);
             Window.PhysicalKeyReader=_=>0;Window.DpiReader=_=>96;Window.Controller.CaptureReturn();Complete(Window.Controller.Refresh());Window.RefreshRows();
         }
         internal void Open(int width=572,int height=940)
@@ -146,6 +161,20 @@ internal static class SessionInterfaceTests
         public Task<ApplicationAudioChange> SetVolumeAsync(WindowRef value,float volume,long epoch,CancellationToken cancellation=default){VolumeWrites++;target=value;generation=epoch;Volume=volume;return Task.FromResult(new ApplicationAudioChange(new(ResultKind.Simulated,"Fixture volume"),Snapshot(),1,1,1,true));}
         public Task<ApplicationAudioChange> SetMutedAsync(WindowRef value,bool muted,long epoch,CancellationToken cancellation=default){MuteWrites++;target=value;generation=epoch;Muted=muted;return Task.FromResult(new ApplicationAudioChange(new(ResultKind.Simulated,"Fixture mute"),Snapshot(),1,1,1,true));}
         public void Suspend(){}public void Dispose(){Changed=null;}
+    }
+    private sealed class ProfileAudioFixture:ISystemAudioBackend,IDisposable
+    {
+        internal readonly ManualResetEventSlim RestoreEntered=new(),ReleaseRestore=new();
+        private SystemAudioSnapshot state=new([new("first","First output"),new("second","Second output")],"first","first","mic","Microphone",false,"fixture");
+        public SystemAudioSnapshot Read()=>state;
+        public ActionResult SetMicrophoneMuted(string expectedId,bool muted,Func<bool> continuing)=>new(ResultKind.Unavailable,"fixture");
+        public ActionResult SetOutputs(string expectedConsole,string expectedMedia,string console,string media,Func<bool> continuing)
+        {
+            if(console=="first"){RestoreEntered.Set();ReleaseRestore.Wait();}
+            if(!continuing())return new(ResultKind.Unknown,"Cancelled native fixture");
+            state=state with{ConsoleOutputId=console,MediaOutputId=media};return new(ResultKind.Simulated,"fixture readback");
+        }
+        public void Dispose(){ReleaseRestore.Set();}
     }
     private sealed class MediaFixture:ISessionMedia
     {

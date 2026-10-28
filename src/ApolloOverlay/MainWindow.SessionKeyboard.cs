@@ -22,6 +22,9 @@ public partial class MainWindow
         });
         var editorButton=AddRow("keyboard-editor","Seu texto",keyboardText.Length+" / "+(keyboardForProfile?48:512)+" caracteres",()=>keyboardEditor?.Focus());
         keyboardEditor=new TextBox{Text=keyboardText,MaxLength=keyboardForProfile?48:512,AcceptsReturn=false,TextWrapping=TextWrapping.Wrap,MinHeight=64,Margin=new(0,8,0,0),FontSize=20};
+        keyboardEditor.SetResourceReference(ForegroundProperty,ThemeSupport.Text);keyboardEditor.SetResourceReference(BackgroundProperty,ThemeSupport.Surface);
+        keyboardEditor.SetResourceReference(BorderBrushProperty,ThemeSupport.Stroke);keyboardEditor.SetResourceReference(TextBox.CaretBrushProperty,ThemeSupport.Focus);keyboardEditor.SetResourceReference(TextBox.SelectionBrushProperty,ThemeSupport.FocusBackground);
+        keyboardEditor.Padding=new(10);keyboardEditor.BorderThickness=new(1);
         var editor=keyboardEditor;editor.TextChanged+=(_,_)=>{keyboardText=editor.Text;SetEntryDescription("keyboard-editor",keyboardText.Length+" caracteres");};
         ((StackPanel)((Grid)editorButton.Content).Children[1]).Children.Add(editor);
         var characters=keyboardSymbols?"1234567890@#$%&*()-_áéíóúãõâêô":"qwertyuiopasdfghjklçzxcvbnm,.?";

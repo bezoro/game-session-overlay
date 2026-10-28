@@ -71,6 +71,7 @@ public partial class MainWindow
                     if(changed.Kind!=ResultKind.Completed)return new(ResultKind.Partial,"A saída foi aplicada, mas o volume não foi confirmado. Confira o áudio antes de continuar.");
                 }
             }
+            token.ThrowIfCancellationRequested();
             profileApplied=SessionProfiles.ApplyLayout(before,profile);Controller.Change(profileApplied);ApplySettings();
             try{Controller.Save();if(!Controller.Platform.IsPreview)sessionProfiles.SetActive(profile.Id);Place();}
             catch(Exception error)when(error is System.IO.IOException or UnauthorizedAccessException or InvalidOperationException)
@@ -99,8 +100,10 @@ public partial class MainWindow
                 }
                 else skipped=true;
             }
+            token.ThrowIfCancellationRequested();
             var layout=SessionProfiles.RestoreUnchangedLayout(before,applied,Controller.Settings);Controller.Change(layout);ApplySettings();Controller.Save();
             if(!Controller.Platform.IsPreview&&sessionProfiles.ActiveId==profileActiveApplied)sessionProfiles.SetActive(profileActiveBefore);
+            Place();
             profileBefore=null;profileApplied=null;profileMasterBefore=profileMasterApplied=null;
             return new(skipped?ResultKind.Partial:diagnostic||Controller.Platform.IsPreview?ResultKind.Simulated:ResultKind.Completed,
                 skipped?"Disposição restaurada. O áudio mudou depois do perfil e foi preservado.":"Disposição anterior restaurada sem substituir ajustes posteriores.");

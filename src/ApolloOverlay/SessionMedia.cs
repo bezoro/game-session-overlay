@@ -29,7 +29,12 @@ public sealed class SessionMedia : ISessionMedia
     private readonly Dictionary<nint, Owner> sessions = [];
     private GlobalSystemMediaTransportControlsSessionManager? manager;
     private bool visible, disposed;
+    private bool refreshPending;
+    private int refreshQueued;
+    private readonly Func<CancellationToken,Task<SessionMediaSnapshot>>? read;
     private long generation, revision;
+    public SessionMedia() { }
+    internal SessionMedia(Func<CancellationToken,Task<SessionMediaSnapshot>> read) { this.read=read; }
     public SessionMediaSnapshot Current { get; private set; } = SessionMediaSnapshot.Empty;
     public event Action<SessionMediaSnapshot>? Changed;
 
@@ -41,13 +46,14 @@ public sealed class SessionMedia : ISessionMedia
     {
         if (!dispatcher.CheckAccess()) { if (!dispatcher.HasShutdownStarted) dispatcher.BeginInvoke(() => SetVisible(value)); return; }
         if (disposed || visible == value) return;
-        visible = value; generation++;
+        visible = value; generation++;refreshPending=false;
         if (value) _ = RefreshAsync();
         else
         {
             foreach (var item in sessions.Values) Unsubscribe(item.Session);
             sessions.Clear();
-            if (manager is not null) manager.SessionsChanged -= SessionsChanged;
+            try { if (manager is not null) manager.SessionsChanged -= SessionsChanged; }
+            catch (Exception error) when (Failure(error)) { }
             manager = null;
             Current = SessionMediaSnapshot.Empty with { Revision = ++revision };
         }
@@ -57,9 +63,9 @@ public sealed class SessionMedia : ISessionMedia
     private void PropertiesChanged(GlobalSystemMediaTransportControlsSession sender, MediaPropertiesChangedEventArgs args) => QueueRefresh();
     private void QueueRefresh()
     {
-        if (dispatcher.HasShutdownStarted) return;
-        try { dispatcher.BeginInvoke(() => { if (visible && !disposed) _ = RefreshAsync(); }); }
-        catch (InvalidOperationException) { }
+        if (dispatcher.HasShutdownStarted || Interlocked.Exchange(ref refreshQueued,1)!=0) return;
+        try { dispatcher.BeginInvoke(() => { Interlocked.Exchange(ref refreshQueued,0);if (visible && !disposed) _ = RefreshAsync(); }); }
+        catch (InvalidOperationException) { Interlocked.Exchange(ref refreshQueued,0); }
     }
     private void Subscribe(GlobalSystemMediaTransportControlsSession session)
     {
@@ -71,15 +77,25 @@ public sealed class SessionMedia : ISessionMedia
         try { session.PlaybackInfoChanged -= PlaybackChanged; session.MediaPropertiesChanged -= PropertiesChanged; }
         catch (Exception error) when (Failure(error)) { }
     }
+    private static bool CanToggle(GlobalSystemMediaTransportControlsSessionPlaybackInfo info)=>info.Controls.IsPlayPauseToggleEnabled||
+        (info.PlaybackStatus==GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing?info.Controls.IsPauseEnabled:info.Controls.IsPlayEnabled);
     public async Task RefreshAsync(CancellationToken cancellation = default)
     {
         if (!dispatcher.CheckAccess()) { await dispatcher.InvokeAsync(() => RefreshAsync(cancellation)).Task.Unwrap(); return; }
-        if (!visible || disposed || !await owner.WaitAsync(0, cancellation)) return;
+        if (!visible || disposed) return;
+        if(!await owner.WaitAsync(0,cancellation)){refreshPending=true;return;}
+        refreshPending=false;
         var epoch = generation;
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         deadline.CancelAfter(TimeSpan.FromSeconds(3));
         try
         {
+            if(read is not null)
+            {
+                var observed=await read(deadline.Token);
+                if(visible&&!disposed&&epoch==generation){Current=observed with{Revision=++revision};Changed?.Invoke(Current);}
+                return;
+            }
             if (manager is null)
             {
                 var requested = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync().AsTask(deadline.Token);
@@ -102,7 +118,7 @@ public sealed class SessionMedia : ISessionMedia
                 var playback = session.GetPlaybackInfo(); var controls = playback.Controls;
                 items.Add(new(entry.Id, Text(properties.Title), Text(properties.Artist), Text(session.SourceAppUserModelId, 100),
                     playback.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing,
-                    controls.IsPlayPauseToggleEnabled, controls.IsPreviousEnabled, controls.IsNextEnabled));
+                    CanToggle(playback), controls.IsPreviousEnabled, controls.IsNextEnabled));
                 if (pointer == currentPointer) selected = entry.Id;
             }
             if (!visible || disposed || epoch != generation) return;
@@ -114,7 +130,7 @@ public sealed class SessionMedia : ISessionMedia
         {
             if (visible && !disposed && epoch == generation) { Current = new(++revision, [], "", "Mídia indisponível. Abra um aplicativo compatível e tente novamente."); Changed?.Invoke(Current); }
         }
-        finally { owner.Release(); }
+        finally { owner.Release();if(refreshPending&&visible&&!disposed)QueueRefresh(); }
     }
     public async Task<ActionResult> CommandAsync(string id, SessionMediaCommand command, CancellationToken cancellation = default)
     {
@@ -128,13 +144,15 @@ public sealed class SessionMedia : ISessionMedia
             if (entry is null || manager is null || !manager.GetSessions().Any(value => Identity(value) == Identity(entry.Session)))
                 return new(ResultKind.Unavailable, "A sessão de mídia mudou. Selecione a mídia novamente.");
             var info = entry.Session.GetPlaybackInfo(); var controls = info.Controls;
-            var allowed = command switch { SessionMediaCommand.Toggle => controls.IsPlayPauseToggleEnabled, SessionMediaCommand.Previous => controls.IsPreviousEnabled, SessionMediaCommand.Next => controls.IsNextEnabled, _ => false };
+            var allowed = command switch { SessionMediaCommand.Toggle => CanToggle(info), SessionMediaCommand.Previous => controls.IsPreviousEnabled, SessionMediaCommand.Next => controls.IsNextEnabled, _ => false };
             if (!allowed) return new(ResultKind.Unavailable, "Este aplicativo não oferece esse comando.");
             deadline.Token.ThrowIfCancellationRequested();
             if (!visible || disposed || generation != epoch) return new(ResultKind.Cancelled, "Painel ocultado antes do envio.");
             dispatched = true;
             var accepted = await (command switch
             {
+                SessionMediaCommand.Toggle when info.PlaybackStatus==GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing&&controls.IsPauseEnabled => entry.Session.TryPauseAsync(),
+                SessionMediaCommand.Toggle when info.PlaybackStatus!=GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing&&controls.IsPlayEnabled => entry.Session.TryPlayAsync(),
                 SessionMediaCommand.Toggle => entry.Session.TryTogglePlayPauseAsync(),
                 SessionMediaCommand.Previous => entry.Session.TrySkipPreviousAsync(),
                 _ => entry.Session.TrySkipNextAsync()
