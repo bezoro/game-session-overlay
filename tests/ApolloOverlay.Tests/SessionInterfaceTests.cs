@@ -56,6 +56,9 @@ internal static class SessionInterfaceTests
             TapKey(w,Key.Tab);Require(Keyboard.FocusedElement is Slider,"Mixer slider unavailable");var slider=(Slider)Keyboard.FocusedElement;
             host.Mixer.Volume=.35f;host.Mixer.Muted=true;w.RefreshSessionFeatures();Complete(w.FeatureTask);
             Require(ReferenceEquals(slider,Keyboard.FocusedElement)&&Math.Abs(slider.Value-.35)<.001,"Background observation rebuilt the focused mixer slider");
+            slider.Value=.4;Complete(w.OperationTask);
+            Require(ReferenceEquals(slider,Keyboard.FocusedElement)&&host.Mixer.VolumeWrites==1,"Volume edit rebuilt its focused mixer slider");
+            TapKey(slider,Key.Tab);Require(w.SelectedAction=="mixer-mute"&&Keyboard.FocusedElement is not Slider,"Tab did not leave the slider after editing its volume");
             Pick(w,"mixer-mute");w.ActivateEntry();Release(w);Complete(w.OperationTask);
             Require(host.Mixer.MuteWrites==1&&!host.Mixer.Muted,"Mute action used the state captured before the latest observation");
         });

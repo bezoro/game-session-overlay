@@ -283,7 +283,7 @@ public partial class MainWindow
     private void ChangeMixerVolume(WindowRef target,float value)
     {
         if(!NavigationAllowed||busy||TransitionPending)return;
-        OperationTask=RunSessionAction("mixer-volume",async token=>{var change=await mixerAudio.SetVolumeAsync(target,value,featureEpoch,token);mixerStates[WindowId(target)]=change.Snapshot;return change.Result;},RefreshRows);
+        OperationTask=RunSessionAction("mixer-volume",async token=>{var change=await mixerAudio.SetVolumeAsync(target,value,featureEpoch,token);mixerStates[WindowId(target)]=change.Snapshot;return change.Result;},UpdateMixerLabels);
     }
     private void SetGameVolume(float value)
     {
