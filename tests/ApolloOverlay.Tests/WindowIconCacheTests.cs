@@ -114,6 +114,44 @@ internal static class WindowIconCacheTests
             Require(ready.WaitOne(2000) && ReferenceEquals(second, cache.Get(replacement)), "Replacement icon did not load independently");
         });
 
+        test("saturated icon cache keeps fallbacks while pending and recovers after completion", () =>
+        {
+            var image = new DrawingImage(); image.Freeze();
+            using var workersEntered = new CountdownEvent(2);
+            using var release = new ManualResetEventSlim();
+            using var initialReady = new CountdownEvent(128);
+            using var extraReady = new ManualResetEventSlim();
+            var windows = Enumerable.Range(1, 128).Select(i => new WindowRef(i, i, i, "Window", "fixture", Generation: 1)).ToArray();
+            var extra = new WindowRef(129, 129, 129, "Extra", "fixture", Generation: 1);
+            var loads = 0;
+            using var cache = new WindowIconCache(_ =>
+            {
+                if (Interlocked.Increment(ref loads) <= 2) workersEntered.Signal();
+                release.Wait(5000);
+                return image;
+            });
+            cache.Available += window =>
+            {
+                if (window.Same(extra)) extraReady.Set();
+                else initialReady.Signal();
+            };
+            try
+            {
+                foreach (var window in windows) Require(cache.Get(window) is null, "Pending icon did not use a fallback");
+                Require(workersEntered.Wait(2000), "Icon workers did not reach the blocked loader");
+                var timer = Stopwatch.StartNew();
+                Require(cache.Get(extra) is null, "Saturated cache did not keep the fallback icon");
+                Require(timer.ElapsedMilliseconds < 500 && Volatile.Read(ref loads) == 2, "Saturated cache blocked or exceeded its worker limit");
+                release.Set();
+                Require(initialReady.Wait(5000), "Pending icons did not finish after saturation");
+                foreach (var window in windows) Require(ReferenceEquals(image, cache.Get(window)), "Saturation evicted a pending icon");
+                Require(cache.Get(extra) is null, "A new icon was not loaded asynchronously after capacity became available");
+                Require(extraReady.Wait(2000) && ReferenceEquals(image, cache.Get(extra)), "Cache did not recover when an entry became evictable");
+                Require(Volatile.Read(ref loads) == 129, "Saturation queued redundant icon requests");
+            }
+            finally { release.Set(); }
+        });
+
         test("icon result after disposal is discarded and not published", () =>
         {
             var image = new DrawingImage(); image.Freeze();

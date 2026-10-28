@@ -51,7 +51,9 @@ internal sealed class WindowIconCache : IDisposable
             {
                 if (entries.Count >= Capacity)
                 {
-                    var victim = entries.Where(pair => !pair.Value.Pending).MinBy(pair => pair.Value.LastAccess);
+                    var victim = entries.Where(pair => !pair.Value.Pending)
+                        .DefaultIfEmpty()
+                        .MinBy(pair => pair.Value?.LastAccess ?? long.MaxValue);
                     if (victim.Value is null) return null;
                     entries.Remove(victim.Key);
                 }
