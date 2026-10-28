@@ -32,6 +32,14 @@ internal static class SessionInterfaceTests
                 Require(version.Visibility==Visibility.Visible&&version.Text.StartsWith("v"),"Compact page hid build version");
             });
         }
+        test("session directional audio navigation reaches microphone without changing volume",()=>
+        {
+            using var host=new Host();var w=host.Window;host.Open();Pick(w,"session-volume");w.Move(NavDirection.Down);
+            Require(w.SelectedAction=="windows-volume","Down skipped the output volume");w.Move(NavDirection.Down);
+            if(w.SelectedAction=="session-mixer")w.Move(NavDirection.Left);
+            Require(w.SelectedAction=="microphone"&&host.Audio.VolumeWrites==0,"Directional navigation could not reach the microphone without editing volume");
+            w.Move(NavDirection.Right);Require(w.SelectedAction=="session-mixer","Microphone did not connect to its sibling mixer action");
+        });
         test("session volume slider keeps native focus while keyboard edits commit exact app volume",()=>
         {
             using var host=new Host();var w=host.Window;host.Open();Pick(w,"session-volume");

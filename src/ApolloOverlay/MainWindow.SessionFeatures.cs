@@ -179,11 +179,11 @@ public partial class MainWindow
         Section("Áudio da sessão");
         var gameVolume=AddRow("session-volume",GameVolumeTitle,GameVolumeDescription,ToggleGameAudio,appAudio.CanSetMute);
         AddSessionSlider(gameVolume,appAudio.VolumeMaximum??0,value=>SetGameVolume(value));SyncSessionSlider("session-volume",appAudio.VolumeMaximum);
-        var first=Rows.RowDefinitions.Count;
-        var outputVolume=AddRow("windows-volume",WindowsVolumeTitle,systemAudio.Current.OutputName,()=>AudioAction(audio.Set(muted:!audio.Current.Muted,expectedEndpoint:audio.Current.EndpointId)),audio.Current.Available,row:narrow?null:first,column:0);
+        var outputVolume=AddRow("windows-volume",WindowsVolumeTitle,systemAudio.Current.OutputName,()=>AudioAction(audio.Set(muted:!audio.Current.Muted,expectedEndpoint:audio.Current.EndpointId)),audio.Current.Available);
         if(audio.Current.Available)AddSessionSlider(outputVolume,audio.Current.Volume,value=>AudioAction(audio.Set(value,expectedEndpoint:audio.Current.EndpointId)));
-        AddRow("microphone",MicrophoneTitle,systemAudio.Current.MicrophoneName,ToggleMicrophone,systemAudio.Current.MicrophoneMuted is not null,row:narrow?null:first,column:1);
-        AddRow("session-mixer","Mixer de aplicativos","Jogo, conversa e música separados",()=>OpenFeature(OverlayRoute.Mixer,"mixer-refresh"));
+        var first=Rows.RowDefinitions.Count;
+        AddRow("microphone",MicrophoneTitle,systemAudio.Current.MicrophoneName,ToggleMicrophone,systemAudio.Current.MicrophoneMuted is not null,row:narrow?null:first,column:0);
+        AddRow("session-mixer","Mixer de áudio","Som de cada aplicativo",()=>OpenFeature(OverlayRoute.Mixer,"mixer-refresh"),row:narrow?null:first,column:1);
         Section("Sua sessão");first=Rows.RowDefinitions.Count;
         AddRow("session-profiles","Ambiente",sessionProfiles.Items.FirstOrDefault(profile=>profile.Id==sessionProfiles.ActiveId)?.Name??"TV ou Computador",()=>OpenFeature(OverlayRoute.Profiles,"profile:tv"),row:narrow?null:first,column:0);
         AddRow("session-capture","Capturar tela","Salvar uma imagem do monitor",CaptureSession,row:narrow?null:first,column:1);
