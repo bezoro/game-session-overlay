@@ -139,7 +139,6 @@ public partial class MainWindow
         Rows.ColumnDefinitions.Clear();
         Rows.ColumnDefinitions.Add(new());
         Rows.ColumnDefinitions.Add(new());
-        CloseArea.Children.Clear();
         entries.Clear();
         operationText = null;
         entries.Add(new("settings", SettingsGear, () => Page(2), true, "Open System"));

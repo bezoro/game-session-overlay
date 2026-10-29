@@ -450,7 +450,7 @@ internal static class ReviewFixTests
                     var gear = (Button)w.FindName("SettingsGear");
                     Require(new ButtonAutomationPeer(gear).GetName() == "Open System", "Gear name missing");
                     Require(new ButtonAutomationPeer(gear).GetHelpText().Length > 0, "Gear help missing");
-                    var buttons = ((Grid)w.FindName("Rows")).Children.OfType<Button>().Concat(((Grid)w.FindName("CloseArea")).Children.OfType<Button>()).ToArray();
+                    var buttons = ((Grid)w.FindName("Rows")).Children.OfType<Button>().ToArray();
                     Require(buttons.Length > 0, "Empty page fixture");
                     foreach (var button in buttons)
                     {

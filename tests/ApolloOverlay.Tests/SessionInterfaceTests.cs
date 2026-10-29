@@ -22,6 +22,7 @@ internal static class SessionInterfaceTests
                 Navigate(w, "keyboard");
                 w.UpdateLayout();
                 var viewport = (ScrollViewer)w.FindName("ContentScroll");
+                Require(viewport.ScrollableHeight <= 1, "Keyboard must scroll its keys without scrolling or fading its pinned commands");
                 foreach (var id in new[] { "keyboard-target", "keyboard-editor", "keyboard-insert", "back" })
                 {
                     var button = ReviewFixTests.Button(w, id);

@@ -758,9 +758,6 @@
             </Border>
             <Grid
               x:Name="Rows" />
-            <Grid
-              x:Name="CloseArea"
-              Margin="0,10,0,0" />
           </StackPanel>
         </ScrollViewer>
         <local:VectorIcon

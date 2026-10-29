@@ -78,7 +78,6 @@ public partial class MainWindow
         keyboardDown = false;
         ConfirmPanel.Visibility = Visibility.Collapsed;
         ContentScroll.Visibility = Visibility.Visible;
-        CloseArea.Visibility = Visibility.Visible;
         if (restore && view.Back())
         {
             SyncView();
@@ -121,7 +120,6 @@ public partial class MainWindow
         AutomationProperties.SetName(ConfirmTarget, target.Title);
         ConfirmPanel.Visibility = Visibility.Visible;
         ContentScroll.Visibility = Visibility.Collapsed;
-        CloseArea.Visibility = Visibility.Collapsed;
         HoldProgress.Value = 0;
         ConfirmHint.Text = "Waiting for release…";
         FeedbackText("No close command sent.");
