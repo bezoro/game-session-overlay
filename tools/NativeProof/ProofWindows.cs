@@ -24,27 +24,33 @@ internal sealed class ProofWindows : IDisposable
     internal readonly long Identity = OwnedNative.StartTicks;
     internal int ActiveRenderHandlers
     {
-        get; private set;
+        get;
+        private set;
     }
     internal bool HotkeyRegistered
     {
-        get; private set;
+        get;
+        private set;
     }
     internal int HotkeyError
     {
-        get; private set;
+        get;
+        private set;
     }
     internal int InputEvents
     {
-        get; private set;
+        get;
+        private set;
     }
     internal int Page
     {
-        get; private set;
+        get;
+        private set;
     }
     internal int Selection
     {
-        get; private set;
+        get;
+        private set;
     }
 
     internal Action? Exit;

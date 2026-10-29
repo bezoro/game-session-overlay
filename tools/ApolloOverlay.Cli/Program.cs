@@ -1,11 +1,10 @@
-using ApolloOverlay.Automation;
-using System.Diagnostics;
-using System.IO;
-using System.IO.Pipes;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.IO.Pipes;
 using System.Runtime.InteropServices;
-using Microsoft.Win32.SafeHandles;
 using System.Text.Json;
+using ApolloOverlay.Automation;
+using Microsoft.Win32.SafeHandles;
 
 internal static class Program
 {

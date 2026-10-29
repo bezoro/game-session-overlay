@@ -1590,7 +1590,11 @@ internal static unsafe class GuideAbiTests
                         Key(w, System.Windows.Input.Key.Enter, true);
                         dialog.SetResult(ok ? "C:/owned/Playnite.FullscreenApp.exe" : null);
                         FinishFocus(w.DialogTask);
-                        Require(requests == 1 && w.SelectedAction == selected && w.ActionIds.Contains("configure-playnite") && w.Controller.Session.Anchor?.Same(p.Game) == true && w.Controller.ReturnTarget?.Same(p.Game) == true);
+                        Require(requests == 1
+                            && w.SelectedAction == selected
+                            && w.ActionIds.Contains("configure-playnite")
+                            && w.Controller.Session.Anchor?.Same(p.Game) == true
+                            && w.Controller.ReturnTarget?.Same(p.Game) == true);
                         Require(ok ? w.Controller.Settings.PlaynitePath == "C:/owned/Playnite.FullscreenApp.exe" : w.Controller.Settings.PlaynitePath is null);
                         Key(w, System.Windows.Input.Key.Up, true);
                         Require(w.SelectedAction == selected, "Dialog held gesture navigated before release");
@@ -2465,7 +2469,9 @@ internal static unsafe class GuideAbiTests
             window.SetRenderState("integrations");
             window.ShowDiagnostic();
             var rows = (System.Windows.Controls.Grid)window.FindName("Rows");
-            var button = rows.Children.OfType<System.Windows.Controls.Button>().Single(b => b.Content is System.Windows.Controls.Grid grid && grid.Children[1] is System.Windows.Controls.StackPanel labels && ((System.Windows.Controls.TextBlock)labels.Children[0]).Text.StartsWith("Botão Xbox / Guide"));
+            var button = rows.Children.OfType<System.Windows.Controls.Button>().Single(b => b.Content is System.Windows.Controls.Grid grid
+                && grid.Children[1] is System.Windows.Controls.StackPanel labels
+                && ((System.Windows.Controls.TextBlock)labels.Children[0]).Text.StartsWith("Botão Xbox / Guide"));
             var texts = (System.Windows.Controls.StackPanel)((System.Windows.Controls.Grid)button.Content).Children[1];
             var subtitle = (System.Windows.Controls.TextBlock)texts.Children[1];
             var selected = window.SelectedAction;

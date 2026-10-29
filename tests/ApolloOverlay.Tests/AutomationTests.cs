@@ -1,11 +1,11 @@
-using ApolloOverlay;
-using ApolloOverlay.Automation;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Interop;
+using ApolloOverlay;
+using ApolloOverlay.Automation;
 
 internal static class AutomationTests
 {
@@ -249,13 +249,15 @@ internal static class AutomationTests
             Require(!AutomationPipeSecurity.SameSession(p, p with
             {
                 User = "different"
-            }) && !AutomationPipeSecurity.SameSession(p, p with
-            {
-                Logon = "different"
-            }) && !AutomationPipeSecurity.SameSession(p, p with
-            {
-                Session = p.Session + 1
-            }), "Peer boundary broadened");
+            })
+                && !AutomationPipeSecurity.SameSession(p, p with
+                {
+                    Logon = "different"
+                })
+                && !AutomationPipeSecurity.SameSession(p, p with
+                {
+                    Session = p.Session + 1
+                }), "Peer boundary broadened");
         });
         test("automation locality accepts only explicit ERROR_PIPE_LOCAL", () =>
         {

@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.IO;
 using System.Text.Json;
 using ApolloOverlay.Automation;
 
@@ -17,7 +16,13 @@ internal static class UpdateCommands
         return Program.Print(await Execute(args, Program.Send, CancellationToken.None));
     }
 
-    internal static async Task<AutomationReply> Execute(string[] args, Func<string, AutomationRequest, CancellationToken, Task<AutomationReply>> send, CancellationToken cancellation, string? defaultPipe = null, Func<CancellationToken, Task>? pause = null)
+    internal static async Task<AutomationReply> Execute(
+        string[] args,
+        Func<string, AutomationRequest, CancellationToken, Task<AutomationReply>> send,
+        CancellationToken cancellation,
+        string? defaultPipe = null,
+        Func<CancellationToken, Task>? pause = null
+    )
     {
         string job = "";
         string endpoint = "";
@@ -285,7 +290,12 @@ internal static class UpdateCommands
             throw new ArgumentException("Canal inválido para este comando.");
         if (seconds is < 5 or > 600)
             throw new ArgumentException("O prazo deve ficar entre 5 e 600 segundos.");
-        if (seen.Contains("--build") && build.Length == 0 || build.Length > 0 && (build.Length > 96 || build.Any(character => !char.IsAsciiLetterOrDigit(character) && character is not ('.' or '-' or '_'))))
+        if (seen.Contains("--build")
+            && build.Length == 0
+            || build.Length > 0
+            && (build.Length > 96
+            || build.Any(character => !char.IsAsciiLetterOrDigit(character)
+            && character is not ('.' or '-' or '_'))))
             throw new ArgumentException("BuildId inválido.");
         if (command == "rollback" && build.Length == 0 || command == "cancel" && (job.Length == 0 || job.Length > 256 || job.Any(char.IsControl)))
             throw new ArgumentException("Identificador ausente ou inválido.");

@@ -14,10 +14,10 @@
       Include="../../tools/ApolloOverlay.Cli/UpdateCommands.cs"
       Link="UpdateCommands.cs" />
     <Compile
-      Include="../../src/ApolloOverlay/AutomationProtocol.cs"
+      Include="../../src/ApolloOverlay/Automation/AutomationProtocol.cs"
       Link="AutomationProtocol.cs" />
     <Compile
-      Include="../../src/ApolloOverlay/AutomationPipeSecurity.cs"
+      Include="../../src/ApolloOverlay/Automation/AutomationPipeSecurity.cs"
       Link="AutomationPipeSecurity.cs" />
   </ItemGroup>
 </Project>

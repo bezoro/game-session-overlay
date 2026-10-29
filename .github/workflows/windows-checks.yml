@@ -69,6 +69,14 @@ jobs:
           ./scripts/verify.ps1 -Stage Build -OutputVersion native-v1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Verify source formatting and unused imports
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          ./scripts/format.ps1 -Verify
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet format style ApolloOverlay.sln --diagnostics IDE0005 --severity info --verify-no-changes --no-restore
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       # These suites exercise managed state, mocked native boundaries and settings on Windows.
       # They do not establish compatibility with a physical controller or interactive desktop.
       - name: Run non-interactive behavior suites
@@ -104,6 +112,16 @@ jobs:
           & $cliTests '--roundtrip' $cli 2>&1 | Tee-Object -FilePath "$checks/cli-roundtrip.log"
           if ($LASTEXITCODE -ne 0) { Write-Error "CLI roundtrip failed with exit code $LASTEXITCODE" -ErrorAction Continue; $failed = $true }
           if ($failed) { exit 1 }
+
+      - name: Run diagnostic tool synthetic tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 3
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & dotnet 'tools/GuideProbe/bin/Release/net10.0-windows/GuideProbe.dll' '--self-test'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & dotnet 'tools/NativeProof/bin/Release/net10.0-windows/Bezoro.NativeProof.dll' '--input-tests' '--output' 'artifacts/check-native-v1/native-proof-input'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       # These render the app's own WPF tree with fixtures and synthetic palettes.
       # Images are review artifacts, not a physical TV or streaming compatibility test.

@@ -82,7 +82,13 @@ internal static class OwnedNative
     private static bool Intersects(Rect a, Rect b) => a.Left < b.Right && a.Right > b.Left && a.Top < b.Bottom && a.Bottom > b.Top;
     internal static void Guard(nint underlay, nint overlay, Rect capture, long start)
     {
-        if (!IsOwned(underlay, start) || !IsWindowVisible(underlay) || !GetWindowRect(underlay, out var bounds) || capture.Left < bounds.Left || capture.Top < bounds.Top || capture.Right > bounds.Right || capture.Bottom > bounds.Bottom)
+        if (!IsOwned(underlay, start)
+            || !IsWindowVisible(underlay)
+            || !GetWindowRect(underlay, out var bounds)
+            || capture.Left < bounds.Left
+            || capture.Top < bounds.Top
+            || capture.Right > bounds.Right
+            || capture.Bottom > bounds.Bottom)
             throw new InvalidOperationException("Capture aborted: owned coverage not established.");
         var foreground = GetForegroundWindow();
         if (foreground != underlay && foreground != overlay)

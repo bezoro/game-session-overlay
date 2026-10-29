@@ -1,13 +1,13 @@
-using ApolloOverlay;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Input;
 using System.Windows.Threading;
+using ApolloOverlay;
 
 internal static class SessionHubTests
 {
@@ -32,7 +32,13 @@ internal static class SessionHubTests
             )
             {
                 var value = UserSettings.Parse("{\"Version\":" + version + ",\"GuideXInputEnabled\":true,\"UiScalePercent\":\"bad\",\"PanelSide\":4,\"FavoriteQuickActions\":false,\"HapticFeedbackEnabled\":{},\"SoundFeedbackEnabled\":true}");
-                Check(value.Version == 3 && value.GuideXInputEnabled && value.SoundFeedbackEnabled && !value.HapticFeedbackEnabled && value.UiScalePercent == 100 && value.PanelSide == "Left" && SessionHubSettings.Favorites(value).Count() == 6, "Field-local recovery lost valid settings");
+                Check(value.Version == 3
+                    && value.GuideXInputEnabled
+                    && value.SoundFeedbackEnabled
+                    && !value.HapticFeedbackEnabled
+                    && value.UiScalePercent == 100
+                    && value.PanelSide == "Left"
+                    && SessionHubSettings.Favorites(value).Count() == 6, "Field-local recovery lost valid settings");
             }
         });
         test("hub favorites missing defaults versus empty and stable sanitized order", () =>
@@ -370,7 +376,12 @@ internal static class SessionHubTests
     {
         var focus = ActualFocus(window);
         var id = focus.Tag as string;
-        Check(id == window.SelectedAction || id == "description:" + window.SelectedAction || focus.Name == "SessionCardButton" && window.SelectedAction == "session-card" || focus.Name == "SettingsGear" && window.SelectedAction == "settings", "Actual focus differs from selected " + window.SelectedAction + ": " + id);
+        Check(id == window.SelectedAction
+            || id == "description:" + window.SelectedAction
+            || focus.Name == "SessionCardButton"
+            && window.SelectedAction == "session-card"
+            || focus.Name == "SettingsGear"
+            && window.SelectedAction == "settings", "Actual focus differs from selected " + window.SelectedAction + ": " + id);
     }
 
     private static void RequireRevealed(MainWindow window)
@@ -609,7 +620,11 @@ internal static class SessionHubTests
                 Check(w.Controller.Settings.UiScalePercent == 130 && w.Controller.SettingsDirty && !w.Controller.Settings.SetupSeen, "Esc dropped draft or persisted invitation");
                 Click(w, "setup");
                 Click(w, "setup-skip");
-                Check(w.Controller.Settings.SetupSeen && w.Controller.SettingsDirty && !w.Controller.Settings.SoundFeedbackEnabled && !w.Controller.Settings.HapticFeedbackEnabled && w.Controller.Settings.GuideXInputEnabled, "Skip changed Guide or saved feedback settings");
+                Check(w.Controller.Settings.SetupSeen
+                    && w.Controller.SettingsDirty
+                    && !w.Controller.Settings.SoundFeedbackEnabled
+                    && !w.Controller.Settings.HapticFeedbackEnabled
+                    && w.Controller.Settings.GuideXInputEnabled, "Skip changed Guide or saved feedback settings");
                 Click(w, "setup");
                 Click(w, "setup-next");
                 Click(w, "setup-next");
@@ -1526,7 +1541,6 @@ internal static class SessionHubTests
             add
             {
             }
-
             remove
             {
             }
@@ -1562,6 +1576,22 @@ internal static class SessionHubTests
     }
 }
 
-internal sealed record SessionCaptureInfo(string Image, string Theme, int Width, int Height, string State, UserSettings Settings, string Selected, string Route, double Offset, double Viewport, double Extent, bool Offscreen, bool Fixture, bool TemplateSimulation, SidebarBounds PhysicalPlacement);
+internal sealed record SessionCaptureInfo(
+    string Image,
+    string Theme,
+    int Width,
+    int Height,
+    string State,
+    UserSettings Settings,
+    string Selected,
+    string Route,
+    double Offset,
+    double Viewport,
+    double Extent,
+    bool Offscreen,
+    bool Fixture,
+    bool TemplateSimulation,
+    SidebarBounds PhysicalPlacement
+);
 [JsonSerializable(typeof(List<SessionCaptureInfo>))]
 internal partial class SessionCaptureJson : JsonSerializerContext;

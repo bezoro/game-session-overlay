@@ -91,9 +91,16 @@ internal static unsafe class SessionHubServiceTests
             var other = new Session("other-process", 99);
             using var audio = Audio(new Catalog(first, second, other) { Gaps = 1 });
             var mute = Done(audio.SetMutedAsync(Target, true, 9));
-            Require(mute.Result.Kind == ResultKind.Partial && mute.Snapshot is { Availability: ApplicationAudioAvailability.Partial, MuteState: ApplicationMuteState.Muted, CanSetMute: true } && mute.Verified == 2, "Partial observed mute must retain restoration capability");
+            Require(mute.Result.Kind == ResultKind.Partial
+                && mute.Snapshot is { Availability: ApplicationAudioAvailability.Partial, MuteState: ApplicationMuteState.Muted, CanSetMute: true }
+                && mute.Verified == 2, "Partial observed mute must retain restoration capability");
             var restore = Done(audio.SetMutedAsync(Target, false, 9));
-            Require(restore.Result.Kind == ResultKind.Partial && restore.Snapshot.MuteState == ApplicationMuteState.Audible && restore.Verified == 2 && !first.Muted && !second.Muted && other.Writes == 0, "Restore must reach identified sessions only");
+            Require(restore.Result.Kind == ResultKind.Partial
+                && restore.Snapshot.MuteState == ApplicationMuteState.Audible
+                && restore.Verified == 2
+                && !first.Muted
+                && !second.Muted
+                && other.Writes == 0, "Restore must reach identified sessions only");
         });
         test("session audio unavailable without positively identified sessions", () =>
         {
@@ -852,7 +859,8 @@ internal static unsafe class SessionHubServiceTests
         [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
         private static int Query(ComValue* self, Guid* iid, nint* result)
         {
-            if (*iid == new Guid("00000000-0000-0000-C000-000000000046") || *iid == (self->Muted < 0 ? new Guid("BFB7FF88-7239-4FC9-8FA2-07C950BE9C6D") : new Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8")))
+            if (*iid == new Guid("00000000-0000-0000-C000-000000000046")
+                || *iid == (self->Muted < 0 ? new Guid("BFB7FF88-7239-4FC9-8FA2-07C950BE9C6D") : new Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8")))
             {
                 *result = (nint)self;
                 self->References++;

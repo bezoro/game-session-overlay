@@ -7,10 +7,10 @@ $sourceFiles = @(
     foreach ($directory in @('src', 'tools', 'tests')) {
         Get-ChildItem -LiteralPath (Join-Path $root $directory) -Filter '*.cs' -Recurse -File |
             Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' } |
-            ForEach-Object { $_.FullName }
+            ForEach-Object { [System.IO.Path]::GetRelativePath($root, $_.FullName) }
     }
 )
-$arguments = @('format', 'whitespace', $root, '--folder', '--include') + $sourceFiles
+$arguments = @('format', 'whitespace', (Join-Path $root 'ApolloOverlay.sln'), '--no-restore')
 if ($Verify) {
     $arguments += '--verify-no-changes'
 }
@@ -63,5 +63,14 @@ foreach ($file in $xmlFiles) {
 }
 if ($invalid.Count -gt 0) {
     throw "XML formatting differs. Run ./scripts/format.ps1:`n$($invalid -join "`n")"
+}
+
+foreach ($file in Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.ps1' -File) {
+    $tokens = $null
+    $parseErrors = $null
+    $null = [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$parseErrors)
+    if ($parseErrors.Count -gt 0) {
+        throw "PowerShell syntax error in $($file.Name): $($parseErrors[0].Message)"
+    }
 }
 Write-Host "Formatting verified: $($sourceFiles.Count) C# files and $($xmlFiles.Count) XML files."

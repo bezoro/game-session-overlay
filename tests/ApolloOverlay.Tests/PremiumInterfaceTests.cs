@@ -1,10 +1,10 @@
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Automation.Peers;
-using System.Windows.Media;
 using System.IO;
-using System.Windows.Threading;
+using System.Windows;
+using System.Windows.Automation.Peers;
+using System.Windows.Controls;
 using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Threading;
 using ApolloOverlay;
 
 internal static class PremiumInterfaceTests

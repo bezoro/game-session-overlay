@@ -81,7 +81,10 @@ public static class Program
             return startup ? 0 : 3;
         }
 
-        if (!preview && bridge is null && proofRoot is null && !StartupRegistration.TryEnsure(VelopackInstallation.IsInstalled ? VelopackInstallation.StartupExecutable : Environment.ProcessPath))
+        if (!preview
+            && bridge is null
+            && proofRoot is null
+            && !StartupRegistration.TryEnsure(VelopackInstallation.IsInstalled ? VelopackInstallation.StartupExecutable : Environment.ProcessPath))
             new LocalDiagnostics().Log("startup-registration", ResultKind.Unavailable);
         var application = new Application
         {
@@ -162,7 +165,8 @@ public static class Program
         if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true" || temporary is null || index + 1 >= args.Length)
             throw new InvalidOperationException("Este modo é exclusivo do teste isolado de instalação no CI.");
         var root = Path.GetFullPath(args[index + 1]);
-        if (!string.Equals(Path.GetDirectoryName(root), Path.GetFullPath(temporary).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase) || !Regex.IsMatch(Path.GetFileName(root), "^overlay-velopack-proof-[a-f0-9]{32}$"))
+        if (!string.Equals(Path.GetDirectoryName(root), Path.GetFullPath(temporary).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase)
+            || !Regex.IsMatch(Path.GetFileName(root), "^overlay-velopack-proof-[a-f0-9]{32}$"))
             throw new InvalidOperationException("Diretório de teste inválido.");
         args = args.Where((_, i) => i != index && i != index + 1).ToArray();
         return root;

@@ -13,18 +13,25 @@ internal unsafe sealed class GameInput(LimitedQueue<RawGuide> queue, Func<double
     private GCHandle context;
     private volatile bool active;
     private bool retained;
-    internal string Status { get; private set; } = "unavailable";
+    internal string Status
+    {
+        get;
+        private set;
+    } = "unavailable";
     internal int Hresult
     {
-        get; private set;
+        get;
+        private set;
     }
     internal bool EnumerationComplete
     {
-        get; private set;
+        get;
+        private set;
     }
     internal int DeviceRegistrationHr
     {
-        get; private set;
+        get;
+        private set;
     }
 
     internal GameInput(nint test, LimitedQueue<RawGuide> queue, Func<double> elapsed) : this(queue, elapsed)

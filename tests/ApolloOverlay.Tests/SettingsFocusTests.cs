@@ -265,7 +265,12 @@ internal static class SettingsFocusTests
             window.UpdateLayout();
             Require(window.SelectedAction != selected, "Feedback toggle reset controller ownership or input arming");
             host.RequireOwnedFocus();
-            Require(NativeCapture.GetWindowRect(host.Handle, out var after) && before.Left == after.Left && before.Top == after.Top && before.Right == after.Right && before.Bottom == after.Bottom && moves == 0, "Feedback-only preference moved the native overlay window");
+            Require(NativeCapture.GetWindowRect(host.Handle, out var after)
+                && before.Left == after.Left
+                && before.Top == after.Top
+                && before.Right == after.Right
+                && before.Bottom == after.Bottom
+                && moves == 0, "Feedback-only preference moved the native overlay window");
         }
         finally
         {

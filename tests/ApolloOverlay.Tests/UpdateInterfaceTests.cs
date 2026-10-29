@@ -1,16 +1,16 @@
-using System.Net.Http;
 using System.IO;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using System.Windows.Input;
-using System.Windows.Threading;
 using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using Velopack.Exceptions;
+using System.Windows.Threading;
 using ApolloOverlay;
+using Velopack.Exceptions;
 
 internal static class UpdateInterfaceTests
 {
@@ -125,7 +125,8 @@ internal static class UpdateInterfaceTests
         {
             using var host = new Host();
             var w = host.Window;
-            Require(((TextBlock)w.FindName("HeaderIdentity")).Text == "v" + AppBuild.Current.Version.Split('+')[0] && ((TextBlock)w.FindName("HeaderIdentity")).ToolTip?.ToString()?.Contains(AppBuild.Current.Version) == true, "Header hides compiled version identity");
+            Require(((TextBlock)w.FindName("HeaderIdentity")).Text == "v" + AppBuild.Current.Version.Split('+')[0]
+                && ((TextBlock)w.FindName("HeaderIdentity")).ToolTip?.ToString()?.Contains(AppBuild.Current.Version) == true, "Header hides compiled version identity");
             Require(((TextBlock)w.FindName("HeaderIdentity")).ToolTip?.ToString()?.Contains(AppBuild.Current.BuildId) == true, "Header has no build identity");
             w.Page(2);
             w.RefreshRows();

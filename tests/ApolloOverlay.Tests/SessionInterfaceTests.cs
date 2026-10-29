@@ -549,7 +549,11 @@ internal static class SessionInterfaceTests
 
     private sealed class MediaFixture : ISessionMedia
     {
-        public SessionMediaSnapshot Current { get; private set; } = new(1, [new("music", "A moment between worlds", "Session soundtrack", "Fixture music", true, true, false, true)], "music", "Fixture media");
+        public SessionMediaSnapshot Current
+        {
+            get;
+            private set;
+        } = new(1, [new("music", "A moment between worlds", "Session soundtrack", "Fixture music", true, true, false, true)], "music", "Fixture media");
 
         public event Action<SessionMediaSnapshot>? Changed;
         internal int Commands;

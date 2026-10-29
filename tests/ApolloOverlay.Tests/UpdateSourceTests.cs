@@ -1,5 +1,5 @@
-using System.Net.Http;
 using System.IO;
+using System.Net.Http;
 using ApolloOverlay;
 using Velopack;
 using Velopack.Logging;

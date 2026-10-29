@@ -1,6 +1,6 @@
+using System.Windows.Threading;
 using ApolloOverlay;
 using Automation = ApolloOverlay.Automation;
-using System.Windows.Threading;
 
 internal static class SteamShortcutFocusTests
 {

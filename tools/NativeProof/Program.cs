@@ -8,29 +8,85 @@ namespace Bezoro.NativeProof;
 
 internal sealed record CaseResult(string Name, bool Passed, string? Error);
 internal sealed record GuideResult(bool InterfaceAvailable, string Reason, bool CallbacksRegistered, bool EdgesObserved, string LongPress, string SteamShortPress);
-internal sealed record CycleResult(int Cycle, long Underlay, long Overlay, long ForegroundShown, long ForegroundReturned, bool ShowFocus, bool ReturnFocus, int VisibleOwnedWindows, int RenderSubscribers);
+internal sealed record CycleResult(
+    int Cycle,
+    long Underlay,
+    long Overlay,
+    long ForegroundShown,
+    long ForegroundReturned,
+    bool ShowFocus,
+    bool ReturnFocus,
+    int VisibleOwnedWindows,
+    int RenderSubscribers
+);
 internal sealed record CostSample(double ElapsedMs, double CoreNormalizedCpuPercent, long PrivateBytes);
-internal sealed record CostResult(string Phase, double DurationMs, double CpuMeanPercent, double CpuPeakPercent, long PrivateStart, long PrivateEnd, List<CostSample> Samples);
+internal sealed record CostResult(
+    string Phase,
+    double DurationMs,
+    double CpuMeanPercent,
+    double CpuPeakPercent,
+    long PrivateStart,
+    long PrivateEnd,
+    List<CostSample> Samples
+);
 internal sealed record LatencyResult(string Kind, int Count, double P50Ms, double P95Ms, double MaxMs, List<double> Samples);
 internal sealed class ProofReport
 {
-    public string Status { get; set; } = "running";
+    public string Status
+    {
+        get;
+        set;
+    } = "running";
     public string? Failure
     {
-        get; set;
+        get;
+        set;
     }
-    public List<CaseResult> Cases { get; set; } = [];
-    public List<CycleResult> Cycles { get; set; } = [];
-    public List<CostResult> Costs { get; set; } = [];
-    public List<LatencyResult> Latencies { get; set; } = [];
-    public List<string> Captures { get; set; } = [];
-    public Dictionary<string, string> Facts { get; set; } = [];
-    public List<int> ConnectedSlots { get; set; } = [];
+    public List<CaseResult> Cases
+    {
+        get;
+        set;
+    } = [];
+    public List<CycleResult> Cycles
+    {
+        get;
+        set;
+    } = [];
+    public List<CostResult> Costs
+    {
+        get;
+        set;
+    } = [];
+    public List<LatencyResult> Latencies
+    {
+        get;
+        set;
+    } = [];
+    public List<string> Captures
+    {
+        get;
+        set;
+    } = [];
+    public Dictionary<string, string> Facts
+    {
+        get;
+        set;
+    } = [];
+    public List<int> ConnectedSlots
+    {
+        get;
+        set;
+    } = [];
     public int ObservedPacketChanges
     {
-        get; set;
+        get;
+        set;
     }
-    public List<string> Gaps { get; set; } = [];
+    public List<string> Gaps
+    {
+        get;
+        set;
+    } = [];
 }
 
 [JsonSerializable(typeof(ProofReport))]

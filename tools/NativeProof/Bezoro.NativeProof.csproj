@@ -10,16 +10,22 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile
-      Include="../../src/ApolloOverlay/Core.cs"
-      Link="Shared/Core.cs" />
+      Include="../../src/ApolloOverlay/Input/PadFrame.cs"
+      Link="Shared/PadFrame.cs" />
     <Compile
-      Include="../../src/ApolloOverlay/Native.cs"
+      Include="../../src/ApolloOverlay/Input/PadInterpreter.cs"
+      Link="Shared/PadInterpreter.cs" />
+    <Compile
+      Include="../../src/ApolloOverlay/Domain/DisplayRef.cs"
+      Link="Shared/DisplayRef.cs" />
+    <Compile
+      Include="../../src/ApolloOverlay/Windows/Native.cs"
       Link="Shared/Native.cs" />
     <Compile
-      Include="../../src/ApolloOverlay/Navigation.cs"
+      Include="../../src/ApolloOverlay/UI/Navigation.cs"
       Link="Shared/Navigation.cs" />
     <Compile
-      Include="../../src/ApolloOverlay/GuideInput.cs"
+      Include="../../src/ApolloOverlay/Input/GuideInput.cs"
       Link="Shared/GuideInput.cs" />
   </ItemGroup>
 </Project>

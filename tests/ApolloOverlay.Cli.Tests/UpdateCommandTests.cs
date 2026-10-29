@@ -1,4 +1,3 @@
-using System.IO;
 using System.Text.Json;
 using ApolloOverlay.Automation;
 
@@ -30,14 +29,18 @@ internal static class UpdateCommandTests
         {
             var server = new Server();
             var reply = await server.Run("update", "check", "--channel", "stable");
-            Require(reply is { Outcome: "Completed", Update.Phase: "Catalog" } && server.Requests.Single(r => r.Verb == "update-check").Channel == "stable" && !server.Requests.Any(r => r.Verb is "update-download" or "update-apply"), "Check applied or ignored its channel");
+            Require(reply is { Outcome: "Completed", Update.Phase: "Catalog" }
+                && server.Requests.Single(r => r.Verb == "update-check").Channel == "stable"
+                && !server.Requests.Any(r => r.Verb is "update-download" or "update-apply"), "Check applied or ignored its channel");
         });
         await test("CLI update prepares once and returns Requested instead of claiming the new version runs", async () =>
         {
             var server = new Server();
             var reply = await server.Run("update");
             Require(reply is { Outcome: "Requested", Update.TargetBuildId: "next" } && reply.Update.BuildId == "current", "Restart request was falsely reported as the new installation");
-            Require(server.Requests.Count(r => r.Verb == "update-check") == 1 && server.Requests.Count(r => r.Verb == "update-download") == 1 && server.Requests.Count(r => r.Verb == "update-apply") == 1, "Mutation was repeated");
+            Require(server.Requests.Count(r => r.Verb == "update-check") == 1
+                && server.Requests.Count(r => r.Verb == "update-download") == 1
+                && server.Requests.Count(r => r.Verb == "update-apply") == 1, "Mutation was repeated");
             Require(!server.Requests.Single(r => r.Verb == "update-download").AllowDowngrade, "Automatic latest selection allowed a downgrade");
         });
         await test("CLI current build does not download or restart", async () =>
@@ -115,7 +118,10 @@ internal static class UpdateCommandTests
                 cancellation.Cancel();
                 return Task.FromCanceled(token);
             });
-            Require(reply.Outcome == "Unknown" && server.Requests.Count(r => r.Verb == "update-cancel") == 1 && server.Requests.Single(r => r.Verb == "update-cancel").JobId == "job-1" && !server.Requests.Any(r => r.Verb == "update-apply"), "Cancellation touched another job or committed installation");
+            Require(reply.Outcome == "Unknown"
+                && server.Requests.Count(r => r.Verb == "update-cancel") == 1
+                && server.Requests.Single(r => r.Verb == "update-cancel").JobId == "job-1"
+                && !server.Requests.Any(r => r.Verb == "update-apply"), "Cancellation touched another job or committed installation");
         });
         await test("CLI uncertain apply is not automatically resent or cancelled", async () =>
         {
@@ -140,7 +146,9 @@ internal static class UpdateCommandTests
         {
             var server = new Server();
             var reply = await server.Run("rollback", "older");
-            Require(reply is { Outcome: "Requested", Update.TargetBuildId: "older" } && server.Requests.Single(r => r.Verb == "update-rollback").BuildId == "older" && !server.Requests.Any(r => r.Verb == "update-check"), "Rollback queried the network or changed the target");
+            Require(reply is { Outcome: "Requested", Update.TargetBuildId: "older" }
+                && server.Requests.Single(r => r.Verb == "update-rollback").BuildId == "older"
+                && !server.Requests.Any(r => r.Verb == "update-check"), "Rollback queried the network or changed the target");
         });
         await test("CLI explicit build selection alone enables downgrade", async () =>
         {

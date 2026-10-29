@@ -64,7 +64,7 @@ internal static class MotionAndControllerTests
             Complete(w.ControllerBadgeTask);
             var label = (TextBlock)w.FindName("ControllerModelLabel");
             var battery = (TextBlock)w.FindName("ControllerBatteryLabel");
-            var icon = (System.Windows.Shapes.Path)w.FindName("ControllerModelIcon");
+            var icon = (VectorIcon)w.FindName("ControllerModelIcon");
             Require(label.Text == "Xbox One" && battery.Text == "76%" && icon.Data is not null, "Model or measured charge not presented");
             var xbox = icon.Data!.ToString();
             var peer = AutomationProperties.GetName((DependencyObject)w.FindName("ControllerInfoBar"));
@@ -89,7 +89,7 @@ internal static class MotionAndControllerTests
             w.UpdateLayout();
             var badge = (FrameworkElement)w.FindName("ControllerInfoBar");
             var gear = (FrameworkElement)w.FindName("SettingsGear");
-            var power = (System.Windows.Shapes.Path)w.FindName("ControllerPowerGlyph");
+            var power = (VectorIcon)w.FindName("ControllerPowerGlyph");
             var label = (TextBlock)w.FindName("ControllerModelLabel");
             var right = badge.TranslatePoint(new(badge.ActualWidth, 0), w).X;
             var gearLeft = gear.TranslatePoint(new(), w).X;
@@ -112,8 +112,56 @@ internal static class MotionAndControllerTests
         });
         test("controller metadata recognizes Sony generations and rejects invalid capacity reports", () =>
         {
-            Require(WindowsControllerIdentitySource.Describe(0x054c, 0x09cc, "Wireless").Family == ControllerFamily.PlayStation4 && WindowsControllerIdentitySource.Describe(0x054c, 0x0ce6, "Wireless").Family == ControllerFamily.PlayStation5, "Sony generations were guessed from the generic display name");
-            Require(WindowsControllerIdentitySource.Percent(520, 1000) == 52 && WindowsControllerIdentitySource.Percent(1, 0) is null && WindowsControllerIdentitySource.Percent(120, 100) is null && WindowsControllerIdentitySource.Percent(null, null) is null, "Missing or inconsistent capacities produced a false percentage");
+            Require(WindowsControllerIdentitySource.Describe(0x054c, 0x09cc, "Wireless").Family == ControllerFamily.PlayStation4
+                && WindowsControllerIdentitySource.Describe(0x054c, 0x0ce6, "Wireless").Family == ControllerFamily.PlayStation5, "Sony generations were guessed from the generic display name");
+            Require(WindowsControllerIdentitySource.Percent(520, 1000) == 52
+                && WindowsControllerIdentitySource.Percent(1, 0) is null
+                && WindowsControllerIdentitySource.Percent(120, 100) is null
+                && WindowsControllerIdentitySource.Percent(null, null) is null, "Missing or inconsistent capacities produced a false percentage");
+        });
+        foreach (var width in new[]
+        {
+            360,
+            572
+        }
+
+        )
+        {
+            var size = width;
+            test($"vector icons retain source padding and fit selected buttons at {size}", () =>
+            {
+                using var host = new Host();
+                var w = host.Window;
+                w.Width = size;
+                w.Height = size == 360 ? 480 : 940;
+                Pick(w, "settings");
+                w.UpdateLayout();
+                var gear = (Button)w.FindName("SettingsGear");
+                var icon = (VectorIcon)gear.Content;
+                var bounds = icon.TransformToAncestor(gear).TransformBounds(new Rect(new Size(icon.ActualWidth, icon.ActualHeight)));
+                var left = gear.Padding.Left + gear.BorderThickness.Left;
+                var right = gear.ActualWidth - gear.Padding.Right - gear.BorderThickness.Right;
+                Require(bounds.Left >= left - .5 && bounds.Right <= right + .5 && Math.Abs(bounds.Left - (gear.ActualWidth - bounds.Right)) < 1, "Selected system icon was clipped or off-center");
+                foreach (var vector in PremiumInterfaceTests.Descendants<VectorIcon>(w))
+                {
+                    if (vector.Data is null || vector.Visibility != Visibility.Visible)
+                        continue;
+                    var source = new Rect(new Point(), vector.SourceSize);
+                    source.Inflate(.1, .1);
+                    Require(source.Contains(vector.Data.Bounds), "Vector exceeds its declared source frame");
+                }
+
+                Require(ReferenceEquals(icon.Data, w.FindResource("Icon.settings")), "System icon is not the licensed source vector");
+            });
+        }
+
+        test("controller presentation prefers measured charge over categorical and USB estimates", () =>
+        {
+            var xinput = new ControllerDeviceSnapshot(0, 1, true, ControllerBatteryType.Alkaline, ControllerBatteryLevel.Low, ControllerVibrationCapability.Unknown, 0, "");
+            var measured = ControllerBadgeModel.Create(1, [new("one", "Xbox One", ControllerFamily.Xbox, true, 76, false)], xinput, "");
+            Require(measured.BatteryText == "76%" && !measured.LowBattery && Math.Abs(measured.BatteryFraction - .76) < .001, "Categorical XInput overrode a measured charge");
+            var wired = ControllerBadgeModel.Create(1, [new("usb", "Xbox", ControllerFamily.Xbox, false, null, false)], xinput, "");
+            Require(wired.Power == ControllerPowerState.Wired && wired.BatteryText == "USB" && wired.BatteryFraction == 0 && !wired.LowBattery, "USB power guessed a battery charge");
         });
         test("Windows controller metadata projection loads through a read-only query", () =>
         {

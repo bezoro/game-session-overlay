@@ -1,9 +1,9 @@
-using ApolloOverlay;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Windows.Threading;
+using ApolloOverlay;
 
 internal static class SteamOverlayDetectionTests
 {
@@ -35,7 +35,12 @@ internal static class SteamOverlayDetectionTests
         task.GetAwaiter().GetResult();
     }
 
-    private static bool Observe(SteamProcessEntry[]? entries = null, Dictionary<uint, SteamProcessIdentity>? identities = null, bool complete = true, WindowRef? target = null)
+    private static bool Observe(
+        SteamProcessEntry[]? entries = null,
+        Dictionary<uint, SteamProcessIdentity>? identities = null,
+        bool complete = true,
+        WindowRef? target = null
+    )
     {
         var live = identities ?? Identities();
         return SteamLaunchContext.Observe(target ?? Game, _ => true, () => new(entries ?? Chain, complete), pid => live.GetValueOrDefault(pid));
@@ -257,10 +262,11 @@ internal static class SteamOverlayDetectionTests
             Require(!c.SteamOverlayEligible(p.A with
             {
                 Protected = true
-            }) && !c.SteamOverlayEligible(p.A with
-            {
-                ProcessName = "steam"
-            }), "Protected/launcher module route accepted");
+            })
+&& !c.SteamOverlayEligible(p.A with
+{
+    ProcessName = "steam"
+}), "Protected/launcher module route accepted");
             p.ValidIdentity = false;
             Require(!c.SteamOverlayEligible(p.A), "Reused identity accepted");
         });

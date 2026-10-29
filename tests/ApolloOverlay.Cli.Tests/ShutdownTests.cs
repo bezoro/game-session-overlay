@@ -1,8 +1,8 @@
-using ApolloOverlay.Automation;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Text.Json;
+using ApolloOverlay.Automation;
 
 internal static class ShutdownTests
 {

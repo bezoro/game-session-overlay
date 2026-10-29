@@ -5,7 +5,28 @@ using System.Text.Json.Serialization;
 
 namespace GuideProbe;
 
-internal sealed record Entry(string Source, string Edge, double ElapsedMs, int? Device = null, int? Slot = null, string? Button = null, ulong? NativeRelUs = null, double? DurationNativeMs = null, double? DurationArrivalMs = null, string? Status = null, int? Hresult = null, long? Count = null, long Seq = 0, int? Family = null, uint? SupportedInput = null, uint? SupportedSystemButtons = null, uint? InputKind = null, int? LabelIndex = null, int? Label = null, uint? MappedInputKinds = null);
+internal sealed record Entry(
+    string Source,
+    string Edge,
+    double ElapsedMs,
+    int? Device = null,
+    int? Slot = null,
+    string? Button = null,
+    ulong? NativeRelUs = null,
+    double? DurationNativeMs = null,
+    double? DurationArrivalMs = null,
+    string? Status = null,
+    int? Hresult = null,
+    long? Count = null,
+    long Seq = 0,
+    int? Family = null,
+    uint? SupportedInput = null,
+    uint? SupportedSystemButtons = null,
+    uint? InputKind = null,
+    int? LabelIndex = null,
+    int? Label = null,
+    uint? MappedInputKinds = null
+);
 [JsonSerializable(typeof(Entry))]
 internal partial class LogJson : JsonSerializerContext;
 internal readonly record struct RawGuide(nint Device, ulong Timestamp, uint Current, uint Previous, double ArrivalMs, bool DeviceEvent = false);
@@ -604,7 +625,15 @@ internal sealed class CapabilitySamples
 // Active consumption yields after one capacity-sized batch; complete drains require quiesced callbacks.
 internal static class DeviceShutdown
 {
-    internal static void Consume(LimitedQueue<RawGuide> queue, Devices registry, Pairing pairing, CapabilitySamples samples, Writer writer, RawLabels? rawCheck = null, bool complete = false)
+    internal static void Consume(
+        LimitedQueue<RawGuide> queue,
+        Devices registry,
+        Pairing pairing,
+        CapabilitySamples samples,
+        Writer writer,
+        RawLabels? rawCheck = null,
+        bool complete = false
+    )
     {
         for (var consumed = 0; (complete || consumed < queue.Capacity) && queue.Pop(out var raw); consumed++)
         {
@@ -641,7 +670,15 @@ internal static class DeviceShutdown
         }
     }
 
-    internal static void Complete(LimitedQueue<RawGuide> queue, Devices registry, Pairing pairing, CapabilitySamples samples, Writer writer, double elapsed, RawLabels? rawCheck = null)
+    internal static void Complete(
+        LimitedQueue<RawGuide> queue,
+        Devices registry,
+        Pairing pairing,
+        CapabilitySamples samples,
+        Writer writer,
+        double elapsed,
+        RawLabels? rawCheck = null
+    )
     {
         if (queue.Dropped > 0 || writer.Limited)
         {
@@ -684,7 +721,8 @@ internal sealed class RawLabels
     internal bool Invalid;
     internal int PairedCycles
     {
-        get; private set;
+        get;
+        private set;
     }
 
     private int edges;

@@ -783,7 +783,16 @@ internal static class SelfTests
         }
 
         [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-        private static int RegisterDevice(nint self, nint filter, uint input, uint status, uint enumeration, nint ctx, delegate* unmanaged[Stdcall]<ulong, nint, nint, ulong, uint, uint, void> cb, ulong* token)
+        private static int RegisterDevice(
+            nint self,
+            nint filter,
+            uint input,
+            uint status,
+            uint enumeration,
+            nint ctx,
+            delegate* unmanaged[Stdcall]<ulong, nint, nint, ulong, uint, uint, void> cb,
+            ulong* token
+        )
         {
             context = ctx;
             deviceCallback = cb;

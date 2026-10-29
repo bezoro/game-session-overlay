@@ -1,6 +1,5 @@
 using System.IO;
 using System.Reflection;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Input;
@@ -166,7 +165,10 @@ internal static class AgentUpdateTests
             var reply = host.Send(Request("update-download", Next.BuildId));
             host.Finish();
             var state = host.Status();
-            Require(reply.Outcome == "Requested" && state is { Phase: "Ready", Progress: 100, Terminal: true, SettingsDirty: true } && state.TargetBuildId == Next.BuildId && state.TargetVersion == Next.Version, "Download did not preserve its exact ready state and dirty draft");
+            Require(reply.Outcome == "Requested"
+                && state is { Phase: "Ready", Progress: 100, Terminal: true, SettingsDirty: true }
+                && state.TargetBuildId == Next.BuildId
+                && state.TargetVersion == Next.Version, "Download did not preserve its exact ready state and dirty draft");
             Require(host.Source.Stages == 1 && w.Controller.Settings.UiScalePercent == 130 && w.Controller.SettingsDirty, "Download applied or discarded unsaved settings");
             var receipt = File.ReadAllBytes(host.Receipt);
             var apply = host.Send(Request("update-apply", Next.BuildId, state.JobId));
@@ -182,7 +184,9 @@ internal static class AgentUpdateTests
             WaitFor(() => host.Source.Checks == 1);
             Require(host.Send(Request("update-cancel", jobId: "foreign")).Outcome == "Conflict" && !host.Source.CheckToken.IsCancellationRequested, "Foreign job cancelled another operation");
             var before = File.ReadAllBytes(host.Receipt);
-            Require(host.Send(Request("update-cancel", jobId: request.RequestId, dryRun: true)).Outcome == "DryRun" && !host.Source.CheckToken.IsCancellationRequested && before.SequenceEqual(File.ReadAllBytes(host.Receipt)), "Dry-run cancelled the actual job");
+            Require(host.Send(Request("update-cancel", jobId: request.RequestId, dryRun: true)).Outcome == "DryRun"
+                && !host.Source.CheckToken.IsCancellationRequested
+                && before.SequenceEqual(File.ReadAllBytes(host.Receipt)), "Dry-run cancelled the actual job");
             Require(host.Send(Request("update-cancel", jobId: request.RequestId)).Outcome == "Cancelled" && host.Source.CheckToken.IsCancellationRequested, "Exact job was not cancelled");
             Require(host.Send(Request("update-check")).Outcome == "Busy", "New job raced the still-draining source");
             host.Source.CheckCompletion.SetResult([Next]);

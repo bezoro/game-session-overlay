@@ -1,79 +1,50 @@
 # Game Session Overlay
 
-Overlay nativa WPF/.NET 10 para Windows 11. Não requer administrador, SDK nem instalação no Windows quando executada pelo pacote self-contained.
+Uma overlay para controlar sua sessão de jogo pelo controle, mouse ou teclado, no PC ou em uma TV com streaming. Aplicativo nativo WPF/.NET 10 para Windows 11 x64; funciona com ou sem Apollo.
 
-Para instalar, configurar para a TV e resolver problemas comuns, consulte o [guia de uso](<Guia de uso.md>).
+## Instalar e abrir
 
-Instale pelo arquivo **GameSessionOverlay-testing-Setup.exe** ou pelo Setup do canal estável disponível em [Releases](https://github.com/bezoro/game-session-overlay/releases). O instalador e as atualizações usam **Velopack 1.2.161**. O aplicativo cria atalhos e um desinstalador do Windows. A execução inicial registra a inicialização oculta no logon, respeitando uma inicialização que o usuário já tenha desativado.
+Baixe o Setup do canal desejado em [Releases](https://github.com/bezoro/game-session-overlay/releases). A instalação inclui o runtime, os atalhos e o desinstalador. A overlay inicia oculta no logon; abrir ou fechar o painel usa uma transição breve.
 
-O topo mostra ícone/modelo do controle e carga medida quando o Windows os informa. XInput sem porcentagem usa faixas reais (baixa/média/cheia); dispositivos ambíguos não são associados a um modelo. Em streaming, a identificação pode corresponder ao controle virtual e a bateria do controle da TV pode não estar disponível.
+Abra pelo botão **Guide/Xbox**, dê **duplo clique no ícone da bandeja** ou escolha **Abrir overlay** no menu da bandeja. Guide usa uma API legada do XInput e continua experimental; a bandeja oferece uma alternativa independente do controle.
 
-A versão aparece no cabeçalho e em **Sistema → Versão e atualizações**. Consulte o canal de testes ou estável, leia as alterações, baixe o pacote e selecione **Instalar e reiniciar**. O repositório é público, sem login ou token. O histórico preserva pacotes fora do cache temporário do atualizador, permitindo voltar manualmente a uma versão instalada e recuperar seus ajustes compatíveis. Consulte [atualizações](docs/updates.md).
+O aplicativo não exige administrador para o uso normal. O [guia de uso](<Guia de uso.md>) explica inicialização elevada opcional, escolha de monitor e configuração para a TV.
 
-O instalador também inclui `gso.cmd`, uma CLI com respostas JSON para agentes e terminais. `version` consulta a instância em execução; `update` baixa e solicita a atualização; `history` e `rollback BUILD_ID` permitem retornar a uma versão preservada. Após um pedido de reinício, uma nova consulta confirma a versão que iniciou. Veja os comandos e o fluxo completo em [CLI](docs/cli.md).
+## Durante o jogo
 
-Depois, dê **duplo clique esquerdo no ícone da bandeja** ou use seu menu **Abrir overlay / Sair**. `ApolloOverlay.exe` inicia oculto; `--show` abre uma instância nova. Se já houver uma instância em execução, a mensagem orienta usar a bandeja.
+- Retome a janela da sessão, alterne aplicativos e abra Playnite ou Steam Big Picture.
+- Ajuste volume por aplicativo, mixer, microfone e saída de áudio do Windows.
+- Aplique perfis TV/Computador ou crie perfis com monitor, escala, posição e áudio.
+- Controle mídia compatível, escreva com o teclado virtual e salve capturas locais.
+- Veja modelo e bateria do controle quando informados pelo Windows. Metadados ambíguos e cargas desconhecidas permanecem explícitos.
+- Navegue com foco visível, resposta ao pressionar, contorno com respiração e reflexo sutil. Sons e vibração são configuráveis.
 
-Para iniciar com privilégios elevados, abra o PowerShell **como administrador**, confirme o UAC e execute `./startup-task.ps1 -Action Install` na pasta permanente da instalação. O script registra uma tarefa de logon para o usuário da sessão administrativa, com privilégios máximos e sem armazenar senha, e remove a entrada comum de inicialização para evitar duplicidade. Em uma conta diferente da conta administrativa, instale usando uma sessão administrativa da própria conta destinada ao uso. Para remover a tarefa e desativar a inicialização automática, execute `./startup-task.ps1 -Action Uninstall` também como administrador. A tarefa inicia no próximo logon; confira no Agendador de Tarefas e teste a sessão real.
+| Entrada | Navegar | Selecionar | Voltar | Abas |
+| --- | --- | --- | --- | --- |
+| Controle XInput | Direcional / analógico | A | B | LB / RB |
+| Teclado | Setas / Tab | Enter / Espaço | Esc | PageUp / PageDown |
+| Mouse | Ponteiro e rolagem | Clique | Botão Voltar | Clique |
 
-- Controle: Guide configurado abre na soltura de um toque curto e fecha com proteção de soltura; a bandeja permanece disponível. Direcional/analógico navega, A seleciona, B retorna, X abre opções da janela em Sessão e Aplicativos, LB/RB trocam abas. Se direção e A chegarem juntos, o painel apenas move a seleção; pressione A novamente para confirmar. Ctrl+Alt+Espaço e LB+RB+Start não ativam mais a overlay.
-- Teclado: setas, Tab/Shift+Tab, Enter/Espaço, Esc, X e PageUp/PageDown. Os leitores de detalhes e o slider mantêm uma saída por Tab/Shift+Tab para retornar às ações.
-- Mouse: botões, abas, rolagem e ajustes recebem cliques diretamente. Se a janela estiver ativa, mas ainda sem foco confirmado, o primeiro clique ou tecla de navegação solicita a recuperação e é consumido; solte antes de escolher uma ação.
-- Fechar janela: solte e mantenha uma nova pressão de A/Enter por 1,5 s. Soltar, B, desconectar ou perder foco cancela. Steam, Playnite, Explorer e janelas técnicas são protegidos. Não há encerramento forçado.
-- Áudio: a aba Sessão oferece volume do aplicativo selecionado, saída do Windows e microfone padrão de comunicação. O mixer separa os aplicativos identificados. A aba Áudio permite escolher a saída para jogos e mídia; isso não controla o volume físico da TV. Sessões parciais e estados não confirmados continuam explícitos.
-- Ambiente: perfis TV e Computador ajustam monitor, escala e posição do painel. Perfis personalizados podem incluir uma saída, volume e associação a um jogo. A aplicação é explícita; desfazer preserva valores alterados depois.
-- Mídia: reproduzir/pausar, anterior e próxima pelos controles de mídia do Windows, quando oferecidos pelo aplicativo.
-- Teclado: escreva com o controle ou pelo campo de texto, confira a janela de destino e escolha Inserir. O comando não pressiona Enter.
-- Capturas: salva uma imagem do monitor após ocultar o painel. A galeria e a pasta ficam disponíveis na própria overlay; não há gravação contínua. Capturas locais da sessão podem ilustrar seu cartão.
-- Playnite: descoberta local ou escolha de unidade e pasta em Sistema usando o controle. A seleção de arquivo do Windows continua disponível. Steam: protocolo público Big Picture. Atalhos de Game Bar/Steam/Visão de tarefas são solicitações; visibilidade e controle externo não são presumidos.
+X abre as opções da janela pelo controle ou teclado. O fechamento de uma janela exige uma nova pressão mantida por 1,5 segundo; não há encerramento forçado.
 
-Antes de ocultar, alternar aplicativo, enviar um atalho ou encerrar pela interface, a overlay aguarda todos os controles e teclas soltos por 100 ms contínuos. Input novo reinicia essa espera. B/Esc cancela ações pendentes; quando já significam dispensar o painel, B/Esc/Guide reafirmam a saída. Se foco, leitura do controle ou identidade do destino ficar incerta, a restauração e os efeitos externos daquele pedido são descartados permanentemente. A saída local continua aguardando qualquer tecla, botão, stick ou gatilho ainda observado ativo e 100 ms após a liberação. Se uma entrada antes ativa deixar de ser legível, pressione novamente Escape e solte para autorizar apenas a ocultação local, aguardando também as demais entradas legíveis; repetir a pressão original não autoriza essa saída. Leitura desconhecida não comprova soltura nem consumo do gesto. No caminho normal, a espera evita ceder foco ainda com o gesto pressionado; não bloqueia XInput em aplicativos que leem o controle em segundo plano. **O cartão da sessão** retoma a janela preservada, não o launcher à frente. **Visão de tarefas** solicita Win+Tab mesmo sem jogo. O acesso rápido Steam solicita o menu por F1 quando o contexto anterior é Big Picture verificado; em jogo com módulo Steam confirmado, solicita o overlay Steam. Esses envios não confirmam que o menu foi aberto.
+**Foco não bloqueia globalmente o controle em outros aplicativos.** Jogos que leem XInput em segundo plano podem continuar recebendo entrada. Em streaming, o dispositivo visível pode ser virtual e não informar a bateria do controle da TV. Consulte [compatibilidade](docs/controller-isolation.md) e o [roteiro de teste real](docs/pilot-checklist.md).
 
-A interface acompanha claro/escuro e alto contraste do Windows, com seleção azul e verde reservado para resultados confirmados. A seleção usa respiração de contorno e reflexo de luz sutil; botões recebem compressão e destaque ao pressionar. Os efeitos param ao ocultar ou perder foco. Sem capas inventadas, captura contínua, injeção em jogos, driver ou telemetria.
+## Atualizações e automação
 
-**Guide/Xbox é experimental e vem ligado para novas configurações.** A leitura usa uma API legada não documentada do XInput. Uma configuração existente com `GuideXInputEnabled:false` continua desativada e pode ser ligada em Sistema. Oculta, a overlay abre apenas ao soltar um toque válido após uma soltura basal; o limite padrão é 2,0 s. Segurar além do limite, desconectar ou falhar a leitura não abre. Sistema oferece slider de 0,5–3,0 s, passo 0,1 s; esquerda/direita ajusta, A em **Salvar ajustes** persiste. O limite é capturado no início de cada pressão. Com o painel ativo, Guide dispensa com a mesma proteção de soltura de B/Esc. Se o painel estiver visível sem foco confirmado, Guide solicita uma nova tentativa de ativação; B/Esc continua permitindo a dispensa. A leitura já foi observada em Playnite; as mudanças de soltura/foco/tray desta versão ainda requerem validação física. A overlay não bloqueia Guide em outros programas: os atalhos Guide da Steam e as opções de controle da Game Bar precisam permanecer desativados para evitar ações concorrentes; Win+G e Win+Tab continuam disponíveis. Foco confirmado não isola XInput de jogos que leem o controle em segundo plano.
+A versão fica no cabeçalho. Em **Sistema → Versão e atualizações**, escolha canal, consulte mudanças, instale e reinicie ou volte a uma versão preservada. Instalador e atualizações usam Velopack; não exigem login no GitHub.
 
-Cada abertura tenta a ativação normal e só habilita navegação/ações após observar a própria janela à frente e ativa. Se a ativação for recusada, uma thread auxiliar tenta recuperá-la sem anexar a fila WPF à de outro aplicativo; a espera da interface é limitada a 200 ms, com no máximo uma tentativa auxiliar em andamento. Recusa ou perda de foco deixa B/Esc disponíveis para dispensa segura; um novo pedido de Guide/bandeja tenta novamente. A confirmação de foco é limitada, sem insistência contínua. Diálogo do Playnite retorna por novo ciclo confirmado preservando página, seleção e sessão. A abertura e a dispensa usam um fade breve na janela inteira, com respeito às animações e ao alto contraste do Windows. Transições que exigem foco imediato, como o atalho Steam, ocultam sem esperar o fade.
+A instalação inclui `gso.cmd`, uma CLI JSON para terminais e agentes. Consulte [comandos, atualização e retorno](docs/cli.md), [funcionamento do atualizador](docs/updates.md) e [comportamento detalhado](docs/runtime-behavior.md).
 
-Na espera por foco para Game Bar, menu do Big Picture ou abertura da Steam, cancelar impede as etapas ainda não enviadas. O pedido de foco já enviado não pode ser desfeito. Antes do envio de teclas, a overlay verifica novamente o destino, a solicitação e a soltura das entradas. Uma conexão observada anteriormente continua sendo considerada mesmo se a amostra tiver envelhecido; desconectar não comprova que os botões foram soltos.
+## Contribuir
 
-Ajustes são explicitamente salvos em `%LOCALAPPDATA%\Bezoro\GameSessionOverlay\settings.json`; configuração anterior e fonte corrompida são preservadas. Sistema permite mudar limite Guide, deadzone, monitor, atalho Steam e caminhos. JSON versão 3 aceita versões 1/2 e migra em memória, sem reescrever automaticamente; campos antigos de ativação são mantidos por compatibilidade, mas não ativam nada. `GuideOpenMaxHoldMs` ausente/inválido usa 2000 sem descartar os demais ajustes válidos. Logs locais rotativos limitam-se a três arquivos de aproximadamente 512 KiB, sem títulos/caminhos privados; checkpoints de foco registram resultado nativo e confirmação observada, sem log por frame.
-
-`--preview` é diagnóstico com ações de janelas simuladas e contexto vazio; não representa um jogo. A operação normal usa contexto e ações reais. `--capture-native DIRETÓRIO`, `--capture-alpha DIRETÓRIO` e `--native-check DIRETÓRIO` são verificações limitadas a janelas próprias; a última inclui teste reversível de áudio.
-
-A overlay também funciona com controles XInput conectados diretamente ao PC, sem Apollo. O controle continua compartilhado com outros aplicativos: a overlay não confirma isolamento de entrada. A investigação das opções e dos testes necessários está em [Isolamento do controle](docs/controller-isolation.md).
-
-## Painel da sessão
-
-O cartão é a ação principal: clique, A ou Enter retoma aquela janela. O botão `···`, X ou a navegação para a direita abre suas opções. Ali ficam áudio do aplicativo, minimizar, escolher outra janela, detalhes e fechamento protegido. Os botões são independentes, inclusive para Tab e mouse. Em **Detalhes**, o leitor oferece o título completo e as informações técnicas; A/Enter entra na leitura, setas rolam e esquerda/direita retorna às ações.
-
-Na confirmação de fechamento, o analógico direito rola o título completo; no teclado, use Page Up / Page Down. Os ícones dos aplicativos são carregados em segundo plano e podem aparecer após o restante da lista.
-
-**Minimizar** e alterar o áudio mantêm o painel aberto. Solicitação aceita não é confirmação: a interface informa resultado parcial, recusa ou estado desconhecido e mantém a mensagem em **Ler**. B/Esc antes do envio cancela sem efeito; depois do envio interrompe somente a observação, pois não pode desfazer uma alteração já enviada. Não há repetição automática. O áudio considera apenas sessões do processo exato, incluindo saídas/inativas identificadas; não inclui processos filhos, sessões futuras ou áudio global como alternativa. Uma chamada nativa já em andamento pode ultrapassar o prazo de observação; o resultado fica incerto e não autoriza novas escritas.
-
-**Recentes** guarda no máximo cinco identidades verificadas somente nesta execução. **Janela anterior** permite voltar à última janela observada diferente da abertura atual; só uma troca confirmada à frente atualiza esse histórico. Apenas enumerar, escolher uma referência, iniciar uma biblioteca ou minimizar não promove uma janela. O seletor também permite limpar a referência e recuperar um cartão vazio.
-
-Em **Sistema → Personalizar acesso rápido**, mostre/oculte e reordene as seis ações originais. A ordem não muda quando uma integração fica indisponível; todas podem ser restauradas, inclusive após ocultar tudo. O monitor pode ser escolhido em Sistema; no modo automático, a overlay usa o monitor da janela ativa e, quando a bandeja estiver à frente, procura a janela da sessão preservada. Lado esquerdo/direito e escala 100/115/130/150% também são ajustes explícitos. A escala efetiva é a densidade automática existente (1,0–1,5) multiplicada pela escolha do usuário; o tamanho da letra escolhido não é reduzido para caber. Limites usam a área útil do monitor, conversão DIP/DPI e rolagem. Em altura compacta, Salvar/Descartar permanecem fixos e o resultado retido participa da rolagem, com ações de leitura e dispensa acessíveis.
-
-O controle ativo usa o slot e a época de conexão observados. Bateria é uma categoria (esgotada/baixa/média/cheia), **Com fio** ou **Bateria não informada**, nunca porcentagem. A consulta ocorre ao mostrar/trocar o controle e, no máximo, a cada cinco segundos em primeiro plano; não há consulta de bateria oculta.
-
-Sons e vibração são opt-ins independentes, ambos desligados por padrão. Ative e use **Testar retorno** se desejar; navegação, confirmação e indisponibilidade deliberadas recebem sinais breves, sem som por hover, atualização ou progresso. Vibração exige o controle ativo e foco confirmado; ocultar, desconectar, desativar ou encerrar invalida os pulsos. XInput não oferece isolamento absoluto contra vibração escrita depois por outro aplicativo. Uma chamada aceita não prova que o usuário percebeu o sinal. A prévia usa serviços simulados e não envia áudio ou vibração.
-
-O guia opcional tem três passos e pode ser pulado, encerrado ou reaberto. O guia não altera Guide, sons ou vibração nem salva automaticamente. **Salvar/Descartar** continuam explícitos; alterações atravessam a navegação. Campos novos: `FavoriteQuickActions` (ausente/null=ordem padrão; `[]`=tudo oculto), `UiScalePercent`, `PanelSide`, `SoundFeedbackEnabled`, `HapticFeedbackEnabled` e `SetupSeen`. Listas são copiadas e comparadas pelo conteúdo/ordem; campos opcionais malformados recuperam somente seu próprio padrão.
-
-## Compilar e testar
-
-Com .NET SDK 10 instalado:
+Comece por [CONTRIBUTING.md](CONTRIBUTING.md) e pelo [mapa da arquitetura](docs/architecture.md). O SDK está fixado em [global.json](global.json).
 
 ```powershell
 dotnet build ApolloOverlay.sln -c Release
-dotnet tests/ApolloOverlay.Tests/bin/Release/net10.0-windows10.0.19041.0/ApolloOverlay.Tests.dll artifacts/behavior-report.json
-dotnet publish src/ApolloOverlay/ApolloOverlay.csproj -c Release -r win-x64 --self-contained true -o artifacts/minha-publicacao-nova/publish
+./scripts/format.ps1 -Verify
+dotnet run --project src/ApolloOverlay -- --preview
 ```
 
-`./scripts/verify.ps1 -OutputVersion native-vN` automatiza os checks e publica em diretório novo. O produtor e seus arquivos são revisados antes da cópia para entrega; não sobrescreva uma publicação revisada.
+A solução inclui aplicativo, CLI, testes e ferramentas de diagnóstico. O CI compila com nullable e warnings como erros, verifica formatação, executa testes, gera capturas WPF e valida pacote, instalação, atualização e retorno com Velopack. Fixtures não substituem testes com controle, jogo e TV reais.
 
-O workflow [Windows checks](https://github.com/bezoro/game-session-overlay/actions/workflows/windows-checks.yml) compila em Windows, executa testes da CLI e de comportamento, gera capturas WPF com dados de teste e monta o pacote self-contained. Os relatórios e as capturas ficam nos artefatos da execução, mesmo se uma suíte falhar. O pacote de uma execução com falhas é somente um artefato de diagnóstico. Testes que precisam de foco real podem falhar em runners sem desktop interativo; essas falhas não são convertidas em aprovação. Consulte o resultado da execução correspondente ao commit antes de usar o pacote.
-
-Compatibilidade com borderless depende do Windows. Fullscreen exclusivo, DX11/12/Vulkan específicos, Bluetooth/controle virtual, HDR, DPI misto, monitores virtuais, Game Bar/Steam Overlay e streaming Apollo/Aurora exigem os testes listados em `docs/pilot-checklist.md`. Ausência de hardware não equivale a aprovação física.
-
+Fontes, licenças e proveniência dos vetores: [ícones](docs/third-party-icons.md). Dependências de atualização: [Velopack](docs/third-party-updates.md).
