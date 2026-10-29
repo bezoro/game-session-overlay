@@ -49,6 +49,12 @@ static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        if (args is [IsolatedWindowActivation.HostArgument, var activation])
+            return IsolatedWindowActivation.RunHost(activation);
+        if (args is [IsolatedActivationTests.HangArgument, var ready, var identity])
+            return IsolatedActivationTests.Hang(ready, identity);
+        if (args is [IsolatedActivationTests.ParentExitArgument, var parentReady, var parentIdentity])
+            return IsolatedActivationTests.ExitParent(parentReady, parentIdentity);
         if (args.Length is not (1 or 2))
         {
             Console.Error.WriteLine("Expected report path");
@@ -71,6 +77,18 @@ static class Program
         if (args.Length == 2 && args[1] == "--window-activation")
         {
             WindowActivationTests.Run(Case);
+            return Finish(args[0]);
+        }
+
+        if (args.Length == 2 && args[1] == "--isolated-activation")
+        {
+            IsolatedActivationTests.Run(Case);
+            return Finish(args[0]);
+        }
+
+        if (args.Length == 2 && args[1] == "--administrator-compatibility")
+        {
+            AdministratorCompatibilityTests.Run(Case);
             return Finish(args[0]);
         }
 
@@ -875,6 +893,8 @@ static class Program
         AdaptiveInterfaceTests.Run(Case);
         SettingsFocusTests.Run(Case);
         WindowActivationTests.Run(Case);
+        IsolatedActivationTests.Run(Case);
+        AdministratorCompatibilityTests.Run(Case);
         MouseKeyboardTests.Run(Case);
         AgentUpdateTests.Run(Case);
         MotionAndControllerTests.Run(Case);

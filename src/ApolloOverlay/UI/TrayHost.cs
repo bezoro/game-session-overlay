@@ -17,7 +17,7 @@ internal sealed class TrayHost : IDisposable
         get;
     }
 
-    internal TrayHost(Dispatcher dispatcher, Action open, Action exit, bool visible = true)
+    internal TrayHost(Dispatcher dispatcher, Action open, Action exit, bool visible = true, Action? restartAdministrator = null)
     {
         this.dispatcher = dispatcher;
         this.open = open;
@@ -26,6 +26,8 @@ internal sealed class TrayHost : IDisposable
         artwork = new Drawing.Icon(resource);
         Menu = new Forms.ContextMenuStrip();
         Menu.Items.Add("Open overlay", null, (_, _) => Dispatch(open));
+        if (restartAdministrator is not null)
+            Menu.Items.Add("Restart as administrator…", null, (_, _) => Dispatch(restartAdministrator));
         Menu.Items.Add("Quit", null, (_, _) => Dispatch(exit));
         icon = new Forms.NotifyIcon
         {

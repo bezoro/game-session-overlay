@@ -24,10 +24,11 @@ public partial class MainWindow : Window
     )
     {
         diagnostic = renderOnly;
-        FocusFallbackRequest = renderOnly ? null : WindowActivation.RequestFallbackAsync;
         updateSource = updates ?? (renderOnly || platform?.IsPreview == true ? new PreviewUpdateSource() : new GitHubUpdateSource());
         InitializeComponent();
         Controller = new(platform ?? (renderOnly ? new PreviewPlatform() : null), diagnostics);
+        var activation = new IsolatedWindowActivation(trace: Controller.Diagnostics.Log);
+        FocusFallbackRequest = renderOnly ? null : (window, foreground, token) => activation.RequestAsync(window, foreground, token);
         appliedSettings = Controller.Settings;
         input = new(Controller.Settings);
         if (!diagnostic && !Controller.Platform.IsPreview)

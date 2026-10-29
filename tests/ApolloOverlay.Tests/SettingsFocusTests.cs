@@ -64,7 +64,7 @@ internal static class SettingsFocusTests
                 var before = w.SelectedAction;
                 Neutral(w);
                 Frame(w, PadButtons.Down);
-                Require(calls == 1 && Native.GetForegroundWindow() == host.OtherHandle && w.SelectedAction == before, "Fallback return fabricated input ownership");
+                Require(calls == 1 && !w.IsVisible && Native.GetForegroundWindow() == host.OtherHandle && w.SelectedAction == before, "Fallback return fabricated a visible, usable panel without input ownership");
             });
         }
         test("Guide fallback cancellation prevents a late result from confirming a newer cycle", () =>
@@ -98,7 +98,83 @@ internal static class SettingsFocusTests
             var before = w.SelectedAction;
             Neutral(w);
             Frame(w, PadButtons.Down);
-            Require(w.SelectedAction == before && w.Feedback.Contains("did not confirm"), "Late fallback overwrote denied focus");
+            Require(!w.IsVisible && w.SelectedAction == before && w.Feedback.Contains("did not confirm"), "Late fallback overwrote denied focus or revealed the failed panel");
+        });
+        test("pending foreground acquisition remains visually hidden and cannot dispatch actions", () =>
+        {
+            using var host = new Host();
+            var w = host.Window;
+            host.BeginPendingConfirmation();
+            var selected = w.SelectedAction;
+            // Observe beyond the normal opening fade. A provisional HWND must not
+            // become a visible panel merely because the animation has elapsed.
+            Pump(200);
+            Require(w.IsVisible && w.Opacity == 0 && !w.OpeningTask.IsCompleted, "Pending native activation revealed the panel before confirmation");
+            Neutral(w);
+            Frame(w, PadButtons.Down);
+            Frame(w, PadButtons.A);
+            Require(w.SelectedAction == selected && !w.TransitionPending
+                && ((PremiumInterfaceTests.FixturePlatform)w.Controller.Platform).Calls == 0
+                && Native.GetForegroundWindow() == host.OtherHandle, "Pending activation admitted navigation or an external action");
+        });
+        foreach (var lateResult in new[] { false, true })
+            test("stale activation completion preserves the newer confirmed panel " + lateResult, () =>
+            {
+                using var host = new Host();
+                var w = host.Window;
+                host.FocusOther();
+                var delayed = new TaskCompletionSource<bool>();
+                CancellationToken token = default;
+                w.FocusRequest = _ =>
+                {
+                    host.Other.Activate();
+                    Native.SetForegroundWindow(host.OtherHandle);
+                    return false;
+                };
+                w.FocusFallbackRequest = (_, _, cancellation) => { token = cancellation; return delayed.Task; };
+                w.OpenPanel();
+                var old = w.OpeningTask;
+                Require(!old.IsCompleted && w.Opacity == 0, "PRECONDITION: first activation was not held provisionally");
+                w.FocusRequest = Native.SetForegroundWindow;
+                w.FocusFallbackRequest = null;
+                w.OpenPanel();
+                Complete(w.OpeningTask);
+                Pump(180);
+                host.RequireOwnedFocus();
+                Require(token.IsCancellationRequested && w.Opacity == 1, "The new confirmed panel did not replace its pending predecessor");
+                Neutral(w);
+                Frame(w, PadButtons.Down);
+                var selected = w.SelectedAction;
+                var feedback = w.Feedback;
+                delayed.SetResult(lateResult);
+                Complete(old);
+                Require(w.IsVisible && w.Opacity == 1 && w.SelectedAction == selected && w.Feedback == feedback, "Stale activation completion changed or hid the confirmed panel");
+                host.RequireOwnedFocus();
+            });
+        test("a failed foreground acquisition can recover on the next explicit opening", () =>
+        {
+            using var host = new Host();
+            var w = host.Window;
+            host.FocusOther();
+            w.FocusRequest = _ =>
+            {
+                host.Other.Activate();
+                Native.SetForegroundWindow(host.OtherHandle);
+                return false;
+            };
+            w.OpenPanel();
+            Complete(w.OpeningTask);
+            Require(!w.IsVisible && Native.GetForegroundWindow() == host.OtherHandle, "Refused focus left a blocked panel visible");
+            w.FocusRequest = Native.SetForegroundWindow;
+            w.OpenPanel();
+            Complete(w.OpeningTask);
+            Pump(180);
+            host.RequireOwnedFocus();
+            Require(w.Opacity == 1, "The recovered panel stayed transparent");
+            Neutral(w);
+            var selected = w.SelectedAction;
+            Frame(w, PadButtons.Down);
+            Require(w.SelectedAction != selected, "A previous refusal poisoned subsequent foreground navigation");
         });
         test("settings focus accepts delayed foreground after one false native request", () =>
         {
@@ -141,27 +217,28 @@ internal static class SettingsFocusTests
             };
             w.OpenPanel();
             Complete(w.OpeningTask);
-            Require(Native.GetForegroundWindow() == host.OtherHandle && w.IsVisible, "PRECONDITION: other owned window is not the real foreground");
+            Require(Native.GetForegroundWindow() == host.OtherHandle && !w.IsVisible, "Refused activation did not leave the other owned window in foreground and hide the panel");
             var selected = w.SelectedAction;
             Neutral(w);
             Frame(w, PadButtons.Down);
             Frame(w, PadButtons.A);
             Require(requests == 1 && w.SelectedAction == selected && !w.TransitionPending, "Another foreground was admitted for controller actions");
         });
-        test("Guide hides an unconfirmed panel without issuing another focus request", () =>
+        test("Guide cancels a pending unpresented panel without issuing another focus request", () =>
         {
             using var host = new Host();
             var w = host.Window;
             host.Open();
-            host.DenyConfirmation();
+            host.BeginPendingConfirmation();
             var requests = 0;
             w.FocusRequest = _ => { requests++; return false; };
             w.RequestGuideToggle();
             Frame(w, PadButtons.None);
-            Require(w.IsVisible && w.TransitionPending && requests == 0, "Guide retried activation rather than queuing dismissal");
+            Require(w.IsVisible && w.Opacity == 0 && w.TransitionPending && requests == 0, "Guide retried or revealed activation rather than queuing dismissal");
             w.AdvanceHandoff(new(NeutralFrames(), 0, GuideValid: true), 0);
             w.AdvanceHandoff(new(NeutralFrames(), 100, GuideValid: true), 100);
             Complete(w.OperationTask);
+            Complete(w.OpeningTask);
             Require(!w.IsVisible && !w.TransitionPending && requests == 0, "Guide trapped an unfocused visible overlay");
         });
         test("Guide dismissal cancels pending focus acquisition and ignores a late broker result", () =>
@@ -191,7 +268,7 @@ internal static class SettingsFocusTests
             Complete(opening);
             Require(!w.IsVisible && !w.TransitionPending, "A late activation result reopened the dismissed panel");
         });
-        test("settings focus B and Escape can dismiss a visible unconfirmed panel", () =>
+        test("settings focus B and Escape can cancel an unpresented pending panel", () =>
         {
             foreach (var keyboard in new[]
             {
@@ -204,10 +281,9 @@ internal static class SettingsFocusTests
                 using var host = new Host();
                 var w = host.Window;
                 host.Open();
-                host.DenyConfirmation();
+                host.BeginPendingConfirmation();
                 if (keyboard)
                 {
-                    w.FocusForeground = Native.GetForegroundWindow;
                     SendKey(w, Key.Escape, true);
                     SendKey(w, Key.Escape, false);
                 }
@@ -217,13 +293,56 @@ internal static class SettingsFocusTests
                     Frame(w, PadButtons.B);
                 }
 
-                Require(w.TransitionPending, "Dismissal did not remain available without confirmed focus");
+                Require(w.TransitionPending && w.Opacity == 0, "Dismissal revealed the pending panel or required confirmed focus");
                 w.AdvanceHandoff(new(NeutralFrames(), 0, GuideValid: true), 0);
                 w.AdvanceHandoff(new(NeutralFrames(), 100, GuideValid: true), 100);
                 Complete(w.OperationTask);
+                Complete(w.OpeningTask);
                 Require(!w.IsVisible && !w.TransitionPending, "Unconfirmed panel trapped the user instead of dismissing");
             }
         });
+        foreach (var confirmed in new[] { false, true })
+            test("owned dialog " + (confirmed ? "restarts media observation after verified focus" : "keeps media suspended when focus is refused"), () =>
+            {
+                var reads = 0;
+                using var media = new SessionMedia(_ =>
+                {
+                    reads++;
+                    return Task.FromResult(new SessionMediaSnapshot(reads,
+                        [new("source", "Media observation " + reads, "", "Fixture media", false, true, false, false)], "source", "Fixture observation"));
+                });
+                using var host = new Host(media);
+                var w = host.Window;
+                host.Open();
+                Require(reads == 1 && media.Current.Items.Single().Title == "Media observation 1", "PRECONDITION: initial confirmed opening did not observe media");
+                w.Page(2);
+                var dialog = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+                w.PlayniteDialogFixture = () => dialog.Task;
+                ReviewFixTests.Button(w, "configure-playnite").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                Require(!w.DialogTask.IsCompleted && media.Current.Items.Count == 0 && reads == 1, "The owned dialog retained active media observation");
+                // Even an explicit refresh cannot observe playback while ownership
+                // belongs to the dialog; reopening must request a fresh generation.
+                Complete(media.RefreshAsync());
+                Require(reads == 1, "The suspended media service accepted a refresh during the dialog");
+                if (!confirmed)
+                    w.FocusRequest = _ =>
+                    {
+                        host.Other.Show();
+                        host.Other.Activate();
+                        Native.SetForegroundWindow(host.OtherHandle);
+                        return false;
+                    };
+                dialog.SetResult(null);
+                Complete(w.DialogTask);
+                if (confirmed)
+                {
+                    host.RequireOwnedFocus();
+                    Require(reads == 2 && media.Current.Items.Single().Title == "Media observation 2", "Verified dialog return did not resume a fresh media observation");
+                }
+                else
+                    Require(!w.IsVisible && reads == 1 && media.Current.Items.Count == 0
+                        && Native.GetForegroundWindow() == host.OtherHandle, "Refused dialog return restarted hidden media observation");
+            });
         foreach (var haptics in new[]
         {
             false,
@@ -398,7 +517,7 @@ internal static class SettingsFocusTests
         internal nint Handle => new WindowInteropHelper(Window).Handle;
         internal nint OtherHandle => new WindowInteropHelper(Other).EnsureHandle();
 
-        internal Host()
+        internal Host(ISessionMedia? media = null)
         {
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
             var app = Application.Current ?? new Application
@@ -407,7 +526,7 @@ internal static class SettingsFocusTests
             };
             if (app.TryFindResource(ThemeSupport.Card) is null)
                 ThemeSupport.ForceForValidation(app, false);
-            Window = new MainWindow(renderOnly: true, platform: new PremiumInterfaceTests.FixturePlatform(preview: false), diagnostics: new LocalDiagnostics(Root));
+            Window = new MainWindow(renderOnly: true, platform: new PremiumInterfaceTests.FixturePlatform(preview: false), diagnostics: new LocalDiagnostics(Root), media: media);
             Window.PhysicalKeyReader = _ => 0;
             Window.DpiReader = _ => 96;
             Window.Controller.CaptureReturn();
@@ -432,13 +551,22 @@ internal static class SettingsFocusTests
             Require(Native.GetForegroundWindow() == OtherHandle, "PRECONDITION: owned competing window is not foreground");
         }
 
-        internal void DenyConfirmation()
+        internal void BeginPendingConfirmation()
         {
-            Window.FocusForeground = () => OtherHandle;
-            Window.FocusRequest = _ => false;
+            FocusOther();
+            Window.FocusRequest = _ =>
+            {
+                Other.Activate();
+                Native.SetForegroundWindow(OtherHandle);
+                return false;
+            };
+            Window.FocusFallbackRequest = async (_, _, cancellation) =>
+            {
+                await Task.Delay(Timeout.Infinite, cancellation);
+                return false;
+            };
             Window.OpenPanel();
-            Complete(Window.OpeningTask);
-            Require(Window.IsVisible && Window.Feedback.Contains("did not confirm"), "PRECONDITION: focus refusal was not established");
+            Require(Window.IsVisible && Window.Opacity == 0 && !Window.OpeningTask.IsCompleted, "PRECONDITION: cancellable provisional acquisition was not established");
         }
 
         internal void RequireOwnedFocus() => Require(Window.IsVisible && Window.IsActive && Native.GetForegroundWindow() == Handle, "PRECONDITION: real owned overlay foreground not established");

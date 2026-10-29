@@ -347,7 +347,7 @@ internal static class SessionInterfaceTests
     {
         foreach (var light in new[] { false, true })
             foreach (var width in new[] { 572, 360 })
-                foreach (var state in new[] { "controller", "mouse", "success", "warning", "focus", "unknown-controller", "wired-controller", "unavailable-action", "selected-audio", "breathing" })
+                foreach (var state in new[] { "controller", "mouse", "success", "warning", "unknown-controller", "wired-controller", "unavailable-action", "selected-audio", "breathing" })
                 {
                     ThemeSupport.ForceForValidation(app, light);
                     using var host = new Host(gameTitle: "Elden Ring", identities: state switch
@@ -373,22 +373,13 @@ internal static class SessionInterfaceTests
                         window.ObservePointerPosition(new(100, 100));
                         window.ObservePointerPosition(new(120, 100));
                     }
-                    else if (state == "focus")
-                    {
-                        // Simulate refused ownership while retaining a real, attached WPF
-                        // window for visual review; this does not certify native activation.
-                        window.FocusForeground = () => -1;
-                        window.FocusRequest = _ => false;
-                        window.OpenPanel();
-                        Complete(window.OpeningTask);
-                    }
                     else if (state is "success" or "warning")
                     {
                         window.Controller.SetOperation(state == "success" ? "Completed" : "Unconfirmed", state == "success" ? "Settings saved." : "The window changed. Select it again before trying another command.", summary: state == "warning" ? "Select window again." : null);
                         window.RefreshRows();
                     }
                     window.RefreshOperationNotice(Environment.TickCount64 + 200);
-                    var bitmap = RenderCapture(window, width, height, state == "focus" ? "controller-unfocused" : state == "mouse" ? "mouse" : "controller");
+                    var bitmap = RenderCapture(window, width, height, state == "mouse" ? "mouse" : "controller");
                     var png = new PngBitmapEncoder();
                     png.Frames.Add(BitmapFrame.Create(bitmap));
                     using var file = File.Create(Path.Combine(output, $"{(light ? "light" : "dark")}-{width}-notice-{state}.png"));
@@ -433,7 +424,6 @@ internal static class SessionInterfaceTests
         var expectedPrompt = expectedInput switch
         {
             "controller" => "LB/RB",
-            "controller-unfocused" => "Guide / B",
             "mouse" => "Left click",
             _ => "Enter"
         };

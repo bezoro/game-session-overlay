@@ -13,5 +13,6 @@ public partial class MainWindow
                 token.ThrowIfCancellationRequested();
                 return StartupRegistration.SetEnabled(!state.Enabled);
             }, token), RefreshRows), state.Available);
+        AddAdministratorMode(state);
     }
 }

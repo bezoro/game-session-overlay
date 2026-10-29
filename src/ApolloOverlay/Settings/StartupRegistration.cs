@@ -1,6 +1,7 @@
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security;
+using ApolloOverlay.Automation;
 using Microsoft.Win32;
 
 namespace ApolloOverlay;
@@ -116,9 +117,12 @@ internal static class StartupRegistration
                 return new(ResultKind.Unavailable, "The existing startup task could not be changed. Its registration was preserved.");
             using var settings = Registry.CurrentUser.CreateSubKey(SettingsKey, writable: true);
             using var run = Registry.CurrentUser.CreateSubKey(RunKey, writable: true);
-            if (enabled && !task.Exists)
+            if (enabled)
             {
-                run.SetValue(RunValue, Command(executable), RegistryValueKind.String);
+                if (!task.Exists)
+                    run.SetValue(RunValue, Command(executable), RegistryValueKind.String);
+                else if (run.GetValue(RunValue) is string duplicate && MatchesHiddenCommand(duplicate, executable))
+                    run.DeleteValue(RunValue, false);
                 // Only a deliberate enable action clears this application's Windows opt-out.
                 using var approved = Registry.CurrentUser.OpenSubKey(ApprovedKey, writable: true);
                 approved?.DeleteValue(RunValue, false);
@@ -138,7 +142,76 @@ internal static class StartupRegistration
         }
     }
 
-    private static bool RegistrationError(Exception error) => error is IOException or UnauthorizedAccessException or SecurityException or COMException or InvalidOperationException or Microsoft.CSharp.RuntimeBinder.RuntimeBinderException;
+    /// <summary>Changes startup privilege without changing whether this user starts the app at sign-in.</summary>
+    internal static ActionResult SetElevated(bool elevated)
+    {
+        var executable = VelopackInstallation.StartupExecutable;
+        if (!VelopackInstallation.IsInstalled || !ValidExecutable(executable) || !File.Exists(executable))
+            return new(ResultKind.Unavailable, "Install the overlay using Setup to remember administrator startup.");
+        if (!AutomationPipeSecurity.Elevated())
+            return new(ResultKind.Unavailable, "Restart as administrator before changing startup privileges.");
+        try
+        {
+            var before = ReadStatus(executable);
+            if (!before.Available)
+                return new(ResultKind.Unavailable, "The existing startup registration could not be verified. It was preserved.");
+            using var settings = Registry.CurrentUser.CreateSubKey(SettingsKey, writable: true);
+            using var run = Registry.CurrentUser.CreateSubKey(RunKey, writable: true);
+            var savedRun = RegistryValueSnapshot.Read(run, RunValue);
+            var savedMarker = RegistryValueSnapshot.Read(settings, MarkerValue);
+            var savedPreference = RegistryValueSnapshot.Read(settings, PreferenceValue);
+            if (savedRun.Value is string command && !MatchesHiddenCommand(command, executable))
+                return new(ResultKind.Unavailable, "The Run entry belongs to another location. It was preserved.");
+            try
+            {
+                ScheduledStartup.ConfigureElevation(executable, elevated, before.Enabled, () =>
+                {
+                    if (elevated || !before.Enabled)
+                        run.DeleteValue(RunValue, false);
+                    else
+                        run.SetValue(RunValue, Command(executable), RegistryValueKind.String);
+                    settings.SetValue(MarkerValue, 1, RegistryValueKind.DWord);
+                    settings.SetValue(PreferenceValue, before.Enabled ? 1 : 0, RegistryValueKind.DWord);
+                    var observed = ReadStatus(executable);
+                    if (!observed.Available || observed.Enabled != before.Enabled || observed.Elevated != elevated)
+                        throw new InvalidOperationException("Windows did not confirm the requested startup mode.");
+                });
+            }
+            catch
+            {
+                savedRun.Restore(run, RunValue);
+                savedMarker.Restore(settings, MarkerValue);
+                savedPreference.Restore(settings, PreferenceValue);
+                throw;
+            }
+            return new(ResultKind.Completed, elevated
+                ? before.Enabled ? "Administrator startup is configured. The overlay will remain hidden at sign-in." : "Administrator mode is remembered. Startup remains off."
+                : before.Enabled ? "Standard hidden startup is restored. This session remains elevated until you exit." : "Administrator startup is removed. Startup remains off.");
+        }
+        catch (Exception error) when (RegistrationError(error))
+        {
+            return new(ResultKind.Unknown, "Startup privileges could not be confirmed. Check Windows startup settings before trying again.");
+        }
+    }
+
+    private sealed record RegistryValueSnapshot(object? Value, RegistryValueKind Kind)
+    {
+        internal static RegistryValueSnapshot Read(RegistryKey key, string name)
+        {
+            var value = key.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
+            return new(value, value is null ? RegistryValueKind.None : key.GetValueKind(name));
+        }
+
+        internal void Restore(RegistryKey key, string name)
+        {
+            if (Value is null)
+                key.DeleteValue(name, false);
+            else
+                key.SetValue(name, Value, Kind);
+        }
+    }
+
+    internal static bool RegistrationError(Exception error) => error is IOException or UnauthorizedAccessException or SecurityException or COMException or InvalidOperationException or System.ComponentModel.Win32Exception or Microsoft.CSharp.RuntimeBinder.RuntimeBinderException;
 
     internal static void TryRemoveMatching(string executable)
     {

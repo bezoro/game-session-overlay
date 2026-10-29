@@ -24,72 +24,16 @@ internal interface IWindowActivationNative
 /// <summary>Best-effort activation after a normal explicit request was refused.</summary>
 internal sealed class WindowActivation(IWindowActivationNative api)
 {
-    private static readonly WindowActivation native = new(new Win32Activation());
-    private int pending;
-    internal static Task<bool> RequestFallbackAsync(nint window, nint foreground, CancellationToken cancellation) => native.RequestAsync(window, foreground, cancellation);
-    internal async Task<bool> RequestAsync(nint window, nint foreground, CancellationToken cancellation, int timeoutMs = 200)
+    internal static int ExecuteNative(nint window, nint foreground, uint owner)
     {
-        var owner = api.CurrentThread;
-        if (cancellation.IsCancellationRequested
-            || owner == 0
-            || window == 0
-            || foreground == 0
-            || api.WindowThread(window) != owner
-            || api.Foreground != foreground
-            || Interlocked.CompareExchange(ref pending, 1, 0) != 0)
-            return false;
-        var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
-        deadline.CancelAfter(timeoutMs);
-        var token = deadline.Token;
-        var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        // Never join the WPF input queue to another application's queue. The broker
-        // has its own queue, and the target remains in a different input group so
-        // SetForegroundWindow can notify it asynchronously. A stalled native call
-        // occupies this one background thread; it cannot block UI or spawn retries.
-        var broker = new Thread(() =>
-        {
-            var accepted = false;
-            try
-            {
-                accepted = Attempt(window, foreground, owner, token);
-            }
-            catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception or ExternalException)
-            {
-            }
-            finally
-            {
-                Interlocked.Exchange(ref pending, 0);
-                completed.TrySetResult(accepted);
-                deadline.Dispose();
-            }
-        })
-        {
-            IsBackground = true,
-            Name = "Overlay activation broker"
-        };
-        try
-        {
-            broker.Start();
-        }
-        catch (Exception error) when (error is ThreadStateException or OutOfMemoryException)
-        {
-            Interlocked.Exchange(ref pending, 0);
-            deadline.Dispose();
-            return false;
-        }
-
-        try
-        {
-            return await completed.Task.WaitAsync(token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            return false;
-        }
+        var api = new Win32Activation();
+        return new WindowActivation(api).Execute(window, foreground, owner, CancellationToken.None) ? 0 : api.FailureCode;
     }
 
-    private bool Attempt(nint window, nint foreground, uint owner, CancellationToken cancellation)
+    internal bool Execute(nint window, nint foreground, uint owner, CancellationToken cancellation)
     {
+        if (window == 0 || foreground == 0 || owner == 0)
+            return false;
         api.EnsureQueue();
         var current = api.CurrentThread;
         var other = api.WindowThread(foreground);
@@ -124,6 +68,7 @@ internal sealed class WindowActivation(IWindowActivationNative api)
 
     private sealed class Win32Activation : IWindowActivationNative
     {
+        internal int FailureCode { get; private set; } = 1;
         // SMTO_BLOCK | SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT.
         private const uint AcknowledgementFlags = 0x23;
         public uint CurrentThread => Native.GetCurrentThreadId();
@@ -132,8 +77,26 @@ internal sealed class WindowActivation(IWindowActivationNative api)
         public nint Foreground => Native.GetForegroundWindow();
 
         public void EnsureQueue() => Native.PeekMessage(out _, 0, 0, 0, 0);
-        public bool SetForeground(nint window) => Native.SetForegroundWindow(window);
-        public bool AwaitActivation(nint window, int timeoutMs) => Native.SendMessageTimeout(window, 0, 0, 0, AcknowledgementFlags, (uint)timeoutMs, out _) != 0;
-        public bool Attach(uint current, uint foreground, bool attach) => Native.AttachThreadInput(current, foreground, attach);
+        public bool SetForeground(nint window)
+        {
+            var accepted = Native.SetForegroundWindow(window);
+            if (!accepted)
+                FailureCode = 2;
+            return accepted;
+        }
+        public bool AwaitActivation(nint window, int timeoutMs)
+        {
+            var acknowledged = Native.SendMessageTimeout(window, 0, 0, 0, AcknowledgementFlags, (uint)timeoutMs, out _) != 0;
+            if (!acknowledged)
+                FailureCode = 0x20000 | (Marshal.GetLastPInvokeError() & 0xffff);
+            return acknowledged;
+        }
+        public bool Attach(uint current, uint foreground, bool attach)
+        {
+            var attached = Native.AttachThreadInput(current, foreground, attach);
+            if (attach && !attached)
+                FailureCode = 0x10000 | (Marshal.GetLastPInvokeError() & 0xffff);
+            return attached;
+        }
     }
 }

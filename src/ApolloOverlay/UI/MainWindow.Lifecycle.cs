@@ -207,7 +207,7 @@ public partial class MainWindow
                 {
                     SetInputMethod("mouse");
                     OpenPanel();
-                }, ExitFromTray);
+                }, ExitFromTray, restartAdministrator: Controller.Platform.IsPreview || ApolloOverlay.Automation.AutomationPipeSecurity.Elevated() ? null : RestartAdministratorFromTray);
             }
         };
         Closing += OnClosing;

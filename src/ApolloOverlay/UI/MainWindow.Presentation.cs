@@ -42,14 +42,13 @@ public partial class MainWindow
     private void CancelOpenAnimation()
     {
         BeginAnimation(OpacityProperty, null);
-        Opacity = 1;
+        Opacity = opening && !focusConfirmed ? 0 : 1;
     }
 
     private void PrepareOpenAnimation()
     {
         CancelOpenAnimation();
-        if (OpenAnimationAllowed)
-            Opacity = 0;
+        Opacity = 0;
     }
 
     internal void AnimateOpen()
@@ -177,7 +176,7 @@ public partial class MainWindow
         return PhysicalKeysNeutral();
     }
 
-    private async void HideNow(bool restore, WindowRef? returnTarget = null, bool preserveSteam = false, bool preserveEffect = false, bool preservePending = false)
+    private async void HideNow(bool restore, WindowRef? returnTarget = null, bool preserveSteam = false, bool preserveEffect = false, bool preservePending = false, bool immediate = false)
     {
         if (!preserveSteam)
             CancelSteamOwner("Panel hidden; previous request cancelled.");
@@ -207,7 +206,7 @@ public partial class MainWindow
         }
 
         // Steam requires the window to disappear before its focus handshake. Diagnostics stay synchronous.
-        if (!preserveSteam && (ForceFadeFixture || !diagnostic && OpenAnimationAllowed))
+        if (!immediate && !preserveSteam && (ForceFadeFixture || !diagnostic && OpenAnimationAllowed))
         {
             fadingOut = true;
             var animation = new DoubleAnimation(Opacity, 0, TimeSpan.FromMilliseconds(180))

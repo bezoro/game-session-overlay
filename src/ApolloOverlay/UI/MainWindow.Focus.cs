@@ -128,11 +128,8 @@ public partial class MainWindow
         UpdatePolling();
         audio.SetVisible(!Controller.Platform.IsPreview);
         RefreshRows();
-        if (!wasVisible)
-            AnimateOpen();
         if (!await AcquireFocus(cycle, foreground))
             return;
-        ResumeSessionFeatures();
         try
         {
             await (RefreshFocusFixture?.Invoke() ?? Controller.Refresh());
@@ -211,19 +208,14 @@ public partial class MainWindow
             return false;
         using var activation = new CancellationTokenSource();
         activationCancellation = activation;
+        var needsReveal = Opacity == 0 || !IsActive || !OwnForeground;
+        opening = true;
+        if (needsReveal)
+            PrepareOpenAnimation();
         try
         {
-            bool activated, requested;
-            opening = true;
-            try
-            {
-                activated = Activate();
-                requested = FocusRequest(new WindowInteropHelper(this).Handle);
-            }
-            finally
-            {
-                opening = false;
-            }
+            var activated = Activate();
+            var requested = FocusRequest(new WindowInteropHelper(this).Handle);
 
             // An accepted request can still be awaiting delivery to WPF. Observe it
             // before deciding whether this explicit opening needs the broker.
@@ -250,8 +242,11 @@ public partial class MainWindow
                     input.Cancel();
                     UpdateHints();
                     TrackApplicationAudio();
+                    ResumeSessionFeatures();
                     TraceFocus("confirmed", ResultKind.Completed);
                     FeedbackText("Panel ready. Navigate with your preferred input.");
+                    if (needsReveal)
+                        AnimateOpen();
                     return true;
                 }
 
@@ -260,11 +255,17 @@ public partial class MainWindow
                 if (attempt == 6)
                 {
                     TraceFocus("unconfirmed", requested ? ResultKind.Unknown : ResultKind.Failed);
-                    FeedbackFocusUnavailable("Windows did not confirm focus.");
+                    var refusal = ForegroundPrivilege.Inspect(FocusForeground());
+                    Controller.Diagnostics.Log("focus/refused/" + refusal.Diagnostic, ResultKind.Unavailable);
+                    FeedbackFocusUnavailable(refusal.Message);
+                    // An unusable panel must not cover a game while its input still
+                    // belongs to that game. A later explicit opening gets a fresh attempt.
+                    HideNow(false, immediate: true);
+                    tray?.NotifyResult(refusal.Message);
                     return false;
                 }
 
-                await Task.Delay(50);
+                await Task.Delay(50, activation.Token);
             }
 
             return false;
@@ -276,7 +277,10 @@ public partial class MainWindow
         finally
         {
             if (ReferenceEquals(activationCancellation, activation))
+            {
                 activationCancellation = null;
+                opening = false;
+            }
         }
     }
 

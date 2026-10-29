@@ -96,7 +96,7 @@ internal static class Native
     internal static extern nint GetWindowLongPtr(nint hwnd, int index);
     [DllImport("user32.dll", EntryPoint = "GetClassLongPtrW")]
     internal static extern nint GetClassLongPtr(nint hwnd, int index);
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", SetLastError = true)]
     internal static extern nint SendMessageTimeout(nint hwnd, uint message, nuint wparam, nint lparam, uint flags, uint timeout, out nuint result);
     [DllImport("user32.dll")]
     internal static extern nint GetWindow(nint hwnd, uint command);

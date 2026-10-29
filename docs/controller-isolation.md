@@ -1,16 +1,26 @@
 # Controller focus and isolation
 
-The overlay works with controllers connected directly to the PC and with controllers exposed by Apollo. It currently reads XInput. Window focus, administrator privileges and waiting for button release do not stop another process from reading the same controller.
+The overlay works with controllers connected directly to the PC and with controllers exposed by Apollo. It currently reads XInput. Foreground ownership enables overlay navigation; it is not a system-wide controller capture mechanism. Administrator privileges and waiting for button release do not revoke another process's device access.
 
 ## Guide and window activation
 
-A short Guide press opens the hidden panel after release. Guide on a visible panel requests dismissal, including when Windows has refused focus. Dismissal waits for released input; uncertain input uses the existing recovery path and does not request a return to another app. B and Escape remain available. Opening from the tray explicitly starts another activation attempt.
+A short Guide press opens the hidden panel after release. Guide requests dismissal while a panel is open or acquiring focus. B and Escape remain available during acquisition. Dismissal waits for released input; uncertain input uses the existing recovery path and does not request a return to another app. Opening from the tray explicitly starts another activation attempt.
 
-An accepted `SetForegroundWindow` call does not prove that the panel is active. The overlay confirms both its native foreground window and WPF activation before enabling navigation. A bounded background broker can retry an explicit opening against its original foreground window. It keeps the WPF input queue separate, waits for its activation notification and detaches its own queue. A changed foreground, cancellation, dismissal or a newer opening prevents confirmation of an old attempt. No synthetic Alt presses or global foreground-lock changes are used.
+An accepted `SetForegroundWindow` call does not prove that the panel is active. The overlay keeps its window transparent until both its native foreground window and WPF activation are confirmed, then reveals it. A refused acquisition hides the provisional window immediately and reports the recovery action through the tray. It never leaves an unusable panel covering a game.
 
-The Win32 behavior is documented in [SetForegroundWindow](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setforegroundwindow) and [asynchronous foreground activation](https://devblogs.microsoft.com/oldnewthing/20161118-00/?p=94745). Windows can still refuse activation. The panel must report that state rather than dispatching controller actions to an unconfirmed window. Local diagnostics record the requested window and observed foreground handles.
+A disposable activation child can retry an explicit opening against its original foreground window. It attaches only its own input queue, waits for the overlay's activation notification and detaches again. The child validates its actual parent, process start time, user, logon session, target window ownership and membership in the parent's exact kernel job before making native calls. The private child mode starts no WPF window, installation integration or singleton.
 
-Focus and controller isolation are separate capabilities. An app that reads XInput in the background may continue responding after the overlay gains focus. The product's shared-input warning describes this limitation.
+The native attempt has a 900 ms deadline. The parent owns a kill-on-close job; cancellation, expiry or parent-process exit terminates the helper even if a native call never returns. Deadline cleanup runs independently of the WPF synchronization context. A subsequent opening gets a fresh child rather than waiting for an abandoned thread. A changed foreground, dismissal or newer opening prevents confirmation of an old attempt. No synthetic Alt presses or global foreground-lock changes are used.
+
+The Win32 behavior is documented in [SetForegroundWindow](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setforegroundwindow) and [asynchronous foreground activation](https://devblogs.microsoft.com/oldnewthing/20161118-00/?p=94745). Windows can still refuse activation. Local diagnostics record the requested window, observed foreground handles, helper exit stage and observed privilege when available. Protected or disappearing processes remain unknown rather than being guessed.
+
+## Administrator compatibility
+
+An elevated game can prevent a standard overlay from acquiring foreground ownership. The tray and System page offer an explicit **Restart as administrator** action. Windows asks for consent; cancellation or an unverified handoff keeps the current overlay running. The child verifies the same executable, user and interactive logon session; no alternate-account handoff is accepted. Restarting affects only the current session.
+
+Once elevated, **Elevated startup** separately configures a highest-privilege interactive-user task for the installed application. It preserves whether startup was already enabled, including a Windows Startup-apps opt-out. The task starts hidden, runs only the fixed installed launcher and accepts no arbitrary commands. Existing enabled registration can also serve an explicit manual launch in the current session without another consent prompt. Startup Off remains Off. Removing elevated startup restores standard registration only if startup was effectively enabled.
+
+Focus and controller isolation are separate capabilities. Windows 10 and later normally enable or disable XInput automatically as focus changes, as documented by [XInputEnable](https://learn.microsoft.com/en-us/windows/win32/api/xinput/nf-xinput-xinputenable). This behavior does not establish exclusive capture for background readers, other APIs or every game configuration. The product's shared-input warning remains visible. Real Playnite, elevated-game, local-PC and Apollo/TV tests remain necessary after installation.
 
 ## Independent controller routing
 

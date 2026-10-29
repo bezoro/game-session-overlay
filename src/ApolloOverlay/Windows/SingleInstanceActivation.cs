@@ -10,13 +10,28 @@ internal static class SingleInstanceActivation
 {
     internal const uint OpenMessage = 0x8002;
 
+    internal static Mutex? AcquireMutex(out bool created)
+    {
+        try
+        {
+            return new Mutex(true, @"Local\Bezoro.GameSessionOverlay", out created);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // A higher-integrity instance can own the existing object. Keep its ACL and
+            // use the same-installation, same-session opening message instead.
+            created = false;
+            return null;
+        }
+    }
+
     internal static void AllowRequests(nint window)
     {
         // Opening the panel is the only cross-integrity message allowed; it grants no action authority.
         ChangeWindowMessageFilterEx(window, OpenMessage, 1, 0);
     }
 
-    internal static bool TryOpenExisting()
+    internal static bool TryOpenExisting(int timeoutMs = 2000)
     {
         if (!OperatingSystem.IsWindows() || Environment.ProcessPath is not { } executable)
             return false;
@@ -50,7 +65,7 @@ internal static class SingleInstanceActivation
             if (sent)
                 return true;
             Thread.Sleep(25);
-        } while (watch.ElapsedMilliseconds < 2000);
+        } while (watch.ElapsedMilliseconds < timeoutMs);
         return false;
     }
 

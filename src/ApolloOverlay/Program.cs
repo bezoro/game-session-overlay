@@ -14,6 +14,9 @@ public static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        // This private child performs no installation hooks, WPF or singleton work.
+        if (args is [IsolatedWindowActivation.HostArgument, var activation])
+            return IsolatedWindowActivation.RunHost(activation);
         var culture = CultureInfo.GetCultureInfo("en-US");
         CultureInfo.DefaultThreadCurrentCulture = culture;
         CultureInfo.DefaultThreadCurrentUICulture = culture;
@@ -24,6 +27,8 @@ public static class Program
             VelopackInstallation.ConfigureDataRootForTests(proofRoot);
         // Official installer/update hooks must run before WPF, singleton or strict argument parsing.
         VelopackInstallation.Initialize(args, RemoveInstalledIntegration, EnsureInstalledIntegration, EnsureInstalledIntegration);
+        if (AdministratorRestart.Bootstrap(ref args) is { } restartCode)
+            return restartCode;
         if (args.Length == 2 && args[0] is "--capture-native" or "--native-check" or "--capture-alpha")
         {
             var app = new Application
@@ -78,7 +83,18 @@ public static class Program
             return 2;
         }
 
-        using var singleton = new Mutex(true, @"Local\Bezoro.GameSessionOverlay", out var created);
+        // An explicitly approved task is reusable without asking for UAC on each shell launch.
+        // Its fixed action starts hidden; only this explicit launch asks it to open the panel.
+        if (!startup && !preview && bridge is null && proofRoot is null && VelopackInstallation.IsInstalled
+            && ScheduledStartup.TryRunElevated(VelopackInstallation.StartupExecutable))
+        {
+            if (SingleInstanceActivation.TryOpenExisting(timeoutMs: 10000))
+                return 0;
+            MessageBox.Show("Windows started the configured administrator session, but the panel did not become available. Try Open overlay from its tray icon.", "Game Session Overlay");
+            return 3;
+        }
+
+        using var singleton = SingleInstanceActivation.AcquireMutex(out var created);
         if (!created)
         {
             if (!startup && SingleInstanceActivation.TryOpenExisting())

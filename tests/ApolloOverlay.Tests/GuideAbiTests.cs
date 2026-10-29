@@ -1206,8 +1206,7 @@ internal static unsafe class GuideAbiTests
                     };
                     w.OpenPanel();
                     FinishFocus(w.OpeningTask);
-                    var animated = !System.Windows.SystemParameters.HighContrast && System.Windows.SystemParameters.ClientAreaAnimation;
-                    Require(first == (animated ? 0 : 1), "First visible opacity was not prepared");
+                    Require(first == 0, "A provisional window was revealed before foreground confirmation");
                     var sidebar = (System.Windows.FrameworkElement)w.FindName("Sidebar");
                     Require(sidebar.Opacity == 1);
                     var deadline = System.Diagnostics.Stopwatch.StartNew();

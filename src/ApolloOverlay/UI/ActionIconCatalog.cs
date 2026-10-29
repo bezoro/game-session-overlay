@@ -72,7 +72,7 @@ internal static class ActionIconCatalog
             "mixer-mute" => "speaker",
             "microphone" => "microphone",
             "close" or "close-detail" or "external-close" or "confirm-hold" => "close",
-            "exit" or "startup" => "power",
+            "exit" or "startup" or "administrator-restart" or "administrator-startup" => "power",
             "playnite" or "configure-playnite" => "playnite",
             "session-profiles" or "profile-new" or "profile-current" => "profile",
             "session-media" => "play",
