@@ -49,6 +49,11 @@ static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        if (args is [IsolatedActivationTests.PassiveArgument])
+        {
+            Thread.Sleep(150);
+            return 0;
+        }
         if (args is [IsolatedWindowActivation.HostArgument, var activation])
             return IsolatedWindowActivation.RunHost(activation);
         if (args is [IsolatedActivationTests.HangArgument, var ready, var identity])

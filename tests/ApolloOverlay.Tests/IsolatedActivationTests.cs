@@ -14,6 +14,7 @@ internal static class IsolatedActivationTests
 {
     internal const string HangArgument = "--activation-test-hang";
     internal const string ParentExitArgument = "--activation-test-parent-exit";
+    internal const string PassiveArgument = "--activation-test-passive";
 
     internal static int Hang(string readyName, string identityPath)
     {
@@ -254,18 +255,9 @@ internal static class IsolatedActivationTests
 
     private static ProcessStartInfo PassiveHost()
     {
-        var info = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"))
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        info.ArgumentList.Add("-NoProfile");
-        info.ArgumentList.Add("-NonInteractive");
-        info.ArgumentList.Add("-Command");
-        // A brief startup pause lets the parent assign the job before exit.
-        // This process deliberately performs no window activation at all.
-        info.ArgumentList.Add("Start-Sleep -Milliseconds 150; exit 0");
-        return info;
+        // The same minimal test host avoids measuring an unrelated shell's cold
+        // startup. It performs no activation and still must actually exit zero.
+        return ProbeStart(PassiveArgument);
     }
 
     private static ProcessStartInfo ProbeStart(params string[] arguments)
