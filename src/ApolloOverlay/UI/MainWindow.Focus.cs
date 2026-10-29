@@ -61,12 +61,7 @@ public partial class MainWindow
         if (fadingOut)
             OpenPanel();
         else if (IsVisible)
-        {
-            if (!TransitionPending && !ownedDialog && !NavigationAllowed)
-                OpenPanel();
-            else
-                HidePanel(true, trustedDismiss);
-        }
+            HidePanel(true, trustedDismiss);
         else if (!TransitionPending)
             OpenPanel();
     }
@@ -103,6 +98,7 @@ public partial class MainWindow
 
     private async Task OpenPanelCore()
     {
+        var foreground = FocusForeground();
         var wasVisible = IsVisible;
         fadeGeneration++;
         fadingOut = false;
@@ -134,7 +130,7 @@ public partial class MainWindow
         RefreshRows();
         if (!wasVisible)
             AnimateOpen();
-        if (!await AcquireFocus(cycle))
+        if (!await AcquireFocus(cycle, foreground))
             return;
         ResumeSessionFeatures();
         try
@@ -164,8 +160,11 @@ public partial class MainWindow
 
     private void TraceFocus(string checkpoint, ResultKind kind, string detail = "")
     {
-        if (!Controller.Platform.IsPreview)
-            Controller.Diagnostics.Log($"focus/{focusCycle}/{checkpoint}/foreground={OwnForeground}/active={IsActive}{detail}", kind);
+        if (Controller.Platform.IsPreview)
+            return;
+        var actual = FocusForeground();
+        var window = new WindowInteropHelper(this).Handle;
+        Controller.Diagnostics.Log($"focus/{focusCycle}/{checkpoint}/foreground={actual == window}/active={IsActive}/actual=0x{actual:X}/window=0x{window:X}{detail}", kind);
     }
 
     private void RevokeFocus(string reason, bool supersede = true)
@@ -201,12 +200,12 @@ public partial class MainWindow
             if (context.Active && context.OwnForeground)
                 return true;
             RevokeFocus("lost");
-            FeedbackFocusUnavailable(InputHint("Focus lost. Guide retries · B hides the panel.", "Focus lost. Esc hides · double-click the tray icon to retry.", "Focus lost. Double-click the tray icon to retry."));
+            FeedbackFocusUnavailable(InputHint("Focus lost. Guide or B hides. Reopen to retry.", "Focus lost. Esc hides · double-click the tray icon to retry.", "Focus lost. Double-click the tray icon to retry."));
             return false;
         }
     }
 
-    private async Task<bool> AcquireFocus(long cycle)
+    private async Task<bool> AcquireFocus(long cycle, nint foreground)
     {
         if (!CurrentCycle(cycle) || ownedDialog)
             return false;
@@ -214,7 +213,6 @@ public partial class MainWindow
         activationCancellation = activation;
         try
         {
-            var foreground = FocusForeground();
             bool activated, requested;
             opening = true;
             try
@@ -227,7 +225,13 @@ public partial class MainWindow
                 opening = false;
             }
 
-            if (!requested && !OwnForeground && CurrentCycle(cycle) && !ownedDialog && FocusFallbackRequest is { } fallback)
+            // An accepted request can still be awaiting delivery to WPF. Observe it
+            // before deciding whether this explicit opening needs the broker.
+            if (requested && !OwnForeground)
+                await Task.Delay(50, activation.Token);
+            if (!CurrentCycle(cycle) || ownedDialog || activation.IsCancellationRequested)
+                return false;
+            if (!OwnForeground && FocusForeground() == foreground && FocusFallbackRequest is { } fallback)
             {
                 requested = await fallback(new WindowInteropHelper(this).Handle, foreground, activation.Token);
                 if (!CurrentCycle(cycle) || ownedDialog || activation.IsCancellationRequested)
@@ -237,13 +241,14 @@ public partial class MainWindow
             TraceFocus("request-native", ResultKind.Requested, $"/activate={activated}/request={requested}");
             for (var attempt = 0; attempt <= 6; attempt++)
             {
-                if (!CurrentCycle(cycle) || ownedDialog)
+                if (!CurrentCycle(cycle) || ownedDialog || activation.IsCancellationRequested)
                     return false;
                 if (IsActive && OwnForeground)
                 {
                     focusConfirmed = true;
                     navigationKeysArmed = heldKeys.Count == 0 && PhysicalKeysNeutral();
                     input.Cancel();
+                    UpdateHints();
                     TrackApplicationAudio();
                     TraceFocus("confirmed", ResultKind.Completed);
                     FeedbackText("Panel ready. Navigate with your preferred input.");
@@ -255,13 +260,17 @@ public partial class MainWindow
                 if (attempt == 6)
                 {
                     TraceFocus("unconfirmed", requested ? ResultKind.Unknown : ResultKind.Failed);
-                    FeedbackFocusUnavailable(InputHint("Windows did not confirm focus. Guide retries · B hides.", "Windows did not confirm focus. Esc hides · tray double-click retries.", "Windows did not confirm focus. Double-click the tray icon to retry."));
+                    FeedbackFocusUnavailable(InputHint("Focus unavailable. Guide or B hides. Reopen to retry.", "Windows did not confirm focus. Esc hides · tray double-click retries.", "Windows did not confirm focus. Double-click the tray icon to retry."));
                     return false;
                 }
 
                 await Task.Delay(50);
             }
 
+            return false;
+        }
+        catch (OperationCanceledException) when (activation.IsCancellationRequested)
+        {
             return false;
         }
         finally

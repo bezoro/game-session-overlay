@@ -32,11 +32,13 @@ public partial class MainWindow
         {
             guideBackend = new();
             guideConnection = new(guideBackend);
-            guideConnection.Start(() => guideToggleRequested = true);
+            guideConnection.Start(RequestGuideToggle);
         }
 
         UpdatePolling();
     }
+
+    internal void RequestGuideToggle() => guideToggleRequested = true;
 
     internal void PollGuideStatus(XInputGuideBackend backend)
     {
@@ -118,7 +120,7 @@ public partial class MainWindow
         if (GuidePolling.Consume(ref guideToggleRequested, current.Toggle))
         {
             SetInputMethod("controller");
-            Toggle();
+            Toggle(trustedDismiss: current.Toggle || guideBackend?.SnapshotValid == true);
             return;
         }
 

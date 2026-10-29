@@ -17,6 +17,7 @@ internal interface IWindowActivationNative
 
     void EnsureQueue();
     bool SetForeground(nint window);
+    bool AwaitActivation(nint window, int timeoutMs);
     bool Attach(uint current, uint foreground, bool attach);
 }
 
@@ -106,7 +107,14 @@ internal sealed class WindowActivation(IWindowActivationNative api)
         {
             if (cancellation.IsCancellationRequested || api.Foreground != foreground || api.WindowThread(foreground) != other || api.WindowThread(window) != owner)
                 return false;
-            return api.SetForeground(window);
+            if (!api.SetForeground(window) || cancellation.IsCancellationRequested)
+                return false;
+            // Cross-queue activation is asynchronous. Drain our own window's
+            // activation notification before detaching the foreground broker.
+            return api.AwaitActivation(window, 100)
+                && !cancellation.IsCancellationRequested
+                && api.Foreground == window
+                && api.WindowThread(window) == owner;
         }
         finally
         {
@@ -116,6 +124,8 @@ internal sealed class WindowActivation(IWindowActivationNative api)
 
     private sealed class Win32Activation : IWindowActivationNative
     {
+        // SMTO_BLOCK | SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT.
+        private const uint AcknowledgementFlags = 0x23;
         public uint CurrentThread => Native.GetCurrentThreadId();
 
         public uint WindowThread(nint window) => window != 0 ? Native.GetWindowThreadProcessId(window, out _) : 0;
@@ -123,6 +133,7 @@ internal sealed class WindowActivation(IWindowActivationNative api)
 
         public void EnsureQueue() => Native.PeekMessage(out _, 0, 0, 0, 0);
         public bool SetForeground(nint window) => Native.SetForegroundWindow(window);
+        public bool AwaitActivation(nint window, int timeoutMs) => Native.SendMessageTimeout(window, 0, 0, 0, AcknowledgementFlags, (uint)timeoutMs, out _) != 0;
         public bool Attach(uint current, uint foreground, bool attach) => Native.AttachThreadInput(current, foreground, attach);
     }
 }

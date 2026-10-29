@@ -62,6 +62,7 @@ public partial class MainWindow
     private void FeedbackFocusUnavailable(string text)
     {
         FeedbackText(text, important: true);
+        UpdateHints();
         if (!compactChrome || exiting || !IsVisible || Dispatcher.HasShutdownStarted)
             return;
         StatusLabel.TextWrapping = TextWrapping.Wrap;

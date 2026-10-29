@@ -21,6 +21,31 @@ internal static class WindowActivationTests
             Require(!Wait(new WindowActivation(api).RequestAsync(10, 20, CancellationToken.None)) && api.Foreground == 20 && api.Requests == 1);
             Require(api.Attachments.SequenceEqual(new[] { true, false }) && !api.Attached);
         });
+        test("Guide broker waits for asynchronous activation before detaching", () =>
+        {
+            var api = new Fake { DeferredActivation = true };
+            Require(Wait(new WindowActivation(api).RequestAsync(10, 20, CancellationToken.None)));
+            Require(api.Foreground == 10 && api.ActivationWaits == 1 && !api.Attached);
+        });
+        test("Guide broker rejects an accepted request without observed activation", () =>
+        {
+            var api = new Fake { DeferredActivation = true, ActivateOnWait = false };
+            Require(!Wait(new WindowActivation(api).RequestAsync(10, 20, CancellationToken.None)));
+            Require(api.Foreground == 20 && api.ActivationWaits == 1 && !api.Attached);
+        });
+        test("Guide broker activation timeout cannot claim foreground ownership", () =>
+        {
+            var api = new Fake { Acknowledged = false };
+            Require(!Wait(new WindowActivation(api).RequestAsync(10, 20, CancellationToken.None)));
+            Require(api.ActivationWaits == 1 && !api.Attached);
+        });
+        test("Guide broker cancellation while acknowledging activation prevents confirmation", () =>
+        {
+            using var cancellation = new CancellationTokenSource();
+            var api = new Fake { OnActivationWait = () => cancellation.Cancel() };
+            Require(!Wait(new WindowActivation(api).RequestAsync(10, 20, cancellation.Token)));
+            Require(SpinWait.SpinUntil(() => !api.Attached, 2000));
+        });
         test("Guide broker attachment refusal does not activate or detach unrelated queues", () =>
         {
             var api = new Fake
@@ -170,8 +195,11 @@ internal static class WindowActivationTests
         public nint Foreground => ForegroundWindow;
 
         internal bool Accepted = true, AttachAllowed = true, ThrowOnRequest, QueueCreated;
+        internal bool DeferredActivation, ActivateOnWait = true, Acknowledged = true;
         internal volatile bool Attached;
         internal int Requests;
+        internal int ActivationWaits;
+        internal Action? OnActivationWait;
         internal Action<Fake>? OnAttach;
         internal List<bool> Attachments = [];
         public uint WindowThread(nint window) => window == 10 ? TargetThread : window == 20 ? ForegroundThread : 4;
@@ -187,9 +215,19 @@ internal static class WindowActivationTests
             Requests++;
             if (ThrowOnRequest)
                 throw new InvalidOperationException("fixture");
-            if (Accepted)
+            if (Accepted && !DeferredActivation)
                 ForegroundWindow = window;
             return Accepted;
+        }
+
+        public bool AwaitActivation(nint window, int timeoutMs)
+        {
+            Require(CurrentThread == 2 && Attached && window == 10 && timeoutMs is > 0 and <= 100);
+            ActivationWaits++;
+            OnActivationWait?.Invoke();
+            if (DeferredActivation && ActivateOnWait && Acknowledged)
+                ForegroundWindow = window;
+            return Acknowledged;
         }
 
         public bool Attach(uint current, uint foreground, bool attach)

@@ -152,9 +152,10 @@ public partial class MainWindow
             ownedDialog = false;
             if (CurrentCycle(cycle))
             {
+                var foreground = FocusForeground();
                 RevokeFocus("dialog-return");
                 var resumed = focusCycle;
-                var focus = AcquireFocus(resumed);
+                var focus = AcquireFocus(resumed, foreground);
                 OpeningTask = focus;
                 if (await focus && CurrentCycle(resumed))
                 {

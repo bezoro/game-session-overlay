@@ -139,6 +139,7 @@ public partial class MainWindow
 
     private void HidePanel(bool restore, bool trustedDismiss = false)
     {
+        activationCancellation?.Cancel();
         if (handoffDismiss)
             ReaffirmDismiss(trustedDismiss);
         var target = Controller.ReturnTarget;
@@ -255,6 +256,14 @@ public partial class MainWindow
     {
         UpdateContextualHints();
         UpdateScrollContinuation();
+        var context = InputContext;
+        if (context.Visible && !context.Confirmed && !context.OwnedDialog)
+        {
+            SessionHint.Text = "Waiting for window focus";
+            System.Windows.Automation.AutomationProperties.SetHelpText(SessionCardButton, SessionHint.Text);
+            ModeLabel.Text = InputHint("Guide / B hide · reopen to retry", "Esc hides · tray opens the panel", "Click the panel to retry · tray opens");
+            return;
+        }
         if (Confirming)
         {
             ModeLabel.Text = inputMethod == "controller" ? "Hold A · B cancel · right stick scroll" : inputMethod == "mouse" ? "Hold to confirm · Cancel stops" : "Hold Enter / Space · Esc cancel · PgUp/PgDn scroll";

@@ -9,63 +9,70 @@ internal static class SettingsFocusTests
 {
     internal static void Run(Action<string, Action> test)
     {
-        test("Guide fallback activation still requires real WPF and native foreground", () =>
+        foreach (var nativeAccepted in new[] { false, true })
         {
-            using var host = new Host();
-            var w = host.Window;
-            host.Open();
-            var calls = 0;
-            w.FocusRequest = _ =>
+            test("Guide fallback verifies real WPF/native foreground after request return " + nativeAccepted, () =>
             {
-                host.Other.Show();
-                host.Other.Activate();
-                Native.SetForegroundWindow(host.OtherHandle);
-                return false;
-            };
-            w.FocusFallbackRequest = (handle, _, token) =>
+                using var host = new Host();
+                var w = host.Window;
+                host.Open();
+                host.FocusOther();
+                var calls = 0;
+                w.FocusRequest = _ =>
+                {
+                    host.Other.Show();
+                    host.Other.Activate();
+                    Native.SetForegroundWindow(host.OtherHandle);
+                    return nativeAccepted;
+                };
+                w.FocusFallbackRequest = (handle, previous, token) =>
+                {
+                    calls++;
+                    Require(previous == host.OtherHandle, "Opening lost its original foreground before showing the overlay");
+                    token.ThrowIfCancellationRequested();
+                    return Task.FromResult(Native.SetForegroundWindow(handle));
+                };
+                w.OpenPanel();
+                Complete(w.OpeningTask);
+                host.RequireOwnedFocus();
+                Neutral(w);
+                var before = w.SelectedAction;
+                Frame(w, PadButtons.Down);
+                Require(calls == 1 && w.SelectedAction != before, "Fallback did not restore actual foreground navigation");
+            });
+            test("Guide fallback cannot fabricate real foreground after request return " + nativeAccepted, () =>
             {
-                calls++;
-                token.ThrowIfCancellationRequested();
-                return Task.FromResult(Native.SetForegroundWindow(handle));
-            };
-            w.OpenPanel();
-            Complete(w.OpeningTask);
-            host.RequireOwnedFocus();
-            Neutral(w);
-            var before = w.SelectedAction;
-            Frame(w, PadButtons.Down);
-            Require(calls == 1 && w.SelectedAction != before, "Fallback did not restore actual foreground navigation");
-        });
-        test("Guide fallback success cannot admit a genuinely foreign foreground", () =>
-        {
-            using var host = new Host();
-            var w = host.Window;
-            host.Open();
-            var calls = 0;
-            w.FocusRequest = _ =>
-            {
-                host.Other.Show();
-                host.Other.Activate();
-                Native.SetForegroundWindow(host.OtherHandle);
-                return false;
-            };
-            w.FocusFallbackRequest = (_, _, _) =>
-            {
-                calls++;
-                return Task.FromResult(true);
-            };
-            w.OpenPanel();
-            Complete(w.OpeningTask);
-            var before = w.SelectedAction;
-            Neutral(w);
-            Frame(w, PadButtons.Down);
-            Require(calls == 1 && Native.GetForegroundWindow() == host.OtherHandle && w.SelectedAction == before, "Fallback return fabricated input ownership");
-        });
+                using var host = new Host();
+                var w = host.Window;
+                host.Open();
+                host.FocusOther();
+                var calls = 0;
+                w.FocusRequest = _ =>
+                {
+                    host.Other.Show();
+                    host.Other.Activate();
+                    Native.SetForegroundWindow(host.OtherHandle);
+                    return nativeAccepted;
+                };
+                w.FocusFallbackRequest = (_, _, _) =>
+                {
+                    calls++;
+                    return Task.FromResult(true);
+                };
+                w.OpenPanel();
+                Complete(w.OpeningTask);
+                var before = w.SelectedAction;
+                Neutral(w);
+                Frame(w, PadButtons.Down);
+                Require(calls == 1 && Native.GetForegroundWindow() == host.OtherHandle && w.SelectedAction == before, "Fallback return fabricated input ownership");
+            });
+        }
         test("Guide fallback cancellation prevents a late result from confirming a newer cycle", () =>
         {
             using var host = new Host();
             var w = host.Window;
             host.Open();
+            host.FocusOther();
             var delayed = new TaskCompletionSource<bool>();
             CancellationToken token = default;
             w.FocusRequest = _ =>
@@ -123,6 +130,7 @@ internal static class SettingsFocusTests
             var w = host.Window;
             host.Open();
             var requests = 0;
+            w.FocusFallbackRequest = (_, _, _) => throw new Exception("Activation followed a new foreground instead of the opening's original window");
             w.FocusRequest = _ =>
             {
                 requests++;
@@ -140,27 +148,48 @@ internal static class SettingsFocusTests
             Frame(w, PadButtons.A);
             Require(requests == 1 && w.SelectedAction == selected && !w.TransitionPending, "Another foreground was admitted for controller actions");
         });
-        test("settings focus Guide retries a visible unconfirmed panel without hiding", () =>
+        test("Guide hides an unconfirmed panel without issuing another focus request", () =>
         {
             using var host = new Host();
             var w = host.Window;
             host.Open();
             host.DenyConfirmation();
             var requests = 0;
-            w.FocusForeground = Native.GetForegroundWindow;
-            w.FocusRequest = handle =>
+            w.FocusRequest = _ => { requests++; return false; };
+            w.RequestGuideToggle();
+            Frame(w, PadButtons.None);
+            Require(w.IsVisible && w.TransitionPending && requests == 0, "Guide retried activation rather than queuing dismissal");
+            w.AdvanceHandoff(new(NeutralFrames(), 0, GuideValid: true), 0);
+            w.AdvanceHandoff(new(NeutralFrames(), 100, GuideValid: true), 100);
+            Complete(w.OperationTask);
+            Require(!w.IsVisible && !w.TransitionPending && requests == 0, "Guide trapped an unfocused visible overlay");
+        });
+        test("Guide dismissal cancels pending focus acquisition and ignores a late broker result", () =>
+        {
+            using var host = new Host();
+            var w = host.Window;
+            host.Open();
+            host.FocusOther();
+            var delayed = new TaskCompletionSource<bool>();
+            CancellationToken token = default;
+            w.FocusRequest = _ =>
             {
-                requests++;
-                return Native.SetForegroundWindow(handle);
+                host.Other.Activate();
+                Native.SetForegroundWindow(host.OtherHandle);
+                return false;
             };
-            w.Toggle();
-            Complete(w.OpeningTask);
-            host.RequireOwnedFocus();
-            Require(w.IsVisible && !w.TransitionPending && !w.FadePending && requests == 1, "Guide hid the unconfirmed panel or failed to retry activation");
-            Neutral(w);
-            var before = w.SelectedAction;
-            Frame(w, PadButtons.Down);
-            Require(w.SelectedAction != before, "Guide activation retry did not recover controller navigation");
+            w.FocusFallbackRequest = (_, _, cancellation) => { token = cancellation; return delayed.Task; };
+            w.OpenPanel();
+            var opening = w.OpeningTask;
+            Require(!opening.IsCompleted, "PRECONDITION: acquisition did not await the broker");
+            w.RequestGuideToggle();
+            Frame(w, PadButtons.None);
+            Require(token.IsCancellationRequested && w.TransitionPending, "Guide left a pending activation alive");
+            w.AdvanceHandoff(new(NeutralFrames(), 0, GuideValid: true), 0);
+            w.AdvanceHandoff(new(NeutralFrames(), 100, GuideValid: true), 100);
+            delayed.SetResult(true);
+            Complete(opening);
+            Require(!w.IsVisible && !w.TransitionPending, "A late activation result reopened the dismissed panel");
         });
         test("settings focus B and Escape can dismiss a visible unconfirmed panel", () =>
         {
@@ -392,6 +421,15 @@ internal static class SettingsFocusTests
             Complete(Window.OpeningTask);
             Window.UpdateLayout();
             RequireOwnedFocus();
+        }
+
+        internal void FocusOther()
+        {
+            Window.Hide();
+            Other.Show();
+            Other.Activate();
+            Native.SetForegroundWindow(OtherHandle);
+            Require(Native.GetForegroundWindow() == OtherHandle, "PRECONDITION: owned competing window is not foreground");
         }
 
         internal void DenyConfirmation()
