@@ -91,7 +91,7 @@ internal static class SettingsFocusTests
             var before = w.SelectedAction;
             Neutral(w);
             Frame(w, PadButtons.Down);
-            Require(w.SelectedAction == before && w.Feedback.Contains("não confirmou"), "Late fallback overwrote denied focus");
+            Require(w.SelectedAction == before && w.Feedback.Contains("did not confirm"), "Late fallback overwrote denied focus");
         });
         test("settings focus accepts delayed foreground after one false native request", () =>
         {
@@ -225,7 +225,7 @@ internal static class SettingsFocusTests
                 w.UpdateLayout();
                 Pump(20);
                 host.RequireOwnedFocus();
-                Require(!w.Controller.SettingsDirty && w.Controller.Operation is { State: "Concluído" }, "Save did not complete as a real settings operation");
+                Require(!w.Controller.SettingsDirty && w.Controller.Operation is { State: "Completed" }, "Save did not complete as a real settings operation");
                 Require(w.SelectedAction == content && w.SelectedAction != "exit" && Keyboard.FocusedElement is FrameworkElement live && live.IsVisible && Equals(live.Tag, content), "Save left focus on the collapsed dirty strip, a result button or Exit");
                 var saved = UserSettings.Load(Path.Combine(host.Root, "settings.json"), out _);
                 Require(saved.SoundFeedbackEnabled && saved.HapticFeedbackEnabled == both, "Feedback settings were not persisted");
@@ -240,7 +240,7 @@ internal static class SettingsFocusTests
                 Pick(w, "session-card");
                 before = w.SelectedAction;
                 Frame(w, PadButtons.Down);
-                Require(w.SelectedAction != before && !w.Feedback.Contains("não confirmou"), "Hub controller navigation remained blocked after feedback settings");
+                Require(w.SelectedAction != before && !w.Feedback.Contains("did not confirm"), "Hub controller navigation remained blocked after feedback settings");
             });
         }
     }
@@ -400,7 +400,7 @@ internal static class SettingsFocusTests
             Window.FocusRequest = _ => false;
             Window.OpenPanel();
             Complete(Window.OpeningTask);
-            Require(Window.IsVisible && Window.Feedback.Contains("não confirmou"), "PRECONDITION: focus refusal was not established");
+            Require(Window.IsVisible && Window.Feedback.Contains("did not confirm"), "PRECONDITION: focus refusal was not established");
         }
 
         internal void RequireOwnedFocus() => Require(Window.IsVisible && Window.IsActive && Native.GetForegroundWindow() == Handle, "PRECONDITION: real owned overlay foreground not established");

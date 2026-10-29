@@ -35,48 +35,48 @@ public sealed class GuardedActions(IWindowEffects effects, Action<SteamSequenceE
     public async Task<ActionResult> Minimize(WindowRef window, CancellationToken cancellation)
     {
         if (cancellation.IsCancellationRequested)
-            return new(ResultKind.Cancelled, "Cancelado antes do envio; nada minimizado.");
+            return new(ResultKind.Cancelled, "Cancelled before dispatch; nothing was minimized.");
         if (!effects.SupportsMinimize)
-            return new(ResultKind.Unavailable, "Minimização indisponível nesta plataforma.");
+            return new(ResultKind.Unavailable, "Minimizing is unavailable on this platform.");
         if (window.Protected || window.Handle == 0 || window.Pid <= 0 || window.Started <= 0 || !effects.Valid(window))
-            return new(ResultKind.Unavailable, "Identidade inválida ou janela protegida; minimização bloqueada.");
+            return new(ResultKind.Unavailable, "Invalid identity or protected window; minimizing was blocked.");
         if (effects.IsMinimized(window))
-            return new(ResultKind.Completed, "A janela confirmada já está minimizada.");
+            return new(ResultKind.Completed, "The verified window is already minimized.");
         if (cancellation.IsCancellationRequested || !effects.Valid(window))
-            return new(ResultKind.Cancelled, "Alvo mudou antes do envio; nada minimizado.");
+            return new(ResultKind.Cancelled, "The target changed before dispatch; nothing was minimized.");
         if (!effects.RequestMinimize(window))
-            return new(ResultKind.Failed, "O Windows recusou a solicitação de minimizar.");
+            return new(ResultKind.Failed, "Windows rejected the minimize request.");
         for (var i = 0; i <= 20; i++)
         {
             if (cancellation.IsCancellationRequested)
-                return new(ResultKind.Unknown, "Observação cancelada após envio; a solicitação não pode ser desfeita.");
+                return new(ResultKind.Unknown, "Observation cancelled after dispatch; the request cannot be undone.");
             if (!effects.Valid(window))
-                return new(ResultKind.Unknown, "A identidade da janela mudou após a solicitação; minimização não confirmada.");
+                return new(ResultKind.Unknown, "The window identity changed after the request; minimizing is unconfirmed.");
             if (effects.IsMinimized(window))
-                return new(ResultKind.Completed, "A mesma janela foi confirmada como minimizada.");
+                return new(ResultKind.Completed, "The same window was confirmed as minimized.");
             if (i < 20)
                 await effects.Wait(50);
         }
 
-        return new(ResultKind.Unknown, "Minimização solicitada; estado não confirmado em um segundo. O painel continua disponível.");
+        return new(ResultKind.Unknown, "Minimizing requested; the state was not confirmed within one second. The panel remains available.");
     }
 
     public async Task<ActionResult> Switch(WindowRef window)
     {
         if (!effects.Valid(window))
-            return new(ResultKind.Failed, "A identidade da janela mudou ou não pôde ser validada. Selecione novamente.");
+            return new(ResultKind.Failed, "The window identity changed or could not be verified. Select it again.");
         if (!effects.RequestFocus(window))
-            return new(ResultKind.Failed, "O Windows recusou a ativação da janela.");
+            return new(ResultKind.Failed, "Windows rejected window activation.");
         for (var i = 0; i < 6; i++)
         {
             if (!effects.Valid(window))
-                return new(ResultKind.Failed, "A janela foi substituída durante a ativação.");
+                return new(ResultKind.Failed, "The window was replaced during activation.");
             if (effects.IsForeground(window))
-                return new(ResultKind.Completed, "A janela selecionada está em primeiro plano.");
+                return new(ResultKind.Completed, "The selected window is in the foreground.");
             await effects.Wait(50);
         }
 
-        return new(ResultKind.Unknown, "Ativação não confirmada; nenhum atalho foi enviado.");
+        return new(ResultKind.Unknown, "Activation unconfirmed; no shortcut was sent.");
     }
 
     public Task<ActionResult> Shortcut(WindowRef window, string keys) => Shortcut(window, keys, CancellationToken.None, () => true);
@@ -84,24 +84,24 @@ public sealed class GuardedActions(IWindowEffects effects, Action<SteamSequenceE
     {
         bool Allowed() => !cancellation.IsCancellationRequested && continuing() && canUse();
         if (!Allowed())
-            return new(ResultKind.Cancelled, "Contexto ou solicitação indisponível; nenhum F1 enviado.");
+            return new(ResultKind.Cancelled, "Context or request unavailable; no F1 was sent.");
         if (!effects.RequestFocus(window))
-            return new(ResultKind.Failed, "O Windows recusou o foco do Big Picture.");
+            return new(ResultKind.Failed, "Windows rejected Big Picture focus.");
         for (var i = 0; i < 6; i++)
         {
             if (!Allowed())
-                return new(ResultKind.Cancelled, "Foco já solicitado; F1 cancelado antes do envio.");
+                return new(ResultKind.Cancelled, "Focus was already requested; F1 was cancelled before dispatch.");
             if (effects.IsForeground(window))
             {
                 if (!Allowed() || !effects.IsForeground(window))
-                    return new(ResultKind.Cancelled, "Alvo mudou antes do F1.");
+                    return new(ResultKind.Cancelled, "The target changed before F1.");
                 return Outcome.Keys(effects.SendKeys("F1"), 2);
             }
 
             await effects.Wait(50);
         }
 
-        return new(ResultKind.Unknown, "Foco Big Picture não confirmado; nenhum F1 enviado.");
+        return new(ResultKind.Unknown, "Big Picture focus unconfirmed; no F1 was sent.");
     }
 
     private async Task<ActionResult> SteamSequence(WindowRef window, CancellationToken cancellation, Func<bool> continuing)
@@ -264,28 +264,28 @@ public sealed class GuardedActions(IWindowEffects effects, Action<SteamSequenceE
         var normal = events.Where(e => !e.Cleanup).ToArray();
         var accepted = normal.Where(e => e.Accepted.HasValue).Sum(e => (long)e.Accepted!.Value);
         if (uncertain || held != 0)
-            return new(ResultKind.Unknown, "Sequência ou liberação não confirmada; não repita o toggle sem verificar o estado.");
+            return new(ResultKind.Unknown, "Sequence or key release unconfirmed; check the state before toggling again.");
         if (accepted == 4 && !refused && !interrupted)
-            return new(ResultKind.Requested, "Atalho Shift+Tab solicitado; teclas liberadas. Visibilidade Steam não confirmada.");
+            return new(ResultKind.Requested, "Shift+Tab requested; keys released. Steam visibility is unconfirmed.");
         if (accepted > 0)
-            return new(ResultKind.Partial, "Sequência interrompida após envio parcial; teclas liberadas. Verifique o estado antes de nova tentativa.");
-        return new(interrupted ? ResultKind.Cancelled : ResultKind.Failed, "Sequência interrompida com zero eventos aceitos.");
+            return new(ResultKind.Partial, "Sequence interrupted after partial dispatch; keys released. Check the state before trying again.");
+        return new(interrupted ? ResultKind.Cancelled : ResultKind.Failed, "Sequence interrupted with no accepted events.");
     }
 
     public async Task<ActionResult> FocusStable(WindowRef window, CancellationToken cancellation, Func<bool> continuing)
     {
         bool Allowed() => !cancellation.IsCancellationRequested && continuing() && effects.Valid(window);
         if (!Allowed())
-            return new(ResultKind.Cancelled, "Cancelado antes de solicitar foco.");
+            return new(ResultKind.Cancelled, "Cancelled before requesting focus.");
         if (!effects.RequestFocus(window))
-            return new(ResultKind.Failed, "O Windows recusou o foco; nenhum atalho enviado.");
+            return new(ResultKind.Failed, "Windows rejected focus; no shortcut was sent.");
         if (!effects.Valid(window))
-            return new(ResultKind.Failed, "A janela foi substituída durante a ativação; nenhum atalho enviado.");
+            return new(ResultKind.Failed, "The window was replaced during activation; no shortcut was sent.");
         var confirmed = false;
         for (var i = 0; i <= 6; i++)
         {
             if (!Allowed())
-                return new(ResultKind.Cancelled, "Alvo ou solicitação mudou durante o foco; nenhum atalho enviado.");
+                return new(ResultKind.Cancelled, "The target or request changed during focus acquisition; no shortcut was sent.");
             if (effects.IsForeground(window))
             {
                 confirmed = true;
@@ -296,22 +296,22 @@ public sealed class GuardedActions(IWindowEffects effects, Action<SteamSequenceE
             {
                 await effects.Wait(50);
                 if (!Allowed())
-                    return new(ResultKind.Cancelled, "Foco cancelado; nenhum atalho enviado.");
+                    return new(ResultKind.Cancelled, "Focus cancelled; no shortcut was sent.");
             }
         }
 
         if (!confirmed)
-            return new(ResultKind.Unknown, "Foco não confirmado em 300 ms; nenhum atalho enviado.");
+            return new(ResultKind.Unknown, "Focus was not confirmed within 300 ms; no shortcut was sent.");
         for (var i = 0; i < 10; i++)
         {
             if (!Allowed() || !effects.IsForeground(window))
-                return new(ResultKind.Cancelled, "Foco ou entrada alterada; nenhum atalho enviado.");
+                return new(ResultKind.Cancelled, "Focus or input changed; no shortcut was sent.");
             await effects.Wait(50);
             if (!Allowed() || !effects.IsForeground(window))
-                return new(ResultKind.Cancelled, "Foco ou entrada alterada; nenhum atalho enviado.");
+                return new(ResultKind.Cancelled, "Focus or input changed; no shortcut was sent.");
         }
 
-        return new(ResultKind.Completed, "A mesma janela permaneceu em primeiro plano por 500 ms.");
+        return new(ResultKind.Completed, "The same window remained in the foreground for 500 ms.");
     }
 
     public async Task<ActionResult> Shortcut(WindowRef window, string keys, CancellationToken cancellation, Func<bool> continuing)
@@ -319,14 +319,14 @@ public sealed class GuardedActions(IWindowEffects effects, Action<SteamSequenceE
         if (keys is not ("Shift+Tab" or "Ctrl+Tab"))
         {
             if (cancellation.IsCancellationRequested || !continuing())
-                return new(ResultKind.Cancelled, "Cancelado antes do foco; nenhum atalho enviado.");
+                return new(ResultKind.Cancelled, "Cancelled before focus acquisition; no shortcut was sent.");
             var focus = await Switch(window);
             if (cancellation.IsCancellationRequested || !continuing())
-                return new(ResultKind.Cancelled, "Foco já solicitado; atalho cancelado antes do envio.");
+                return new(ResultKind.Cancelled, "Focus was already requested; shortcut cancelled before dispatch.");
             if (focus.Kind != ResultKind.Completed)
                 return focus;
             if (!effects.Valid(window) || !effects.IsForeground(window))
-                return new(ResultKind.Failed, "O alvo mudou antes do envio; atalho bloqueado.");
+                return new(ResultKind.Failed, "The target changed before dispatch; shortcut blocked.");
             return Outcome.Keys(effects.SendKeys(keys), 4);
         }
 
@@ -334,7 +334,7 @@ public sealed class GuardedActions(IWindowEffects effects, Action<SteamSequenceE
         if (focused.Kind != ResultKind.Completed)
             return focused;
         if (cancellation.IsCancellationRequested || !continuing() || !effects.Valid(window) || !effects.IsForeground(window))
-            return new(ResultKind.Cancelled, "Cancelado antes do envio; nenhum atalho enviado.");
+            return new(ResultKind.Cancelled, "Cancelled before dispatch; no shortcut was sent.");
         if (keys == "Shift+Tab")
             return await SteamSequence(window, cancellation, continuing);
         return Outcome.Keys(effects.SendKeys(keys), 4);
@@ -343,17 +343,17 @@ public sealed class GuardedActions(IWindowEffects effects, Action<SteamSequenceE
     public async Task<ActionResult> Close(WindowRef window, CancellationToken cancellation)
     {
         if (cancellation.IsCancellationRequested)
-            return new(ResultKind.Cancelled, "Cancelado antes do envio.");
+            return new(ResultKind.Cancelled, "Cancelled before dispatch.");
         if (!window.CanClose || !effects.Valid(window))
-            return new(ResultKind.Failed, "Identidade inválida ou janela protegida; fechamento bloqueado.");
+            return new(ResultKind.Failed, "Invalid identity or protected window; closing was blocked.");
         if (!effects.PostClose(window))
-            return new(ResultKind.Failed, "WM_CLOSE recusado pelo Windows; nenhuma escalada.");
+            return new(ResultKind.Failed, "Windows rejected WM_CLOSE; no escalation was attempted.");
         for (var i = 0; i < 20; i++)
         {
             if (effects.ObserveWindow(window) == WindowObservation.GoneOrReplaced)
                 return Outcome.Closure(true, false);
             if (cancellation.IsCancellationRequested)
-                return new(ResultKind.Unknown, "Observação cancelada após envio; a solicitação não pode ser desfeita.");
+                return new(ResultKind.Unknown, "Observation cancelled after dispatch; the request cannot be undone.");
             await effects.Wait(100);
         }
 

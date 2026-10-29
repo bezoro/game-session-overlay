@@ -15,7 +15,7 @@ public sealed class WindowsAudio : IDisposable
     {
         get;
         private set;
-    } = new(null, 0, false, "Áudio não consultado.");
+    } = new(null, 0, false, "Audio has not been queried.");
 
     public event Action? Changed;
     public WindowsAudio()
@@ -98,7 +98,7 @@ public sealed class WindowsAudio : IDisposable
         }
         catch (Exception e) when (e is COMException or InvalidCastException)
         {
-            Current = new(null, 0, false, "Saída padrão indisponível. Selecione um dispositivo no Windows.");
+            Current = new(null, 0, false, "Default output unavailable. Select a device in Windows.");
         }
 
         Changed?.Invoke();
@@ -109,15 +109,15 @@ public sealed class WindowsAudio : IDisposable
         try
         {
             if (endpoint is null || device is null)
-                return Current = new(null, 0, false, "Nenhuma saída padrão disponível.");
+                return Current = new(null, 0, false, "No default output is available.");
             Check(device.GetId(out var id));
             Check(endpoint.GetMasterVolumeLevelScalar(out var volume));
             Check(endpoint.GetMute(out var muted));
-            return Current = new(id, volume, muted, "Volume da saída padrão do Windows");
+            return Current = new(id, volume, muted, "Windows default output volume");
         }
         catch (COMException)
         {
-            return Current = new(null, 0, false, "Dispositivo removido ou leitura recusada.");
+            return Current = new(null, 0, false, "The device was removed or the read was rejected.");
         }
     }
 
@@ -125,7 +125,7 @@ public sealed class WindowsAudio : IDisposable
     {
         var current = Read();
         if (!current.Available || endpoint is null || expectedEndpoint is not null && current.EndpointId != expectedEndpoint)
-            return new(ResultKind.Unavailable, "Saída de áudio mudou; alteração bloqueada.");
+            return new(ResultKind.Unavailable, "The audio output changed; the change was blocked.");
         try
         {
             var context = Guid.Empty;
@@ -136,13 +136,13 @@ public sealed class WindowsAudio : IDisposable
             var after = Read();
             Changed?.Invoke();
             if (!after.Available || after.EndpointId != current.EndpointId)
-                return new(ResultKind.Unknown, "Dispositivo mudou após a solicitação.");
-            return new(ResultKind.Completed, $"Saída Windows · {after.Volume:P0}" + (after.Muted ? " · sem som" : ""));
+                return new(ResultKind.Unknown, "The device changed after the request.");
+            return new(ResultKind.Completed, $"Windows output · {after.Volume:P0}" + (after.Muted ? " · muted" : ""));
         }
         catch (COMException)
         {
             Read();
-            return new(ResultKind.Failed, "Windows recusou a alteração do áudio.");
+            return new(ResultKind.Failed, "Windows rejected the audio change.");
         }
     }
 

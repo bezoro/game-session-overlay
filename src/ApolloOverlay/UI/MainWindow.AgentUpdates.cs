@@ -38,54 +38,54 @@ public partial class MainWindow
             Update = AgentSnapshot(request.DryRun)
         };
         if (request.RequestId is null || request.Channel is null || request.BuildId is null || request.JobId is null)
-            return Task.FromResult(Reply("Invalid", "Campos de identificação inválidos."));
+            return Task.FromResult(Reply("Invalid", "Invalid identity fields."));
         if (request.Verb == "update-status")
-            return Task.FromResult(Reply(request.DryRun ? "DryRun" : "Completed", "Estado das atualizações."));
+            return Task.FromResult(Reply(request.DryRun ? "DryRun" : "Completed", "Update status."));
         if (request.Verb is not ("update-check" or "update-download" or "update-rollback" or "update-cancel" or "update-apply"))
-            return Task.FromResult(Reply("Unsupported", "Comando de atualização desconhecido."));
+            return Task.FromResult(Reply("Unsupported", "Unknown update command."));
         if (exiting || agentUpdateDisposed)
-            return Task.FromResult(Reply("Unavailable", "A overlay está encerrando."));
+            return Task.FromResult(Reply("Unavailable", "The overlay is closing."));
         if (request.Channel.Length > 0 && request.Channel is not ("stable" or "testing"))
-            return Task.FromResult(Reply("Invalid", "Canal inválido. Use stable ou testing."));
+            return Task.FromResult(Reply("Invalid", "Invalid channel. Use stable or testing."));
         if (request.RequestId.Length is 0 or > 128 || request.BuildId.Length > 160 || request.JobId.Length > 128)
-            return Task.FromResult(Reply("Invalid", "Identificação da solicitação inválida."));
+            return Task.FromResult(Reply("Invalid", "Invalid request identity."));
         if (request.Verb == "update-cancel")
         {
             if (snapshot.JobId.Length == 0 || request.JobId != snapshot.JobId)
-                return Task.FromResult(Reply("Conflict", "Informe o JobId exato da operação que deve ser cancelada."));
+                return Task.FromResult(Reply("Conflict", "Provide the exact JobId of the operation to cancel."));
             if (updateCommitting || snapshot.Phase == "Restarting")
-                return Task.FromResult(Reply("Busy", "A troca de versão já foi iniciada; não há promessa de cancelamento após o commit."));
+                return Task.FromResult(Reply("Busy", "The version change has started; cancellation is not guaranteed after commit."));
             if (!updateBusy || updateCancellation is null || snapshot.Terminal)
-                return Task.FromResult(Reply("Unavailable", "Esta operação não está em andamento."));
+                return Task.FromResult(Reply("Unavailable", "This operation is not in progress."));
             if (request.DryRun)
-                return Task.FromResult(Reply("DryRun", "O job pode ser cancelado; nenhuma entrada foi alterada."));
+                return Task.FromResult(Reply("DryRun", "The job can be cancelled; no input was changed."));
             if (!AgentClientAlive(token, continuing))
-                return Task.FromResult(Reply("Cancelled", "O cliente não está mais conectado."));
+                return Task.FromResult(Reply("Cancelled", "The client is no longer connected."));
             updateGeneration++;
             agentUpdateApplyPin = null;
-            SetAgentState("Cancelled", "Operação cancelada. A versão instalada foi preservada.", true, persist: true);
+            SetAgentState("Cancelled", "Operation cancelled. The installed version was preserved.", true, persist: true);
             SetUpdateStatus(agentUpdateState!.Message);
             updateCancellation.Cancel();
             return Task.FromResult(Reply("Cancelled", agentUpdateState.Message));
         }
 
         if (busy || updateBusy || updateCommitting || ownedDialog || TransitionPending || Confirming)
-            return Task.FromResult(Reply("Busy", "Outra operação, confirmação ou diálogo está em andamento."));
+            return Task.FromResult(Reply("Busy", "Another operation, confirmation or dialog is in progress."));
         if (request.Verb == "update-apply")
         {
             var error = ValidateAgentApply(request);
             if (error is not null)
                 return Task.FromResult(Reply(error.Value.Outcome, error.Value.Reason));
             if (request.DryRun)
-                return Task.FromResult(Reply("DryRun", "Pacote pronto e identificado; nenhuma instalação foi iniciada."));
+                return Task.FromResult(Reply("DryRun", "Package ready and identified; no installation has started."));
             if (!AgentClientAlive(token, continuing))
-                return Task.FromResult(Reply("Cancelled", "O cliente não está mais conectado."));
+                return Task.FromResult(Reply("Cancelled", "The client is no longer connected."));
             agentUpdateApplyPin = new(request.RequestId, agentUpdateState!.JobId, updateGeneration, preparedUpdate!, AgentPreparedSignature(preparedUpdate!), DateTimeOffset.UtcNow.AddSeconds(15).ToUnixTimeMilliseconds());
-            return Task.FromResult(Reply("UpdateApplyRequested", "Pacote validado. A troca de versão aguarda a confirmação do canal conectado.", false));
+            return Task.FromResult(Reply("UpdateApplyRequested", "Package verified. The version change is waiting for confirmation from the connected client.", false));
         }
 
         if (!AgentSourceAvailable)
-            return Task.FromResult(Reply("Unavailable", "A prévia padrão não consulta nem instala atualizações."));
+            return Task.FromResult(Reply("Unavailable", "The default preview does not check for or install updates."));
         var channel = request.Channel.Length == 0 ? updateChannel : request.Channel;
         UpdateCandidate? candidate = null;
         InstalledBuild? previous = null;
@@ -94,39 +94,39 @@ public partial class MainWindow
             var matches = updateCandidates.Where(c => c.BuildId == request.BuildId && c.Channel == channel).Take(2).ToArray();
             candidate = matches.Length == 1 ? matches[0] : null;
             if (candidate is null || request.BuildId.Length == 0)
-                return Task.FromResult(Reply("Unavailable", "A versão não pertence ao catálogo atual deste canal. Consulte update-check novamente."));
+                return Task.FromResult(Reply("Unavailable", "This build is not in the current channel catalog. Run update-check again."));
             if (candidate.BuildId == AppBuild.Current.BuildId)
-                return Task.FromResult(Reply("Unavailable", "Esta versão já está em execução."));
+                return Task.FromResult(Reply("Unavailable", "This version is already running."));
             var targetVersion = candidate.Asset?.Version;
             if (targetVersion is null && !Velopack.SemanticVersion.TryParse(candidate.Version, out targetVersion))
-                return Task.FromResult(Reply("Invalid", "A versão selecionada não tem uma identificação semântica válida."));
+                return Task.FromResult(Reply("Invalid", "The selected build does not have a valid semantic version."));
             if (!request.AllowDowngrade
                 && Velopack.SemanticVersion.TryParse(VelopackInstallation.CurrentVersion ?? AppBuild.Current.Version, out var currentVersion)
                 && targetVersion < currentVersion)
-                return Task.FromResult(Reply("Conflict", "A versão selecionada é anterior à instalada. Escolha explicitamente o BuildId com AllowDowngrade ou use update-rollback."));
+                return Task.FromResult(Reply("Conflict", "The selected version is older than the installed one. Explicitly choose its BuildId with AllowDowngrade or use update-rollback."));
         }
 
         if (request.Verb == "update-rollback")
         {
             if (!AgentRealInstall)
-                return Task.FromResult(Reply("Unavailable", "A reversão exige uma instalação real pelo Setup."));
+                return Task.FromResult(Reply("Unavailable", "Rollback requires an installation created by Setup."));
             try
             {
                 previous = VelopackInstallation.History().SingleOrDefault(h => h.BuildId == request.BuildId && !h.Current && !h.LastStartFailed);
             }
             catch (Exception error) when (UpdateFailure(error))
             {
-                return Task.FromResult(Reply("Unavailable", "O histórico local não pôde ser lido."));
+                return Task.FromResult(Reply("Unavailable", "The local version history could not be read."));
             }
 
             if (previous is null)
-                return Task.FromResult(Reply("Unavailable", "A versão exata não está no histórico local de instalações."));
+                return Task.FromResult(Reply("Unavailable", "The exact build is not in the local installation history."));
         }
 
         if (request.DryRun)
-            return Task.FromResult(Reply("DryRun", "Operação disponível; nenhuma consulta, download ou escrita foi iniciada."));
+            return Task.FromResult(Reply("DryRun", "Operation available; no query, download or write has started."));
         if (!AgentClientAlive(token, continuing))
-            return Task.FromResult(Reply("Cancelled", "O cliente não está mais conectado."));
+            return Task.FromResult(Reply("Cancelled", "The client is no longer connected."));
         var priorState = agentUpdateState;
         var priorCommit = agentTargetCommit;
         var priorChannel = agentTargetChannel;
@@ -141,7 +141,7 @@ public partial class MainWindow
             Terminal = false,
             TargetBuildId = candidate?.BuildId ?? previous?.BuildId ?? "",
             TargetVersion = candidate?.Version ?? previous?.Version ?? "",
-            Message = request.Verb == "update-check" ? "Buscando versões publicadas…" : request.Verb == "update-rollback" ? "Verificando a versão preservada para reversão…" : "Preparando download da versão selecionada…"
+            Message = request.Verb == "update-check" ? "Checking published versions…" : request.Verb == "update-rollback" ? "Verifying the retained version for rollback…" : "Preparing to download the selected version…"
         };
         try
         {
@@ -152,7 +152,7 @@ public partial class MainWindow
             agentUpdateState = priorState;
             agentTargetCommit = priorCommit;
             agentTargetChannel = priorChannel;
-            return Task.FromResult(Reply("Unavailable", "Não foi possível preservar o recibo da operação. Confira as permissões e o espaço em disco."));
+            return Task.FromResult(Reply("Unavailable", "Could not retain the operation receipt. Check permissions and available disk space."));
         }
 
         updateChannel = channel;
@@ -172,7 +172,7 @@ public partial class MainWindow
         SetUpdateStatus(agentUpdateState.Message);
         UpdatePersistentState();
         UpdateTask = RunAgentUpdateJob(request.Verb, candidate, previous, channel, generation, cancellation);
-        return Task.FromResult(Reply("Requested", "Operação iniciada. Consulte update-status usando o JobId retornado.", false));
+        return Task.FromResult(Reply("Requested", "Operation started. Query update-status with the returned JobId.", false));
     }
 
     internal async Task CommitAgentUpdate(AutomationRequest request, CancellationToken token, Func<bool> continuing)
@@ -192,19 +192,19 @@ public partial class MainWindow
         var error = ValidateAgentApply(request);
         if (error is not null || !AgentApplyPinMatches(pin.ExpiresUtc, pin.JobId, agentUpdateState?.JobId, pin.Generation, updateGeneration, pin.Prepared, preparedUpdate, pin.Signature))
         {
-            SetAgentState("Failed", error?.Reason ?? "O pacote ou o contexto mudou antes da confirmação. Prepare a versão novamente.", true, persist: true);
+            SetAgentState("Failed", error?.Reason ?? "The package or context changed before confirmation. Prepare the version again.", true, persist: true);
             SetUpdateStatus(agentUpdateState!.Message);
             return;
         }
 
-        SetAgentState("Restarting", "Troca de versão iniciada pelo Velopack. A conclusão será confirmada pela identidade do próximo processo.", false);
+        SetAgentState("Restarting", "Version change started by Velopack. Completion will be confirmed by the identity of the next process.", false);
         try
         {
             PersistAgentReceipt();
         }
         catch (Exception failure) when (UpdateFailure(failure))
         {
-            SetAgentState("Failed", "Não foi possível preservar o recibo da troca de versão. A instalação não foi iniciada.", true);
+            SetAgentState("Failed", "Could not retain the version-change receipt. Installation did not start.", true);
             SetUpdateStatus(agentUpdateState!.Message);
             return;
         }
@@ -220,7 +220,7 @@ public partial class MainWindow
         }
         catch (Exception failure) when (UpdateFailure(failure))
         {
-            SetUpdateStatus("Não foi possível iniciar a troca de versão. " + failure.Message);
+            SetUpdateStatus("Could not start the version change. " + failure.Message);
         }
 
         if (!scheduled && !exiting)
@@ -230,15 +230,15 @@ public partial class MainWindow
     private (string Outcome, string Reason)? ValidateAgentApply(AutomationRequest request)
     {
         if (Controller.SettingsDirty)
-            return ("Conflict", "Salve ou descarte os ajustes antes de trocar de versão.");
+            return ("Conflict", "Save or discard your settings before changing versions.");
         if (!AgentRealInstall)
-            return ("Unavailable", "Aplicar exige uma instalação real pelo Setup; prévias e testes não instalam pacotes.");
+            return ("Unavailable", "Applying requires an installation created by Setup; previews and tests do not install packages.");
         if (busy || updateBusy || updateCommitting || ownedDialog || TransitionPending || Confirming)
-            return ("Busy", "Outra operação ou confirmação está em andamento.");
+            return ("Busy", "Another operation or confirmation is in progress.");
         if (agentUpdateState is not { Phase: "Ready" } state || preparedUpdate?.Native is null || !AgentReadyIdentityMatches(state, preparedUpdate, request.BuildId, request.JobId))
-            return ("Conflict", "Informe o BuildId exato de um pacote pronto e seu JobId correspondente.");
+            return ("Conflict", "Provide the exact BuildId of a prepared package and its corresponding JobId.");
         if (request.Channel.Length > 0 && preparedUpdate.Build.Channel != request.Channel)
-            return ("Conflict", "O canal não corresponde ao pacote preparado.");
+            return ("Conflict", "The channel does not match the prepared package.");
         return null;
     }
 
@@ -256,7 +256,7 @@ public partial class MainWindow
                 if (!Current())
                     return;
                 updateCandidates = catalog;
-                SetAgentState("Catalog", catalog.Count == 0 ? "Nenhuma versão publicada neste canal." : "Catálogo consultado. Escolha o BuildId exato para baixar.", true, persist: true);
+                SetAgentState("Catalog", catalog.Count == 0 ? "No versions have been published to this channel." : "Catalog checked. Choose the exact BuildId to download.", true, persist: true);
             }
             else if (verb == "update-download")
             {
@@ -271,40 +271,40 @@ public partial class MainWindow
                 if (prepared.Build.BuildId != candidate!.BuildId || prepared.Build.Version != candidate.Version || prepared.Build.Commit != candidate.Commit || prepared.Build.Channel != channel)
                 {
                     updateSource.Discard(prepared);
-                    throw new InvalidDataException("O pacote preparado difere da versão exata solicitada.");
+                    throw new InvalidDataException("The prepared package differs from the exact build requested.");
                 }
 
                 preparedUpdate = prepared;
                 agentTargetCommit = prepared.Build.Commit;
                 agentTargetChannel = prepared.Build.Channel;
-                SetAgentState("Ready", "Pacote verificado. Aplique explicitamente para instalar e reiniciar; nenhum reinício foi iniciado.", true, progress: 100, persist: true);
+                SetAgentState("Ready", "Package verified. Explicitly apply it to install and restart; no restart has started.", true, progress: 100, persist: true);
             }
             else
             {
-                var target = await VelopackInstallation.PrepareRollbackAsync(previous!.BuildId, percent => AgentUpdateProgress(new("Verificando reversão", percent, 100), generation, cancellation), cancellation.Token);
+                var target = await VelopackInstallation.PrepareRollbackAsync(previous!.BuildId, percent => AgentUpdateProgress(new("Verifying rollback", percent, 100), generation, cancellation), cancellation.Token);
                 if (!Current())
                     return;
                 var build = await LocalUpdateHistory.ReadBuildInfoAsync(target.PackagePath, cancellation.Token);
                 if (!Current())
                     return;
                 if (build.BuildId != previous.BuildId || build.Version != previous.Version || build.Commit != previous.Commit)
-                    throw new InvalidDataException("O pacote local difere da versão exata solicitada.");
+                    throw new InvalidDataException("The local package differs from the exact build requested.");
                 preparedUpdate = new(target.PackagePath, build, target);
                 agentTargetCommit = build.Commit;
                 agentTargetChannel = build.Channel;
-                SetAgentState("Ready", "Reversão verificada. Aplique explicitamente para voltar à versão preservada.", true, progress: 100, persist: true);
+                SetAgentState("Ready", "Rollback verified. Explicitly apply it to return to the retained version.", true, progress: 100, persist: true);
             }
         }
         catch (OperationCanceledException)
         {
             if (Current() || ReferenceEquals(updateCancellation, cancellation) && !exiting && !agentUpdateDisposed && agentUpdateState?.Phase != "Cancelled")
-                SetAgentState("Cancelled", "Operação cancelada. A versão instalada foi preservada.", true, persist: true);
+                SetAgentState("Cancelled", "Operation cancelled. The installed version was preserved.", true, persist: true);
         }
         catch (Exception error) when (error is not (OutOfMemoryException or AccessViolationException))
         {
             if (Current())
             {
-                ReportUpdateFailure("Não foi possível concluir a operação de atualização.", error);
+                ReportUpdateFailure("Could not complete the update operation.", error);
                 SetAgentState("Failed", updateStatus, true, persist: true);
             }
         }
@@ -431,13 +431,13 @@ public partial class MainWindow
         if ((diagnostic || Controller.Platform.IsPreview) && updateSource is PreviewUpdateSource || !File.Exists(AgentReceiptPath))
             return new()
             {
-                Message = "Nenhuma operação de atualização iniciada pelo agente."
+                Message = "No update operation has been started by an agent."
             };
         try
         {
             LocalUpdateHistory.RejectLink(AgentReceiptPath);
             if (new FileInfo(AgentReceiptPath).Length > 49152)
-                throw new InvalidDataException("Recibo excede o limite.");
+                throw new InvalidDataException("Receipt exceeds the limit.");
             var receipt = JsonSerializer.Deserialize<AgentUpdateReceipt>(File.ReadAllBytes(AgentReceiptPath), AgentReceiptJson);
             if (receipt?.SchemaVersion != 1
                 || receipt.State is not { } valid
@@ -449,7 +449,7 @@ public partial class MainWindow
                 || !AgentReceiptText(receipt.TargetChannel, 32)
                 || valid.Phase is not ("Idle" or "Checking" or "Catalog" or "Downloading" or "Ready" or "Failed" or "Cancelled" or "Restarting" or "Completed" or "Interrupted")
                 || valid.Progress is < 0 or > 100)
-                throw new InvalidDataException("Recibo inválido.");
+                throw new InvalidDataException("Invalid receipt.");
             if (captureTarget)
             {
                 agentTargetCommit = receipt.TargetCommit;
@@ -466,7 +466,7 @@ public partial class MainWindow
             {
                 Phase = "Interrupted",
                 Terminal = true,
-                Message = "O recibo anterior não pôde ser lido. A versão em execução não foi alterada."
+                Message = "The previous receipt could not be read. The running version was not changed."
             };
         }
     }
@@ -480,14 +480,14 @@ public partial class MainWindow
                 Phase = "Completed",
                 Terminal = true,
                 Progress = 100,
-                Message = "A versão exata solicitada está em execução como instalação do Velopack."
+                Message = "The exact requested build is running as a Velopack installation."
             };
         if (anotherProcess && (!state.Terminal || state.Phase is "Ready" or "Restarting"))
             return state with
             {
                 Phase = "Interrupted",
                 Terminal = true,
-                Message = "O processo foi reiniciado antes da confirmação da versão solicitada. Consulte e prepare a versão novamente."
+                Message = "The process restarted before the requested version was confirmed. Check and prepare the version again."
             };
         return state;
     }
@@ -498,7 +498,7 @@ public partial class MainWindow
         var receipt = new AgentUpdateReceipt(1, Environment.ProcessId, Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks, state, agentTargetCommit, agentTargetChannel);
         var bytes = JsonSerializer.SerializeToUtf8Bytes(receipt, AgentReceiptJson);
         if (bytes.Length > 49152)
-            throw new InvalidDataException("O recibo da atualização excedeu o limite permitido.");
+            throw new InvalidDataException("The update receipt exceeded the allowed size.");
         LocalUpdateHistory.AtomicBytes(AgentReceiptPath, bytes);
         agentReceiptAt = Environment.TickCount64;
     }
@@ -510,7 +510,7 @@ public partial class MainWindow
         agentUpdateDisposed = true;
         agentUpdateApplyPin = null;
         if (agentUpdateState is { Terminal: false, Phase: not "Restarting" })
-            SetAgentState("Interrupted", "A overlay foi encerrada antes de concluir a operação. Nenhuma atualização foi aplicada automaticamente.", true, persist: true);
+            SetAgentState("Interrupted", "The overlay closed before the operation completed. No update was applied automatically.", true, persist: true);
         updateGeneration++;
     }
 }

@@ -59,7 +59,7 @@ public sealed class LocalUpdateHistory
             || !Regex.IsMatch(value, "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$")
             || value.EndsWith('.')
             || Regex.IsMatch(value.Split('.')[0], "^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$", RegexOptions.IgnoreCase))
-            throw new InvalidDataException("Identificador de versão inválido.");
+            throw new InvalidDataException("Invalid build identifier.");
         return value;
     }
 
@@ -72,7 +72,7 @@ public sealed class LocalUpdateHistory
             || value.Contains(':')
             || !value.EndsWith(".nupkg", StringComparison.Ordinal)
             || value.Length > 200)
-            throw new InvalidDataException("Nome de pacote inválido.");
+            throw new InvalidDataException("Invalid package name.");
         return value;
     }
 
@@ -90,7 +90,7 @@ public sealed class LocalUpdateHistory
     internal static void RejectLink(string path)
     {
         if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-            throw new InvalidDataException("Links não são aceitos no histórico de versões.");
+            throw new InvalidDataException("Links are not allowed in version history.");
     }
 
     internal static void AtomicBytes(string path, byte[] bytes)
@@ -119,8 +119,8 @@ public sealed class LocalUpdateHistory
     {
         RejectLink(path);
         if (new FileInfo(path).Length > 65536)
-            throw new InvalidDataException("Metadados do histórico inválidos.");
-        return JsonSerializer.Deserialize<T>(File.ReadAllBytes(path), Json) ?? throw new InvalidDataException("Metadados do histórico vazios.");
+            throw new InvalidDataException("Invalid history metadata.");
+        return JsonSerializer.Deserialize<T>(File.ReadAllBytes(path), Json) ?? throw new InvalidDataException("Empty history metadata.");
     }
 
     private CachedBuild Record(string buildId)
@@ -129,7 +129,7 @@ public sealed class LocalUpdateHistory
         RejectLink(Folder(buildId));
         var record = Read<CachedBuild>(Path.Combine(Folder(buildId), "release.json"));
         if (record.Build is null || record.Asset is null || record.Build.BuildId != buildId || string.IsNullOrEmpty(record.Asset.Sha256))
-            throw new InvalidDataException("O histórico não corresponde à versão escolhida.");
+            throw new InvalidDataException("The history does not match the selected version.");
         SafeFileName(record.Asset.FileName);
         return record;
     }
@@ -162,7 +162,7 @@ public sealed class LocalUpdateHistory
         if (locator.CurrentlyInstalledVersion is null || locator.PackagesDir is null)
             return;
         if (locator.CurrentlyInstalledVersion != SemanticVersion.Parse(build.Version))
-            throw new InvalidDataException("A versão instalada difere da identificação compilada.");
+            throw new InvalidDataException("The installed version differs from the compiled identity.");
         var asset = locator.GetLocalPackages().FirstOrDefault(p => p.Type == VelopackAssetType.Full && p.Version == locator.CurrentlyInstalledVersion);
         if (asset is null)
         {
@@ -170,7 +170,7 @@ public sealed class LocalUpdateHistory
             {
                 var retained = Record(build.BuildId);
                 if (retained.Build != build)
-                    throw new InvalidDataException("A identificação do histórico foi alterada.");
+                    throw new InvalidDataException("The history identity was changed.");
                 await VerifyPackageAsync(Path.Combine(Folder(build.BuildId), retained.Asset.FileName), retained.Asset.ToAsset(), retained.Build, cancellation).ConfigureAwait(false);
                 Write(Path.Combine(Folder(build.BuildId), "release.json"), retained with
                 {
@@ -179,7 +179,7 @@ public sealed class LocalUpdateHistory
                 return;
             }
 
-            throw new InvalidOperationException("O pacote da versão atual não pôde ser preservado para reversão. Reinstale o Setup desta versão antes de atualizar; seus ajustes permanecem no perfil do Windows.");
+            throw new InvalidOperationException("The current version's package could not be retained for rollback. Reinstall this version's Setup before updating; your settings remain in your Windows profile.");
         }
 
         var path = Path.Combine(locator.PackagesDir, SafeFileName(asset.FileName));
@@ -197,7 +197,7 @@ public sealed class LocalUpdateHistory
         var metadata = Path.Combine(Folder(build.BuildId), "release.json");
         CachedBuild? previous = File.Exists(metadata) ? Record(build.BuildId) : null;
         if (previous is not null && (previous.Build != build || !previous.Asset.Sha256.Equals(expected.SHA256, StringComparison.OrdinalIgnoreCase)))
-            throw new InvalidDataException("Este identificador já está associado a outro pacote. A versão preservada não foi sobrescrita.");
+            throw new InvalidDataException("This identifier already belongs to another package. The retained version was not overwritten.");
         var target = Path.Combine(Folder(build.BuildId), expected.FileName);
         var temporary = target + ".copy-" + Guid.NewGuid().ToString("N") + ".nupkg";
         try
@@ -224,7 +224,7 @@ public sealed class LocalUpdateHistory
     {
         var record = Record(buildId);
         if (record.InstalledAt is null)
-            throw new InvalidOperationException("Esta versão ainda não foi executada como instalação neste computador.");
+            throw new InvalidOperationException("This version has not yet run as an installed app on this computer.");
         var path = Path.Combine(Folder(buildId), record.Asset.FileName);
         await VerifyPackageAsync(path, record.Asset.ToAsset(), record.Build, cancellation).ConfigureAwait(false);
         return (record.Build, record.Asset.ToAsset(), path);
@@ -240,7 +240,7 @@ public sealed class LocalUpdateHistory
             || expected.Size > 1024L * 1024 * 1024
             || !Regex.IsMatch(expected.SHA256 ?? "", "^[0-9a-fA-F]{64}$")
             || !Regex.IsMatch(expected.SHA1 ?? "", "^[0-9a-fA-F]{40}$"))
-            throw new InvalidDataException("O pacote não tem os hashes completos publicados pelo Velopack.");
+            throw new InvalidDataException("The package does not have the full hashes published by Velopack.");
         cancellation.ThrowIfCancellationRequested();
         VelopackAsset actual;
         try
@@ -249,7 +249,7 @@ public sealed class LocalUpdateHistory
         }
         catch (Exception error) when (error is System.Xml.XmlException or FormatException)
         {
-            throw new InvalidDataException("O pacote preservado está danificado. Baixe a versão novamente.", error);
+            throw new InvalidDataException("The retained package is damaged. Download the version again.", error);
         }
 
         cancellation.ThrowIfCancellationRequested();
@@ -259,9 +259,9 @@ public sealed class LocalUpdateHistory
             || actual.Size != expected.Size
             || !actual.SHA256.Equals(expected.SHA256, StringComparison.OrdinalIgnoreCase)
             || !actual.SHA1.Equals(expected.SHA1, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("O pacote preservado não corresponde à publicação. Baixe a versão novamente.");
+            throw new InvalidDataException("The retained package does not match the release. Download the version again.");
         if (build is not null && await ReadBuildInfoAsync(path, cancellation).ConfigureAwait(false) != build)
-            throw new InvalidDataException("A identificação interna do pacote difere da versão selecionada.");
+            throw new InvalidDataException("The package's internal identity differs from the selected version.");
     }
 
     public static async Task<AppBuildInfo> ReadBuildInfoAsync(string packagePath, CancellationToken cancellation = default)
@@ -269,7 +269,7 @@ public sealed class LocalUpdateHistory
         using var archive = ZipFile.OpenRead(packagePath);
         var entries = archive.Entries.Where(e => e.FullName == "build-info.json" || e.FullName.StartsWith("lib/", StringComparison.Ordinal) && e.FullName.EndsWith("/build-info.json", StringComparison.Ordinal)).ToArray();
         if (entries.Length != 1 || entries[0].Length > 16384)
-            throw new InvalidDataException("Pacote sem identificação única de versão.");
+            throw new InvalidDataException("The package has no unique build identity.");
         await using var stream = entries[0].Open();
         using var output = new MemoryStream();
         var buffer = new byte[4096];
@@ -277,14 +277,14 @@ public sealed class LocalUpdateHistory
         while ((read = await stream.ReadAsync(buffer, cancellation).ConfigureAwait(false)) != 0)
         {
             if (output.Length + read > 16384)
-                throw new InvalidDataException("Identificação de versão muito grande.");
+                throw new InvalidDataException("The build identity is too large.");
             output.Write(buffer, 0, read);
         }
 
-        var build = JsonSerializer.Deserialize<AppBuildInfo>(output.ToArray(), Json) ?? throw new InvalidDataException("Identificação de versão vazia.");
+        var build = JsonSerializer.Deserialize<AppBuildInfo>(output.ToArray(), Json) ?? throw new InvalidDataException("Empty build identity.");
         Id(build.BuildId);
         if (!SemanticVersion.TryParse(build.Version, out _) || !Regex.IsMatch(build.Commit ?? "", "^[0-9a-fA-F]{40}$") || build.Channel is not ("testing" or "stable"))
-            throw new InvalidDataException("Identificação de versão inválida.");
+            throw new InvalidDataException("Invalid build identity.");
         return build;
     }
 
@@ -298,7 +298,7 @@ public sealed class LocalUpdateHistory
             RejectLink(SettingsPath);
             bytes = File.ReadAllBytes(SettingsPath);
             if (bytes.Length > 1024 * 1024)
-                throw new InvalidDataException("Os ajustes excedem o limite de backup.");
+                throw new InvalidDataException("The settings exceed the backup size limit.");
         }
 
         if (bytes is not null)
@@ -326,10 +326,10 @@ public sealed class LocalUpdateHistory
         try
         {
             if (pending.BuildId != running.BuildId || pending.Version != running.Version || pending.Commit != running.Commit)
-                return "A reversão não foi aplicada. Seus ajustes atuais foram preservados.";
+                return "Rollback was not applied. Your current settings were preserved.";
             var metadata = Path.Combine(Folder(pending.BuildId), "settings.json");
             if (!File.Exists(metadata))
-                return "Versão anterior iniciada. Não havia um backup de ajustes dessa versão; os ajustes atuais foram mantidos.";
+                return "The previous version started. No settings backup was available for it; current settings were kept.";
             var snapshot = Read<SettingsCopy>(metadata);
             if (File.Exists(SettingsPath))
             {
@@ -349,12 +349,12 @@ public sealed class LocalUpdateHistory
                 RejectLink(source);
                 var bytes = File.ReadAllBytes(source);
                 if (bytes.Length > 1024 * 1024 || !Convert.ToHexString(SHA256.HashData(bytes)).Equals(snapshot.Sha256, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException("Backup de ajustes danificado; os ajustes atuais foram preservados.");
+                    throw new InvalidDataException("The settings backup is damaged; current settings were preserved.");
                 AtomicBytes(SettingsPath, bytes);
                 File.Delete(SettingsPath + ".previous");
             }
 
-            return "Versão anterior restaurada com seus ajustes preservados. Os ajustes mais recentes ficaram em uma cópia separada.";
+            return "The previous version was restored with its retained settings. A separate copy preserves your latest settings.";
         }
         finally
         {

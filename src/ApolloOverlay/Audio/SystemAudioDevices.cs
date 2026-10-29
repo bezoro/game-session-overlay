@@ -17,7 +17,7 @@ public sealed class SystemAudioDevices(ISystemAudioBackend? backend = null)
         MicrophoneMuted = null,
         ConsoleOutputId = "",
         MediaOutputId = "",
-        Status = "Atualizando os dispositivos de áudio…"
+        Status = "Refreshing audio devices…"
     };
     public async Task<SystemAudioSnapshot> RefreshAsync(CancellationToken cancellation = default)
     {
@@ -33,14 +33,14 @@ public sealed class SystemAudioDevices(ISystemAudioBackend? backend = null)
         {
             return Current = SystemAudioSnapshot.Empty with
             {
-                Status = "O áudio demorou a responder. Tente atualizar novamente."
+                Status = "Audio took too long to respond. Try refreshing again."
             };
         }
         catch (Exception error) when (error is COMException or InvalidCastException or InvalidOperationException or UnauthorizedAccessException)
         {
             return Current = SystemAudioSnapshot.Empty with
             {
-                Status = "Dispositivos de áudio indisponíveis. Tente atualizar a lista."
+                Status = "Audio devices unavailable. Try refreshing the list."
             };
         }
         finally
@@ -55,7 +55,7 @@ public sealed class SystemAudioDevices(ISystemAudioBackend? backend = null)
     private async Task<ActionResult> Mutate(Func<Func<bool>, ActionResult> action, CancellationToken cancellation)
     {
         if (!await gate.WaitAsync(0, cancellation))
-            return new(ResultKind.Unavailable, "Outra operação de áudio está em andamento.");
+            return new(ResultKind.Unavailable, "Another audio operation is in progress.");
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         deadline.CancelAfter(3000);
         Task<(ActionResult Result, SystemAudioSnapshot Snapshot)>? work = null;
@@ -75,13 +75,13 @@ public sealed class SystemAudioDevices(ISystemAudioBackend? backend = null)
         {
             if (work is not null)
                 InvalidateObservation();
-            return new(work is not null ? ResultKind.Unknown : ResultKind.Cancelled, work is not null ? "Operação interrompida. Confira o dispositivo antes de repetir." : "Nenhuma alteração de áudio enviada.");
+            return new(work is not null ? ResultKind.Unknown : ResultKind.Cancelled, work is not null ? "Operation interrupted. Check the device before trying again." : "No audio change was sent.");
         }
         catch (Exception error) when (error is COMException or InvalidCastException or InvalidOperationException or UnauthorizedAccessException)
         {
             if (work is not null)
                 InvalidateObservation();
-            return new(work is not null ? ResultKind.Unknown : ResultKind.Unavailable, "Não foi possível confirmar a alteração. Atualize a lista antes de tentar novamente.");
+            return new(work is not null ? ResultKind.Unknown : ResultKind.Unavailable, "The change could not be confirmed. Refresh the list before trying again.");
         }
         finally
         {

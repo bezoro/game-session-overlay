@@ -180,7 +180,7 @@ internal static class SessionInterfaceTests
             Require(buffer.Text == "Olá ", "Virtual backspace split a visible character");
             Pick(w, "keyboard-insert");
             w.ActivateEntry();
-            Require(w.Controller.Operation?.State == "Simulado", "Diagnostic keyboard attempted native input");
+            Require(w.Controller.Operation?.State == "Simulated", "Diagnostic keyboard attempted native input");
         });
         test("session profile editor keeps unsaved name through keyboard back navigation", () =>
         {
@@ -192,11 +192,11 @@ internal static class SessionInterfaceTests
             w.ActivateEntry();
             Pick(w, "keyboard-editor");
             w.ActivateEntry();
-            ((TextBox)Keyboard.FocusedElement).Text = "Sala de jogos";
+            ((TextBox)Keyboard.FocusedElement).Text = "Game room";
             TapKey(w, Key.Tab);
             Pick(w, "keyboard-insert");
             w.ActivateEntry();
-            Require(w.SelectedAction == "profile-name" && AutomationProperties.GetName(ReviewFixTests.Button(w, "profile-name")).Contains("Sala de jogos"), "Profile name or editing origin was lost");
+            Require(w.SelectedAction == "profile-name" && AutomationProperties.GetName(ReviewFixTests.Button(w, "profile-name")).Contains("Game room"), "Profile name or editing origin was lost");
             Require(!File.Exists(Path.Combine(host.Root, "session-profiles.json")), "Editing persisted a profile before Save");
         });
         test("session cancelled profile undo preserves layout and its undo record", () =>
@@ -249,7 +249,7 @@ internal static class SessionInterfaceTests
             Release(w);
             Complete(w.OperationTask);
             Require(host.Media.Commands == 1 && host.Media.LastId == "music" && !host.Media.Current.Items[0].Playing, "Media command missed its explicit source");
-            Require(AutomationProperties.GetName(ReviewFixTests.Button(w, "media-toggle")).Contains("Reproduzir"), "Paused state was not reflected visually");
+            Require(AutomationProperties.GetName(ReviewFixTests.Button(w, "media-toggle")).Contains("Play"), "Paused state was not reflected visually");
 
             var pausedIcon = (VectorIcon)((ActionButtonContent)ReviewFixTests.Button(w, "media-toggle").Content).Icon;
             Require(ReferenceEquals(pausedIcon.Data, w.FindResource("Icon.play")), "Paused media kept the pause icon");
@@ -292,11 +292,12 @@ internal static class SessionInterfaceTests
                 )
                 {
                     ThemeSupport.ForceForValidation(app, light);
-                    using var host = new Host();
+                    using var host = new Host(gameTitle: "Elden Ring");
                     var w = host.Window;
                     var height = width == 572 ? 940 : 600;
                     host.Open(width, height);
                     Navigate(w, route);
+                    w.RefreshOperationNotice(Environment.TickCount64 + 200);
                     w.UpdateLayout();
                     var root = (FrameworkElement)w.Content;
                     root.Measure(new Size(width, height));
@@ -307,6 +308,43 @@ internal static class SessionInterfaceTests
                     var png = new PngBitmapEncoder();
                     png.Frames.Add(BitmapFrame.Create(bitmap));
                     using var file = File.Create(Path.Combine(output, $"{(light ? "light" : "dark")}-{width}-{route}.png"));
+                    png.Save(file);
+                }
+        CaptureAcknowledgements(output, app);
+    }
+
+    private static void CaptureAcknowledgements(string output, Application app)
+    {
+        foreach (var light in new[] { false, true })
+            foreach (var width in new[] { 572, 360 })
+                foreach (var state in new[] { "controller", "mouse", "success", "warning" })
+                {
+                    ThemeSupport.ForceForValidation(app, light);
+                    using var host = new Host(gameTitle: "Elden Ring");
+                    var window = host.Window;
+                    var height = width == 572 ? 940 : 600;
+                    host.Open(width, height);
+                    AdaptiveInterfaceTests.UseController(window);
+                    if (state == "mouse")
+                    {
+                        window.ObservePointerPosition(new(100, 100));
+                        window.ObservePointerPosition(new(120, 100));
+                    }
+                    else if (state is "success" or "warning")
+                    {
+                        window.Controller.SetOperation(state == "success" ? "Completed" : "Unconfirmed", state == "success" ? "Settings saved." : "The window changed. Select it again before trying another command.");
+                        window.RefreshRows();
+                    }
+                    window.RefreshOperationNotice(Environment.TickCount64 + 200);
+                    var root = (FrameworkElement)window.Content;
+                    root.Measure(new Size(width, height));
+                    root.Arrange(new Rect(0, 0, width, height));
+                    root.UpdateLayout();
+                    var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+                    bitmap.Render(root);
+                    var png = new PngBitmapEncoder();
+                    png.Frames.Add(BitmapFrame.Create(bitmap));
+                    using var file = File.Create(Path.Combine(output, $"{(light ? "light" : "dark")}-{width}-notice-{state}.png"));
                     png.Save(file);
                 }
     }
@@ -405,7 +443,7 @@ internal static class SessionInterfaceTests
             get;
         }
 
-        internal Host(Action<string>? initialize = null, ISystemAudioBackend? backend = null, bool preview = true)
+        internal Host(Action<string>? initialize = null, ISystemAudioBackend? backend = null, bool preview = true, string? gameTitle = null)
         {
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
             var app = Application.Current ?? new Application
@@ -415,7 +453,14 @@ internal static class SessionInterfaceTests
             if (app.TryFindResource(ThemeSupport.Card) is null)
                 ThemeSupport.ForceForValidation(app, false);
             initialize?.Invoke(Root);
-            Window = new(renderOnly: true, platform: new PremiumInterfaceTests.FixturePlatform(preview), diagnostics: new(Root), appAudioService: Audio, media: Media, systemAudioBackend: backend ?? new PreviewSystemAudioBackend(), mixerAudioService: Mixer, controllerIdentitySource: new PreviewControllerIdentitySource { Items = [new("fixture-xbox", "Xbox One", ControllerFamily.Xbox, true, 76, false)] });
+            var platform = new PremiumInterfaceTests.FixturePlatform(preview);
+            if (gameTitle is not null)
+                platform.Window = platform.Window with
+                {
+                    Title = gameTitle,
+                    ProcessName = "eldenring"
+                };
+            Window = new(renderOnly: true, platform: platform, diagnostics: new(Root), appAudioService: Audio, media: Media, systemAudioBackend: backend ?? new PreviewSystemAudioBackend(), mixerAudioService: Mixer, controllerIdentitySource: new PreviewControllerIdentitySource { Items = [new("fixture-xbox", "Xbox One", ControllerFamily.Xbox, true, 76, false)] });
             Window.PhysicalKeyReader = _ => 0;
             Window.DpiReader = _ => 96;
             Window.Controller.CaptureReturn();

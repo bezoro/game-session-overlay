@@ -40,13 +40,13 @@ public partial class MainWindow
         CancelHold();
         input.Cancel();
         if (!dismiss)
-            RetainOperation("Pendente", "Solte os controles para continuar. B / Esc cancela antes do envio.");
-        FeedbackText(dismiss ? "Solte os controles para ocultar o painel." : "Solte os controles para continuar · B / Esc cancela.");
+            RetainOperation("Pending", InputHint("Release the controller to continue · B cancels before sending.", "Release the keys to continue · Esc cancels before sending.", "Release the mouse button to continue."));
+        FeedbackText(dismiss ? "Release the controls to hide the panel." : InputHint("Release the controller to continue · B cancels.", "Release the keys to continue · Esc cancels.", "Release the mouse button to continue."));
     }
 
     private void CancelHandoff(bool terminalize = true)
     {
-        var cancelled = terminalize && handoff is not null && !handoffDismiss && Controller.Operation is { State: "Pendente", Dispatched: false };
+        var cancelled = terminalize && handoff is not null && !handoffDismiss && Controller.Operation is { State: "Pending", Dispatched: false };
         handoff = null;
         handoffValid = null;
         handoffDismiss = false;
@@ -56,7 +56,7 @@ public partial class MainWindow
         handoffInputs.Reset();
         releaseGate.Reset();
         if (cancelled)
-            RetainOperation("Cancelado", "Solicitação cancelada antes do envio; nenhum comando externo enviado.");
+            RetainOperation("Cancelled", "Request cancelled before sending; no external command was sent.");
     }
 
     private void RejectHandoff(string message)
@@ -65,7 +65,7 @@ public partial class MainWindow
         {
             CancelHandoff(false);
             input.Cancel();
-            RetainOperation("Cancelado", message);
+            RetainOperation("Cancelled", message);
             FeedbackText(message);
             return;
         }
@@ -78,13 +78,13 @@ public partial class MainWindow
         degradedSince = null;
         releaseGate.Reset();
         input.Cancel();
-        FeedbackText("Leitura ou contexto incerto. Solte os controles para ocultar sem retornar ao aplicativo.");
+        FeedbackText("Input or context uncertain. Release the controls to hide without returning to the app.");
     }
 
     private void CompleteDegradedDismiss()
     {
         HideNow(false);
-        FeedbackText("Painel ocultado sem solicitar retorno ao aplicativo.");
+        FeedbackText("Panel hidden without requesting a return to the app.");
         if (!Controller.Platform.IsPreview)
             Controller.Diagnostics.Log("dismiss-without-focus-return", ResultKind.Cancelled);
     }
@@ -103,7 +103,7 @@ public partial class MainWindow
         if (handoffInputs.UnknownHeld && !degradedExplicit)
         {
             degradedSince = null;
-            FeedbackText("Leitura indisponível. Pressione e solte Esc para ocultar sem retornar ao aplicativo.");
+            FeedbackText("Input unavailable. Press and release Esc to hide without returning to the app.");
             return;
         }
 
@@ -119,7 +119,7 @@ public partial class MainWindow
             return;
         degradedExplicit = true;
         degradedSince = null;
-        FeedbackText("Solte as entradas disponíveis para ocultar sem retornar ao aplicativo.");
+        FeedbackText("Release available inputs to hide without returning to the app.");
     }
 
     private void CommitHandoff()
@@ -156,7 +156,7 @@ public partial class MainWindow
         var state = releaseGate.Update(sample, now, context.Visible && context.Active && context.OwnForeground && !context.Exiting, Controller.Settings.Deadzone);
         if (state == ReleaseState.Cancelled || handoffValid?.Invoke() == false)
         {
-            RejectHandoff("Transição cancelada; foco, controle ou alvo mudou.");
+            RejectHandoff("Transition cancelled; focus, controller or target changed.");
             if (handoffDegraded)
                 AdvanceDegradedDismiss(sample, now);
             return;

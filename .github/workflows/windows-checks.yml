@@ -8,12 +8,12 @@ on:
   workflow_dispatch:
     inputs:
       channel:
-        description: Validar a branch selecionada ou publicá-la no canal de testes
+        description: Validate the selected branch or publish it to the testing channel
         type: choice
         options: [validate, testing]
         default: validate
       notes:
-        description: Notas da prévia exibidas no atualizador (opcional)
+        description: Preview notes shown in the updater (optional)
         type: string
         required: false
 
@@ -262,7 +262,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if ($env:UPDATE_STATUS_REPOSITORY -notmatch '^bezoro/[A-Za-z0-9_.-]+$' -or $env:UPDATE_STATUS_COMMIT -notmatch '^[a-f0-9]{40}$' -or $env:UPDATE_STATUS_RUN_URL -notmatch ('^https://github\.com/' + [Regex]::Escape($env:UPDATE_STATUS_REPOSITORY) + '/actions/runs/[0-9]+$')) { throw 'Invalid publication status target.' }
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28'; 'User-Agent' = 'GameSessionOverlay-release' }
-          $body = @{ state = 'pending'; context = 'overlay/update-release'; target_url = $env:UPDATE_STATUS_RUN_URL; description = 'Preparando publicação da atualização validada.' } | ConvertTo-Json
+          $body = @{ state = 'pending'; context = 'overlay/update-release'; target_url = $env:UPDATE_STATUS_RUN_URL; description = 'Preparing the validated update release.' } | ConvertTo-Json
           Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$($env:UPDATE_STATUS_REPOSITORY)/statuses/$($env:UPDATE_STATUS_COMMIT)" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
 
       - name: Checkout the validated source
@@ -305,10 +305,10 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if ($env:UPDATE_STATUS_REPOSITORY -notmatch '^bezoro/[A-Za-z0-9_.-]+$' -or $env:UPDATE_STATUS_COMMIT -notmatch '^[a-f0-9]{40}$' -or $env:UPDATE_STATUS_RUN_URL -notmatch ('^https://github\.com/' + [Regex]::Escape($env:UPDATE_STATUS_REPOSITORY) + '/actions/runs/[0-9]+$')) { throw 'Invalid publication status target.' }
           $success = $env:PUBLICATION_OUTCOME -eq 'success'
-          $description = 'Falha ao publicar atualização. Consulte os logs.'
+          $description = 'Update publication failed. Check the logs.'
           if ($success) {
             $manifest = Get-Content -LiteralPath 'artifacts/release/build-info.json' -Raw | ConvertFrom-Json
-            $description = "Versão publicada: $($manifest.version)"
+            $description = "Published version: $($manifest.version)"
           }
           if ($description.Length -gt 140) { $description = $description.Substring(0, 140) }
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28'; 'User-Agent' = 'GameSessionOverlay-release' }

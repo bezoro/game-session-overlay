@@ -872,6 +872,7 @@ static class Program
         UpdateSourceTests.Run(Case);
         LocalUpdateHistoryTests.Run(Case);
         InterfaceFeedbackTests.Run(Case);
+        AdaptiveInterfaceTests.Run(Case);
         SettingsFocusTests.Run(Case);
         WindowActivationTests.Run(Case);
         MouseKeyboardTests.Run(Case);
@@ -890,6 +891,7 @@ static class Program
         WindowIconCacheTests.Run(Case);
         PlayniteBrowserTests.Run(Case);
         StartupRegistrationTests.Run(Case);
+        InstalledIntegrationTests.Run(Case);
         CorrectionTests.Run(Case, Path.GetDirectoryName(Path.GetFullPath(args[0]))!);
         return Finish(args[0]);
     }

@@ -111,7 +111,7 @@ public partial class MainWindow
         catch (Exception error) when (error is IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
         {
             if (!exiting && epoch == featureEpoch)
-                FeedbackText("Não foi possível atualizar todos os controles da sessão. Tente atualizar a lista.");
+                FeedbackText("Could not refresh all session controls. Try refreshing the list.");
         }
         finally
         {

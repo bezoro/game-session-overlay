@@ -134,7 +134,7 @@ internal static class LocalUpdateHistoryTests
             Require(f.History.CompleteSettingsRestore(a.Build with
             {
                 BuildId = "unrelated"
-            })!.Contains("não foi aplicada")
+            })!.Contains("was not applied")
                 && File.ReadAllText(f.Settings).Contains("current"), "Unrelated startup restored old settings");
             Require(f.History.CompleteSettingsRestore(a.Build) is null, "Stale restore remained armed");
         });

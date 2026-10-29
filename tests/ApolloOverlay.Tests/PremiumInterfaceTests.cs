@@ -39,9 +39,9 @@ internal static class PremiumInterfaceTests
             try
             {
                 var notice = (TextBlock)w.FindName("SharedControlNotice");
-                Require(notice.Visibility == Visibility.Visible && notice.Text.Contains("também pode agir no jogo"), "Missing or misleading controller sharing notice");
+                Require(notice.Visibility == Visibility.Visible && notice.Text.Contains("may also reach the game"), "Missing or misleading controller sharing notice");
                 var peer = new TextBlockAutomationPeer(notice);
-                Require(peer.GetName().Contains("enquanto este painel está aberto"), "Screen reader cannot discover the complete notice");
+                Require(peer.GetName().Contains("while this panel is open"), "Screen reader cannot discover the complete notice");
             }
             finally
             {
@@ -54,7 +54,7 @@ internal static class PremiumInterfaceTests
             try
             {
                 var card = ReviewFixTests.Button(w, "session-card");
-                Require(new ButtonAutomationPeer(card).GetName().Contains("Retomar janela") && !new ButtonAutomationPeer(card).GetName().Contains("jogo"), "Ordinary application is called a game");
+                Require(new ButtonAutomationPeer(card).GetName().Contains("Resume window") && !new ButtonAutomationPeer(card).GetName().Contains("game"), "Ordinary application is called a game");
             }
             finally
             {
@@ -79,7 +79,7 @@ internal static class PremiumInterfaceTests
             try
             {
                 w.Page(1);
-                Require(Descendants<Button>((DependencyObject)w.Content).Any(b => System.Windows.Automation.AutomationProperties.GetName(b).StartsWith("Opções de ")), "Mouse options absent");
+                Require(Descendants<Button>((DependencyObject)w.Content).Any(b => System.Windows.Automation.AutomationProperties.GetName(b).StartsWith("Options for ")), "Mouse options absent");
             }
             finally
             {
@@ -216,7 +216,7 @@ internal static class PremiumInterfaceTests
                 ReducedMotion = true
             });
             c.Save();
-            Require(c.SettingsDirty && !File.Exists(c.Diagnostics.SettingsPath) && c.Status.Contains("Prévia"), "Preview falsely persisted settings");
+            Require(c.SettingsDirty && !File.Exists(c.Diagnostics.SettingsPath) && c.Status.Contains("Preview"), "Preview falsely persisted settings");
         });
         foreach (var kind in new[]
         {
@@ -261,15 +261,15 @@ internal static class PremiumInterfaceTests
             try
             {
                 Dispatch(w, "taskview");
-                Require(w.Controller.Operation is { State: "Pendente", Dispatched: true }, "Dispatch confused with completion");
+                Require(w.Controller.Operation is { State: "Pending", Dispatched: true }, "Dispatch confused with completion");
                 w.Page(1);
                 w.ActivateEntry();
                 Require(p.Calls == 1, "Duplicate dispatch while busy");
                 w.Back();
-                Require(w.Controller.Operation is { State: "Não confirmado" }, "Post-dispatch cancellation claims undo");
+                Require(w.Controller.Operation is { State: "Unconfirmed" }, "Post-dispatch cancellation claims undo");
                 completion.SetResult(new(ResultKind.Failed, "delayed refusal"));
                 Complete(w.OperationTask);
-                Require(w.Controller.Operation is { State: "Falhou", Message: "delayed refusal", Action: "taskview" }, "Delayed result or original action lost");
+                Require(w.Controller.Operation is { State: "Failed", Message: "delayed refusal", Action: "taskview" }, "Delayed result or original action lost");
                 Require(p.Calls == 1, "Implicit retry occurred");
             }
             finally
@@ -298,7 +298,7 @@ internal static class PremiumInterfaceTests
             {
                 ReviewFixTests.Button(w, "taskview").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
                 w.Back();
-                Require(p.Calls == 0 && w.Controller.Operation?.State == "Cancelado", "Queued cancellation dispatched");
+                Require(p.Calls == 0 && w.Controller.Operation?.State == "Cancelled", "Queued cancellation dispatched");
             }
             finally
             {
@@ -484,7 +484,7 @@ internal static class PremiumInterfaceTests
                             }
 
                             Require(glyph is not null, "Neither the preferred font nor the Windows fallback can render the tab label");
-                            var formatted = new FormattedText(label.Text, System.Globalization.CultureInfo.GetCultureInfo("pt-BR"), label.FlowDirection, new Typeface(label.FontFamily, label.FontStyle, label.FontWeight, label.FontStretch), label.FontSize, Brushes.White, 1);
+                            var formatted = new FormattedText(label.Text, System.Globalization.CultureInfo.GetCultureInfo("en-US"), label.FlowDirection, new Typeface(label.FontFamily, label.FontStyle, label.FontWeight, label.FontStretch), label.FontSize, Brushes.White, 1);
                             var bounds = formatted.BuildGeometry(new Point()).Bounds;
                             Require(!bounds.IsEmpty && bounds.Width > 0 && bounds.Height > 0, "Tab label did not produce visible glyphs");
                             Console.WriteLine($"TAB-FONT light={light}; selectedPage={page}; name={name}; family={label.FontFamily.Source}; size={label.FontSize}; weight={label.FontWeight}; resolved={string.Join(",", glyph!.FamilyNames.Values.Distinct())}");
@@ -556,8 +556,8 @@ internal static class PremiumInterfaceTests
             var w = ReviewFixTests.Window();
             try
             {
-                const string message = "A identidade da janela mudou durante a solicitação. Abra Aplicativos, escolha novamente a janela e verifique um possível diálogo de salvar antes de tentar outra vez. Nenhum comando adicional foi enviado.";
-                w.Controller.SetOperation("Não confirmado", message);
+                const string message = "The window identity changed during the request. Open Apps, select the window again, and check for a save dialog before trying again. No additional command was sent.";
+                w.Controller.SetOperation("Unconfirmed", message);
                 w.RefreshRows();
                 Require(w.ActionIds.Contains("operation-details") && w.ActionIds.Contains("dismiss-operation"), "Full result or dismiss is missing from navigation");
                 for (var n = 0; n < 30 && w.SelectedAction != "operation-details"; n++)
@@ -589,7 +589,7 @@ internal static class PremiumInterfaceTests
                 w.SetRenderState("integrations");
                 var texts = (StackPanel)((Grid)ReviewFixTests.Button(w, "guide").Content).Children[1];
                 var description = ((TextBlock)texts.Children[1]).Text;
-                Require(description.Contains("Prévia") && !description.Contains("toque curto para abrir"), "Disabled preview Guide still advertises opening: " + description);
+                Require(description.Contains("Preview") && !description.Contains("short press to open"), "Disabled preview Guide still advertises opening: " + description);
             }
             finally
             {
@@ -610,7 +610,7 @@ internal static class PremiumInterfaceTests
                 TransferOwnedFocus(other);
                 Console.WriteLine($"DEACTIVATE visible={w.IsVisible}; active={w.IsActive}; queued={w.TransitionPending}; foregroundIsOther={Native.GetForegroundWindow() == new WindowInteropHelper(other).Handle}; operation={w.Controller.Operation}");
                 Require(!w.IsVisible && !w.TransitionPending && p.Calls == 0, "Deactivation did not safely cancel queued action");
-                Require(w.Controller.Operation is { State: "Cancelado", Dispatched: false }, "Deactivated undispatched operation remains " + w.Controller.Operation?.State);
+                Require(w.Controller.Operation is { State: "Cancelled", Dispatched: false }, "Deactivated undispatched operation remains " + w.Controller.Operation?.State);
             }
             finally
             {
@@ -665,7 +665,7 @@ internal static class PremiumInterfaceTests
                 RequireOwnedFocus(w);
                 Dispatch(w, "taskview");
                 Complete(w.OperationTask);
-                Require(w.IsVisible && w.IsActive && p.Calls == 1 && w.Controller.Operation?.State == "Falhou", "Visible immediate refusal or feedback lost");
+                Require(w.IsVisible && w.IsActive && p.Calls == 1 && w.Controller.Operation?.State == "Failed", "Visible immediate refusal or feedback lost");
             }
             finally
             {
@@ -746,7 +746,7 @@ internal static class PremiumInterfaceTests
                 Require(!w.IsVisible && requests == 0, "Pending operation notified or remained visible after deactivation");
                 completion.SetResult(new(ResultKind.Failed, "delayed owned refusal"));
                 Complete(w.OperationTask);
-                Require(requests == 1 && p.Calls == 1 && Native.GetForegroundWindow() == new WindowInteropHelper(other).Handle && !w.IsVisible && w.Controller.Operation?.State == "Falhou", "Delayed request retried, refocused or lost result");
+                Require(requests == 1 && p.Calls == 1 && Native.GetForegroundWindow() == new WindowInteropHelper(other).Handle && !w.IsVisible && w.Controller.Operation?.State == "Failed", "Delayed request retried, refocused or lost result");
             }
             finally
             {
@@ -781,7 +781,7 @@ internal static class PremiumInterfaceTests
                 Queue(w, app);
                 Require(w.TransitionPending, "App switch not queued");
                 w.Back();
-                Require(!w.TransitionPending && w.Controller.Operation?.State == "Cancelado", "App cancellation was lost");
+                Require(!w.TransitionPending && w.Controller.Operation?.State == "Cancelled", "App cancellation was lost");
                 Require(((Button)w.FindName("OperationDetailsButton")).IsEnabled && ((Button)w.FindName("DismissOperationButton")).IsEnabled, "Cancelled transition left recovery actions disabled");
             }
             finally
@@ -927,7 +927,7 @@ internal static class PremiumInterfaceTests
         {
             ReducedMotion = true
         });
-        w.Controller.SetOperation("Falhou", "Navigation fixture");
+        w.Controller.SetOperation("Failed", "Navigation fixture");
         w.RefreshRows();
         return w;
     }
@@ -958,7 +958,7 @@ internal static class PremiumInterfaceTests
                 w.Toggle();
                 Console.WriteLine($"LOCAL-DISMISS visible={w.IsVisible}; queued={w.TransitionPending}; calls={p.Calls}; operation={w.Controller.Operation}");
                 Require(p.Calls == 0 && w.TransitionPending, "Local dismissal handoff was lost or effect dispatched");
-                Require(w.Controller.Operation is { State: "Cancelado", Dispatched: false }, "Replaced undispatched operation remains " + w.Controller.Operation?.State);
+                Require(w.Controller.Operation is { State: "Cancelled", Dispatched: false }, "Replaced undispatched operation remains " + w.Controller.Operation?.State);
             }
             finally
             {
@@ -980,9 +980,9 @@ internal static class PremiumInterfaceTests
             var w = ReviewFixTests.Window();
             try
             {
-                const string ending = "Nenhum comando adicional foi enviado.";
-                var paragraph = "A identidade da janela mudou durante a solicitação. Abra Aplicativos, escolha novamente a janela e verifique um possível diálogo de salvar antes de tentar outra vez. ";
-                w.Controller.SetOperation("Não confirmado", string.Concat(Enumerable.Repeat(paragraph, 8)) + ending);
+                const string ending = "No additional command was sent.";
+                var paragraph = "The window identity changed during the request. Open Apps, select the window again, and check for a save dialog before trying again. ";
+                w.Controller.SetOperation("Unconfirmed", string.Concat(Enumerable.Repeat(paragraph, 8)) + ending);
                 w.RefreshRows();
                 w.Width = 360;
                 w.Height = 480;
@@ -1044,7 +1044,7 @@ internal static class PremiumInterfaceTests
             var w = ReviewFixTests.Window();
             try
             {
-                w.Controller.SetOperation("Parcial", string.Concat(Enumerable.Repeat("Mensagem longa de recuperação para leitura. ", 20)));
+                w.Controller.SetOperation("Partial", string.Concat(Enumerable.Repeat("A long recovery message for reading. ", 20)));
                 w.RefreshRows();
                 w.Width = 360;
                 w.Height = 480;
@@ -1156,7 +1156,7 @@ internal static class PremiumInterfaceTests
     private static void OpenPointerClose(MainWindow w) => ReviewFixTests.Button(w, "close").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
     internal sealed class FixturePlatform(bool preview = true) : IPlatform
     {
-        public WindowRef Window = new(101, 42, 100, "Relatório de produção — uma janela comum com um título completo e bastante longo", "fixture");
+        public WindowRef Window = new(101, 42, 100, "Production report — an ordinary window with a complete and deliberately long title", "fixture");
         public bool ValidIdentity = true, Empty;
         public int Calls, Closes;
         public Task<ActionResult> Next = Task.FromResult(new ActionResult(ResultKind.Failed, "fixture refusal"));

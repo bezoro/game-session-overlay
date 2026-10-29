@@ -14,7 +14,7 @@ internal static class Program
             return await UpdateCommands.Run(args);
         if (args.Length == 0 || args[0] is "--help" or "help")
         {
-            Console.WriteLine("gso version|history|update [install|check|status|cancel JOB_ID] [--build BUILD_ID] [--channel testing|stable] [--dry-run] [--timeout 5..600]|rollback BUILD_ID. gso status|targets|actions|trace|result ID|execute ACTION [--target ID] [--intent activate|left|right] [--revision N] [--dry-run]|cancel ID|shutdown [--bridge] [--pipe LOCAL_NAME]. Saída JSON; sem lançamento, elevação ou reenvio implícitos. Confirme a versão após atualizar com uma nova execução de gso version.");
+            Console.WriteLine("gso version|history|update [install|check|status|cancel JOB_ID] [--build BUILD_ID] [--channel testing|stable] [--dry-run] [--timeout 5..600]|rollback BUILD_ID. gso status|targets|actions|trace|result ID|execute ACTION [--target ID] [--intent activate|left|right] [--revision N] [--dry-run]|cancel ID|shutdown [--bridge] [--pipe LOCAL_NAME]. JSON output; no implicit launch, elevation or retry. Confirm the version after updating with a fresh gso version invocation.");
             return 0;
         }
 
@@ -117,11 +117,11 @@ internal static class Program
         {
             if (request.Verb is "status" or "targets" or "actions" or "trace" or "result")
                 return Print(ReadOnly(request));
-            return Print(AutomationReply.Error("Unavailable", "Instância/autoridade indisponível; nenhum lançamento ou retry implícito."));
+            return Print(AutomationReply.Error("Unavailable", "Instance or authority unavailable; no implicit launch or retry."));
         }
         catch (OperationCanceledException)
         {
-            return Print(AutomationReply.Error("Unknown", "Prazo/cancelamento; consulte result/trace antes de nova ação."));
+            return Print(AutomationReply.Error("Unknown", "Timed out or cancelled; check result/trace before another action."));
         }
         catch (Exception e) when (e is ArgumentException or FormatException or IndexOutOfRangeException or OverflowException or JsonException)
         {
@@ -141,10 +141,10 @@ internal static class Program
         await stream.ConnectAsync(1000, token);
         var handshake = JsonSerializer.Deserialize(await AutomationFrames.Read(stream, AutomationFrames.ResponseLimit, token), AutomationJson.Default.AutomationReply) ?? throw new InvalidDataException();
         if (handshake.Outcome != "Handshake" || !AutomationPipeSecurity.ServerAllowed(stream, handshake, name.EndsWith(".bridge", StringComparison.Ordinal)))
-            return AutomationReply.Error("Denied", "Identidade/elevação do servidor não confirmada.");
+            return AutomationReply.Error("Denied", "Server identity or elevation unconfirmed.");
         using var server = Process.GetProcessById(handshake.Pid);
         if (server.StartTime.ToUniversalTime().Ticks != handshake.Started)
-            return AutomationReply.Error("Denied", "Instância mudou.");
+            return AutomationReply.Error("Denied", "The instance changed.");
         if (request.Verb is "execute" or "shutdown" or "update-check" or "update-download" or "update-rollback" or "update-cancel" or "update-apply")
             request = request with
             {
@@ -163,7 +163,7 @@ internal static class Program
         }
         catch (Exception e) when (e is Win32Exception or InvalidDataException)
         {
-            return AutomationReply.Error("Denied", "Não foi possível fixar a observação da instância; shutdown não enviado.", request.RequestId);
+            return AutomationReply.Error("Denied", "Could not retain an observation of the instance; shutdown was not sent.", request.RequestId);
         }
 
         using var observed = observation;
@@ -175,7 +175,7 @@ internal static class Program
         }
         catch (Exception e) when (e is IOException or OperationCanceledException)
         {
-            return AutomationReply.Error("Unknown", "Resposta não confirmada; não reenviar automaticamente.", request.RequestId);
+            return AutomationReply.Error("Unknown", "Response unconfirmed; do not retry automatically.", request.RequestId);
         }
 
         if (request.Verb == "shutdown" && response.Outcome == "ShutdownRequested")
@@ -190,7 +190,7 @@ internal static class Program
             {
                 Outcome = exited.Outcome == "Completed" ? "Requested" : "Unknown",
                 Terminal = false,
-                Reason = exited.Outcome == "Completed" ? "A instância anterior encerrou. Atualização solicitada ao Velopack; confirme a nova versão com gso version após o reinício." : "Saída não confirmada. Consulte gso update status antes de qualquer novo pedido."
+                Reason = exited.Outcome == "Completed" ? "The previous instance exited. Update requested through Velopack; confirm the new version with gso version after the restart." : "Exit unconfirmed. Check gso update status before making another request."
             };
         }
 
@@ -206,7 +206,7 @@ internal static class Program
             {
                 Outcome = "Completed",
                 Terminal = true,
-                Reason = "A instância PID/criação exatos encerrou normalmente."
+                Reason = "The instance with the exact PID and creation identity exited normally."
             };
         }
         catch (Exception e) when (e is OperationCanceledException or Win32Exception)
@@ -215,7 +215,7 @@ internal static class Program
             {
                 Outcome = "Unknown",
                 Terminal = true,
-                Reason = "Saída da instância não confirmada; não haverá force-kill ou reenvio."
+                Reason = "Instance exit unconfirmed; no force-kill or retry will be attempted."
             };
         }
     }
@@ -231,14 +231,14 @@ internal static class Program
                 if (new FileInfo(path).Length > 1024 * 1024)
                     throw new InvalidDataException();
                 var records = JsonSerializer.Deserialize(File.ReadAllBytes(path), AutomationJson.Default.AutomationRecords);
-                return records?.Records.FirstOrDefault(r => r.Id == request.RequestId)?.Reply ?? AutomationReply.Error("Unavailable", "ID não retido.");
+                return records?.Records.FirstOrDefault(r => r.Id == request.RequestId)?.Reply ?? AutomationReply.Error("Unavailable", "ID not retained.");
             }
 
             if (request.Verb == "trace")
                 return new()
                 {
                     Outcome = "Snapshot",
-                    Reason = "Arquivo somente leitura; não concede autoridade.",
+                    Reason = "Read-only file; it grants no authority.",
                     Trace = File.ReadLines(Path.Combine(root, "automation-trace.jsonl")).TakeLast(24).ToArray()
                 };
             var file = Path.Combine(root, "automation-snapshot.json");
@@ -248,13 +248,13 @@ internal static class Program
             return new()
             {
                 Outcome = "Snapshot",
-                Reason = "Snapshot somente leitura; verifique AtUtc/frescor. Não concede autoridade de mutação.",
+                Reason = "Read-only snapshot; check AtUtc and freshness. It grants no mutation authority.",
                 Snapshot = snapshot
             };
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
         {
-            return AutomationReply.Error("Unavailable", "Nenhuma observação publicada disponível.");
+            return AutomationReply.Error("Unavailable", "No published observation is available.");
         }
     }
 }

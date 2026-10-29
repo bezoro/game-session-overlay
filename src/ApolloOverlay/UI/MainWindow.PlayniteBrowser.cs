@@ -78,10 +78,10 @@ public partial class MainWindow
             var full = Path.GetFullPath(folder);
             var root = Path.GetPathRoot(full);
             if (root is null || !Path.IsPathFullyQualified(full) || new DriveInfo(root).DriveType is not (DriveType.Fixed or DriveType.Removable))
-                return new([], null, "Escolha uma unidade local.", false);
+                return new([], null, "Choose a local drive.", false);
             var directory = new DirectoryInfo(full);
             if ((directory.Attributes & FileAttributes.ReparsePoint) != 0)
-                return new([], null, "Esta pasta é um atalho e não pode ser aberta aqui.", false);
+                return new([], null, "This folder is a shortcut and cannot be opened here.", false);
             var executable = Path.Combine(full, "Playnite.FullscreenApp.exe");
             var found = File.Exists(executable) ? executable : null;
             var folders = new List<PlayniteFolder>();
@@ -120,7 +120,7 @@ public partial class MainWindow
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or SecurityException or ArgumentException or NotSupportedException)
         {
-            return new([], null, "Não foi possível abrir esta pasta. Volte e escolha outra.", false);
+            return new([], null, "Could not open this folder. Go back and choose another.", false);
         }
     }
 
@@ -128,10 +128,10 @@ public partial class MainWindow
     {
         var frame = view.Current;
         EnsurePlayniteScan(frame.BrowserFolder);
-        Paragraph(frame.BrowserFolder is null ? "Escolha uma unidade e abra as pastas até encontrar o Playnite." : frame.BrowserFolder);
+        Paragraph(frame.BrowserFolder is null ? "Choose a drive and browse its folders to find Playnite." : frame.BrowserFolder);
         var listing = playniteListing;
         if (listing is null)
-            AddRow("playnite-loading", "Carregando pastas…", "Aguarde ou volte", () =>
+            AddRow("playnite-loading", "Loading folders…", "Wait or go back", () =>
             {
             }, false);
         else
@@ -139,27 +139,27 @@ public partial class MainWindow
             if (listing.Error is not null)
                 Paragraph(listing.Error);
             if (listing.Executable is { } executable)
-                AddRow("playnite-use", "Usar Playnite desta pasta", "Salve os ajustes para manter esta escolha.", () => ChoosePlayniteExecutable(executable));
+                AddRow("playnite-use", "Use Playnite from this folder", "Save settings to keep this choice.", () => ChoosePlayniteExecutable(executable));
             var pageCount = Math.Max(1, (listing.Folders.Length + PlaynitePageSize - 1) / PlaynitePageSize);
             var page = Math.Clamp(frame.BrowserPage, 0, pageCount - 1);
             for (var i = page * PlaynitePageSize; i < Math.Min((page + 1) * PlaynitePageSize, listing.Folders.Length); i++)
             {
                 var item = listing.Folders[i];
-                AddRow("playnite-folder:" + i, item.Name, "Abrir pasta", () => OpenView(new(OverlayRoute.PlayniteBrowser, SelectedId: "playnite-loading", BrowserFolder: item.Path)));
+                AddRow("playnite-folder:" + i, item.Name, "Open folder", () => OpenView(new(OverlayRoute.PlayniteBrowser, SelectedId: "playnite-loading", BrowserFolder: item.Path)));
             }
 
             if (listing.Folders.Length == 0 && listing.Executable is null && listing.Error is null)
-                Paragraph(frame.BrowserFolder is null ? "Nenhuma unidade local encontrada." : "Nenhuma pasta ou Playnite encontrado aqui.");
+                Paragraph(frame.BrowserFolder is null ? "No local drives found." : "No folders or Playnite installation found here.");
             if (listing.Truncated)
-                Paragraph("Esta pasta tem muitas subpastas. Use a seleção pelo Windows se a pasta desejada não aparecer.");
+                Paragraph("This folder has many subfolders. Use the Windows file picker if the folder you need is not listed.");
             if (page > 0)
-                AddRow("playnite-page-previous", "Página anterior", $"{page} de {pageCount}", () => PlaynitePage(page - 1));
+                AddRow("playnite-page-previous", "Previous page", $"{page} of {pageCount}", () => PlaynitePage(page - 1));
             if (page + 1 < pageCount)
-                AddRow("playnite-page-next", "Próxima página", $"{page + 1} de {pageCount}", () => PlaynitePage(page + 1));
+                AddRow("playnite-page-next", "Next page", $"{page + 1} of {pageCount}", () => PlaynitePage(page + 1));
         }
 
-        AddRow("playnite-native", "Selecionar pelo Windows", "Usar mouse ou teclado", () => DialogTask = ConfigurePlayniteCore());
-        AddRow("playnite-browser-back", "Voltar", "Não altera a configuração", Back);
+        AddRow("playnite-native", "Choose using Windows", "Use mouse or keyboard", () => DialogTask = ConfigurePlayniteCore());
+        AddRow("playnite-browser-back", "Back", "Does not change settings", Back);
     }
 
     private void PlaynitePage(int page)
@@ -183,13 +183,13 @@ public partial class MainWindow
             return;
         var cycle = focusCycle;
         var revision = playniteScanRevision;
-        FeedbackText("Verificando Playnite…");
+        FeedbackText("Checking Playnite…");
         var available = await Task.Run(() => File.Exists(executable));
         if (exiting || cycle != focusCycle || revision != playniteScanRevision || view.Current.Route != OverlayRoute.PlayniteBrowser || !NavigationAllowed)
             return;
         if (!available)
         {
-            FeedbackText("Playnite não está mais disponível nesta pasta. Escolha novamente.");
+            FeedbackText("Playnite is no longer available in this folder. Choose it again.");
             return;
         }
 
@@ -207,6 +207,6 @@ public partial class MainWindow
             view.SwitchTab(OverlayTab.System);
         SyncView();
         RefreshRows();
-        FeedbackText("Playnite selecionado. Salve os ajustes para manter.");
+        FeedbackText("Playnite selected. Save settings to keep this choice.");
     }
 }

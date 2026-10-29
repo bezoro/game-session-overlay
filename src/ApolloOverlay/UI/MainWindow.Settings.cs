@@ -31,7 +31,7 @@ public partial class MainWindow
         });
     }
 
-    private string GuideLimitTitle() => "Guide · limite para abrir " + (Controller.Settings.GuideOpenMaxHoldMs / 1000d).ToString("0.0", System.Globalization.CultureInfo.GetCultureInfo("pt-BR")) + " s";
+    private string GuideLimitTitle() => "Guide · opening hold limit " + (Controller.Settings.GuideOpenMaxHoldMs / 1000d).ToString("0.0", System.Globalization.CultureInfo.GetCultureInfo("en-US")) + " s";
     private bool AdjustGuideLimit(NavDirection direction)
     {
         if (navigation.Id != "guide-limit" || direction is not (NavDirection.Left or NavDirection.Right))
@@ -71,7 +71,7 @@ public partial class MainWindow
         RefreshRows();
         if (soundJustEnabled)
             RequestCue(FeedbackCue.Confirmation);
-        FeedbackText("Alteração em memória · Salvar ajustes para manter.");
+        FeedbackText("Unsaved change · Save settings to keep it.");
     }
 
     private void Save()
@@ -81,15 +81,15 @@ public partial class MainWindow
         try
         {
             Controller.Save();
-            RetainOperation(Controller.Platform.IsPreview ? "Simulado" : "Concluído", Controller.Status);
+            RetainOperation(Controller.Platform.IsPreview ? "Simulated" : "Completed", Controller.Status);
             if (fromFooter && !Controller.SettingsDirty)
                 navigation = new(entries.Any(entry => entry.Id == returnTo && !IsFooterAction(entry.Id)) ? returnTo : "settings");
             FeedbackText(Controller.Status);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException)
         {
-            RetainOperation("Falhou", "Falha ao salvar; configuração anterior preservada. Tente salvar novamente ou descarte as alterações.");
-            FeedbackText("Falha ao salvar; configuração anterior preservada.");
+            RetainOperation("Failed", "Could not save; previous settings preserved. Try saving again or discard your changes.");
+            FeedbackText("Could not save; previous settings preserved.");
         }
 
         RefreshRows();
@@ -110,7 +110,7 @@ public partial class MainWindow
     {
         if (Controller.Platform.IsPreview && PlayniteDialogFixture is null)
         {
-            FeedbackText("Prévia: nenhuma configuração alterada.");
+            FeedbackText("Preview: no settings changed.");
             return;
         }
 
@@ -126,7 +126,7 @@ public partial class MainWindow
             {
                 var dialog = new OpenFileDialog
                 {
-                    Title = "Escolha Playnite.FullscreenApp.exe",
+                    Title = "Choose Playnite.FullscreenApp.exe",
                     Filter = "Playnite Fullscreen|Playnite.FullscreenApp.exe",
                     CheckFileExists = true
                 };
@@ -145,7 +145,7 @@ public partial class MainWindow
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
             if (CurrentCycle(cycle))
-                FeedbackText("Não foi possível escolher o Playnite.");
+                FeedbackText("Could not select Playnite.");
         }
         finally
         {

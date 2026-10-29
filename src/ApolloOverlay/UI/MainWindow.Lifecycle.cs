@@ -10,16 +10,25 @@ public partial class MainWindow
     private HwndSource? source;
     private TrayHost? tray;
     private bool ownedDialog;
+    private bool placementQueued;
     private nint WindowMessage(nint hwnd, int message, nint w, nint l, ref bool handled)
     {
-        if (message == 0x8002)
+        if (message == SingleInstanceActivation.OpenMessage)
         {
             OpenPanel();
             handled = true;
         }
 
-        if (message is 0x7E or 0x2E0 && IsVisible && !placing)
-            Dispatcher.BeginInvoke(() => Place());
+        if ((message is 0x7E or 0x2E0 || message == 0x1A && w == 47) && IsVisible && !placing && !placementQueued)
+        {
+            placementQueued = true;
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+            {
+                placementQueued = false;
+                if (!exiting && IsVisible)
+                    Place();
+            });
+        }
         return 0;
     }
 
@@ -27,7 +36,7 @@ public partial class MainWindow
     {
         if (updateCommitting && !updateCloseAuthorized)
         {
-            FeedbackText("A troca de versão está sendo preparada. Aguarde o reinício.");
+            FeedbackText("The version change is being prepared. Wait for the restart.");
             return;
         }
 
@@ -44,7 +53,7 @@ public partial class MainWindow
         if (updateCommitting && !updateCloseAuthorized)
         {
             args.Cancel = true;
-            FeedbackText("Aguarde a preparação da troca de versão.");
+            FeedbackText("Wait while the version change is prepared.");
             return;
         }
 
@@ -70,7 +79,7 @@ public partial class MainWindow
 
         args.Cancel = true;
         closeRequested = true;
-        CancelSteamOwner("Encerramento solicitado; drenando teclas.");
+        CancelSteamOwner("Shutdown requested; releasing held keys.");
         closeDrain = DrainAndClose(owner, OperationTask);
     }
 
@@ -131,7 +140,7 @@ public partial class MainWindow
         effectCancellation?.Cancel();
         fadeGeneration++;
         fadingOut = false;
-        CancelSteamOwner("Overlay encerrada.");
+        CancelSteamOwner("Overlay closed.");
         automationHost?.Dispose();
         exiting = true;
         operationGeneration++;
@@ -192,7 +201,14 @@ public partial class MainWindow
             source.CompositionTarget.BackgroundColor = Colors.Transparent;
             source.AddHook(WindowMessage);
             if (!diagnostic)
-                tray = new(Dispatcher, OpenPanel, ExitFromTray);
+            {
+                SingleInstanceActivation.AllowRequests(source.Handle);
+                tray = new(Dispatcher, () =>
+                {
+                    SetInputMethod("mouse");
+                    OpenPanel();
+                }, ExitFromTray);
+            }
         };
         Closing += OnClosing;
     }

@@ -31,7 +31,7 @@ public sealed class ScreenCaptures
     private string ItemPath(string id, string extension)
     {
         if (!ValidId(id))
-            throw new InvalidDataException("Identificação da captura inválida.");
+            throw new InvalidDataException("Invalid capture identity.");
         return Path.Combine(DirectoryPath, id + extension);
     }
 
@@ -47,7 +47,7 @@ public sealed class ScreenCaptures
     public async Task<ScreenCaptureResult> CaptureAsync(DisplayRef display, string title, string gameKey, CancellationToken cancellation = default)
     {
         if (!await operation.WaitAsync(0, cancellation))
-            return new(new(ResultKind.Unavailable, "Uma captura já está em andamento."), null);
+            return new(new(ResultKind.Unavailable, "A capture is already in progress."), null);
         try
         {
             return await Task.Run(() =>
@@ -59,7 +59,7 @@ public sealed class ScreenCaptures
                     || pixels.Height is < 1 or > 16384
                     || (long)pixels.Width * pixels.Height > 40000000
                     || pixels.Bgra.LongLength != (long)pixels.Width * pixels.Height * 4)
-                    throw new InvalidDataException("A imagem ultrapassa o tamanho suportado.");
+                    throw new InvalidDataException("The image exceeds the supported size.");
                 cancellation.ThrowIfCancellationRequested();
                 var created = DateTimeOffset.UtcNow;
                 var id = "gso-" + created.ToString("yyyyMMddHHmmssfff", System.Globalization.CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N");
@@ -86,10 +86,10 @@ public sealed class ScreenCaptures
                     }
                     catch (Exception error) when (error is IOException or UnauthorizedAccessException)
                     {
-                        return new ScreenCaptureResult(new(ResultKind.Partial, "A imagem foi salva, mas não foi possível adicioná-la à galeria. Abra a pasta de capturas."), item);
+                        return new ScreenCaptureResult(new(ResultKind.Partial, "The image was saved but could not be added to the gallery. Open the captures folder."), item);
                     }
 
-                    return new ScreenCaptureResult(new(ResultKind.Completed, "Imagem salva na pasta Capturas."), item);
+                    return new ScreenCaptureResult(new(ResultKind.Completed, "Image saved to the captures folder."), item);
                 }
                 finally
                 {
@@ -100,11 +100,11 @@ public sealed class ScreenCaptures
         }
         catch (OperationCanceledException)
         {
-            return new(new(ResultKind.Cancelled, "Captura cancelada antes de salvar."), null);
+            return new(new(ResultKind.Cancelled, "Capture cancelled before saving."), null);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or Win32Exception or InvalidDataException or ArgumentException or NotSupportedException)
         {
-            return new(new(ResultKind.Unavailable, "Não foi possível salvar a imagem. Confira o monitor, as permissões e o espaço em disco."), null);
+            return new(new(ResultKind.Unavailable, "Could not save the image. Check the monitor, permissions and available disk space."), null);
         }
         finally
         {
@@ -166,7 +166,7 @@ public sealed class ScreenCaptures
         if (!header[..8].SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 })
             || System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(header[16..20]) != item.Width
             || System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(header[20..24]) != item.Height)
-            throw new InvalidDataException("A imagem não corresponde à captura selecionada.");
+            throw new InvalidDataException("The image does not match the selected capture.");
         input.Position = 0;
         var image = new BitmapImage();
         image.BeginInit();

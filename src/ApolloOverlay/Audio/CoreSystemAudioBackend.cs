@@ -7,7 +7,7 @@ internal sealed class CoreSystemAudioBackend : ISystemAudioBackend
     private static void Check(int value)
     {
         if (value != 0)
-            throw new COMException("Core Audio não retornou S_OK.", value);
+            throw new COMException("Core Audio did not return S_OK.", value);
     }
 
     private static void Release(object? value)
@@ -58,7 +58,7 @@ internal sealed class CoreSystemAudioBackend : ISystemAudioBackend
                 {
                     Check(collection.Item(index, out device));
                     Check(device.GetId(out var id));
-                    choices.Add(new(id, DeviceName(device, "Saída " + (index + 1))));
+                    choices.Add(new(id, DeviceName(device, "Output " + (index + 1))));
                 }
                 finally
                 {
@@ -67,7 +67,7 @@ internal sealed class CoreSystemAudioBackend : ISystemAudioBackend
             }
 
             var microphone = Default(enumerator, 1, 2);
-            var name = "Microfone indisponível";
+            var name = "Microphone unavailable";
             bool? muted = null;
             if (microphone.Length > 0)
             {
@@ -76,7 +76,7 @@ internal sealed class CoreSystemAudioBackend : ISystemAudioBackend
                 try
                 {
                     Check(enumerator.GetDevice(microphone, out capture));
-                    name = DeviceName(capture, "Microfone padrão");
+                    name = DeviceName(capture, "Default microphone");
                     var iid = typeof(IAudioEndpointVolume).GUID;
                     Check(capture.Activate(ref iid, 23, 0, out activated));
                     Check(((IAudioEndpointVolume)activated).GetMute(out var state));
@@ -93,7 +93,7 @@ internal sealed class CoreSystemAudioBackend : ISystemAudioBackend
                 }
             }
 
-            return new(choices.ToArray(), Default(enumerator, 0, 0), Default(enumerator, 0, 1), microphone, name, muted, "Saídas para jogos e mídia; microfone padrão de comunicação.");
+            return new(choices.ToArray(), Default(enumerator, 0, 0), Default(enumerator, 0, 1), microphone, name, muted, "Game and media outputs; default communications microphone.");
         }
         finally
         {
@@ -114,27 +114,27 @@ internal sealed class CoreSystemAudioBackend : ISystemAudioBackend
         {
             enumerator = Create();
             if (string.IsNullOrEmpty(expectedId) || Default(enumerator, 1, 2) != expectedId)
-                return new(ResultKind.Unavailable, "O microfone mudou. Atualize antes de alterar o estado.");
+                return new(ResultKind.Unavailable, "The microphone changed. Refresh before changing its state.");
             Check(enumerator.GetDevice(expectedId, out device));
             Check(device.GetState(out var state));
             if (state != 1)
-                return new(ResultKind.Unavailable, "O microfone está desconectado.");
+                return new(ResultKind.Unavailable, "The microphone is disconnected.");
             var iid = typeof(IAudioEndpointVolume).GUID;
             Check(device.Activate(ref iid, 23, 0, out activated));
             var volume = (IAudioEndpointVolume)activated;
             if (!continuing())
-                return new(ResultKind.Cancelled, "Nenhuma alteração enviada ao microfone.");
+                return new(ResultKind.Cancelled, "No microphone change was sent.");
             var context = Guid.Empty;
             sent = true;
             Check(volume.SetMute(muted, ref context));
             if (!continuing() || Default(enumerator, 1, 2) != expectedId)
-                return new(ResultKind.Unknown, "O microfone pode ter mudado após o envio. Confira seu estado.");
+                return new(ResultKind.Unknown, "The microphone may have changed after dispatch. Check its state.");
             Check(volume.GetMute(out var after));
-            return new(after == muted ? ResultKind.Completed : ResultKind.Unknown, after == muted ? muted ? "Microfone silenciado." : "Microfone ativado." : "O microfone não confirmou o estado solicitado.");
+            return new(after == muted ? ResultKind.Completed : ResultKind.Unknown, after == muted ? muted ? "Microfone silenciado." : "Microfone ativado." : "The microphone did not confirm the requested state.");
         }
         catch (COMException)
         {
-            return new(sent ? ResultKind.Unknown : ResultKind.Unavailable, "O Windows não confirmou a alteração do microfone.");
+            return new(sent ? ResultKind.Unknown : ResultKind.Unavailable, "Windows did not confirm the microphone change.");
         }
         finally
         {
@@ -155,7 +155,7 @@ internal sealed class CoreSystemAudioBackend : ISystemAudioBackend
         {
             enumerator = Create();
             if (expectedConsole.Length == 0 || Default(enumerator, 0, 0) != expectedConsole || Default(enumerator, 0, 1) != expectedMedia)
-                return new(ResultKind.Unavailable, "A saída de áudio mudou. Atualize antes de selecionar outro dispositivo.");
+                return new(ResultKind.Unavailable, "The audio output changed. Refresh before selecting another device.");
             foreach (var id in new[]
             {
                 console,
@@ -168,7 +168,7 @@ internal sealed class CoreSystemAudioBackend : ISystemAudioBackend
                     Check(enumerator.GetDevice(id, out device));
                     Check(device.GetState(out var state));
                     if (state != 1)
-                        return new(ResultKind.Unavailable, "A saída escolhida não está conectada.");
+                        return new(ResultKind.Unavailable, "The selected output is disconnected.");
                 }
                 finally
                 {
@@ -181,21 +181,21 @@ internal sealed class CoreSystemAudioBackend : ISystemAudioBackend
             Check(CoCreateInstance(ref clsid, 0, 1, ref iid, out policy));
             var setter = (IOverlayAudioPolicy)policy;
             if (!continuing())
-                return new(ResultKind.Cancelled, "Nenhuma alteração enviada às saídas.");
+                return new(ResultKind.Cancelled, "No output changes were sent.");
             sent++;
             Check(setter.SetDefaultEndpoint(console, 0));
             if (!continuing())
-                return new(ResultKind.Partial, "A saída dos jogos foi solicitada. A saída da mídia não foi alterada após o cancelamento.");
+                return new(ResultKind.Partial, "The game output was requested. The media output was not changed after cancellation.");
             sent++;
             Check(setter.SetDefaultEndpoint(media, 1));
             if (!continuing())
-                return new(ResultKind.Unknown, "Confira as saídas após o envio. A observação foi interrompida.");
+                return new(ResultKind.Unknown, "Check the outputs after dispatch. Observation was interrupted.");
             var confirmed = Default(enumerator, 0, 0) == console && Default(enumerator, 0, 1) == media;
-            return new(confirmed ? ResultKind.Completed : ResultKind.Unknown, confirmed ? "Saídas de jogos e mídia confirmadas." : "O Windows não confirmou todas as saídas solicitadas.");
+            return new(confirmed ? ResultKind.Completed : ResultKind.Unknown, confirmed ? "Game and media outputs confirmed." : "Windows did not confirm all requested outputs.");
         }
         catch (COMException)
         {
-            return new(sent > 0 ? ResultKind.Partial : ResultKind.Unavailable, sent > 0 ? "A alteração das saídas foi parcial. Atualize para conferir o estado." : "A troca de saída não está disponível neste Windows.");
+            return new(sent > 0 ? ResultKind.Partial : ResultKind.Unavailable, sent > 0 ? "The output change was partial. Refresh to check the state." : "Output switching is unavailable on this version of Windows.");
         }
         finally
         {

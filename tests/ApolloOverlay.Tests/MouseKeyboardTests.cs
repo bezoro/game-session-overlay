@@ -154,7 +154,7 @@ internal static class MouseKeyboardTests
             Pick(w, "guide");
             var enabled = w.Controller.Settings.GuideXInputEnabled;
             Tap(w, Key.Enter);
-            Require(w.Controller.Settings.GuideXInputEnabled == enabled && w.Feedback.StartsWith("Indisponível"), "Disabled Guide was activated or lacked an explanation");
+            Require(w.Controller.Settings.GuideXInputEnabled == enabled && w.Feedback.StartsWith("Unavailable"), "Disabled Guide was activated or lacked an explanation");
             Pick(w, "guide-limit");
             var before = w.Controller.Settings.GuideOpenMaxHoldMs;
             Tap(w, Key.Right);
@@ -199,7 +199,7 @@ internal static class MouseKeyboardTests
             Tap(w, Key.Enter);
             Tap(RequireReader(), Key.Right);
             Require(w.SelectedAction == "switch-detail" && Keyboard.FocusedElement is not TextBox, "Right did not leave the window reader");
-            w.Controller.SetOperation("Não confirmado", "Mensagem longa de resultado para leitura e seleção.", "audio");
+            w.Controller.SetOperation("Unconfirmed", "A long result message for reading and selection.", "audio");
             w.RefreshRows();
             Click(w, "operation-details");
             Pick(w, "operation-text");
@@ -371,7 +371,7 @@ internal static class MouseKeyboardTests
             Window.FocusRequest = _ => false;
             Window.OpenPanel();
             Complete(Window.OpeningTask);
-            Require(Window.IsVisible && Window.Feedback.Contains("não confirmou"), "PRECONDITION: native confirmation refusal was not established");
+            Require(Window.IsVisible && Window.Feedback.Contains("did not confirm"), "PRECONDITION: native confirmation refusal was not established");
         }
 
         internal void RestoreNativeFocus()
@@ -404,7 +404,7 @@ internal static class MouseKeyboardTests
 
     private sealed class Source : IUpdateSource
     {
-        internal static readonly UpdateCandidate Next = new(42, "0.2.0-preview.42.1+1111111", "mouse-keyboard-fixture", new string('1', 40), "testing", DateTimeOffset.Parse("2026-10-28T12:00:00Z"), "Notas literais para leitura e seleção de texto.", 201, "fixture.nupkg", 1234, new string('a', 64));
+        internal static readonly UpdateCandidate Next = new(42, "0.2.0-preview.42.1+1111111", "mouse-keyboard-fixture", new string('1', 40), "testing", DateTimeOffset.Parse("2026-10-28T12:00:00Z"), "Literal notes for reading and text selection.", 201, "fixture.nupkg", 1234, new string('a', 64));
         internal int Stages;
         public Task<IReadOnlyList<UpdateCandidate>> CheckAsync(string channel, CancellationToken token) => Task.FromResult<IReadOnlyList<UpdateCandidate>>([Next]);
         public Task<PreparedUpdate> StageAsync(UpdateCandidate candidate, IProgress<UpdateProgress>? progress, CancellationToken token)

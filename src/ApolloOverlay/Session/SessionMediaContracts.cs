@@ -10,7 +10,7 @@ public enum SessionMediaCommand
 public sealed record SessionMediaItem(string Id, string Title, string Artist, string Application, bool Playing, bool CanToggle, bool CanPrevious, bool CanNext);
 public sealed record SessionMediaSnapshot(long Revision, IReadOnlyList<SessionMediaItem> Items, string CurrentId, string Status)
 {
-    public static SessionMediaSnapshot Empty { get; } = new(0, [], "", "Nenhuma mídia ativa.");
+    public static SessionMediaSnapshot Empty { get; } = new(0, [], "", "No active media.");
 }
 
 public interface ISessionMedia : IDisposable

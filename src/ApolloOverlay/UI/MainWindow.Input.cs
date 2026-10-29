@@ -45,8 +45,7 @@ public partial class MainWindow
 
     private void OnLocalPreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        inputMethod = "mouse";
-        UpdateHints();
+        SetInputMethod("mouse");
         recoveryMouseRelease = null;
         if (fadingOut)
         {
@@ -91,8 +90,7 @@ public partial class MainWindow
             return;
         }
 
-        inputMethod = "keyboard";
-        UpdateHints();
+        SetInputMethod("keyboard");
         if (HandleSessionKeyboardKey(e) || HandleSessionSliderKey(e))
             return;
         var recoveryKey = NormalizeKey(e.Key, e.SystemKey, e.ImeProcessedKey, e.DeadCharProcessedKey);
@@ -167,14 +165,14 @@ public partial class MainWindow
         if (Confirming && closeSource != 0 && firstPress && key != Key.Escape)
         {
             CancelHold();
-            FeedbackText("Origem da pressão mudou; fechamento cancelado.");
+            FeedbackText("Input source changed; closing cancelled.");
             e.Handled = true;
             return;
         }
 
         if (key == Key.None && TransitionPending)
         {
-            RejectHandoff("Transição cancelada; tecla não identificada.");
+            RejectHandoff("Transition cancelled; unidentified key.");
             e.Handled = true;
             return;
         }
@@ -212,7 +210,7 @@ public partial class MainWindow
             if (Confirming && closeSource != 0)
             {
                 CancelHold();
-                FeedbackText("Origem da pressão mudou; fechamento cancelado.");
+                FeedbackText("Input source changed; closing cancelled.");
             }
             else if (!e.IsRepeat && !Confirming)
             {
@@ -290,6 +288,12 @@ public partial class MainWindow
     {
         PreviewMouseDown += OnLocalPreviewMouseDown;
         PreviewMouseUp += OnLocalPreviewMouseUp;
+        PreviewMouseMove += (_, e) =>
+        {
+            if (IsVisible && !exiting)
+                ObservePointerPosition(PointToScreen(e.GetPosition(this)));
+        };
+        PreviewMouseWheel += (_, _) => SetInputMethod("mouse");
     }
 
     private void WireKeyboardInput()
@@ -301,7 +305,7 @@ public partial class MainWindow
             if (key != Key.None)
                 heldKeys.Remove(key);
             else if (TransitionPending)
-                RejectHandoff("Transição cancelada; tecla não identificada.");
+                RejectHandoff("Transition cancelled; unidentified key.");
             if (!navigationKeysArmed && heldKeys.Count == 0 && PhysicalKeysNeutral())
                 navigationKeysArmed = true;
             if (e.Key is Key.Enter or Key.Space)

@@ -59,7 +59,7 @@ public partial class MainWindow
 
     private void BuildSessionDashboard()
     {
-        Section("Áudio da sessão");
+        Section("Session audio");
         var gameVolume = AddRow("session-volume", GameVolumeTitle, GameVolumeDescription, ToggleGameAudio, appAudio.CanSetMute);
         AddSessionSlider(gameVolume, appAudio.VolumeMaximum ?? 0, value => SetGameVolume(value));
         SyncSessionSlider("session-volume", appAudio.VolumeMaximum);
@@ -68,15 +68,15 @@ public partial class MainWindow
             AddSessionSlider(outputVolume, audio.Current.Volume, value => AudioAction(audio.Set(value, expectedEndpoint: audio.Current.EndpointId)));
         var first = Rows.RowDefinitions.Count;
         AddRow("microphone", MicrophoneTitle, systemAudio.Current.MicrophoneName, ToggleMicrophone, systemAudio.Current.MicrophoneMuted is not null, row: narrow ? null : first, column: 0);
-        AddRow("session-mixer", "Mixer de áudio", "Som de cada aplicativo", () => OpenFeature(OverlayRoute.Mixer, "mixer-refresh"), row: narrow ? null : first, column: 1);
-        Section("Sua sessão");
+        AddRow("session-mixer", "Audio mixer", "Audio for each app", () => OpenFeature(OverlayRoute.Mixer, "mixer-refresh"), row: narrow ? null : first, column: 1);
+        Section("Your session");
         first = Rows.RowDefinitions.Count;
-        AddRow("session-profiles", "Ambiente", sessionProfiles.Items.FirstOrDefault(profile => profile.Id == sessionProfiles.ActiveId)?.Name ?? "TV ou Computador", () => OpenFeature(OverlayRoute.Profiles, "profile:tv"), row: narrow ? null : first, column: 0);
-        AddRow("session-capture", "Capturar tela", "Salvar uma imagem do monitor", CaptureSession, row: narrow ? null : first, column: 1);
+        AddRow("session-profiles", "Setup", sessionProfiles.Items.FirstOrDefault(profile => profile.Id == sessionProfiles.ActiveId)?.Name ?? "TV or Desktop", () => OpenFeature(OverlayRoute.Profiles, "profile:tv"), row: narrow ? null : first, column: 0);
+        AddRow("session-capture", "Capture screen", "Save a screenshot of the display", CaptureSession, row: narrow ? null : first, column: 1);
         first = Rows.RowDefinitions.Count;
-        AddRow("session-media", "Mídia", CurrentMedia?.Title ?? "Controles de reprodução", () => OpenFeature(OverlayRoute.Media, "media-toggle"), row: narrow ? null : first, column: 0);
-        AddRow("session-keyboard", "Teclado", "Escrever usando o controle", () => OpenKeyboard(false), row: narrow ? null : first, column: 1);
-        AddRow("session-gallery", "Suas capturas", "Galeria local da sessão", OpenCaptures);
+        AddRow("session-media", "Media", CurrentMedia?.Title ?? "Playback controls", () => OpenFeature(OverlayRoute.Media, "media-toggle"), row: narrow ? null : first, column: 0);
+        AddRow("session-keyboard", "Keyboard", "Type with a controller", () => OpenKeyboard(false), row: narrow ? null : first, column: 1);
+        AddRow("session-gallery", "Your captures", "Local session gallery", OpenCaptures);
     }
 
     private void OpenFeature(OverlayRoute route, string first)
@@ -120,14 +120,14 @@ public partial class MainWindow
 
     private string? SessionFeatureTitle => view.Current.Route switch
     {
-        OverlayRoute.Mixer => "Mixer de aplicativos",
-        OverlayRoute.AudioDevices => "Saída e microfone",
-        OverlayRoute.Profiles => "Seu ambiente",
-        OverlayRoute.ProfileEdit => "Ajustar perfil",
-        OverlayRoute.Media => "Sua música",
-        OverlayRoute.Keyboard => "Teclado",
-        OverlayRoute.Captures => "Suas capturas",
-        OverlayRoute.CaptureDetail => "Captura da sessão",
+        OverlayRoute.Mixer => "App mixer",
+        OverlayRoute.AudioDevices => "Output and microphone",
+        OverlayRoute.Profiles => "Your setup",
+        OverlayRoute.ProfileEdit => "Edit profile",
+        OverlayRoute.Media => "Your music",
+        OverlayRoute.Keyboard => "Keyboard",
+        OverlayRoute.Captures => "Your captures",
+        OverlayRoute.CaptureDetail => "Session capture",
         _ => null
     };
 }

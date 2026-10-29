@@ -22,7 +22,7 @@ public sealed class GuideConnection : IDisposable
     {
         get;
         private set;
-    } = "Guide não verificado.";
+    } = "Guide not verified.";
     public bool Observed
     {
         get;
@@ -55,7 +55,7 @@ public sealed class GuideConnection : IDisposable
         }
 
         registered = true;
-        Status = "Guide inscrito; entrega ainda não observada. Ctrl+Alt+Espaço disponível.";
+        Status = "Guide registered; delivery has not been observed. Ctrl+Alt+Space is available.";
         return true;
     }
 
@@ -69,7 +69,7 @@ public sealed class GuideConnection : IDisposable
             backend.Stop();
             if (!backend.Unregister())
             {
-                Status = "Guide desativado; runtime retido até a saída por falha ao remover callback.";
+                Status = "Guide disabled; the runtime is retained until exit because callback removal failed.";
                 return;
             }
         }
@@ -97,10 +97,10 @@ public unsafe sealed class GameInputBackend : IGuideBackend
     internal GameInputBackend(nint testInstance) => instance = testInstance;
     public bool Initialize(out string reason)
     {
-        reason = "GameInput v2 indisponível. Use Ctrl+Alt+Espaço.";
+        reason = "GameInput v2 unavailable. Use Ctrl+Alt+Space.";
         if (instance != 0)
         {
-            reason = "Interface v2 já inicializada.";
+            reason = "The v2 interface is already initialized.";
             return true;
         }
 
@@ -135,7 +135,7 @@ public unsafe sealed class GameInputBackend : IGuideBackend
                 if (hr >= 0 && v2 != 0)
                 {
                     instance = v2;
-                    reason = $"GameInput v2 disponível ({file}); entrega Guide não verificada.";
+                    reason = $"GameInput v2 available ({file}); Guide delivery unverified.";
                     return true;
                 }
             }
@@ -152,7 +152,7 @@ public unsafe sealed class GameInputBackend : IGuideBackend
 
     public bool Register(Action pressed, out string reason)
     {
-        reason = "Falha ao registrar Guide. Use Ctrl+Alt+Espaço.";
+        reason = "Guide registration failed. Use Ctrl+Alt+Space.";
         if (instance == 0)
             return false;
         onPress = pressed;
@@ -166,7 +166,7 @@ public unsafe sealed class GameInputBackend : IGuideBackend
         token = newToken;
         if (hr >= 0 && token != 0)
         {
-            reason = "Guide inscrito, não verificado.";
+            reason = "Guide registered, not verified.";
             return true;
         }
 
@@ -177,7 +177,7 @@ public unsafe sealed class GameInputBackend : IGuideBackend
             Stop();
             if (!Unregister())
             {
-                reason = "Falha ao registrar/remover Guide; runtime retido até saída.";
+                reason = "Guide registration or removal failed; the runtime is retained until exit.";
                 return false;
             }
         }
@@ -287,7 +287,7 @@ public unsafe sealed class XInputGuideBackend : IGuideBackend
     {
         get;
         private set;
-    } = "Guide legado desligado. Use a bandeja para abrir.";
+    } = "Legacy Guide disabled. Open the overlay from the tray.";
 
     public XInputGuideBackend() : this(Load, NativeLibrary.Free)
     {
@@ -310,7 +310,7 @@ public unsafe sealed class XInputGuideBackend : IGuideBackend
     private static extern nint GetProcAddress(nint module, nint ordinal);
     public bool Initialize(out string reason)
     {
-        reason = "Leitura Guide legada indisponível. Use a bandeja para abrir.";
+        reason = "Legacy Guide reading unavailable. Open the overlay from the tray.";
         if (disposed)
             return false;
         if (address != 0)
@@ -318,7 +318,7 @@ public unsafe sealed class XInputGuideBackend : IGuideBackend
         (module, address) = load();
         if (module != 0 && address != 0)
         {
-            reason = "Leitura Guide legada disponível; entrega ainda não observada.";
+            reason = "Legacy Guide reading available; delivery has not been observed.";
             return true;
         }
 
@@ -328,13 +328,13 @@ public unsafe sealed class XInputGuideBackend : IGuideBackend
 
     public bool Register(Action callback, out string reason)
     {
-        reason = "Guide legado indisponível.";
+        reason = "Legacy Guide unavailable.";
         if (disposed || address == 0 || active)
             return false;
         pressed = callback;
         Array.Clear(armed);
         active = true;
-        Status = reason = "Guide legado experimental ativo; aguardando soltar e pressionar.";
+        Status = reason = "Experimental legacy Guide active; waiting for release and press.";
         return true;
     }
 
@@ -372,7 +372,7 @@ public unsafe sealed class XInputGuideBackend : IGuideBackend
             }
         }
 
-        Status = connected ? "Guide legado experimental ativo · toque para abrir ou fechar." : "Nenhum controle lido pelo Guide legado. Use a bandeja para abrir.";
+        Status = connected ? "Experimental legacy Guide active · press to open or close." : "No controller was read by legacy Guide. Open the overlay from the tray.";
         if (edge && active)
             pressed?.Invoke();
     }
@@ -440,7 +440,7 @@ public unsafe sealed class XInputGuideBackend : IGuideBackend
             edge = false;
         }
 
-        Status = Connections != 0 ? "Guide experimental ativo · solte para abrir; toque para fechar." : "Nenhum controle lido pelo Guide. Use a bandeja para abrir.";
+        Status = Connections != 0 ? "Experimental Guide active · release to open; press to close." : "No controller was read by Guide. Open the overlay from the tray.";
         if (edge && active)
             pressed?.Invoke();
     }

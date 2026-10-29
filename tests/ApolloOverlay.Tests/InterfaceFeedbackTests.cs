@@ -70,7 +70,7 @@ internal static class InterfaceFeedbackTests
                 Require(w.TransitionPending, "Fixture did not queue handoff");
                 feedback.Cues.Clear();
                 Click((Button)w.FindName("BackButton"));
-                Require(!w.TransitionPending && w.Controller.Operation is { State: "Cancelado", Dispatched: false }, "Header Back did not cancel before dispatch");
+                Require(!w.TransitionPending && w.Controller.Operation is { State: "Cancelled", Dispatched: false }, "Header Back did not cancel before dispatch");
                 Require(feedback.Cues.SequenceEqual(new[] { FeedbackCue.Cancellation }), "Header cancellation feedback missing or duplicated");
             }
             finally
@@ -91,7 +91,7 @@ internal static class InterfaceFeedbackTests
                 feedback.Cues.Clear();
                 Click(ReviewFixTests.Button(w, "test-feedback"));
                 Require(feedback.Cues.SequenceEqual(new[] { FeedbackCue.Test }), "Confirmation interrupted or duplicated the sample");
-                Require(w.Feedback.Contains("Teste solicitado"), "Test has no visible acknowledgement");
+                Require(w.Feedback.Contains("Test requested"), "Test has no visible acknowledgement");
             }
             finally
             {
@@ -110,7 +110,7 @@ internal static class InterfaceFeedbackTests
                 w.Page(2);
                 feedback.Response = new(false, false, "Prior status must not be presented as a new pulse");
                 Click(ReviewFixTests.Button(w, "test-feedback"));
-                Require(w.Feedback == "Use A no controle ativo para testar a vibração.", "Test falsely claimed a pulse or kept an unrelated status");
+                Require(w.Feedback == "Press A on the active controller to test vibration.", "Test falsely claimed a pulse or kept an unrelated status");
             }
             finally
             {
@@ -168,7 +168,7 @@ internal static class InterfaceFeedbackTests
                 Require(w.SelectedAction == "test-feedback", "Disabled test unreachable");
                 feedback.Cues.Clear();
                 w.ActivateEntry();
-                Require(feedback.Cues.SequenceEqual(new[] { FeedbackCue.Unavailable }) && w.Feedback.StartsWith("Indisponível"), "Unavailable action falsely acknowledged");
+                Require(feedback.Cues.SequenceEqual(new[] { FeedbackCue.Unavailable }) && w.Feedback.StartsWith("Unavailable"), "Unavailable action falsely acknowledged");
                 feedback.Cues.Clear();
                 w.RefreshRows();
                 w.RevealSelection();
@@ -214,12 +214,12 @@ internal static class InterfaceFeedbackTests
             {
                 foreach (var (state, symbol) in new[]
                 {
-                    ("Pendente", "…"),
-                    ("Solicitado", "i"),
-                    ("Concluído", "✓"),
-                    ("Não confirmado", "!"),
-                    ("Falhou", "!"),
-                    ("Cancelado", "×")
+                    ("Pending", "…"),
+                    ("Requested", "i"),
+                    ("Completed", "✓"),
+                    ("Unconfirmed", "!"),
+                    ("Failed", "!"),
+                    ("Cancelled", "×")
                 }
 
                 )

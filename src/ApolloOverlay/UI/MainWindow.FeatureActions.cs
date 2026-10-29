@@ -25,7 +25,7 @@ public partial class MainWindow
         busy = true;
         var request = new CancellationTokenSource();
         pending = request;
-        RetainOperation("Pendente", "Aplicando sua escolha…", id);
+        RetainOperation("Pending", "Applying your choice…", id);
         ActionResult result;
         try
         {
@@ -33,11 +33,11 @@ public partial class MainWindow
         }
         catch (OperationCanceledException)
         {
-            result = new(ResultKind.Unknown, "Operação interrompida. Confira o estado antes de repetir.");
+            result = new(ResultKind.Unknown, "Operation interrupted. Check the state before trying again.");
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception or System.Runtime.InteropServices.COMException)
         {
-            result = new(ResultKind.Failed, "Não foi possível concluir a operação. Confira o dispositivo e tente novamente.");
+            result = new(ResultKind.Failed, "Could not complete the operation. Check the device and try again.");
         }
         finally
         {

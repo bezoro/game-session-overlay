@@ -96,7 +96,7 @@ public partial class MainWindow
         var id = automationHost is null ? "ui:" + Guid.NewGuid().ToString("N") : automationHost.BeginUi("steam-overlay", TargetId(target));
         if (id is null)
         {
-            RetainOperation("Falhou", "Não foi possível registrar a intenção; nenhum efeito enviado.");
+            RetainOperation("Failed", "Could not record the request; no action was sent.");
             return;
         }
 
@@ -109,7 +109,7 @@ public partial class MainWindow
         catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException)
         {
             if (!exiting && generation == operationGeneration)
-                RetainOperation("Não confirmado", "Registro indisponível; não haverá repetição automática.");
+                RetainOperation("Unconfirmed", "Request log unavailable; there will be no automatic retry.");
         }
     }
 
@@ -124,7 +124,7 @@ public partial class MainWindow
     )
     {
         if (busy || exiting || closeRequested || steamOwner is not null)
-            return AutomationReply.Error("Busy", "Outra operação está ativa ou drenando.", id);
+            return AutomationReply.Error("Busy", "Another operation is active or finishing.", id);
         var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         cts.CancelAfter(10000);
         var owner = new SteamOwner(++operationGeneration, id, target, cts, Environment.TickCount64 + 10000, context, origin);
@@ -175,7 +175,7 @@ public partial class MainWindow
                     var sample = SteamSample();
                     var state = gate.Update(sample, Environment.TickCount64, true, Controller.Settings.Deadzone);
                     if (state == ReleaseState.Cancelled)
-                        return AutomationReply.Error("Cancelled", "Entrada desconhecida ou conexão perdida.", id);
+                        return AutomationReply.Error("Cancelled", "Unknown input or lost connection.", id);
                     if (state == ReleaseState.Ready)
                     {
                         owner.InputQualified = true;
@@ -187,8 +187,8 @@ public partial class MainWindow
             }
 
             if (!Continue())
-                return AutomationReply.Error("Cancelled", "Entrada ou alvo não confirmado; nenhum foco/atalho enviado.", id);
-            RetainOperation("Pendente", "Focando o jogo; nenhum atalho enviado.", "steam-overlay", target, false);
+                return AutomationReply.Error("Cancelled", "Input or target unconfirmed; no focus request or shortcut was sent.", id);
+            RetainOperation("Pending", "Focusing the game; no shortcut sent.", "steam-overlay", target, false);
             owner.PendingRecord = Controller.Operation;
             phase(new()
             {
@@ -211,7 +211,7 @@ public partial class MainWindow
             var result = focusOnly ? await Controller.Platform.Focus(target, cts.Token, Continue) : await Controller.Platform.Shortcut(target, Controller.Settings.SteamShortcut, cts.Token, Continue, dispatch =>
             {
                 owner.OwnedKeys = dispatch.Sequence?.PossiblyHeld ?? 0;
-                phase(Receipt(new(ResultKind.Requested, "Sequência em andamento; resultado ainda não terminal.")) with
+                phase(Receipt(new(ResultKind.Requested, "Sequence in progress; the result is not final.")) with
                 {
                     Outcome = "Pending",
                     Terminal = false
@@ -230,7 +230,7 @@ public partial class MainWindow
         }
         catch (OperationCanceledException)
         {
-            return Receipt(new(ResultKind.Cancelled, "Solicitação interrompida; consulte contagens e liberação antes de nova tentativa."));
+            return Receipt(new(ResultKind.Cancelled, "Request interrupted; check counts and key release before trying again."));
         }
         finally
         {
@@ -287,32 +287,32 @@ public partial class MainWindow
         && entry.Id.StartsWith("window:", StringComparison.Ordinal)
         || entry.Id.StartsWith("options:", StringComparison.Ordinal)
         || entry.Id.StartsWith("favorite:", StringComparison.Ordinal) ? "Execute" : "RequiresInteractive";
-    internal AutomationSnapshot AutomationSnapshot() => new("", Environment.ProcessId, System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), automationRevision, view.Current.Route.ToString(), IsVisible, busy, AutomationWindows().Select(w => new AutomationTarget(TargetId(w), w.Handle.ToInt64(), w.Pid, w.Started, w.Generation, w.ProcessName)).ToArray(), entries.Select(e => new AutomationAction(e.Id, e.Available, e.Reason, Capability(e), e.Id is "volume" or "guide-limit" ? ["activate", "left", "right"] : ["activate"])).Concat(new[] { "home", "apps", "system", "audio", "integrations", "options", "details", "customize", "setup", "result" }.Select(r => new AutomationAction("route:" + r, !busy, "Navegação de rota explícita", "Execute", ["activate"]))).Concat([new("focus", !busy, "Foco do alvo validado", "Execute", ["activate"]), new("steam-overlay", !busy, "Atalho configurado; sem garantia de interface visível", "Execute", ["activate"])]).DistinctBy(a => a.Id).ToArray(), "unknown", PendingRequestId: steamOwner?.Id ?? "", Phase: Controller.Operation?.State ?? "", TargetsAtUtc: automationTargetsAt);
+    internal AutomationSnapshot AutomationSnapshot() => new("", Environment.ProcessId, System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), automationRevision, view.Current.Route.ToString(), IsVisible, busy, AutomationWindows().Select(w => new AutomationTarget(TargetId(w), w.Handle.ToInt64(), w.Pid, w.Started, w.Generation, w.ProcessName)).ToArray(), entries.Select(e => new AutomationAction(e.Id, e.Available, e.Reason, Capability(e), e.Id is "volume" or "guide-limit" ? ["activate", "left", "right"] : ["activate"])).Concat(new[] { "home", "apps", "system", "audio", "integrations", "options", "details", "customize", "setup", "result" }.Select(r => new AutomationAction("route:" + r, !busy, "Explicit route navigation", "Execute", ["activate"]))).Concat([new("focus", !busy, "Target focus verified", "Execute", ["activate"]), new("steam-overlay", !busy, "Shortcut configured; visible interface is not guaranteed", "Execute", ["activate"])]).DistinctBy(a => a.Id).ToArray(), "unknown", PendingRequestId: steamOwner?.Id ?? "", Phase: Controller.Operation?.State ?? "", TargetsAtUtc: automationTargetsAt);
     internal async Task<AutomationReply> AutomationExecute(AutomationRequest request, CancellationToken token, Action<AutomationReply> phase, Func<bool> continuing)
     {
         if (token.IsCancellationRequested || !continuing())
-            return AutomationReply.Error("Cancelled", "Cancelado.");
+            return AutomationReply.Error("Cancelled", "Cancelled.");
         if (request.Preset.Length > 0)
-            return AutomationReply.Error("Unsupported", "Preset não integrado.");
+            return AutomationReply.Error("Unsupported", "Preset is not integrated.");
         if (request.Revision != automationRevision)
-            return AutomationReply.Error("Rejected", "Revisão de contexto mudou.");
+            return AutomationReply.Error("Rejected", "Context revision changed.");
         if (busy || TransitionPending || Confirming)
-            return AutomationReply.Error("Busy", "Operação ou interação ativa.");
+            return AutomationReply.Error("Busy", "Operation or interaction is active.");
         if (request.Intent != "activate" && request.ActionId is not ("volume" or "guide-limit"))
-            return AutomationReply.Error("Unsupported", "Intenção não disponível neste controle.");
+            return AutomationReply.Error("Unsupported", "Intent is unavailable for this control.");
         var target = AutomationWindows().FirstOrDefault(w => TargetId(w) == request.TargetId);
         var entry = entries.FirstOrDefault(e => e.Id == request.ActionId);
         if (request.TargetId.Length > 0 && target is null)
-            return AutomationReply.Error("Rejected", "Identidade do alvo mudou; obtenha targets novamente.");
+            return AutomationReply.Error("Rejected", "Target identity changed; retrieve targets again.");
         if (request.ActionId is "focus" or "steam-overlay" or "test-steam")
         {
             target ??= request.ActionId == "test-steam" ? Controller.Session.Anchor : Controller.ReturnTarget;
             if (target is null || !Controller.Platform.Valid(target) || target.Protected || target.Launcher)
-                return AutomationReply.Error("Unavailable", "Alvo exato indisponível.");
+                return AutomationReply.Error("Unavailable", "Exact target unavailable.");
             if (request.ActionId != "focus" && !Controller.SteamOverlayEligible(target))
-                return AutomationReply.Error("Unavailable", "Contexto Steam não confirmado.");
+                return AutomationReply.Error("Unavailable", "Steam context unconfirmed.");
             if (request.DryRun)
-                return AutomationReply.Error("DryRun", "Capacidade disponível; nenhum efeito ou escrita solicitado.");
+                return AutomationReply.Error("DryRun", "Capability available; no action or write requested.");
             var captured = target;
             var result = RunSteam(captured, () => continuing() && request.Revision == automationRevision && (Controller.Apps.Any(captured.Same) || captured.Same(Controller.Session.Anchor) || captured.Same(Controller.ReturnTarget)), request.RequestId, "CLI", request.ActionId == "focus", token, phase);
             OperationTask = result;
@@ -335,11 +335,11 @@ public partial class MainWindow
                 "setup",
                 "result"
             }.Contains(route))
-                return AutomationReply.Error("Rejected", "Rota desconhecida.");
+                return AutomationReply.Error("Rejected", "Unknown route.");
             if (route is "options" or "details" && target is null)
-                return AutomationReply.Error("Unavailable", "Informe targetId válido.");
+                return AutomationReply.Error("Unavailable", "Provide a valid targetId.");
             if (request.DryRun)
-                return AutomationReply.Error("DryRun", "Rota disponível; sem alteração.");
+                return AutomationReply.Error("DryRun", "Route available; no change.");
             switch (route)
             {
                 case "home":
@@ -369,27 +369,27 @@ public partial class MainWindow
                     break;
             }
 
-            return AutomationReply.Error("Completed", "Rota atualizada.");
+            return AutomationReply.Error("Completed", "Route updated.");
         }
 
         if (entry is null)
-            return AutomationReply.Error("Unavailable", "ID não registrado nesta rota.");
+            return AutomationReply.Error("Unavailable", "ID is not registered on this route.");
         if (!entry.Available)
             return AutomationReply.Error("Unavailable", entry.Reason);
         var capability = Capability(entry);
         if (capability != "Execute")
-            return AutomationReply.Error(capability, "Use interação normal; esta ação não tem continuação CLI cancelável.");
+            return AutomationReply.Error(capability, "Use normal interaction; this action has no cancellable CLI continuation.");
         if (request.Intent != "activate" && entry.Id is not ("volume" or "guide-limit"))
-            return AutomationReply.Error("Unsupported", "Intenção não disponível neste controle.");
+            return AutomationReply.Error("Unsupported", "Intent is unavailable for this control.");
         if (request.DryRun)
-            return AutomationReply.Error("DryRun", "Handler disponível; nenhum efeito ou escrita solicitado.");
+            return AutomationReply.Error("DryRun", "Handler available; no action or write requested.");
         token.ThrowIfCancellationRequested();
         if (!continuing())
-            return AutomationReply.Error("Cancelled", "Cliente não está mais conectado.");
+            return AutomationReply.Error("Cancelled", "Client is no longer connected.");
         var previousOperation = Controller.Operation;
         var selected = view.Current.ChooseSession && entry.Id.StartsWith("window:", StringComparison.Ordinal) ? Controller.Apps.FirstOrDefault(w => WindowId(w) == entry.Id) : null;
         if (view.Current.ChooseSession && entry.Id.StartsWith("window:", StringComparison.Ordinal) && (selected is null || !Controller.Platform.Valid(selected)))
-            return AutomationReply.Error("Unavailable", "Janela da seleção mudou.");
+            return AutomationReply.Error("Unavailable", "The selected window changed.");
         navigation = new(entry.Id);
         if (request.Intent is "left" or "right")
         {
@@ -401,26 +401,26 @@ public partial class MainWindow
         else
             entry.Run();
         if (selected is not null)
-            return AutomationReply.Error(selected.Same(Controller.Session.Anchor) ? "Completed" : "Failed", "Resultado da seleção observado.");
+            return AutomationReply.Error(selected.Same(Controller.Session.Anchor) ? "Completed" : "Failed", "Selection result observed.");
         if (!ReferenceEquals(previousOperation, Controller.Operation) && Controller.Operation is { } operation)
             return new()
             {
                 Outcome = operation.State switch
                 {
-                    "Concluído" => "Completed",
-                    "Solicitado" => "Requested",
-                    "Simulado" => "Simulated",
-                    "Falhou" => "Failed",
-                    "Não confirmado" => "Unknown",
-                    "Parcial" => "Partial",
-                    "Cancelado" => "Cancelled",
-                    "Indisponível" => "Unavailable",
+                    "Completed" => "Completed",
+                    "Requested" => "Requested",
+                    "Simulated" => "Simulated",
+                    "Failed" => "Failed",
+                    "Unconfirmed" => "Unknown",
+                    "Partial" => "Partial",
+                    "Cancelled" => "Cancelled",
+                    "Unavailable" => "Unavailable",
                     _ => "Unknown"
                 },
                 Reason = operation.Message,
                 Dispatched = operation.Dispatched
             };
-        return AutomationReply.Error("Completed", "Handler síncrono concluído.");
+        return AutomationReply.Error("Completed", "Synchronous handler completed.");
     }
 
     internal async Task StartAutomation(string? pipeName = null, AutomationGrant? grant = null)
@@ -438,9 +438,9 @@ public partial class MainWindow
         {
             // Never discard or replace an unreadable ledger: older effects may already have occurred.
             if (grant is not null)
-                throw new InvalidOperationException("Ponte de automação indisponível; histórico preservado.", error);
+                throw new InvalidOperationException("Automation bridge unavailable; history preserved.", error);
             Controller.Diagnostics.Log("automation-start", ResultKind.Unavailable);
-            RetainOperation("Indisponível", "Automação indisponível. O histórico foi preservado; a overlay continua disponível.");
+            RetainOperation("Unavailable", "Automation unavailable. History was preserved; the overlay remains available.");
         }
     }
 
@@ -448,7 +448,7 @@ public partial class MainWindow
     {
         var target = Controller.Platform.Windows().SingleOrDefault(w => w.Pid == pid && w.Started == started && w.Handle.ToInt64() == handle);
         if (target is null || target.Protected || target.Launcher || !Controller.Platform.Valid(target))
-            throw new InvalidOperationException("Concessão não corresponde a uma janela atual válida.");
+            throw new InvalidOperationException("Grant does not match a valid current window.");
         automationGrantTarget = target;
         return new(TargetId(target), shutdown);
     }
@@ -481,7 +481,7 @@ public partial class MainWindow
             token.ThrowIfCancellationRequested();
             if (window.steamOwner is not { } owner || owner.Id != id || grantedTarget is not null && TargetId(owner.Target) != grantedTarget)
                 return false;
-            window.CancelSteamOwner("Cancelamento solicitado pela CLI; nenhum novo atalho enviado.");
+            window.CancelSteamOwner("Cancellation requested by CLI; no new shortcut sent.");
             return true;
         }, DispatcherPriority.Normal, token);
     }

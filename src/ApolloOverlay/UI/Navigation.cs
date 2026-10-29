@@ -119,21 +119,3 @@ public static class Navigation
         return 0;
     }
 }
-
-public readonly record struct SidebarBounds(int X, int Y, int Width, int Height);
-public static class SidebarLayout
-{
-    public const double DesignWidth = 440, DesignHeight = 684;
-    public static double Density(DisplayRef display, double dpi = 96) => Math.Clamp(display.Height / (1080d * (dpi / 96)), 1, 1.5);
-    public static double EffectiveScale(DisplayRef display, double dpi, int userPercent) => Density(display, dpi) * (userPercent is 100 or 115 or 130 or 150 ? userPercent : 100) / 100d;
-    public static SidebarBounds Place(DisplayRef display, double dpi = 96, int userPercent = 100, string side = "Left")
-    {
-        var scale = dpi / 96;
-        var density = EffectiveScale(display, dpi, userPercent);
-        var margin = (int)Math.Round(16 * scale);
-        var availableWidth = display.Width - 2 * margin;
-        var widthLimit = display.Width / scale < 1000 ? availableWidth : display.Width * .38;
-        var width = Math.Max(1, (int)Math.Min(572 * scale * density, widthLimit));
-        return new(side == "Right" ? display.X + display.Width - margin - width : display.X + margin, display.Y + margin, width, Math.Max(1, (int)Math.Min(980 * scale * density, display.Height - 2 * margin)));
-    }
-}

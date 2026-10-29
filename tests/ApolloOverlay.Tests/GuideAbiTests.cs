@@ -278,7 +278,7 @@ internal static unsafe class GuideAbiTests
                 var rows = (System.Windows.Controls.Grid)window.FindName("Rows");
                 var button = rows.Children.OfType<System.Windows.Controls.Button>().Single(b => (string?)b.Tag == "taskview");
                 button.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
-                Require(!window.Feedback.StartsWith("Indisponível"), "Task View incorrectly blocked without a target: " + window.Feedback);
+                Require(!window.Feedback.StartsWith("Unavailable"), "Task View incorrectly blocked without a target: " + window.Feedback);
             }
             finally
             {
@@ -600,7 +600,7 @@ internal static unsafe class GuideAbiTests
                 w.AdvanceHandoff(Neutral(100), 100);
                 w.AdvanceHandoff(Neutral(300), 300);
                 Require(!w.TransitionPending && p.Globals == 0 && p.Switches == 0, "Disconnection erased stale known connection and dispatched an effect");
-                Require(w.Controller.Operation is { State: "Cancelado", Dispatched: false }, "Uncertain handoff did not retain cancellation");
+                Require(w.Controller.Operation is { State: "Cancelled", Dispatched: false }, "Uncertain handoff did not retain cancellation");
             }
             finally
             {
@@ -681,7 +681,7 @@ internal static unsafe class GuideAbiTests
                 w.RefreshRows();
                 var tile = Button(w, "steam-overlay");
                 var labels = (System.Windows.Controls.StackPanel)((System.Windows.Controls.Grid)tile.Content).Children[1];
-                Require(((System.Windows.Controls.TextBlock)labels.Children[0]).Text == "Menu do Steam Big Picture");
+                Require(((System.Windows.Controls.TextBlock)labels.Children[0]).Text == "Steam Big Picture menu");
                 tile.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
                 Require(p.Menus == 0);
                 Commit(w);
@@ -1469,7 +1469,7 @@ internal static unsafe class GuideAbiTests
                     refresh.SetResult();
                     FinishFocus(operation);
                     w.Move(NavDirection.Down);
-                    Require(w.SelectedAction == selected && w.Feedback.Contains("Foco perdido"));
+                    Require(w.SelectedAction == selected && w.Feedback.Contains("Focus lost"));
                     w.FocusForeground = () => new System.Windows.Interop.WindowInteropHelper(w).Handle;
                     w.Move(NavDirection.Down);
                     Require(w.SelectedAction == selected);
@@ -1771,7 +1771,7 @@ internal static unsafe class GuideAbiTests
                 ((System.Windows.Forms.ToolStripMenuItem)tray.Menu.Items[0]).PerformClick();
                 ((System.Windows.Forms.ToolStripMenuItem)tray.Menu.Items[1]).PerformClick();
                 PumpFocus();
-                Require(opens == 2 && exits == 1 && tray.Menu.Items[0].Text == "Abrir overlay" && tray.Menu.Items[1].Text == "Sair");
+                Require(opens == 2 && exits == 1 && tray.Menu.Items[0].Text == "Open overlay" && tray.Menu.Items[1].Text == "Quit");
                 tray.OnDoubleClick(null, new(System.Windows.Forms.MouseButtons.Left, 2, 0, 0, 0));
                 tray.Dispose();
                 tray.Dispose();
@@ -2286,7 +2286,7 @@ internal static unsafe class GuideAbiTests
                 var tile = Button(w, "steam-overlay");
                 Require(tile.IsEnabled, "Confirmed launch context ignored when module access denied");
                 var labels = (System.Windows.Controls.StackPanel)((System.Windows.Controls.Grid)tile.Content).Children[1];
-                Require(((System.Windows.Controls.TextBlock)labels.Children[1]).Text.Contains("Iniciado pela Steam"), "Launch label claims module injection");
+                Require(((System.Windows.Controls.TextBlock)labels.Children[1]).Text.Contains("Launched by Steam"), "Launch label claims module injection");
                 var reads = p.LaunchQueries;
                 for (var i = 0; i < 4; i++)
                     w.RefreshRows();
@@ -2369,7 +2369,7 @@ internal static unsafe class GuideAbiTests
                 var button = Button(w, "test-steam");
                 var texts = (System.Windows.Controls.StackPanel)((System.Windows.Controls.Grid)button.Content).Children[1];
                 var description = ((System.Windows.Controls.TextBlock)texts.Children[1]).Text;
-                Require(button.IsEnabled && description.Contains("Iniciado pela Steam") && !description.Contains("Módulo carregado"), "Integration fallback misstates module evidence");
+                Require(button.IsEnabled && description.Contains("Launched by Steam") && !description.Contains("Module loaded"), "Integration fallback misstates module evidence");
                 button.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
                 Require(p.Shortcuts == 0, "Integration bypassed handoff");
                 Commit(w);
@@ -2471,12 +2471,12 @@ internal static unsafe class GuideAbiTests
             var rows = (System.Windows.Controls.Grid)window.FindName("Rows");
             var button = rows.Children.OfType<System.Windows.Controls.Button>().Single(b => b.Content is System.Windows.Controls.Grid grid
                 && grid.Children[1] is System.Windows.Controls.StackPanel labels
-                && ((System.Windows.Controls.TextBlock)labels.Children[0]).Text.StartsWith("Botão Xbox / Guide"));
+                && ((System.Windows.Controls.TextBlock)labels.Children[0]).Text.StartsWith("Xbox / Guide button"));
             var texts = (System.Windows.Controls.StackPanel)((System.Windows.Controls.Grid)button.Content).Children[1];
             var subtitle = (System.Windows.Controls.TextBlock)texts.Children[1];
             var selected = window.SelectedAction;
             window.PollGuideStatus(backend);
-            Require(subtitle.Text == backend.Status && subtitle.Text.StartsWith("Nenhum controle"), "G3-01 disconnected status did not reach actual Guide subtitle");
+            Require(subtitle.Text == backend.Status && subtitle.Text.StartsWith("No controller"), "G3-01 disconnected status did not reach actual Guide subtitle");
             statuses[0] = 0;
             window.PollGuideStatus(backend);
             Require(subtitle.Text == backend.Status && subtitle.Text.Contains("ativo"), "G3-01 connected status stale");
@@ -2490,11 +2490,11 @@ internal static unsafe class GuideAbiTests
             Require(subtitle.Text == unchanged, "Hidden status update touched UI");
             window.ShowDiagnostic();
             window.PollGuideStatus(backend);
-            Require(subtitle.Text == backend.Status && subtitle.Text.StartsWith("Nenhum controle"), "G3-01 disconnected transition stale");
+            Require(subtitle.Text == backend.Status && subtitle.Text.StartsWith("No controller"), "G3-01 disconnected transition stale");
             window.Page(0);
             statuses[0] = 0;
             window.PollGuideStatus(backend);
-            Require(subtitle.Text.StartsWith("Nenhum controle"), "Non-integration page updated detached subtitle");
+            Require(subtitle.Text.StartsWith("No controller"), "Non-integration page updated detached subtitle");
         }
         finally
         {

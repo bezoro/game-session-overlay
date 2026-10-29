@@ -6,29 +6,29 @@ public sealed class PreviewSystemAudioBackend : ISystemAudioBackend
     {
         get;
         set;
-    } = new([new("preview-output", "Saída de áudio de exemplo")], "preview-output", "preview-output", "preview-mic", "Microfone de exemplo", false, "Prévia de áudio.");
+    } = new([new("preview-output", "Sample audio output")], "preview-output", "preview-output", "preview-mic", "Sample microphone", false, "Audio preview.");
 
     public SystemAudioSnapshot Read() => State;
     public ActionResult SetMicrophoneMuted(string expectedId, bool muted, Func<bool> continuing)
     {
         if (!continuing() || expectedId != State.MicrophoneId)
-            return new(ResultKind.Cancelled, "Contexto da prévia mudou.");
+            return new(ResultKind.Cancelled, "The preview context changed.");
         State = State with
         {
             MicrophoneMuted = muted
         };
-        return new(ResultKind.Simulated, "Prévia: estado do microfone alterado.");
+        return new(ResultKind.Simulated, "Preview: microphone state changed.");
     }
 
     public ActionResult SetOutputs(string expectedConsole, string expectedMedia, string console, string media, Func<bool> continuing)
     {
         if (!continuing() || expectedConsole != State.ConsoleOutputId || expectedMedia != State.MediaOutputId)
-            return new(ResultKind.Cancelled, "Contexto da prévia mudou.");
+            return new(ResultKind.Cancelled, "The preview context changed.");
         State = State with
         {
             ConsoleOutputId = console,
             MediaOutputId = media
         };
-        return new(ResultKind.Simulated, "Prévia: saída selecionada.");
+        return new(ResultKind.Simulated, "Preview: output selected.");
     }
 }

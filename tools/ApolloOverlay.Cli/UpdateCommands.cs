@@ -9,7 +9,7 @@ internal static class UpdateCommands
     {
         if (args.Any(arg => arg is "--help" or "-h"))
         {
-            Console.WriteLine("gso version | history | update [install|check|status|cancel JOB_ID] [--build BUILD_ID] [--channel testing|stable] [--dry-run] [--timeout 5..600] | rollback BUILD_ID. Saída JSON. update solicita o reinício; confirme a versão em uma nova execução de gso version. Nenhum lançamento ou elevação implícitos.");
+            Console.WriteLine("gso version | history | update [install|check|status|cancel JOB_ID] [--build BUILD_ID] [--channel testing|stable] [--dry-run] [--timeout 5..600] | rollback BUILD_ID. JSON output. update requests a restart; confirm the version with a fresh gso version invocation. No implicit launch or elevation.");
             return 0;
         }
 
@@ -51,7 +51,7 @@ internal static class UpdateCommands
                 if (started.Outcome != "Requested")
                     return started;
                 if (started.Update is not { JobId.Length: > 0 } state)
-                    return AutomationReply.Error("Unknown", "O servidor não identificou a operação iniciada. Consulte update status antes de prosseguir.");
+                    return AutomationReply.Error("Unknown", "The server did not identify the started operation. Check update status before continuing.");
                 job = state.JobId;
                 while (true)
                 {
@@ -66,12 +66,12 @@ internal static class UpdateCommands
                     if (reply.Outcome != "Completed" || reply.Update is null)
                         return reply;
                     if (instance.Length > 0 && reply.Instance != instance)
-                        return AutomationReply.Error("Unknown", "A instância mudou durante a preparação. Consulte a versão; nenhum novo pedido será enviado.", job) with
+                        return AutomationReply.Error("Unknown", "The instance changed during preparation. Check the version; no new request will be sent.", job) with
                         {
                             Update = reply.Update
                         };
                     if (reply.Update.JobId != job)
-                        return AutomationReply.Error("Unknown", "Outra operação substituiu o pedido. Nenhuma instalação será solicitada.", job) with
+                        return AutomationReply.Error("Unknown", "Another operation replaced the request. No installation will be requested.", job) with
                         {
                             Update = reply.Update
                         };
@@ -102,17 +102,17 @@ internal static class UpdateCommands
                 return current with
                 {
                     Outcome = "Rejected",
-                    Reason = "Uma observação antiga não autoriza atualização. Conecte-se à instância em execução."
+                    Reason = "A stale observation does not authorize an update. Connect to the running instance."
                 };
             if (current.Outcome != "Completed" || current.Update is null)
-                return current.Outcome == "Completed" ? AutomationReply.Error("Unsupported", "A instância não oferece a API de atualização. Instale o Setup mais recente.") : current;
+                return current.Outcome == "Completed" ? AutomationReply.Error("Unsupported", "The instance does not provide the update API. Install the latest Setup.") : current;
             if (options.Command is "version" or "status" or "history")
                 return current;
             if (options.Command != "check" && (!current.Update.Installed || current.Update.SettingsDirty))
                 return current with
                 {
                     Outcome = "Rejected",
-                    Reason = current.Update.SettingsDirty ? "Salve ou descarte os ajustes antes de trocar de versão." : "Instale a versão inicial pelo Setup antes de atualizar pela CLI."
+                    Reason = current.Update.SettingsDirty ? "Save or discard settings before switching versions." : "Install the initial version using Setup before updating through the CLI."
                 };
             var channel = options.Channel.Length > 0 ? options.Channel : current.Update.SelectedChannel;
             AutomationReply ready;
@@ -147,12 +147,12 @@ internal static class UpdateCommands
                     return ready with
                     {
                         Outcome = options.BuildId.Length == 0 ? "Unavailable" : "Rejected",
-                        Reason = "Nenhuma publicação correspondente foi encontrada no canal selecionado."
+                        Reason = "No matching release was found in the selected channel."
                     };
                 if (selected.BuildId == ready.Update.BuildId)
                     return ready with
                     {
-                        Reason = "A versão selecionada já está em execução."
+                        Reason = "The selected version is already running."
                     };
                 ready = await Send(new()
                 {
@@ -170,13 +170,13 @@ internal static class UpdateCommands
                 return ready with
                 {
                     Outcome = "Rejected",
-                    Reason = "Os ajustes mudaram durante o download. Salve ou descarte antes de aplicar."
+                    Reason = "Settings changed during download. Save or discard them before applying the update."
                 };
             if (ready.Update.TargetBuildId.Length == 0)
                 return ready with
                 {
                     Outcome = "Rejected",
-                    Reason = "O pacote preparado não identifica a versão de destino."
+                    Reason = "The prepared package does not identify the target version."
                 };
             applying = true;
             return await Send(new()
@@ -204,11 +204,11 @@ internal static class UpdateCommands
                 }
             }
 
-            return AutomationReply.Error("Unknown", applying ? "Confirmação interrompida após solicitar aplicação. Consulte gso version e update status; não repita automaticamente." : "Prazo ou cancelamento durante a preparação. Nenhuma aplicação foi solicitada; consulte update status.", job);
+            return AutomationReply.Error("Unknown", applying ? "Confirmation interrupted after requesting application. Check gso version and update status; do not retry automatically." : "Preparation timed out or was cancelled. No application was requested; check update status.", job);
         }
         catch (Exception error) when (error is IOException or InvalidDataException or JsonException or UnauthorizedAccessException or Win32Exception or TimeoutException)
         {
-            return AutomationReply.Error(applying ? "Unknown" : "Unavailable", "A instância local não respondeu. Confira se está em execução no mesmo usuário, sessão e nível de elevação. Nenhum lançamento ou reenvio foi feito.", job);
+            return AutomationReply.Error(applying ? "Unknown" : "Unavailable", "The local instance did not respond. Check that it is running under the same user, session and elevation level. No launch or retry was attempted.", job);
         }
         catch (Exception error) when (error is ArgumentException or FormatException or OverflowException)
         {
@@ -223,7 +223,7 @@ internal static class UpdateCommands
     private static Options Parse(string[] args, string? defaultPipe)
     {
         if (args.Length == 0)
-            throw new ArgumentException("Informe um comando.");
+            throw new ArgumentException("Specify a command.");
         var command = args[0];
         var index = 1;
         var build = "";
@@ -236,19 +236,19 @@ internal static class UpdateCommands
             if (command == "cancel")
             {
                 if (index >= args.Length)
-                    throw new ArgumentException("Informe o JobId.");
+                    throw new ArgumentException("Specify the JobId.");
                 job = args[index++];
             }
         }
         else if (command == "rollback")
         {
             if (index >= args.Length)
-                throw new ArgumentException("Informe o BuildId preservado.");
+                throw new ArgumentException("Specify the retained BuildId.");
             build = args[index++];
         }
 
         if (command is not ("version" or "history" or "status" or "install" or "check" or "cancel" or "rollback"))
-            throw new ArgumentException("Comando de atualização desconhecido.");
+            throw new ArgumentException("Unknown update command.");
         var pipe = defaultPipe ?? "";
         var channel = "";
         var dry = false;
@@ -258,7 +258,7 @@ internal static class UpdateCommands
         {
             var option = args[index];
             if (!seen.Add(option))
-                throw new ArgumentException("Opção repetida: " + option);
+                throw new ArgumentException("Repeated option: " + option);
             if (option == "--dry-run")
             {
                 dry = true;
@@ -266,7 +266,7 @@ internal static class UpdateCommands
             }
 
             if (++index >= args.Length)
-                throw new ArgumentException("Falta o valor de " + option);
+                throw new ArgumentException("Missing value for " + option);
             switch (option)
             {
                 case "--pipe":
@@ -282,29 +282,29 @@ internal static class UpdateCommands
                     seconds = int.Parse(args[index], System.Globalization.CultureInfo.InvariantCulture);
                     break;
                 default:
-                    throw new ArgumentException("Opção não suportada: " + option);
+                    throw new ArgumentException("Unsupported option: " + option);
             }
         }
 
         if (channel.Length > 0 && (command is not ("install" or "check") || channel is not ("testing" or "stable")))
-            throw new ArgumentException("Canal inválido para este comando.");
+            throw new ArgumentException("Invalid channel for this command.");
         if (seconds is < 5 or > 600)
-            throw new ArgumentException("O prazo deve ficar entre 5 e 600 segundos.");
+            throw new ArgumentException("The timeout must be between 5 and 600 seconds.");
         if (seen.Contains("--build")
             && build.Length == 0
             || build.Length > 0
             && (build.Length > 96
             || build.Any(character => !char.IsAsciiLetterOrDigit(character)
             && character is not ('.' or '-' or '_'))))
-            throw new ArgumentException("BuildId inválido.");
+            throw new ArgumentException("Invalid BuildId.");
         if (command == "rollback" && build.Length == 0 || command == "cancel" && (job.Length == 0 || job.Length > 256 || job.Any(char.IsControl)))
-            throw new ArgumentException("Identificador ausente ou inválido.");
+            throw new ArgumentException("Missing or invalid identifier.");
         if (dry && command is "version" or "history" or "status")
-            throw new ArgumentException("Consulta de estado já é somente leitura.");
+            throw new ArgumentException("Status queries are already read-only.");
         if (pipe.Length == 0)
             pipe = AutomationPipeSecurity.DefaultName;
         if (pipe.Length > 128 || pipe.Any(character => !char.IsAsciiLetterOrDigit(character) && character is not ('.' or '-' or '_')))
-            throw new ArgumentException("Somente endpoints locais são aceitos.");
+            throw new ArgumentException("Only local endpoints are accepted.");
         return new(command, pipe, channel, build, job, dry, seconds);
     }
 }

@@ -19,15 +19,15 @@ public interface IPlatform : IDisposable
     bool HasSteamLaunchContext(WindowRef? window) => false;
     Task<ActionResult> Switch(WindowRef window);
     Task<ActionResult> Close(WindowRef window, CancellationToken cancellation);
-    Task<ActionResult> Minimize(WindowRef window, CancellationToken cancellation) => Task.FromResult(new ActionResult(ResultKind.Unavailable, "Minimização indisponível nesta plataforma."));
+    Task<ActionResult> Minimize(WindowRef window, CancellationToken cancellation) => Task.FromResult(new ActionResult(ResultKind.Unavailable, "Minimizing is unavailable on this platform."));
     Task<ActionResult> Shortcut(WindowRef window, string keys);
-    Task<ActionResult> Shortcut(WindowRef window, string keys, CancellationToken cancellation, Func<bool> continuing) => cancellation.IsCancellationRequested || !continuing() ? Task.FromResult(new ActionResult(ResultKind.Cancelled, "Cancelado antes do envio.")) : IsPreview ? Shortcut(window, keys) : Task.FromResult(new ActionResult(ResultKind.Unavailable, "Esta plataforma não oferece atalho cancelável."));
+    Task<ActionResult> Shortcut(WindowRef window, string keys, CancellationToken cancellation, Func<bool> continuing) => cancellation.IsCancellationRequested || !continuing() ? Task.FromResult(new ActionResult(ResultKind.Cancelled, "Cancelled before dispatch.")) : IsPreview ? Shortcut(window, keys) : Task.FromResult(new ActionResult(ResultKind.Unavailable, "This platform does not support cancellable shortcuts."));
     async Task<ActionResult> Focus(WindowRef window, CancellationToken cancellation, Func<bool> continuing)
     {
         if (cancellation.IsCancellationRequested || !continuing())
-            return new(ResultKind.Cancelled, "Cancelado antes do foco.");
+            return new(ResultKind.Cancelled, "Cancelled before focus acquisition.");
         var result = await Switch(window);
-        return cancellation.IsCancellationRequested || !continuing() ? new(ResultKind.Unknown, "Foco solicitado; observação cancelada.") : result;
+        return cancellation.IsCancellationRequested || !continuing() ? new(ResultKind.Unknown, "Focus requested; observation cancelled.") : result;
     }
 
     ShortcutDispatch? LastShortcutDispatch => null;
@@ -35,10 +35,10 @@ public interface IPlatform : IDisposable
     int SteamOwnedKeys => 0;
 
     Task<ActionResult> Shortcut(WindowRef window, string keys, CancellationToken cancellation, Func<bool> continuing, Action<ShortcutDispatch> progress) => Shortcut(window, keys, cancellation, continuing);
-    Task<ActionResult> TaskView() => Task.FromResult(new ActionResult(ResultKind.Unavailable, "Visão de tarefas indisponível nesta plataforma."));
+    Task<ActionResult> TaskView() => Task.FromResult(new ActionResult(ResultKind.Unavailable, "Task View is unavailable on this platform."));
     bool CanSteamMenu(WindowRef? window) => false;
-    Task<ActionResult> SteamMenu(WindowRef window) => Task.FromResult(new ActionResult(ResultKind.Unavailable, "Menu Big Picture não confirmado."));
-    Task<ActionResult> SteamMenu(WindowRef window, CancellationToken cancellation, Func<bool> continuing) => cancellation.IsCancellationRequested || !continuing() ? Task.FromResult(new ActionResult(ResultKind.Cancelled, "Cancelado antes do envio.")) : IsPreview ? SteamMenu(window) : Task.FromResult(new ActionResult(ResultKind.Unavailable, "Esta plataforma não oferece menu cancelável."));
+    Task<ActionResult> SteamMenu(WindowRef window) => Task.FromResult(new ActionResult(ResultKind.Unavailable, "Big Picture menu unconfirmed."));
+    Task<ActionResult> SteamMenu(WindowRef window, CancellationToken cancellation, Func<bool> continuing) => cancellation.IsCancellationRequested || !continuing() ? Task.FromResult(new ActionResult(ResultKind.Cancelled, "Cancelled before dispatch.")) : IsPreview ? SteamMenu(window) : Task.FromResult(new ActionResult(ResultKind.Unavailable, "This platform does not support a cancellable menu request."));
     ActionResult Launch(bool playnite, string? path);
 }
 

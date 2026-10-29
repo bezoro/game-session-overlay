@@ -13,8 +13,8 @@ public interface IAutomationBackend
     Task<AutomationReply> Execute(AutomationRequest request, CancellationToken token, Action<AutomationReply> phase, Func<bool> continuing);
     Task Shutdown(CancellationToken token, Func<bool> continuing);
     Task<bool> Cancel(string id, string? grantedTarget, CancellationToken token) => Task.FromResult(false);
-    Task<AutomationReply> Update(AutomationRequest request, CancellationToken token, Func<bool> continuing) => Task.FromResult(AutomationReply.Error("Unsupported", "Atualização por CLI indisponível nesta instância."));
-    Task CommitUpdate(AutomationRequest request, CancellationToken token, Func<bool> continuing) => Task.FromException(new InvalidOperationException("Atualização por CLI indisponível nesta instância."));
+    Task<AutomationReply> Update(AutomationRequest request, CancellationToken token, Func<bool> continuing) => Task.FromResult(AutomationReply.Error("Unsupported", "CLI updates are unavailable in this instance."));
+    Task CommitUpdate(AutomationRequest request, CancellationToken token, Func<bool> continuing) => Task.FromException(new InvalidOperationException("CLI updates are unavailable in this instance."));
 }
 
 public sealed record AutomationGrant(string TargetId, bool Shutdown);
@@ -37,9 +37,9 @@ internal sealed class AutomationLedger
             return;
         if (new FileInfo(path).Length > 1024 * 1024)
             throw new InvalidDataException("Ledger outside bounds.");
-        var saved = JsonSerializer.Deserialize(File.ReadAllBytes(path), AutomationJson.Default.AutomationRecords) ?? throw new InvalidDataException("Ledger vazio.");
+        var saved = JsonSerializer.Deserialize(File.ReadAllBytes(path), AutomationJson.Default.AutomationRecords) ?? throw new InvalidDataException("Empty ledger.");
         if (saved.Records is null || saved.Records.Any(record => record is null || string.IsNullOrEmpty(record.Id) || record.Canonical is null || record.Reply is null))
-            throw new InvalidDataException("Ledger inválido; histórico preservado.");
+            throw new InvalidDataException("Invalid ledger; history preserved.");
         foreach (var record in saved.Records.TakeLast(256))
             records[record.Id] = record.Terminal ? record : record with
             {
@@ -47,7 +47,7 @@ internal sealed class AutomationLedger
                 Reply = record.Reply with
                 {
                     Outcome = "Unknown",
-                    Reason = "Instância reiniciada após intenção persistida; efeito desconhecido, sem reenvio.",
+                    Reason = "The instance restarted after a persisted intent; the outcome is unknown and will not be retried.",
                     Terminal = true,
                     Dispatched = null
                 }
@@ -90,7 +90,7 @@ internal sealed class AutomationLedger
             records.Remove(oldest.Id);
         }
 
-        var pending = AutomationReply.Error("Pending", "Intenção persistida; nenhum efeito confirmado.", id) with
+        var pending = AutomationReply.Error("Pending", "Intent persisted; no effect confirmed.", id) with
         {
             Terminal = false
         };
@@ -299,7 +299,7 @@ public sealed class AutomationHost : IDisposable
             var request = JsonSerializer.Deserialize(await AutomationFrames.Read(pipe, AutomationFrames.RequestLimit, life.Token), AutomationJson.Default.AutomationRequest);
             if (request is null || !Valid(request))
             {
-                await Reply(AutomationReply.Error("Rejected", "Protocolo ou intenção inválida."));
+                await Reply(AutomationReply.Error("Rejected", "Invalid protocol or intent."));
                 return;
             }
 
@@ -323,7 +323,7 @@ public sealed class AutomationHost : IDisposable
                     AutomationRecord? record;
                     lock (gate)
                         record = ledger.Find(request.RequestId);
-                    await Reply(record?.Reply ?? AutomationReply.Error("Unavailable", "ID não retido."));
+                    await Reply(record?.Reply ?? AutomationReply.Error("Unavailable", "ID not retained."));
                     return;
                 }
 
@@ -348,7 +348,7 @@ public sealed class AutomationHost : IDisposable
                 if (restricted)
                     snapshot = snapshot with
                     {
-                        Actions = snapshot.Actions.Select(a => a.Id is "focus" or "steam-overlay" ? a : a with { Available = false, Capability = "Denied", Reason = "Ponte restrita à concessão explícita." }).ToArray()
+                        Actions = snapshot.Actions.Select(a => a.Id is "focus" or "steam-overlay" ? a : a with { Available = false, Capability = "Denied", Reason = "The bridge is restricted to the explicit grant." }).ToArray()
                     };
                 await Reply(new()
                 {
@@ -370,7 +370,7 @@ public sealed class AutomationHost : IDisposable
 
                 if (!found)
                     found = await backend.Cancel(request.RequestId, restricted ? grant!.TargetId : null, life.Token);
-                await Reply(AutomationReply.Error(found ? "Cancelled" : "Unavailable", found ? "Cancelamento solicitado; limpeza ainda não confirmada. Consulte result até Terminal=true." : "Solicitação não ativa ou não concedida.", request.RequestId) with
+                await Reply(AutomationReply.Error(found ? "Cancelled" : "Unavailable", found ? "Cancellation requested; cleanup is not yet confirmed. Query result until Terminal=true." : "The request is not active or was not granted.", request.RequestId) with
                 {
                     Terminal = !found,
                     Dispatched = found ? null : false
@@ -380,13 +380,13 @@ public sealed class AutomationHost : IDisposable
 
             if (request.Preset.Length > 0)
             {
-                await Reply(AutomationReply.Error("Unsupported", "Preset diagnóstico não integrado; nenhum foco/atalho enviado.", request.RequestId));
+                await Reply(AutomationReply.Error("Unsupported", "The diagnostic preset is not integrated; no focus or shortcut command was sent.", request.RequestId));
                 return;
             }
 
             if (restricted && !Granted(request))
             {
-                await Reply(AutomationReply.Error("Denied", "Ponte permite somente o alvo e capacidades concedidos nesta execução.", request.RequestId));
+                await Reply(AutomationReply.Error("Denied", "The bridge allows only the target and capabilities granted for this run.", request.RequestId));
                 return;
             }
 
@@ -421,7 +421,7 @@ public sealed class AutomationHost : IDisposable
 
             if (request.RequestId != ticket || request.DeadlineUtc <= DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())
             {
-                await Reply(AutomationReply.Error("Rejected", "Ticket incorreto ou expirado.", request.RequestId));
+                await Reply(AutomationReply.Error("Rejected", "Incorrect or expired ticket.", request.RequestId));
                 return;
             }
 
@@ -447,7 +447,7 @@ public sealed class AutomationHost : IDisposable
                 AutomationRecord? duplicate;
                 lock (gate)
                     duplicate = ledger.Find(request.RequestId);
-                await Reply(accepted == "Duplicate" ? duplicate!.Reply : AutomationReply.Error(accepted, "Solicitação não aceita; não há retry automático.", request.RequestId));
+                await Reply(accepted == "Duplicate" ? duplicate!.Reply : AutomationReply.Error(accepted, "Request not accepted; there is no automatic retry.", request.RequestId));
                 return;
             }
 
@@ -523,7 +523,7 @@ public sealed class AutomationHost : IDisposable
                 }
                 finally
                 {
-                    result = AutomationReply.Error(commitAttempted ? "Unknown" : "Cancelled", commitAttempted ? "Reinício pode ter sido solicitado; confirme a versão em uma nova conexão." : "Cancelado antes de aplicar a atualização.", request.RequestId);
+                    result = AutomationReply.Error(commitAttempted ? "Unknown" : "Cancelled", commitAttempted ? "A restart may have been requested; confirm the version through a new connection." : "Cancelled before applying the update.", request.RequestId);
                     lock (gate)
                         ledger.Update(request.RequestId, result);
                     Trace(request, "Result", result);
@@ -536,7 +536,7 @@ public sealed class AutomationHost : IDisposable
                 var commitAttempted = false;
                 try
                 {
-                    result = AutomationReply.Error("ShutdownRequested", "Fechamento normal solicitado; cliente deve observar a saída exata.", request.RequestId) with
+                    result = AutomationReply.Error("ShutdownRequested", "Normal shutdown requested; the client must observe the exact process exit.", request.RequestId) with
                     {
                         Terminal = false
                     };
@@ -554,7 +554,7 @@ public sealed class AutomationHost : IDisposable
                 }
                 finally
                 {
-                    result = AutomationReply.Error(commitAttempted ? "Unknown" : "Cancelled", commitAttempted ? "Fechamento pode ter sido solicitado; cliente deve observar a saída exata." : "Cancelado antes de solicitar o fechamento.", request.RequestId);
+                    result = AutomationReply.Error(commitAttempted ? "Unknown" : "Cancelled", commitAttempted ? "Shutdown may have been requested; the client must observe the exact process exit." : "Cancelled before requesting shutdown.", request.RequestId);
                     lock (gate)
                         ledger.Update(request.RequestId, result);
                     Trace(request, "Result", result);
@@ -576,7 +576,7 @@ public sealed class AutomationHost : IDisposable
             }
             catch (OperationCanceledException)
             {
-                result = AutomationReply.Error("Cancelled", "Cancelado; consulte evidência de envio.", request.RequestId);
+                result = AutomationReply.Error("Cancelled", "Cancelled; inspect the dispatch evidence.", request.RequestId);
             }
             catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception)
             {

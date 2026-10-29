@@ -13,7 +13,7 @@ internal static class TvUsabilityTests
 
     private static MainWindow Window()
     {
-        var target = new WindowRef(101, 42, 100, "Janela de teste", "fixture");
+        var target = new WindowRef(101, 42, 100, "Test window", "fixture");
         var window = new MainWindow(renderOnly: true, platform: new PreviewPlatform(target))
         {
             Width = 360,
@@ -93,7 +93,7 @@ internal static class TvUsabilityTests
                 frames[0] = new(true, PadButtons.Down | PadButtons.A);
                 window.ReviewTick(frames);
                 Require(window.SelectedAction != "session-card", "Simultaneous input did not move selection");
-                Require(((TextBlock)window.FindName("PageTitle")).Text == "Controle da sessão", "Simultaneous input activated the next item");
+                Require(((TextBlock)window.FindName("PageTitle")).Text == "Session controls", "Simultaneous input activated the next item");
                 Require(!window.TransitionPending, "Simultaneous input queued an external action");
             }
             finally
@@ -190,18 +190,18 @@ internal static class TvUsabilityTests
                 window.RefreshRows();
                 window.Page(2);
                 PressX(window);
-                Require(((TextBlock)window.FindName("PageTitle")).Text == "Sistema", "X changed system page to unrelated options");
+                Require(((TextBlock)window.FindName("PageTitle")).Text == "System", "X changed system page to unrelated options");
                 ReviewFixTests.Button(window, "configure-playnite").RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
                 PressX(window);
-                Require(((TextBlock)window.FindName("PageTitle")).Text == "Escolher Playnite", "X interrupted Playnite folder selection");
+                Require(((TextBlock)window.FindName("PageTitle")).Text == "Find Playnite", "X interrupted Playnite folder selection");
                 window.Back();
                 window.Page(0);
                 PressX(window);
-                Require(((TextBlock)window.FindName("PageTitle")).Text == "Opções da janela", "X no longer opens session options");
+                Require(((TextBlock)window.FindName("PageTitle")).Text == "Window options", "X no longer opens session options");
                 window.Back();
                 window.Page(1);
                 PressX(window);
-                Require(((TextBlock)window.FindName("PageTitle")).Text == "Opções da janela", "X no longer opens application options");
+                Require(((TextBlock)window.FindName("PageTitle")).Text == "Window options", "X no longer opens application options");
             }
             finally
             {
@@ -215,12 +215,12 @@ internal static class TvUsabilityTests
             {
                 var hint = (TextBlock)window.FindName("SessionHint");
                 Require(window.Controller.Session.Anchor is null, "The initial fixture unexpectedly selected a window");
-                Require(hint.Text.Contains("Escolher", StringComparison.OrdinalIgnoreCase), "Empty session advertises resuming a window");
+                Require(hint.Text.Contains("Choose", StringComparison.OrdinalIgnoreCase), "Empty session advertises resuming a window");
                 UseController(window);
-                Require(hint.Text.Contains("A", StringComparison.Ordinal) && hint.Text.Contains("Escolher", StringComparison.OrdinalIgnoreCase), "Controller hint does not explain the empty session action");
+                Require(hint.Text.Contains("A", StringComparison.Ordinal) && hint.Text.Contains("Choose", StringComparison.OrdinalIgnoreCase), "Controller hint does not explain the empty session action");
                 window.Controller.CaptureReturn();
                 window.RefreshRows();
-                Require(hint.Text.Contains("Retomar", StringComparison.OrdinalIgnoreCase), "Selected session does not advertise resuming");
+                Require(hint.Text.Contains("Resume", StringComparison.OrdinalIgnoreCase), "Selected session does not advertise resuming");
             }
             finally
             {
@@ -235,10 +235,10 @@ internal static class TvUsabilityTests
                 UseController(window);
                 window.Page(2);
                 var hint = ((TextBlock)window.FindName("ModeLabel")).Text;
-                Require(!hint.Contains("X opções", StringComparison.Ordinal), "System page misleadingly advertises contextual options");
+                Require(!hint.Contains("X options", StringComparison.Ordinal), "System page misleadingly advertises contextual options");
                 window.Page(1);
                 hint = ((TextBlock)window.FindName("ModeLabel")).Text;
-                Require(hint.Contains("X opções", StringComparison.Ordinal), "Apps page lost its contextual options hint");
+                Require(hint.Contains("X options", StringComparison.Ordinal), "Apps page lost its contextual options hint");
             }
             finally
             {

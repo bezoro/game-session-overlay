@@ -4,6 +4,7 @@
   xmlns:local="clr-namespace:ApolloOverlay"
   x:Class="ApolloOverlay.MainWindow"
   Title="Game Session Overlay"
+  Language="en-US"
   Width="572"
   Height="940"
   FontFamily="Segoe UI Variable Text, Segoe UI"
@@ -417,7 +418,7 @@
             MinHeight="44"
             Padding="10"
             Margin="0,0,12,0"
-            AutomationProperties.Name="Voltar à página anterior">
+            AutomationProperties.Name="Back to the previous page">
             <local:VectorIcon
               Data="{StaticResource Icon.back}"
               Fill="{DynamicResource TextFillColorPrimaryBrush}"
@@ -454,7 +455,7 @@
             </Grid>
             <TextBlock
               x:Name="PageTitle"
-              Text="Sua sessão"
+              Text="Your session"
               FontFamily="Segoe UI Variable Display, Segoe UI"
               FontSize="25"
               FontWeight="SemiBold"
@@ -546,8 +547,8 @@
             Padding="8"
             Margin="0"
             MinHeight="44"
-            AutomationProperties.Name="Abrir Sistema"
-            AutomationProperties.HelpText="Abrir ajustes do sistema e integrações">
+            AutomationProperties.Name="Open System"
+            AutomationProperties.HelpText="Open system settings and integrations">
             <local:VectorIcon
               Data="{StaticResource Icon.settings}"
               Fill="{DynamicResource TextFillColorPrimaryBrush}"
@@ -568,7 +569,7 @@
               x:Name="HomeTab"
               Style="{StaticResource TabButton}">
               <TextBlock
-                Text="Sessão"
+                Text="Session"
                 Style="{x:Null}"
                 FontFamily="Segoe UI Variable Text, Segoe UI"
                 FontSize="16"
@@ -579,7 +580,7 @@
               x:Name="AppsTab"
               Style="{StaticResource TabButton}">
               <TextBlock
-                Text="Aplicativos"
+                Text="Apps"
                 Style="{x:Null}"
                 FontFamily="Segoe UI Variable Text, Segoe UI"
                 FontSize="16"
@@ -590,7 +591,7 @@
               x:Name="SettingsTab"
               Style="{StaticResource TabButton}">
               <TextBlock
-                Text="Áudio"
+                Text="Audio"
                 Style="{x:Null}"
                 FontFamily="Segoe UI Variable Text, Segoe UI"
                 FontSize="16"
@@ -683,16 +684,16 @@
                       Grid.Row="1">
                       <TextBlock
                         x:Name="SessionKicker"
-                        Text="Janela da sessão"
+                        Text="Session window"
                         FontSize="13"
                         FontWeight="SemiBold"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                       <TextBlock
                         x:Name="TargetLabel"
-                        Text="Escolha uma janela"
-                        FontSize="24"
+                        Text="Choose a window"
+                        FontSize="28"
                         TextWrapping="Wrap"
-                        MaxHeight="64"
+                        MaxHeight="76"
                         FontWeight="SemiBold"
                         Margin="0,2,0,4"
                         TextTrimming="CharacterEllipsis" />
@@ -710,7 +711,7 @@
                           Margin="10,0,6,0" />
                         <TextBlock
                           x:Name="ContextStatus"
-                          Text="Disponível"
+                          Text="Available"
                           FontSize="14"
                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                       </WrapPanel>
@@ -723,7 +724,7 @@
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                       <TextBlock
                         x:Name="SessionHint"
-                        Text="Enter · Retomar   X · Opções"
+                        Text="Enter · Resume   X · Options"
                         TextWrapping="Wrap"
                         FontSize="14"
                         Margin="0,6,0,0"
@@ -742,7 +743,7 @@
                   Margin="0,8,5,8"
                   Background="Transparent"
                   BorderThickness="0"
-                  AutomationProperties.Name="Opções da janela da sessão" />
+                  AutomationProperties.Name="Session window options" />
               </Grid>
             </Border>
             <Grid
@@ -772,12 +773,12 @@
                 x:Name="ConfirmationInfo"
                 Margin="4,6">
                 <TextBlock
-                  Text="Fechamento seguro"
+                  Text="Safe closing"
                   Foreground="{DynamicResource SystemFillColorCriticalBrush}"
                   FontSize="13"
                   FontWeight="SemiBold" />
                 <TextBlock
-                  Text="Fechar esta janela?"
+                  Text="Close this window?"
                   FontSize="24"
                   FontWeight="SemiBold"
                   TextWrapping="Wrap"
@@ -789,7 +790,7 @@
                   Margin="0,8,0,8" />
                 <TextBlock
                   x:Name="ConfirmationWarning"
-                  Text="Trabalho não salvo pode ser perdido."
+                  Text="Unsaved work may be lost."
                   FontSize="15"
                   TextWrapping="Wrap"
                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
@@ -806,7 +807,7 @@
                 Foreground="{DynamicResource SystemFillColorCriticalBrush}" />
               <TextBlock
                 x:Name="ConfirmHint"
-                Text="Aguardando soltar…"
+                Text="Waiting for release…"
                 FontSize="13"
                 Margin="0,0,0,4"
                 TextWrapping="Wrap" />
@@ -814,77 +815,83 @@
                 x:Name="HoldCloseButton"
                 MinHeight="52"
                 Foreground="{DynamicResource SystemFillColorCriticalBrush}"
-                AutomationProperties.Name="Segurar para fechar esta janela por 1,5 segundo">
+                AutomationProperties.Name="Hold for 1.5 seconds to close this window">
                 <TextBlock
-                  Text="Segurar para fechar · 1,5 s"
+                  Text="Hold to close · 1.5 s"
                   TextWrapping="Wrap"
                   TextAlignment="Center" />
               </Button>
               <Button
                 x:Name="CancelCloseButton"
-                Content="Cancelar"
+                Content="Cancel"
                 MinHeight="44"
-                AutomationProperties.Name="Cancelar fechamento" />
+                AutomationProperties.Name="Cancel closing" />
             </StackPanel>
           </Grid>
         </Border>
         <Border
           x:Name="OperationPanel"
           Grid.Row="4"
-          Visibility="Collapsed"
-          Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
-          BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
-          BorderThickness="1"
-          CornerRadius="10"
-          Padding="12,8"
-          Margin="0,10,0,0">
+          Visibility="Hidden"
+          Background="Transparent"
+          Height="40"
+          Margin="0,4,0,0">
           <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition
-                Width="24" />
+                Width="22" />
               <ColumnDefinition />
               <ColumnDefinition
-                Width="48" />
+                Width="Auto" />
               <ColumnDefinition
-                Width="40" />
+                Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock
               x:Name="OperationGlyph"
               FontFamily="Segoe UI Variable Text, Segoe UI"
               FontWeight="Bold"
-              FontSize="20"
-              VerticalAlignment="Top" />
+              FontSize="16"
+              VerticalAlignment="Center" />
             <TextBlock
               x:Name="OperationLabel"
               Grid.Column="1"
               FontSize="14"
-              TextWrapping="Wrap"
+              TextWrapping="NoWrap"
               TextTrimming="CharacterEllipsis"
-              LineHeight="20"
-              LineStackingStrategy="BlockLineHeight"
-              MaxHeight="60"
+              VerticalAlignment="Center"
+              Foreground="{DynamicResource TextFillColorSecondaryBrush}"
               AutomationProperties.LiveSetting="Polite" />
             <Button
               x:Name="OperationDetailsButton"
               Grid.Column="2"
-              Content="Ler"
+              Content="···"
+              Width="40"
+              Height="40"
               MinHeight="40"
+              FontSize="18"
               Padding="4"
               Margin="4,0,0,0"
               Background="Transparent"
               BorderThickness="0"
-              ToolTip="Ler resultado completo"
-              AutomationProperties.Name="Ler resultado completo" />
+              ToolTip="Read full result"
+              AutomationProperties.Name="Read full result" />
             <Button
               x:Name="DismissOperationButton"
               Grid.Column="3"
-              Content="×"
+              Width="40"
+              Height="40"
               MinHeight="40"
               Padding="4"
               Margin="4,0,0,0"
               Background="Transparent"
               BorderThickness="0"
-              AutomationProperties.Name="Dispensar resultado da operação" />
+              AutomationProperties.Name="Dismiss command result">
+              <local:VectorIcon
+                Data="{StaticResource Icon.close}"
+                Width="16"
+                Height="16"
+                Fill="{DynamicResource TextFillColorSecondaryBrush}" />
+            </Button>
           </Grid>
         </Border>
         <Border
@@ -899,7 +906,7 @@
           <StackPanel>
             <TextBlock
               x:Name="DirtyLabel"
-              Text="Alterações não salvas"
+              Text="Unsaved changes"
               FontSize="14"
               FontWeight="SemiBold" />
             <UniformGrid
@@ -907,13 +914,13 @@
               Margin="0,4,0,0">
               <Button
                 x:Name="SaveSettingsButton"
-                Content="Salvar"
+                Content="Save"
                 MinHeight="40"
                 Padding="8,4"
                 Margin="0,0,4,0" />
               <Button
                 x:Name="DiscardSettingsButton"
-                Content="Descartar"
+                Content="Discard"
                 MinHeight="40"
                 Padding="8,4"
                 Margin="4,0,0,0" />
@@ -931,15 +938,15 @@
             Background="{DynamicResource ControlStrokeColorDefaultBrush}" />
           <TextBlock
             x:Name="SharedControlNotice"
-            Text="O controle também pode agir no jogo."
+            Text="Controller input may also reach the game."
             FontSize="14"
             FontWeight="SemiBold"
             TextWrapping="Wrap"
             Foreground="{DynamicResource TextFillColorPrimaryBrush}"
-            AutomationProperties.Name="O controle também pode agir no jogo enquanto este painel está aberto." />
+            AutomationProperties.Name="Controller input may also reach the game while this panel is open." />
           <TextBlock
             x:Name="StatusLabel"
-            Text="Pronto"
+            Text="Ready"
             FontSize="14"
             Margin="0,4,0,0"
             TextTrimming="CharacterEllipsis"

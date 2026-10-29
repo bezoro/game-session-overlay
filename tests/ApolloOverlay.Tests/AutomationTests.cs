@@ -107,7 +107,7 @@ internal static class AutomationTests
 
                         Require(startup.IsCompleted, "Startup deadline");
                         startup.GetAwaiter().GetResult();
-                        Require(window.Controller.Operation?.State == "Indisponível" && File.ReadAllText(path) == invalid, "Corrupt history was erased or overlay startup failed");
+                        Require(window.Controller.Operation?.State == "Unavailable" && File.ReadAllText(path) == invalid, "Corrupt history was erased or overlay startup failed");
                         var bridge = window.StartAutomation(grant: new AutomationGrant("fixed", false));
                         watch.Restart();
                         while (!bridge.IsCompleted && watch.ElapsedMilliseconds < 5000)

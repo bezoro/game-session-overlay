@@ -65,44 +65,45 @@ public partial class MainWindow
                 ChooseSession();
             else
                 RunEffect(() => Controller.Switch(target), () => Controller.Platform.Valid(target));
-        }, true, valid ? target!.Title : "Escolher uma janela em Aplicativos");
+        }, true, valid ? target!.Title : "Choose a window in Apps");
         RegisterFixed("session-options", SessionOptionsButton, () =>
         {
             if (target is not null)
                 OpenOptions(target);
             else
                 ChooseSession();
-        }, true, "Opções da janela da sessão");
-        AutomationProperties.SetName(SessionCardButton, valid ? target!.Title + " · Retomar janela" : "Escolher janela");
-        AutomationProperties.SetHelpText(SessionCardButton, valid ? "A / Enter retoma esta janela. X abre opções." : "Escolher uma janela em Aplicativos");
-        BuildSessionDashboard();
+        }, true, "Session window options");
+        AutomationProperties.SetName(SessionCardButton, valid ? target!.Title + " · Resume window" : "Choose window");
+        AutomationProperties.SetHelpText(SessionCardButton, valid ? "A / Enter resumes this window. X opens options." : "Choose a window in Apps");
         var windowCount = Controller.Apps.Count;
         var windowSummary = windowCount switch
         {
-            0 => "Nenhuma janela encontrada",
-            1 => "1 janela disponível",
-            _ => $"{windowCount} janelas disponíveis"
+            0 => "No windows found",
+            1 => "1 window available",
+            _ => $"{windowCount} windows available"
         };
-        AddRow("apps", "Aplicativos abertos", windowSummary, () => Page(1));
         var favorites = SessionHubSettings.Favorites(Controller.Settings);
         if (favorites.Length > 0)
         {
-            Section("Acesso rápido");
+            Section("Quick access");
             var first = Rows.RowDefinitions.Count;
             for (var i = 0; i < favorites.Length; i++)
                 BuildFavorite(favorites[i], narrow ? null : first + i / 2, i % 2);
         }
 
+        AddRow("apps", "Open apps", windowSummary, () => Page(1));
+        BuildSessionDashboard();
+
         var previous = Controller.Recent.Previous(Controller.Platform.Valid);
         var recents = Controller.Recent.Items.Where(w => !w.Same(Controller.Recent.OpeningForeground) && !w.Same(previous)).Take(4).ToArray();
         if (previous is not null || recents.Length > 0)
-            Section("Recentes");
+            Section("Recent");
         if (previous is not null)
-            AddRow("previous-window", "Janela anterior", previous.Title, () => RunEffect(() => Controller.Switch(previous), () => Controller.Platform.Valid(previous)));
+            AddRow("previous-window", "Previous window", previous.Title, () => RunEffect(() => Controller.Switch(previous), () => Controller.Platform.Valid(previous)));
         foreach (var recent in recents)
             AddWindowRow(recent, "recent:", false);
         if (!Controller.Settings.SetupSeen)
-            AddRow("setup-invitation", "Personalizar painel", "Configuração rápida em três passos", () => OpenView(new(OverlayRoute.Setup, SelectedId: "setup-next")));
+            AddRow("setup-invitation", "Customize panel", "Quick setup in three steps", () => OpenView(new(OverlayRoute.Setup, SelectedId: "setup-next")));
     }
 
     private void BuildFavorite(string id, int? row, int column)
@@ -114,16 +115,16 @@ public partial class MainWindow
         switch (id)
         {
             case "playnite":
-                AddRow(id, "Playnite", Controller.Settings.PlaynitePath is null ? "Configure em Sistema" : "Abrir biblioteca", () => RunEffect((token, keep) => Controller.Launch(true, token, keep), focusTarget: Controller.LaunchTarget(true)), Controller.Settings.PlaynitePath is not null || Controller.Apps.Any(a => a.ProcessName.Equals("Playnite.FullscreenApp", StringComparison.OrdinalIgnoreCase)), row: row, column: column);
+                AddRow(id, "Playnite", Controller.Settings.PlaynitePath is null ? "Configure in System" : "Open library", () => RunEffect((token, keep) => Controller.Launch(true, token, keep), focusTarget: Controller.LaunchTarget(true)), Controller.Settings.PlaynitePath is not null || Controller.Apps.Any(a => a.ProcessName.Equals("Playnite.FullscreenApp", StringComparison.OrdinalIgnoreCase)), row: row, column: column);
                 break;
             case "steam":
-                AddRow(id, "Steam Big Picture", Controller.SteamAvailable ? "Abrir biblioteca" : "Steam não encontrada", () => RunEffect((token, keep) => Controller.Launch(false, token, keep), focusTarget: Controller.LaunchTarget(false)), Controller.SteamAvailable, row: row, column: column);
+                AddRow(id, "Steam Big Picture", Controller.SteamAvailable ? "Open library" : "Steam not found", () => RunEffect((token, keep) => Controller.Launch(false, token, keep), focusTarget: Controller.LaunchTarget(false)), Controller.SteamAvailable, row: row, column: column);
                 break;
             case "gamebar":
-                AddRow(id, "Game Bar", target is null ? "Escolha uma janela" : "Xbox · janela da sessão", () => Shortcut("Win+G"), target is not null, row: row, column: column);
+                AddRow(id, "Game Bar", target is null ? "Choose a window" : "Xbox · session window", () => Shortcut("Win+G"), target is not null, row: row, column: column);
                 break;
             case "steam-overlay":
-                AddRow(id, menu ? "Menu do Steam Big Picture" : "Overlay Steam", menu ? "Big Picture" : steamGame ? Controller.HasSteamLaunchObservation(steamContext) ? "Iniciado pela Steam · " + Controller.Settings.SteamShortcut : "Solicitar " + Controller.Settings.SteamShortcut : "Não disponível nesta janela", () =>
+                AddRow(id, menu ? "Steam Big Picture menu" : "Steam Overlay", menu ? "Big Picture" : steamGame ? Controller.HasSteamLaunchObservation(steamContext) ? "Launched by Steam · " + Controller.Settings.SteamShortcut : "Request " + Controller.Settings.SteamShortcut : "Unavailable in this window", () =>
                 {
                     if (steamContext is null)
                         return;
@@ -134,10 +135,10 @@ public partial class MainWindow
                 }, menu || steamGame, row: row, column: column);
                 break;
             case "taskview":
-                AddRow(id, "Visão de tarefas", "Janelas do Windows", () => RunEffect(Controller.Platform.TaskView), row: row, column: column);
+                AddRow(id, "Task View", "Open windows", () => RunEffect(Controller.Platform.TaskView), row: row, column: column);
                 break;
             case "audio":
-                AddRow(id, "Áudio do Windows", audio.Current.Available ? audio.Current.Muted ? "Saída sem som" : audio.Current.Volume.ToString("P0") : "Saída indisponível", () => Subpage("audio", "volume"), row: row, column: column);
+                AddRow(id, "Windows audio", audio.Current.Available ? audio.Current.Muted ? "Output muted" : audio.Current.Volume.ToString("P0") : "Output unavailable", () => Subpage("audio", "volume"), row: row, column: column);
                 break;
         }
     }
@@ -146,13 +147,13 @@ public partial class MainWindow
     {
         var id = prefix + WindowId(target);
         var eligible = !chooser || !target.Protected && !target.Launcher;
-        var button = AddRow(id, target.Title, eligible ? target.ProcessName + (chooser ? " · Usar nesta sessão" : " · Alternar janela") : "Esta janela não pode ser a referência da sessão", () =>
+        var button = AddRow(id, target.Title, eligible ? target.ProcessName + (chooser ? " · Use for this session" : " · Switch window") : "This window cannot be the session reference", () =>
         {
             if (chooser)
             {
                 if (!Controller.Platform.Valid(target))
                 {
-                    FeedbackText("A janela mudou; atualize a lista.");
+                    FeedbackText("The window changed; refresh the list.");
                     return;
                 }
 
@@ -181,24 +182,24 @@ public partial class MainWindow
             HorizontalAlignment = HorizontalAlignment.Right,
             Tag = "options:" + id
         };
-        AutomationProperties.SetName(more, "Opções de " + target.Title);
-        AutomationProperties.SetHelpText(more, "Áudio do aplicativo, minimizar, detalhes e fechamento com confirmação");
+        AutomationProperties.SetName(more, "Options for " + target.Title);
+        AutomationProperties.SetHelpText(more, "App audio, minimize, details and confirmed closing");
         more.Click += (_, _) => ActivatePointerEntry(more);
         Grid.SetRow(more, Grid.GetRow(button));
         Grid.SetColumn(more, 1);
         Rows.Children.Add(more);
-        RegisterFixed("options:" + id, more, () => OpenOptions(target), true, "Opções de " + target.Title);
+        RegisterFixed("options:" + id, more, () => OpenOptions(target), true, "Options for " + target.Title);
     }
 
     private void BuildApps()
     {
         if (view.Current.ChooseSession)
-            Paragraph("Escolha a janela que deseja retomar pelo painel.");
+            Paragraph("Choose the window you want to resume from the panel.");
         foreach (var app in Controller.Apps)
             AddWindowRow(app, "", view.Current.ChooseSession);
         if (Controller.Apps.Count == 0)
-            Paragraph("Nenhuma janela encontrada. Atualize a lista para procurar novamente.", 20);
-        AddRow("refresh-apps", "Atualizar janelas", "Procurar novamente", async () =>
+            Paragraph("No windows found. Refresh the list to check again.", 20);
+        AddRow("refresh-apps", "Refresh windows", "Check again", async () =>
         {
             try
             {
@@ -211,14 +212,14 @@ public partial class MainWindow
         });
         if (view.Current.ChooseSession)
         {
-            AddRow("clear-session", "Limpar janela da sessão", "Deixa o cartão sem uma janela selecionada", () =>
+            AddRow("clear-session", "Clear session window", "Clears the window selected on the session card", () =>
             {
                 Controller.ClearSelection();
                 Page(0);
                 navigation = new("session-card");
                 SetSelection(false);
             });
-            AddRow("back", "Voltar", "Mantém a seleção anterior", Back);
+            AddRow("back", "Back", "Keeps the previous selection", Back);
         }
     }
 
@@ -227,20 +228,20 @@ public partial class MainWindow
         var target = view.Current.Target;
         if (target is null)
         {
-            AddRow("choose-session", "Escolher janela", "Abrir Aplicativos", ChooseSession);
+            AddRow("choose-session", "Choose window", "Open Apps", ChooseSession);
             return;
         }
 
         var valid = Controller.Platform.Valid(target);
         Paragraph(target.Title, 20);
         if (!valid)
-            Paragraph("Esta janela não está mais disponível. Escolha outra janela.");
-        AddRow("application-mute", MuteActionTitle(), valid ? AppAudioDescription() : "Esta janela não está mais disponível.", () => MuteApplication(target), valid && AudioFor(target) && appAudio.CanSetMute);
-        AddRow("minimize", "Minimizar janela", valid && target.CanClose ? "O painel permanece aberto" : "Janela protegida ou indisponível", () => RunInPlace(target, token => Controller.Platform.Minimize(target, token), "minimize"), valid && target.CanClose);
-        AddRow("choose-session", "Escolher outra janela", "Escolha o que deseja retomar", ChooseSession);
-        AddRow("details", "Detalhes da janela", "Ver informações completas", () => OpenView(new(OverlayRoute.Details, target, "switch-detail")));
-        AddRow("close", "Fechar janela…", target.CanClose && valid ? "Confirmar com nova pressão de 1,5 s" : "Janela protegida ou indisponível", () => Confirm(target), valid && target.CanClose, true);
-        AddRow("back", "Voltar", "Voltar", Back);
+            Paragraph("This window is no longer available. Choose another window.");
+        AddRow("application-mute", MuteActionTitle(), valid ? AppAudioDescription() : "This window is no longer available.", () => MuteApplication(target), valid && AudioFor(target) && appAudio.CanSetMute);
+        AddRow("minimize", "Minimize window", valid && target.CanClose ? "The panel stays open" : "Window protected or unavailable", () => RunInPlace(target, token => Controller.Platform.Minimize(target, token), "minimize"), valid && target.CanClose);
+        AddRow("choose-session", "Choose another window", "Choose what to resume", ChooseSession);
+        AddRow("details", "Window details", "View full details", () => OpenView(new(OverlayRoute.Details, target, "switch-detail")));
+        AddRow("close", "Close window…", target.CanClose && valid ? "Confirm with a fresh 1.5-second hold" : "Window protected or unavailable", () => Confirm(target), valid && target.CanClose, true);
+        AddRow("back", "Back", "Back", Back);
     }
 
     private void BuildDetails()
@@ -248,15 +249,15 @@ public partial class MainWindow
         var target = view.Current.Target;
         if (target is null)
         {
-            AddRow("back", "Voltar", "Nenhuma janela selecionada", Back);
+            AddRow("back", "Back", "No window selected", Back);
             return;
         }
 
         Paragraph(target.Title, 22);
-        AddRow("window-information", "Título e informações completas", "Enter / A para ler · setas rolam · ← / → volta às ações", () => detailsText?.Focus());
-        var information = $"{target.Title}\n\n{target.ProcessName} · PID {target.Pid}\nIdentidade de criação {target.Started} · geração {target.Generation}";
+        AddRow("window-information", "Full title and details", "Enter / A to read · arrows scroll · ← / → returns to actions", () => detailsText?.Focus());
+        var information = $"{target.Title}\n\n{target.ProcessName} · PID {target.Pid}\nCreation identity {target.Started} · generation {target.Generation}";
         if (AudioFor(target))
-            information += $"\n\nÁudio do aplicativo · {AudioBadge()}\n{appAudio.IdentifiedSessions} sessões identificadas · {appAudio.SkippedOrFailedSessions} não verificadas\n{appAudio.Reason}";
+            information += $"\n\nApp audio · {AudioBadge()}\n{appAudio.IdentifiedSessions} sessions identified · {appAudio.SkippedOrFailedSessions} unverified\n{appAudio.Reason}";
         detailsText = new TextBox
         {
             Text = information,
@@ -271,44 +272,44 @@ public partial class MainWindow
         };
         detailsText.SetResourceReference(BackgroundProperty, ThemeSupport.Card);
         detailsText.SetResourceReference(ForegroundProperty, ThemeSupport.Text);
-        AutomationProperties.SetName(detailsText, "Título completo e identidade da janela");
-        AutomationProperties.SetHelpText(detailsText, "Setas rolam. Direita retorna às ações; Esc volta às opções.");
+        AutomationProperties.SetName(detailsText, "Full window title and identity");
+        AutomationProperties.SetHelpText(detailsText, "Arrows scroll. Right returns to actions; Esc returns to options.");
         AddVisual(detailsText);
-        AddRow("switch-detail", "Alternar para esta janela", "Retoma apenas esta identidade", () => RunEffect(() => Controller.Switch(target), () => Controller.Platform.Valid(target)), Controller.Platform.Valid(target));
-        AddRow("select-session", "Usar nesta sessão", "Atualiza o cartão sem alternar o Windows", () =>
+        AddRow("switch-detail", "Switch to this window", "Resumes only this exact window", () => RunEffect(() => Controller.Switch(target), () => Controller.Platform.Valid(target)), Controller.Platform.Valid(target));
+        AddRow("select-session", "Use for this session", "Updates the card without switching Windows focus", () =>
         {
             Controller.Select(target);
             Back();
             RefreshRows();
         }, !target.Launcher && !target.Protected && Controller.Platform.Valid(target));
-        AddRow("close-detail", "Fechar esta janela…", "Nova pressão longa · 1,5 s", () => Confirm(target), target.CanClose && Controller.Platform.Valid(target), true);
-        AddRow("back", "Voltar", "Retorna às opções anteriores", Back);
+        AddRow("close-detail", "Close this window…", "Fresh long press · 1.5 s", () => Confirm(target), target.CanClose && Controller.Platform.Valid(target), true);
+        AddRow("back", "Back", "Returns to the previous options", Back);
     }
 
     private void BuildWindowsAudio()
     {
         var state = audio.Current;
-        Paragraph("Volume do Windows e controles de áudio da sessão.");
-        AddRow("volume-down", "Diminuir volume", "− 5% · saída padrão do Windows", () => AdjustVolume(-.05f), state.Available);
-        var volume = AddRow("volume", "Volume · " + (state.Available ? state.Volume.ToString("P0") : "indisponível"), "+ 5% · ← / → ajusta", () => AdjustVolume(.05f), state.Available);
+        Paragraph("Windows volume and session audio controls.");
+        AddRow("volume-down", "Lower volume", "− 5% · default Windows output", () => AdjustVolume(-.05f), state.Available);
+        var volume = AddRow("volume", "Volume · " + (state.Available ? state.Volume.ToString("P0") : "unavailable"), "+ 5% · ← / → adjusts", () => AdjustVolume(.05f), state.Available);
         if (state.Available)
             AddSessionSlider(volume, state.Volume, value => AudioAction(audio.Set(value, expectedEndpoint: audio.Current.EndpointId)));
-        AddRow("mute", state.Muted ? "Ativar som" : "Silenciar", "Silencia ou ativa a saída do Windows", () => AudioAction(audio.Set(muted: !audio.Current.Muted)), state.Available);
+        AddRow("mute", state.Muted ? "Unmute" : "Mute", "Mutes or unmutes the Windows output", () => AudioAction(audio.Set(muted: !audio.Current.Muted)), state.Available);
         AddRow("microphone", MicrophoneTitle, systemAudio.Current.MicrophoneName, ToggleMicrophone, systemAudio.Current.MicrophoneMuted is not null);
-        AddRow("session-mixer", "Mixer de aplicativos", "Jogo, conversa e música separados", () => OpenFeature(OverlayRoute.Mixer, "mixer-refresh"));
-        AddRow("audio-devices", "Saída de áudio", systemAudio.Current.OutputName, () => OpenFeature(OverlayRoute.AudioDevices, "device-refresh"));
-        AddRow("back", "Voltar", state.Status, Back);
+        AddRow("session-mixer", "App mixer", "Separate game, voice and music audio", () => OpenFeature(OverlayRoute.Mixer, "mixer-refresh"));
+        AddRow("audio-devices", "Audio output", systemAudio.Current.OutputName, () => OpenFeature(OverlayRoute.AudioDevices, "device-refresh"));
+        AddRow("back", "Back", state.Status, Back);
     }
 
     private void BuildResult()
     {
         if (Controller.Operation is not { } result)
         {
-            AddRow("back", "Voltar", "Nenhum resultado retido", Back);
+            AddRow("back", "Back", "No retained result", Back);
             return;
         }
 
-        AddRow("operation-text", "Ler mensagem completa", "Setas para rolar · B / Esc para voltar", () => operationText?.Focus());
+        AddRow("operation-text", "Read full message", "Arrows to scroll · B / Esc to go back", () => operationText?.Focus());
         operationText = new TextBox
         {
             Text = result.Message,
@@ -323,9 +324,9 @@ public partial class MainWindow
         };
         operationText.SetResourceReference(BackgroundProperty, ThemeSupport.Card);
         operationText.SetResourceReference(ForegroundProperty, ThemeSupport.Text);
-        AutomationProperties.SetName(operationText, "Resultado completo · " + result.State);
+        AutomationProperties.SetName(operationText, "Full result · " + result.State);
         AddVisual(operationText);
-        AddRow("dismiss-operation", "Dispensar resultado", "Remove apenas esta mensagem", DismissOperation);
-        AddRow("back", "Voltar ao painel", "Mantém o resultado disponível", Back);
+        AddRow("dismiss-operation", "Dismiss result", "Removes only this message", DismissOperation);
+        AddRow("back", "Back to panel", "Keeps the result available", Back);
     }
 }

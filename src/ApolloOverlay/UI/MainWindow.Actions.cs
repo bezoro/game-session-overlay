@@ -98,7 +98,7 @@ public partial class MainWindow
     {
         if (!target.CanClose || !Controller.Platform.Valid(target))
         {
-            FeedbackText("Janela protegida ou identidade alterada; fechamento bloqueado.");
+            FeedbackText("Window protected or identity changed; closing blocked.");
             return;
         }
 
@@ -110,8 +110,8 @@ public partial class MainWindow
         entries.Clear();
         RegisterFixed("confirm-hold", HoldCloseButton, () =>
         {
-        }, true, "Segure por 1,5 s após soltar");
-        RegisterFixed("confirm-cancel", CancelCloseButton, Back, true, "Cancelar fechamento");
+        }, true, "Release, then hold for 1.5 s");
+        RegisterFixed("confirm-cancel", CancelCloseButton, Back, true, "Cancel closing");
         navigation = new("confirm-hold");
         HeaderArea.Visibility = Visibility.Collapsed;
         TabArea.Visibility = Visibility.Collapsed;
@@ -123,8 +123,8 @@ public partial class MainWindow
         ContentScroll.Visibility = Visibility.Collapsed;
         CloseArea.Visibility = Visibility.Collapsed;
         HoldProgress.Value = 0;
-        ConfirmHint.Text = "Aguardando soltar…";
-        FeedbackText("Nenhum comando de fechamento enviado.");
+        ConfirmHint.Text = "Waiting for release…";
+        FeedbackText("No close command sent.");
         UpdateHints();
         SetSelection(false);
     }
@@ -138,7 +138,7 @@ public partial class MainWindow
         var valid = Controller.Platform.Valid(target) && target.Same(view.Current.Target ?? Controller.Session.Anchor) ? target : null;
         var completed = closeHold.Tick(down, false, context.Active && context.OwnForeground && context.Confirmed, captured && (!down || inside), valid, now);
         HoldProgress.Value = closeHold.Progress;
-        ConfirmHint.Text = closeHold.Progress > 0 ? $"Mantenha pressionado… {closeHold.Progress:P0}" : "Solte e pressione novamente por 1,5 s.";
+        ConfirmHint.Text = closeHold.Progress > 0 ? $"Keep holding… {closeHold.Progress:P0}" : "Release, then hold again for 1.5 s.";
         if (completed)
         {
             CancelHold();
@@ -155,7 +155,7 @@ public partial class MainWindow
             return;
         busy = true;
         pending = new();
-        RetainOperation("Pendente", "Aguardando confirmação de fechamento…", "close", target, true);
+        RetainOperation("Pending", "Waiting for closing confirmation…", "close", target, true);
         ActionResult result;
         try
         {
@@ -163,11 +163,11 @@ public partial class MainWindow
         }
         catch (OperationCanceledException)
         {
-            result = new(ResultKind.Unknown, "Observação interrompida após o envio. Verifique a janela e possíveis diálogos de salvar.");
+            result = new(ResultKind.Unknown, "Observation interrupted after sending. Check the window and any save dialogs.");
         }
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
-            result = new(ResultKind.Failed, "Não foi possível solicitar o fechamento.");
+            result = new(ResultKind.Failed, "Could not request closing.");
         }
         finally
         {
@@ -287,7 +287,7 @@ public partial class MainWindow
             return true;
         }
 
-        RetainOperation("Pendente", "Solicitação enviada; aguardando o resultado.", action, target, true);
+        RetainOperation("Pending", "Request sent; waiting for the result.", action, target, true);
         ActionResult result;
         try
         {
@@ -295,11 +295,11 @@ public partial class MainWindow
         }
         catch (OperationCanceledException)
         {
-            result = new(ResultKind.Unknown, "Observação interrompida; verifique o aplicativo antes de tentar novamente.");
+            result = new(ResultKind.Unknown, "Observation interrupted; check the app before trying again.");
         }
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
-            result = new(ResultKind.Failed, "A solicitação não pôde ser concluída.");
+            result = new(ResultKind.Failed, "The request could not be completed.");
         }
         finally
         {
@@ -327,14 +327,14 @@ public partial class MainWindow
         var target = keys == "Win+Tab" ? Controller.ReturnTarget : Controller.Session.Anchor;
         if (target is null)
         {
-            FeedbackText("Nenhuma janela válida para este atalho.");
+            FeedbackText("No valid window for this shortcut.");
             return;
         }
 
         var steam = keys is "Shift+Tab" or "Ctrl+Tab";
         if (steam && !Controller.SteamOverlayEligible(target))
         {
-            FeedbackText("Overlay Steam não confirmado nesta janela.");
+            FeedbackText("Steam Overlay unconfirmed in this window.");
             return;
         }
 
@@ -352,7 +352,7 @@ public partial class MainWindow
         var generation = ++operationGeneration;
         busy = true;
         pending = new();
-        RetainOperation("Pendente", "Solicitação enviada; aguardando confirmação.", action, target, true);
+        RetainOperation("Pending", "Request sent; waiting for confirmation.", action, target, true);
         ActionResult result;
         try
         {
@@ -360,11 +360,11 @@ public partial class MainWindow
         }
         catch (OperationCanceledException)
         {
-            result = new(ResultKind.Unknown, "Observação interrompida; o comando enviado não pode ser desfeito. Verifique o aplicativo.");
+            result = new(ResultKind.Unknown, "Observation interrupted; the sent command cannot be undone. Check the app.");
         }
         catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
-            result = new(ResultKind.Failed, "Não foi possível confirmar a operação; não haverá repetição automática.");
+            result = new(ResultKind.Failed, "Could not confirm the operation; there will be no automatic retry.");
         }
         finally
         {
@@ -389,7 +389,7 @@ public partial class MainWindow
             if (closeSource != -1)
             {
                 CancelHold();
-                FeedbackText("Origem da pressão mudou; fechamento cancelado.");
+                FeedbackText("Input source changed; closing cancelled.");
                 return;
             }
 
@@ -411,7 +411,7 @@ public partial class MainWindow
             if (pointerDown)
             {
                 CancelHold();
-                FeedbackText("Pressão cancelada: o ponteiro saiu do botão.");
+                FeedbackText("Hold cancelled: the pointer left the button.");
             }
         };
         HoldCloseButton.LostMouseCapture += (_, _) =>
@@ -419,7 +419,7 @@ public partial class MainWindow
             if (pointerDown)
             {
                 CancelHold();
-                FeedbackText("Pressão cancelada: captura do mouse perdida.");
+                FeedbackText("Hold cancelled: mouse capture lost.");
             }
         };
     }

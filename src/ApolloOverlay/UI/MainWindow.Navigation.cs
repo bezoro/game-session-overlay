@@ -119,11 +119,11 @@ public partial class MainWindow
                     host.BorderBrush = Brushes.Transparent;
             }
 
-            AutomationProperties.SetItemStatus(entry.Button, selected ? (entry.Available ? "Selecionado" : "Selecionado · indisponível") : entry.Available ? "" : "Indisponível");
+            AutomationProperties.SetItemStatus(entry.Button, selected ? (entry.Available ? "Selected" : "Selected · unavailable") : entry.Available ? "" : "Unavailable");
             if (selected)
             {
                 if (showReason)
-                    FeedbackText(entry.Available ? entry.Reason : "Indisponível · " + entry.Reason);
+                    FeedbackText(entry.Available ? entry.Reason : "Unavailable · " + entry.Reason);
                 SaveView();
                 if (restoreFocus && NavigationAllowed)
                 {
@@ -270,7 +270,7 @@ public partial class MainWindow
         }
         else if (!entry.Available)
         {
-            FeedbackText("Indisponível · " + entry.Reason);
+            FeedbackText("Unavailable · " + entry.Reason);
             RequestCue(FeedbackCue.Unavailable);
         }
     }
@@ -312,20 +312,20 @@ public partial class MainWindow
             if (view.Current.Route == OverlayRoute.Hub)
                 HidePanel(true);
             else
-                FeedbackText("Transição cancelada.");
+                FeedbackText("Transition cancelled.");
             return;
         }
 
         if (Confirming)
         {
             CancelHold();
-            FeedbackText("Fechamento cancelado antes do envio.");
+            FeedbackText("Closing cancelled before sending.");
             return;
         }
 
         if (steamOwner is not null)
         {
-            CancelSteamOwner("Cancelado por Voltar.");
+            CancelSteamOwner("Cancelled by Back.");
             return;
         }
 
@@ -333,7 +333,7 @@ public partial class MainWindow
         {
             effectCancellation?.Cancel();
             pending?.Cancel();
-            RetainOperation("Não confirmado", "Observação interrompida; o comando já enviado não pode ser desfeito. Verifique a janela.", dispatched: true);
+            RetainOperation("Unconfirmed", "Observation interrupted; the command already sent cannot be undone. Check the window.", dispatched: true);
             return;
         }
 

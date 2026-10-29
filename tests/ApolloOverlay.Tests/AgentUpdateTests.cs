@@ -172,7 +172,7 @@ internal static class AgentUpdateTests
             Require(host.Source.Stages == 1 && w.Controller.Settings.UiScalePercent == 130 && w.Controller.SettingsDirty, "Download applied or discarded unsaved settings");
             var receipt = File.ReadAllBytes(host.Receipt);
             var apply = host.Send(Request("update-apply", Next.BuildId, state.JobId));
-            Require(apply.Outcome == "Conflict" && apply.Reason.Contains("Salve ou descarte") && host.Status().Phase == "Ready" && receipt.SequenceEqual(File.ReadAllBytes(host.Receipt)), "Dirty apply crossed the settings guard or changed its prepared receipt");
+            Require(apply.Outcome == "Conflict" && apply.Reason.Contains("Save or discard") && host.Status().Phase == "Ready" && receipt.SequenceEqual(File.ReadAllBytes(host.Receipt)), "Dirty apply crossed the settings guard or changed its prepared receipt");
             Require(!w.TransitionPending && !w.IsVisible && selection == w.SelectedAction && ReferenceEquals(focus, Keyboard.FocusedElement), "Download or refused apply changed focus, visibility or process lifecycle");
         });
         test("agent updates cancellation requires exact job and ignores late check success", () =>

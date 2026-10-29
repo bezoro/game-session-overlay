@@ -113,7 +113,7 @@ public sealed class WindowsPlatform : IPlatform, IWindowEffects, IWindowIconNoti
         }
         catch (Exception e) when (e is Win32Exception or InvalidOperationException or ArgumentException)
         {
-            return new(hwnd, (int)pid, 0, title.ToString(), "identidade indisponível", true);
+            return new(hwnd, (int)pid, 0, title.ToString(), "identity unavailable", true);
         }
     }
 
@@ -205,9 +205,9 @@ public sealed class WindowsPlatform : IPlatform, IWindowEffects, IWindowIconNoti
 
     public bool IsMinimized(WindowRef window) => Valid(window) && Native.IsIconic(window.Handle);
     public bool RequestMinimize(WindowRef window) => !disposed && !window.Protected && Valid(window) && Native.ShowWindowAsync(window.Handle, 6);
-    public Task<ActionResult> Shortcut(WindowRef window, string keys) => keys is "Win+G" or "Shift+Tab" or "Ctrl+Tab" ? new GuardedActions(this).Shortcut(window, keys) : Task.FromResult(new ActionResult(ResultKind.Unavailable, "Atalho não permitido neste caminho."));
-    public Task<ActionResult> Shortcut(WindowRef window, string keys, CancellationToken cancellation, Func<bool> continuing) => keys is "Win+G" or "Shift+Tab" or "Ctrl+Tab" ? new GuardedActions(this).Shortcut(window, keys, cancellation, continuing) : Task.FromResult(new ActionResult(ResultKind.Unavailable, "Atalho não permitido."));
-    public Task<ActionResult> Shortcut(WindowRef window, string keys, CancellationToken cancellation, Func<bool> continuing, Action<ShortcutDispatch> progress) => keys is "Shift+Tab" or "Ctrl+Tab" ? new GuardedActions(this, _ => progress(LastShortcutDispatch!.Value)).Shortcut(window, keys, cancellation, continuing) : Task.FromResult(new ActionResult(ResultKind.Unavailable, "Atalho não permitido."));
+    public Task<ActionResult> Shortcut(WindowRef window, string keys) => keys is "Win+G" or "Shift+Tab" or "Ctrl+Tab" ? new GuardedActions(this).Shortcut(window, keys) : Task.FromResult(new ActionResult(ResultKind.Unavailable, "Shortcut not allowed in this flow."));
+    public Task<ActionResult> Shortcut(WindowRef window, string keys, CancellationToken cancellation, Func<bool> continuing) => keys is "Win+G" or "Shift+Tab" or "Ctrl+Tab" ? new GuardedActions(this).Shortcut(window, keys, cancellation, continuing) : Task.FromResult(new ActionResult(ResultKind.Unavailable, "Shortcut not allowed."));
+    public Task<ActionResult> Shortcut(WindowRef window, string keys, CancellationToken cancellation, Func<bool> continuing, Action<ShortcutDispatch> progress) => keys is "Shift+Tab" or "Ctrl+Tab" ? new GuardedActions(this, _ => progress(LastShortcutDispatch!.Value)).Shortcut(window, keys, cancellation, continuing) : Task.FromResult(new ActionResult(ResultKind.Unavailable, "Shortcut not allowed."));
     public Task<ActionResult> Focus(WindowRef window, CancellationToken cancellation, Func<bool> continuing) => new GuardedActions(this).FocusStable(window, cancellation, continuing);
     public WindowObservation ObserveWindow(WindowRef window) => ClosureObservation.Classify(window, Probe(window.Handle));
     private WindowProbe Probe(nint hwnd)
@@ -309,7 +309,7 @@ public sealed class WindowsPlatform : IPlatform, IWindowEffects, IWindowIconNoti
         return sent;
     }
 
-    public Task<ActionResult> TaskView() => Task.FromResult(disposed ? new ActionResult(ResultKind.Cancelled, "Overlay encerrada; nenhum atalho enviado.") : Outcome.Keys(SendKeys("Win+Tab"), 4));
+    public Task<ActionResult> TaskView() => Task.FromResult(disposed ? new ActionResult(ResultKind.Cancelled, "Overlay closed; no shortcut was sent.") : Outcome.Keys(SendKeys("Win+Tab"), 4));
     internal static bool BigPictureIdentity(WindowRef window) => window.Started > 0
         && window.ProcessName.Equals("steamwebhelper", StringComparison.OrdinalIgnoreCase)
         && window.Title.Equals("Steam Big Picture Mode", StringComparison.OrdinalIgnoreCase);
@@ -351,14 +351,14 @@ public sealed class WindowsPlatform : IPlatform, IWindowEffects, IWindowIconNoti
     public ActionResult Launch(bool playnite, string? path)
     {
         if (disposed)
-            return new(ResultKind.Cancelled, "Overlay encerrada; nenhuma inicialização enviada.");
+            return new(ResultKind.Cancelled, "Overlay closed; no launch command was sent.");
         try
         {
             ProcessStartInfo info;
             if (playnite)
             {
                 if (path is null || !Path.IsPathFullyQualified(path) || !File.Exists(path) || !Path.GetFileName(path).Equals("Playnite.FullscreenApp.exe", StringComparison.OrdinalIgnoreCase))
-                    return new(ResultKind.Unavailable, "Escolha Playnite.FullscreenApp.exe em Ajustes.");
+                    return new(ResultKind.Unavailable, "Select Playnite.FullscreenApp.exe in System.");
                 info = new(path)
                 {
                     UseShellExecute = false
@@ -371,11 +371,11 @@ public sealed class WindowsPlatform : IPlatform, IWindowEffects, IWindowIconNoti
                     UseShellExecute = true
                 };
             using var process = Process.Start(info);
-            return new(ResultKind.Requested, playnite ? "Inicialização do Playnite solicitada; modo e foco ainda não confirmados." : "URI do Steam enviada; Big Picture ainda não confirmado.");
+            return new(ResultKind.Requested, playnite ? "Playnite launch requested; mode and focus are not yet confirmed." : "Steam URI sent; Big Picture is not yet confirmed.");
         }
         catch (Exception e) when (e is Win32Exception or InvalidOperationException or IOException)
         {
-            return new(ResultKind.Failed, "O Windows não aceitou a inicialização. Verifique a instalação em Ajustes.");
+            return new(ResultKind.Failed, "Windows rejected the launch. Check the installation in System.");
         }
     }
 

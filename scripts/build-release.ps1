@@ -108,7 +108,7 @@ if ($notes.Length -gt 4000) {
     $notes = $notes.Substring(0, 4000)
 }
 if (-not $notes) {
-    $notes = 'Atualização validada automaticamente no Windows.'
+    $notes = 'Update validated automatically on Windows.'
 }
 $notes = [Regex]::Replace($notes, '(?m)^[ \t]*(Version|Build|Commit|Channel):', '> $1:')
 $notes += "`n`nVersion: $version`nBuild: $buildId`nCommit: $commit`nChannel: $channel`n"

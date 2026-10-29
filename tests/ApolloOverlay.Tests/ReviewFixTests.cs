@@ -42,7 +42,7 @@ internal static class ReviewFixTests
 
     internal static MainWindow Window()
     {
-        var w = new MainWindow(renderOnly: true, platform: new PreviewPlatform(new(101, 42, 100, "Janela de teste", "fixture")));
+        var w = new MainWindow(renderOnly: true, platform: new PreviewPlatform(new(101, 42, 100, "Test window", "fixture")));
         try
         {
             w.InputContextReader = () => new(true, true, true, true);
@@ -210,7 +210,7 @@ internal static class ReviewFixTests
                 }
                 else if (state is "long-error" or "operation")
                 {
-                    w.Controller.SetOperation("Não confirmado", "A identidade da janela mudou durante a solicitação. Abra Aplicativos, escolha a janela novamente e verifique se há um diálogo de salvar antes de tentar outra vez. Nenhum comando adicional foi enviado.", "fixture", dispatched: true);
+                    w.Controller.SetOperation("Unconfirmed", "The window identity changed during the request. Open Apps, select the window again, and check for a save dialog before trying again. No additional command was sent.", "fixture", dispatched: true);
                     w.RefreshRows();
                     if (state == "operation")
                         ((Button)w.FindName("OperationDetailsButton")).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
@@ -448,7 +448,7 @@ internal static class ReviewFixTests
                 {
                     w.SetRenderState(state);
                     var gear = (Button)w.FindName("SettingsGear");
-                    Require(new ButtonAutomationPeer(gear).GetName() == "Abrir Sistema", "Gear name missing");
+                    Require(new ButtonAutomationPeer(gear).GetName() == "Open System", "Gear name missing");
                     Require(new ButtonAutomationPeer(gear).GetHelpText().Length > 0, "Gear help missing");
                     var buttons = ((Grid)w.FindName("Rows")).Children.OfType<Button>().Concat(((Grid)w.FindName("CloseArea")).Children.OfType<Button>()).ToArray();
                     Require(buttons.Length > 0, "Empty page fixture");
@@ -464,7 +464,7 @@ internal static class ReviewFixTests
                                 Require(peer.GetHelpText() == desc.Text, "Description differs: " + button.Tag);
                         }
                         else
-                            Require(peer.GetName().StartsWith("Opções de "), "Sibling options missing full target name");
+                            Require(peer.GetName().StartsWith("Options for "), "Sibling options missing full target name");
                     }
 
                     Require(!w.IsVisible, "Accessibility probe must stay offscreen");
@@ -482,11 +482,11 @@ internal static class ReviewFixTests
                 var button = Button(w, "audio");
                 var peer = new ButtonAutomationPeer(button);
                 w.UpdateAudioEntries(new("fixture", .35f, true, "fixture"));
-                Require(peer.GetHelpText() == "Sem som", "Mute help stale");
+                Require(peer.GetHelpText() == "Muted", "Mute help stale");
                 w.UpdateAudioEntries(new("fixture", .35f, false, "fixture"));
                 Require(peer.GetHelpText() == .35f.ToString("P0"), "Volume help stale");
                 w.UpdateAudioEntries(new(null, 0, false, "fixture"));
-                Require(peer.GetHelpText() == "Saída indisponível", "Unavailable help stale");
+                Require(peer.GetHelpText() == "Output unavailable", "Unavailable help stale");
             }
             finally
             {
@@ -501,8 +501,8 @@ internal static class ReviewFixTests
                 w.SetRenderState("integrations");
                 var button = Button(w, "guide");
                 var peer = new ButtonAutomationPeer(button);
-                w.UpdateGuideStatus("Controle indisponível · fixture");
-                Require(peer.GetHelpText() == "Controle indisponível · fixture", "Guide help stale");
+                w.UpdateGuideStatus("Controller unavailable · fixture");
+                Require(peer.GetHelpText() == "Controller unavailable · fixture", "Guide help stale");
                 Require(ReferenceEquals(button, Button(w, "guide")), "Guide rebuilt button");
                 w.Page(2);
                 var limit = Button(w, "guide-limit");
@@ -523,8 +523,8 @@ internal static class ReviewFixTests
             {
                 var button = Button(w, "session-card");
                 var peer = new ButtonAutomationPeer(button);
-                Require(peer.GetName().Contains("Janela de teste") && peer.GetName().Contains("Retomar janela"), "Missing card target/action name: '" + peer.GetName() + "'");
-                Require(peer.GetHelpText().Contains("retoma") && peer.GetHelpText().Contains("opções"), "Missing card help: '" + peer.GetHelpText() + "'");
+                Require(peer.GetName().Contains("Test window") && peer.GetName().Contains("Resume window"), "Missing card target/action name: '" + peer.GetName() + "'");
+                Require(peer.GetHelpText().Contains("resumes") && peer.GetHelpText().Contains("options"), "Missing card help: '" + peer.GetHelpText() + "'");
                 Require(!w.IsVisible, "Probe must stay offscreen");
             }
             finally

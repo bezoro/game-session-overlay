@@ -13,7 +13,7 @@ internal static class ProductTests
     private static void Complete(Task task) => ReviewFixTests.Complete(task);
     private static MainWindow Window()
     {
-        var w = new MainWindow(renderOnly: true, platform: new PreviewPlatform(new(101, 42, 100, "Janela de teste", "fixture")));
+        var w = new MainWindow(renderOnly: true, platform: new PreviewPlatform(new(101, 42, 100, "Test window", "fixture")));
         w.InputContextReader = () => new(true, true, true, true);
         w.PhysicalKeyReader = _ => 0;
         w.Controller.CaptureReturn();
@@ -275,7 +275,7 @@ internal static class ProductTests
 
             )
             {
-                var target = new WindowRef(9, 12, 13, "Janela de teste", name, name == "explorer");
+                var target = new WindowRef(9, 12, 13, "Test window", name, name == "explorer");
                 Require(!target.CanClose);
                 var effect = new ActivationEffects();
                 Require(new GuardedActions(effect).Switch(target).GetAwaiter().GetResult().Kind == ResultKind.Completed && effect.FocusCalls == 1);

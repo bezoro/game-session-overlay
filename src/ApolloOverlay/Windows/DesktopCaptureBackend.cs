@@ -19,7 +19,7 @@ internal sealed class DesktopCaptureBackend : IScreenCaptureBackend
     public CapturePixels Capture(DisplayRef display)
     {
         if (display.Width is < 1 or > 16384 || display.Height is < 1 or > 16384 || (long)display.Width * display.Height > 40000000)
-            throw new ArgumentException("Monitor inválido.");
+            throw new ArgumentException("Invalid monitor.");
         var screen = GetDC(0);
         if (screen == 0)
             throw new Win32Exception();

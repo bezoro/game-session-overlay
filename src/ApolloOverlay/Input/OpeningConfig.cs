@@ -5,9 +5,9 @@ public sealed record OpeningConfig(uint Modifiers, uint Key, PadButtons Buttons,
     public static OpeningConfig Parse(string hotkey, string chord, int hold)
     {
         if (string.IsNullOrWhiteSpace(hotkey) || string.IsNullOrWhiteSpace(chord))
-            throw new ArgumentException("Atalho e combinação são obrigatórios.");
+            throw new ArgumentException("Shortcut and button combination are required.");
         if (hold < 300 || hold > 2000)
-            throw new ArgumentException("Pressão deve ficar entre 300 e 2000 ms.");
+            throw new ArgumentException("Hold duration must be between 300 and 2000 ms.");
         uint modifiers = 0, key = 0;
         foreach (var token in hotkey.Split('+'))
         {
@@ -21,21 +21,21 @@ public sealed record OpeningConfig(uint Modifiers, uint Key, PadButtons Buttons,
             if (modifier != 0)
             {
                 if ((modifiers & modifier) != 0)
-                    throw new ArgumentException("Modificador repetido.");
+                    throw new ArgumentException("Repeated modifier.");
                 modifiers |= modifier;
             }
             else
             {
                 if (key != 0)
-                    throw new ArgumentException("Use uma tecla.");
+                    throw new ArgumentException("Use a key.");
                 key = token.Equals("Space", StringComparison.OrdinalIgnoreCase) ? 32u : token.Length == 1 && char.IsAsciiLetter(token[0]) ? (uint)char.ToUpperInvariant(token[0]) : 0;
                 if (key == 0)
-                    throw new ArgumentException("Use letra ou Space.");
+                    throw new ArgumentException("Use a letter or Space.");
             }
         }
 
         if (modifiers == 0 || key == 0)
-            throw new ArgumentException("Use modificador e tecla.");
+            throw new ArgumentException("Use a modifier and a key.");
         PadButtons buttons = 0;
         foreach (var token in chord.Split('+'))
         {
@@ -51,13 +51,13 @@ public sealed record OpeningConfig(uint Modifiers, uint Key, PadButtons Buttons,
                 _ => PadButtons.None
             };
             if (button == 0 || (buttons & button) != 0)
-                throw new ArgumentException("Combinação inválida.");
+                throw new ArgumentException("Invalid button combination.");
             buttons |= button;
         }
 
         var bits = (ushort)buttons;
         if ((bits & (bits - 1)) == 0)
-            throw new ArgumentException("Use dois ou mais botões.");
+            throw new ArgumentException("Use two or more buttons.");
         return new(modifiers | 0x4000, key, buttons, hold);
     }
 }

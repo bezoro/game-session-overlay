@@ -75,7 +75,7 @@ public sealed class FeedbackService : IFeedbackService
     {
         get;
         private set;
-    } = new(true, false, "Feedback opcional desativado.");
+    } = new(true, false, "Optional feedback disabled.");
 
     public FeedbackService(IControllerDevices devices) : this(devices, new PcmFeedbackSound(), new FeedbackScheduler(), () => Environment.TickCount64)
     {
@@ -136,7 +136,7 @@ public sealed class FeedbackService : IFeedbackService
         }
         catch (Exception e) when (e is InvalidOperationException or IOException or System.ComponentModel.Win32Exception)
         {
-            Report(soundAvailable: false, reason: "Saída dos sinais sonoros indisponível.");
+            Report(soundAvailable: false, reason: "Sound feedback output unavailable.");
         }
     }
 
@@ -158,13 +158,13 @@ public sealed class FeedbackService : IFeedbackService
         lock (gate)
         {
             if (disposed || !context.Visible || !context.ConfirmedForeground)
-                return new(false, false, "Feedback suspenso fora do painel ativo.");
+                return new(false, false, "Feedback suspended while the panel is inactive.");
             if (!soundEnabled && !hapticsEnabled)
-                return new(false, false, "Ative os sinais opcionais antes de testar.");
+                return new(false, false, "Enable sound or haptics before testing.");
             var now = clock();
             var interval = cue == FeedbackCue.Unavailable ? 250 : 80;
             if (last.TryGetValue(cue, out var previous) && now >= previous && now - previous < interval)
-                return new(false, false, "Sinal limitado para evitar repetição.");
+                return new(false, false, "Feedback was rate-limited to prevent repetition.");
             var played = false;
             var vibrated = false;
             if (soundEnabled)
@@ -173,11 +173,11 @@ public sealed class FeedbackService : IFeedbackService
                 {
                     sound.Play(cue);
                     played = true;
-                    Report(soundAvailable: true, reason: "Sinal sonoro solicitado.");
+                    Report(soundAvailable: true, reason: "Sound feedback requested.");
                 }
                 catch (Exception e) when (e is InvalidOperationException or IOException or System.ComponentModel.Win32Exception or PlatformNotSupportedException)
                 {
-                    Report(soundAvailable: false, reason: "Não foi possível reproduzir o sinal sonoro. O painel continua disponível.");
+                    Report(soundAvailable: false, reason: "The sound could not be played. The panel remains available.");
                 }
             }
 
@@ -206,7 +206,7 @@ public sealed class FeedbackService : IFeedbackService
                     }
                 }
                 else
-                    Report(hapticsAvailable: false, reason: device.Vibration == ControllerVibrationCapability.Unavailable ? "Este controle não informa suporte a vibração." : "Controle ativo ou capacidade de vibração não confirmados.");
+                    Report(hapticsAvailable: false, reason: device.Vibration == ControllerVibrationCapability.Unavailable ? "This controller does not report haptic support." : "The active controller or its haptic support is unconfirmed.");
             }
 
             if (played || vibrated)

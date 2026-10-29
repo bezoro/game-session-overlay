@@ -22,9 +22,9 @@ public sealed class SteamPermission
     public void Invalidate() => verified = null;
     public static string Reason(ModuleEvidence evidence) => evidence switch
     {
-        ModuleEvidence.Loaded => "Módulo carregado; teste e confirme nesta sessão antes de alternar.",
-        ModuleEvidence.Absent => "O módulo do overlay não foi observado nesta janela.",
-        ModuleEvidence.Denied => "Sem acesso aos módulos desta janela; suporte desconhecido.",
-        _ => "Steam aberto ou origem do jogo não comprovam suporte."
+        ModuleEvidence.Loaded => "Module loaded; test and verify it in this session before toggling.",
+        ModuleEvidence.Absent => "The overlay module was not observed in this window.",
+        ModuleEvidence.Denied => "This window's modules are inaccessible; support is unknown.",
+        _ => "Steam running or the game's origin does not prove support."
     };
 }

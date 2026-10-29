@@ -35,6 +35,7 @@ public partial class MainWindow
 
     internal void BeginFadeFixture() => HideNow(false);
     private bool placing;
+    private string automaticScaleDescription = "Automatically adjusted to the monitor and Windows scaling";
     private bool OpenAnimationAllowed => InteractionMotion.Allowed;
 
     private void CancelOpenAnimation()
@@ -117,23 +118,15 @@ public partial class MainWindow
             if (hwnd != 0)
                 Native.SetWindowPos(hwnd, 0, chosen.X + 16, chosen.Y + 16, 0, 0, 0x15);
             var dpi = DpiReader(hwnd);
-            if (dpi == 0)
-                dpi = 96;
-            var scale = dpi / 96d;
+            var presentation = SidebarLayout.Calculate(chosen, dpi, Controller.Settings.UiScalePercent, Controller.Settings.PanelSide, DesktopPresentation);
             if (pointerDown)
                 CancelHold();
-            var density = DesktopPresentation ? Controller.Settings.UiScalePercent / 100d : SidebarLayout.EffectiveScale(chosen, dpi, Controller.Settings.UiScalePercent);
-            ((FrameworkElement)Content).LayoutTransform = new ScaleTransform(density, density);
-            var placement = SidebarLayout.Place(chosen, dpi, Controller.Settings.UiScalePercent, Controller.Settings.PanelSide);
-            if (DesktopPresentation)
-            {
-                var compactWidth = (int)Math.Min(480 * scale * density, chosen.Width - 32 * scale);
-                var compactHeight = (int)Math.Min(760 * scale * density, chosen.Height - 32 * scale);
-                placement = new(Controller.Settings.PanelSide == "Right" ? chosen.X + chosen.Width - (int)(16 * scale) - compactWidth : chosen.X + (int)(16 * scale), chosen.Y + (int)(16 * scale), compactWidth, compactHeight);
-            }
-
-            Width = placement.Width / scale;
-            Height = placement.Height / scale;
+            ((FrameworkElement)Content).LayoutTransform = new ScaleTransform(presentation.ContentScale, presentation.ContentScale);
+            var placement = presentation.Bounds;
+            automaticScaleDescription = $"Windows {presentation.DpiScale:P0} · sized to the monitor work area";
+            SetEntryDescription("ui-scale", automaticScaleDescription);
+            Width = placement.Width / presentation.DpiScale;
+            Height = placement.Height / presentation.DpiScale;
             if (hwnd != 0)
                 Native.SetWindowPos(hwnd, (nint)(-1), placement.X, placement.Y, placement.Width, placement.Height, 0x10);
         }
@@ -185,7 +178,7 @@ public partial class MainWindow
     private async void HideNow(bool restore, WindowRef? returnTarget = null, bool preserveSteam = false, bool preserveEffect = false, bool preservePending = false)
     {
         if (!preserveSteam)
-            CancelSteamOwner("Painel ocultado; solicitação anterior cancelada.");
+            CancelSteamOwner("Panel hidden; previous request cancelled.");
         if (!IsVisible || fadingOut)
             return;
         var wasForeground = Native.GetForegroundWindow() == new WindowInteropHelper(this).Handle;
@@ -237,7 +230,7 @@ public partial class MainWindow
         if (stillForeground && fadeInterrupted)
         {
             OpenPanel();
-            FeedbackText("Entrada detectada ao fechar. Solte os controles e tente novamente.");
+            FeedbackText("Input detected while closing. Release the controls and try again.");
             return;
         }
 
@@ -259,37 +252,38 @@ public partial class MainWindow
 
     private void UpdateHints()
     {
+        UpdateContextualHints();
         if (Confirming)
         {
-            ModeLabel.Text = inputMethod == "controller" ? "A segurar · B cancelar · analógico direito rolar" : inputMethod == "mouse" ? "Segure para confirmar · Cancelar interrompe" : "Enter / Espaço segurar · Esc cancelar · PgUp/PgDn rolar";
+            ModeLabel.Text = inputMethod == "controller" ? "Hold A · B cancel · right stick scroll" : inputMethod == "mouse" ? "Hold to confirm · Cancel stops" : "Hold Enter / Space · Esc cancel · PgUp/PgDn scroll";
             return;
         }
 
         var sessionTarget = Controller.Session.Anchor;
         SessionHint.Text = (sessionTarget is null || !Controller.Platform.Valid(sessionTarget)) ? inputMethod switch
         {
-            "controller" => "A · Escolher janela",
-            "mouse" => "Clique para escolher janela",
-            _ => "Enter · Escolher janela"
+            "controller" => "A · Choose window",
+            "mouse" => "Click to choose a window",
+            _ => "Enter · Choose window"
         } : inputMethod switch
         {
-            "controller" => "A · Retomar   X · Opções",
-            "mouse" => "Clique para retomar · ·· Opções",
-            _ => "Enter · Retomar   X · Opções"
+            "controller" => "A · Resume   X · Options",
+            "mouse" => "Click to resume · ·· Options",
+            _ => "Enter · Resume   X · Options"
         };
         var details = page == 1 || subpage == "details";
         ModeLabel.Text = inputMethod switch
         {
-            "mouse" => "Clique para selecionar · arraste para ajustar",
-            "controller" => "A selecionar · B voltar" + (details ? " · X opções" : "") + "\nLB/RB abas · direcional mover" + (Controller.Settings.GuideXInputEnabled && guideBackend?.Active == true ? " · Guide ocultar" : ""),
-            _ => "Enter selecionar · Esc voltar" + (details ? " · X opções" : "") + "\nPgUp/PgDn abas · Setas / Tab mover · bandeja: abrir"
+            "mouse" => "Click to select · drag to adjust",
+            "controller" => "A select · B back" + (details ? " · X options" : "") + "\nLB/RB tabs · D-pad move" + (Controller.Settings.GuideXInputEnabled && guideBackend?.Active == true ? " · Guide hide" : ""),
+            _ => "Enter select · Esc back" + (details ? " · X options" : "") + "\nPgUp/PgDn tabs · Arrows / Tab move · tray: open"
         };
         if (compactChrome)
             ModeLabel.Text = inputMethod switch
             {
-                "mouse" => "Clique selecionar · bandeja: abrir",
-                "controller" => "A selecionar · B voltar" + (details ? " · X opções" : "") + "\nLB/RB abas · direcional mover",
-                _ => "Enter selecionar · Esc voltar\nTab / Setas mover · PgUp/PgDn abas"
+                "mouse" => "Click to select · tray: open",
+                "controller" => "A select · B back" + (details ? " · X options" : "") + "\nLB/RB tabs · D-pad move",
+                _ => "Enter select · Esc back\nTab / Arrows move · PgUp/PgDn tabs"
             };
     }
 

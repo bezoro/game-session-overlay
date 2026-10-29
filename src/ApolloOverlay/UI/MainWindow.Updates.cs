@@ -21,7 +21,7 @@ public partial class MainWindow
     private int updateHistoryPage;
     private long updateGeneration, nextUpdateProgress;
     private string updateChannel = AppBuild.Current.Channel == "stable" ? "stable" : "testing";
-    private string updateStatus = "Busque versões publicadas após os testes do projeto.";
+    private string updateStatus = "Check for versions published after project validation.";
     private TextBlock? updateProgressLabel;
     private TextBox? updateNotesText;
     internal Task UpdateTask
@@ -33,13 +33,13 @@ public partial class MainWindow
     private void OpenUpdates() => OpenView(new(OverlayRoute.Updates, SelectedId: "check-updates"));
     private void BuildUpdates()
     {
-        Paragraph("Versão instalada", 14);
+        Paragraph("Installed version", 14);
         Paragraph(AppBuild.Current.Display, 23);
         Paragraph("Build " + AppBuild.Current.BuildId + " · commit " + AppBuild.Current.ShortCommit, 14);
         updateProgressLabel = Paragraph(updateStatus);
         AutomationProperties.SetLiveSetting(updateProgressLabel, AutomationLiveSetting.Polite);
-        AddRow("check-updates", "Buscar atualizações", "Consultar versões publicadas no GitHub", () => UpdateTask = CheckUpdatesAsync(), updateSource is not PreviewUpdateSource);
-        AddRow("update-channel", "Canal · " + (updateChannel == "testing" ? "Testes" : "Estável"), updateChannel == "testing" ? "Novos builds aprovados nos testes · inclui mudanças em avaliação" : "Versões publicadas a partir da versão principal", () =>
+        AddRow("check-updates", "Check for updates", "Check versions published on GitHub", () => UpdateTask = CheckUpdatesAsync(), updateSource is not PreviewUpdateSource);
+        AddRow("update-channel", "Channel · " + (updateChannel == "testing" ? "Testing" : "Stable"), updateChannel == "testing" ? "Validated preview builds · includes changes under evaluation" : "Versions published from the main branch", () =>
         {
             var nextChannel = updateChannel == "testing" ? "stable" : "testing";
             try
@@ -49,44 +49,44 @@ public partial class MainWindow
             }
             catch (Exception e) when (UpdateFailure(e))
             {
-                ReportUpdateFailure("Não foi possível salvar o canal.", e);
+                ReportUpdateFailure("Could not save the channel.", e);
                 return;
             }
 
             updateChannel = nextChannel;
             updateGeneration++;
             updateCandidates = [];
-            updateStatus = "Canal alterado. Busque as versões disponíveis.";
+            updateStatus = "Channel changed. Check for available versions.";
             RefreshRows();
         });
         if (!VelopackInstallation.IsInstalled)
-            Paragraph("Para atualizar, instale a versão inicial usando o Setup do Game Session Overlay.");
+            Paragraph("To enable updates, install Game Session Overlay using Setup.");
         if (updateCandidates.Count > 0)
         {
-            Section("Versões disponíveis");
+            Section("Available versions");
             foreach (var candidate in updateCandidates)
             {
                 var selected = candidate;
                 var current = candidate.BuildId == AppBuild.Current.BuildId;
-                AddRow("release:" + candidate.BuildId, candidate.Version + (current ? " · instalada" : ""), candidate.PublishedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm") + " · commit " + candidate.Commit[..7] + " · " + (candidate.Size / 1024d / 1024d).ToString("N0") + " MB", () => ReviewRelease(selected), !current);
+                AddRow("release:" + candidate.BuildId, candidate.Version + (current ? " · installed" : ""), candidate.PublishedAt.ToLocalTime().ToString("MMM d, yyyy HH:mm") + " · commit " + candidate.Commit[..7] + " · " + (candidate.Size / 1024d / 1024d).ToString("N0") + " MB", () => ReviewRelease(selected), !current);
             }
         }
 
-        Section("Voltar a uma versão anterior");
+        Section("Restore an earlier version");
         try
         {
             var history = (diagnostic || Controller.Platform.IsPreview ? Array.Empty<InstalledBuild>() : VelopackInstallation.History()).Where(h => !h.Current && !h.LastStartFailed).OrderByDescending(h => h.InstalledAt).ToArray();
             if (history.Length == 0)
-                Paragraph("As versões já instaladas aparecerão aqui. A reversão local funciona sem internet.");
+                Paragraph("Previously installed versions will appear here. Local rollback works offline.");
             const int pageSize = 8;
             var pages = Math.Max(1, (history.Length + pageSize - 1) / pageSize);
             updateHistoryPage = Math.Clamp(updateHistoryPage, 0, pages - 1);
             if (pages > 1)
-                Paragraph($"Histórico local · página {updateHistoryPage + 1} de {pages}", 14);
+                Paragraph($"Local history · page {updateHistoryPage + 1} of {pages}", 14);
             foreach (var item in history.Skip(updateHistoryPage * pageSize).Take(pageSize))
             {
                 var selected = item;
-                AddRow("rollback:" + item.BuildId, "Voltar para " + item.Version, "Disponível neste computador · " + item.InstalledAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm"), () =>
+                AddRow("rollback:" + item.BuildId, "Restore " + item.Version, "Available on this computer · " + item.InstalledAt.ToLocalTime().ToString("MMM d, yyyy HH:mm"), () =>
                 {
                     rollbackReview = selected;
                     updateReview = null;
@@ -96,12 +96,12 @@ public partial class MainWindow
 
             if (pages > 1)
             {
-                AddRow("history-previous", "Versões mais recentes", "Página anterior do histórico local", () =>
+                AddRow("history-previous", "Newer versions", "Previous page of local history", () =>
                 {
                     updateHistoryPage--;
                     RefreshRows();
                 }, updateHistoryPage > 0);
-                AddRow("history-next", "Versões mais antigas", "Próxima página do histórico local", () =>
+                AddRow("history-next", "Older versions", "Next page of local history", () =>
                 {
                     updateHistoryPage++;
                     RefreshRows();
@@ -110,10 +110,10 @@ public partial class MainWindow
         }
         catch (Exception e) when (UpdateFailure(e))
         {
-            Paragraph("O histórico local não pôde ser lido. A versão atual foi preservada.");
+            Paragraph("The local version history could not be read. The current version was preserved.");
         }
 
-        AddRow("back", "Voltar", "Retorna aos ajustes do aplicativo", Back);
+        AddRow("back", "Back", "Returns to app settings", Back);
     }
 
     private void ReviewRelease(UpdateCandidate candidate)
@@ -135,10 +135,10 @@ public partial class MainWindow
         updateNotesText = null;
         if (rollbackReview is { } old)
         {
-            Paragraph("Voltar para " + old.Version, 23);
-            Paragraph("A versão atual continuará no histórico. A reversão recupera os ajustes preservados para essa versão quando houver uma cópia compatível.");
-            updateProgressLabel = Paragraph("A versão anterior está disponível neste computador.");
-            AddRow("apply-rollback", "Voltar e reiniciar", "Retoma uma versão preservada neste computador", () => BeginUpdateCommit(async () =>
+            Paragraph("Restore " + old.Version, 23);
+            Paragraph("The current version will remain in history. Rollback restores that version's saved settings when a compatible copy is available.");
+            updateProgressLabel = Paragraph("The earlier version is available on this computer.");
+            AddRow("apply-rollback", "Restore and restart", "Restores a version retained on this computer", () => BeginUpdateCommit(async () =>
             {
                 var target = await VelopackInstallation.PrepareRollbackAsync(old.BuildId);
                 await VelopackInstallation.ScheduleApplyAsync(target);
@@ -146,25 +146,25 @@ public partial class MainWindow
         }
         else if (updateReview is { } candidate)
         {
-            Paragraph("Atualizar para " + candidate.Version, 23);
-            Paragraph("Instalada: " + AppBuild.Current.Display + "\nCommit da atualização: " + candidate.Commit[..7]);
-            updateProgressLabel = Paragraph(preparedUpdate is null ? updateStatus : "Download verificado. A versão instalada ainda não foi alterada.");
+            Paragraph("Update to " + candidate.Version, 23);
+            Paragraph("Installed: " + AppBuild.Current.Display + "\nUpdate commit: " + candidate.Commit[..7]);
+            updateProgressLabel = Paragraph(preparedUpdate is null ? updateStatus : "Download verified. The installed version has not changed.");
             AutomationProperties.SetLiveSetting(updateProgressLabel, AutomationLiveSetting.Polite);
             if (preparedUpdate is null)
-                AddRow("prepare-update", "Baixar atualização", "Você pode cancelar com B / Esc. A instalação atual será preservada.", () => UpdateTask = DownloadUpdateAsync(candidate), updateSource is not PreviewUpdateSource);
+                AddRow("prepare-update", "Download update", "Cancel with B / Esc. Your current installation will be preserved.", () => UpdateTask = DownloadUpdateAsync(candidate), updateSource is not PreviewUpdateSource);
             else
-                AddRow("apply-update", "Instalar e reiniciar", "Mantém a versão atual no histórico · atualização pelo Velopack", () =>
+                AddRow("apply-update", "Install and restart", "Keeps the current version in history · updated by Velopack", () =>
                 {
                     var staged = preparedUpdate;
                     if (staged is null || staged.Build.BuildId != candidate.BuildId)
                         return;
-                    BeginUpdateCommit(() => VelopackInstallation.ScheduleApplyAsync(staged.Native ?? throw new InvalidDataException("Consulte e baixe novamente a versão escolhida.")));
+                    BeginUpdateCommit(() => VelopackInstallation.ScheduleApplyAsync(staged.Native ?? throw new InvalidDataException("Check and download the selected version again.")));
                 }, !Controller.SettingsDirty && !diagnostic && !Controller.Platform.IsPreview && VelopackInstallation.IsInstalled);
             if (!VelopackInstallation.IsInstalled)
-                Paragraph("Use o instalador Setup para habilitar as atualizações neste computador.");
+                Paragraph("Use the Setup installer to enable updates on this computer.");
             if (candidate.Notes.Length > 0)
             {
-                AddRow("update-notes", "Ler alterações", "A / Enter para ler · setas rolam · ← / → volta às ações", () => updateNotesText?.Focus());
+                AddRow("update-notes", "Read changes", "A / Enter to read · arrows scroll · ← / → returns to actions", () => updateNotesText?.Focus());
                 updateNotesText = new TextBox
                 {
                     Text = candidate.Notes,
@@ -179,14 +179,14 @@ public partial class MainWindow
                 };
                 updateNotesText.SetResourceReference(BackgroundProperty, ThemeSupport.Card);
                 updateNotesText.SetResourceReference(ForegroundProperty, ThemeSupport.Text);
-                AutomationProperties.SetName(updateNotesText, "Alterações da versão " + candidate.Version);
+                AutomationProperties.SetName(updateNotesText, "Changes in version " + candidate.Version);
                 AddVisual(updateNotesText);
             }
         }
 
         if (Controller.SettingsDirty)
-            Paragraph("Salve ou descarte seus ajustes antes de reiniciar para trocar de versão.");
-        AddRow("back", "Voltar", "Nenhuma instalação é iniciada ao sair desta página", Back);
+            Paragraph("Save or discard your settings before restarting to change versions.");
+        AddRow("back", "Back", "Leaving this page does not start an installation", Back);
     }
 
     private async Task CheckUpdatesAsync()
@@ -198,7 +198,7 @@ public partial class MainWindow
         updateCancellation = cancellation;
         busy = updateBusy = true;
         ClearPreviousUpdateResult();
-        updateStatus = "Buscando versões no GitHub…";
+        updateStatus = "Checking versions on GitHub…";
         SetUpdateStatus(updateStatus);
         try
         {
@@ -206,18 +206,18 @@ public partial class MainWindow
             if (exiting || generation != updateGeneration)
                 return;
             updateCandidates = releases;
-            updateStatus = releases.Count == 0 ? "Nenhuma versão publicada neste canal. Builds só aparecem após passar nos testes." : releases[0].BuildId == AppBuild.Current.BuildId ? "Você está usando a versão mais recente deste canal." : "Há versões disponíveis. Escolha uma para ler as alterações e atualizar.";
+            updateStatus = releases.Count == 0 ? "No versions published to this channel. Builds appear only after passing validation." : releases[0].BuildId == AppBuild.Current.BuildId ? "You are using the latest version of this channel." : "Versions are available. Choose one to read the changes and update.";
             RequestCue(FeedbackCue.Completion);
         }
         catch (OperationCanceledException)
         {
             if (!exiting)
-                updateStatus = "Busca cancelada. A versão instalada foi preservada.";
+                updateStatus = "Check cancelled. The installed version was preserved.";
         }
         catch (Exception e) when (UpdateFailure(e))
         {
             if (!exiting)
-                ReportUpdateFailure("Não foi possível buscar atualizações.", e);
+                ReportUpdateFailure("Could not check for updates.", e);
         }
         finally
         {
@@ -226,7 +226,7 @@ public partial class MainWindow
                 updateCancellation = null;
                 busy = updateBusy = false;
                 if (cancellation.IsCancellationRequested && !exiting)
-                    updateStatus = "Busca cancelada. A versão instalada foi preservada.";
+                    updateStatus = "Check cancelled. The installed version was preserved.";
             }
 
             if (!exiting)
@@ -248,7 +248,7 @@ public partial class MainWindow
         updateCancellation = cancellation;
         busy = updateBusy = true;
         ClearPreviousUpdateResult();
-        updateStatus = "Preparando download…";
+        updateStatus = "Preparing download…";
         SetUpdateStatus(updateStatus);
         try
         {
@@ -270,19 +270,19 @@ public partial class MainWindow
             }
 
             preparedUpdate = prepared;
-            updateStatus = "Download verificado. Selecione Instalar e reiniciar para concluir.";
+            updateStatus = "Download verified. Select Install and restart to finish.";
             navigation = new("apply-update");
             RequestCue(FeedbackCue.Completion);
         }
         catch (OperationCanceledException)
         {
             if (!exiting)
-                updateStatus = "Download cancelado. A versão instalada foi preservada.";
+                updateStatus = "Download cancelled. The installed version was preserved.";
         }
         catch (Exception e) when (UpdateFailure(e))
         {
             if (!exiting)
-                ReportUpdateFailure("Não foi possível preparar a atualização.", e);
+                ReportUpdateFailure("Could not prepare the update.", e);
         }
         finally
         {
@@ -291,7 +291,7 @@ public partial class MainWindow
                 updateCancellation = null;
                 busy = updateBusy = false;
                 if (cancellation.IsCancellationRequested && !exiting)
-                    updateStatus = "Download cancelado. A versão instalada foi preservada.";
+                    updateStatus = "Download cancelled. The installed version was preserved.";
             }
 
             if (!exiting)
@@ -308,7 +308,7 @@ public partial class MainWindow
     {
         if (Controller.SettingsDirty)
         {
-            FeedbackText("Salve ou descarte seus ajustes antes de trocar de versão.");
+            FeedbackText("Save or discard your settings before changing versions.");
             RequestCue(FeedbackCue.Unavailable);
             return;
         }
@@ -330,7 +330,7 @@ public partial class MainWindow
 
         )
             button.IsEnabled = false;
-        SetUpdateStatus("Preparando reinício. Aguarde…");
+        SetUpdateStatus("Preparing to restart. Please wait…");
         try
         {
             await prepare();
@@ -343,7 +343,7 @@ public partial class MainWindow
         catch (Exception e) when (UpdateFailure(e))
         {
             if (!exiting)
-                ReportUpdateFailure("Não foi possível reiniciar na versão escolhida. A instalação atual foi preservada.", e);
+                ReportUpdateFailure("Could not restart into the selected version. The current installation was preserved.", e);
         }
         finally
         {
@@ -381,7 +381,7 @@ public partial class MainWindow
             return false;
         if (updateCommitting)
         {
-            FeedbackText("A troca de versão está sendo preparada. Aguarde o reinício.");
+            FeedbackText("The version change is being prepared. Wait for the restart.");
             RequestCue(FeedbackCue.Unavailable);
             return true;
         }
@@ -391,7 +391,7 @@ public partial class MainWindow
         updateGeneration++;
         // Cancellation can synchronously run the awaiting operation's finally on this UI
         // context. Publish the pending state first so it cannot overwrite the terminal one.
-        SetUpdateStatus("Cancelando. A versão instalada será preservada…");
+        SetUpdateStatus("Cancelling. The installed version will be preserved…");
         updateCancellation?.Cancel();
         return true;
     }
@@ -411,22 +411,22 @@ public partial class MainWindow
     {
         var reason = error switch
         {
-            ChecksumFailedException => "O pacote recebido falhou na verificação de integridade. Nenhuma instalação foi iniciada. Baixe novamente a atualização.",
-            AcquireLockFailedException => "Outra atualização está em andamento. Aguarde sua conclusão e tente novamente.",
-            NotInstalledException => "A instalação não foi encontrada. Repare a overlay pelo Setup antes de atualizar.",
-            UnauthorizedAccessException => "Confira se o repositório está público e se o GitHub está disponível.",
+            ChecksumFailedException => "The downloaded package failed its integrity check. Installation did not start. Download the update again.",
+            AcquireLockFailedException => "Another update is in progress. Wait for it to finish and try again.",
+            NotInstalledException => "Installation not found. Repair the overlay using Setup before updating.",
+            UnauthorizedAccessException => "Check that the repository is public and GitHub is available.",
             InvalidDataException or TimeoutException => error.Message,
-            _ => "Confira a conexão, o espaço em disco e as permissões da pasta. Tente novamente."
+            _ => "Check your connection, disk space and folder permissions. Try again."
         };
         updateStatus = message + " " + reason;
         SetUpdateStatus(updateStatus);
-        RetainOperation("Não confirmado", updateStatus, "update");
+        RetainOperation("Unconfirmed", updateStatus, "update");
         RequestCue(FeedbackCue.Unavailable);
     }
 
     internal void ShowUpdateHistoryWarning()
     {
-        updateStatus = "Não foi possível preservar o pacote atual para reversão. Repare a instalação pelo Setup antes de atualizar.";
+        updateStatus = "Could not retain the current package for rollback. Repair the installation using Setup before updating.";
     }
 
     internal void ScheduleUpdateNotice() => ShowUpdateRecoveryNotice();
@@ -439,7 +439,7 @@ public partial class MainWindow
             updateStatus = notice;
             if (Controller.Operation is null or { Action: "update" })
             {
-                RetainOperation(notice.StartsWith("Versão anterior restaurada", StringComparison.Ordinal) ? "Concluído" : "Não confirmado", notice, "update");
+                RetainOperation(notice.StartsWith("Earlier version restored", StringComparison.Ordinal) ? "Completed" : "Unconfirmed", notice, "update");
                 FeedbackText(notice);
             }
         }
@@ -459,7 +459,7 @@ public partial class MainWindow
 internal sealed class PreviewUpdateSource : IUpdateSource
 {
     public Task<IReadOnlyList<UpdateCandidate>> CheckAsync(string channel, CancellationToken cancellation) => Task.FromResult<IReadOnlyList<UpdateCandidate>>([]);
-    public Task<PreparedUpdate> StageAsync(UpdateCandidate candidate, IProgress<UpdateProgress>? progress, CancellationToken cancellation) => Task.FromException<PreparedUpdate>(new InvalidOperationException("A prévia não instala atualizações."));
+    public Task<PreparedUpdate> StageAsync(UpdateCandidate candidate, IProgress<UpdateProgress>? progress, CancellationToken cancellation) => Task.FromException<PreparedUpdate>(new InvalidOperationException("Preview does not install updates."));
     public void Dispose()
     {
     }

@@ -19,11 +19,11 @@ public sealed class LocalDiagnostics
         if (File.Exists(legacy))
         {
             var settings = UserSettings.Load(legacy, out status);
-            status = "Ajustes locais importados em memória; Salvar migra para AppData e preserva o original.";
+            status = "Local settings imported into memory; Save migrates them to AppData and preserves the original.";
             return settings;
         }
 
-        status = "Pronto · Guide ou duplo clique na bandeja";
+        status = "Ready · Guide or double-click the tray icon";
         return new();
     }
 

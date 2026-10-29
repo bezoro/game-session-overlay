@@ -58,6 +58,6 @@ public interface IApplicationAudio : IDisposable
     void Track(WindowRef? target, bool visible, long generation);
     Task<ApplicationAudioSnapshot> RefreshAsync(WindowRef target, long generation, CancellationToken cancellation = default);
     Task<ApplicationAudioChange> SetMutedAsync(WindowRef target, bool desiredMute, long generation, CancellationToken cancellation = default);
-    Task<ApplicationAudioChange> SetVolumeAsync(WindowRef target, float volume, long generation, CancellationToken cancellation = default) => Task.FromResult(new ApplicationAudioChange(new(ResultKind.Unavailable, "O volume deste aplicativo não está disponível."), new(target, generation, 0, ApplicationAudioAvailability.Unavailable, ApplicationMuteState.Unknown, 0, 0, "Volume indisponível."), 0, 0, 0, false));
+    Task<ApplicationAudioChange> SetVolumeAsync(WindowRef target, float volume, long generation, CancellationToken cancellation = default) => Task.FromResult(new ApplicationAudioChange(new(ResultKind.Unavailable, "This app's volume is unavailable."), new(target, generation, 0, ApplicationAudioAvailability.Unavailable, ApplicationMuteState.Unknown, 0, 0, "Volume unavailable."), 0, 0, 0, false));
     void Suspend();
 }

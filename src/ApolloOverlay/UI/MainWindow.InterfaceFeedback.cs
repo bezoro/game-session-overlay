@@ -1,4 +1,3 @@
-using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
@@ -10,6 +9,7 @@ public partial class MainWindow
     private int interfaceActionDepth;
     private void ClickTab(Button button, int index)
     {
+        SetInputMethod("mouse");
         if (!NavigationAllowed || TransitionPending || Confirming || page == index && view.Depth == 0)
             return;
         var previousSource = dispatchSource;
@@ -26,6 +26,7 @@ public partial class MainWindow
 
     private void ActivatePointerEntry(Button button)
     {
+        SetInputMethod("mouse");
         if (button.Tag is not string id)
             return;
         var previousSource = dispatchSource;
@@ -97,43 +98,25 @@ public partial class MainWindow
         reset.Start();
     }
 
-    private void UpdateOperationAppearance(string? state)
-    {
-        var problem = state is "Falhou" or "Indisponível" or "Parcial" or "Não confirmado";
-        var complete = state == "Concluído";
-        var brush = problem ? ThemeSupport.Critical : complete ? ThemeSupport.Success : ThemeSupport.Stroke;
-        OperationPanel.SetResourceReference(Border.BorderBrushProperty, brush);
-        OperationGlyph.SetResourceReference(TextBlock.ForegroundProperty, problem ? ThemeSupport.Critical : complete ? ThemeSupport.Success : ThemeSupport.SecondaryText);
-        OperationGlyph.Text = state switch
-        {
-            "Concluído" => "✓",
-            "Pendente" => "…",
-            "Cancelado" => "×",
-            "Falhou" or "Indisponível" or "Parcial" or "Não confirmado" => "!",
-            _ => "i"
-        };
-        AutomationProperties.SetItemStatus(OperationPanel, state ?? "");
-    }
-
     private void TestFeedback()
     {
         var sent = RequestCue(FeedbackCue.Test);
         var controllerSource = dispatchSource > 0 || dispatchSource is null && inputMethod == "controller";
         FeedbackText((sent.SoundRequested, sent.HapticRequested) switch
         {
-            (true, true) => "Teste solicitado. Confira o som e a vibração no controle ativo.",
-            (true, false) => "Teste solicitado. Confira o som na saída de áudio ativa.",
-            (false, true) => "Teste solicitado. Confira a vibração no controle ativo.",
-            _ => Controller.Settings.HapticFeedbackEnabled && !Controller.Settings.SoundFeedbackEnabled && !controllerSource ? "Use A no controle ativo para testar a vibração." : sent.Reason
+            (true, true) => "Test requested. Check the sound and vibration on the active controller.",
+            (true, false) => "Test requested. Check the sound on the active audio output.",
+            (false, true) => "Test requested. Check vibration on the active controller.",
+            _ => Controller.Settings.HapticFeedbackEnabled && !Controller.Settings.SoundFeedbackEnabled && !controllerSource ? "Press A on the active controller to test vibration." : sent.Reason
         });
     }
 
     private string FeedbackDescription()
     {
         if (!Controller.Settings.SoundFeedbackEnabled && !Controller.Settings.HapticFeedbackEnabled)
-            return "Ative sons ou vibração para testar";
+            return "Enable sounds or vibration to test feedback";
         if (Controller.Settings.SoundFeedbackEnabled && !feedbackService.Status.SoundAvailable)
             return feedbackService.Status.Reason;
-        return Controller.Settings.SoundFeedbackEnabled ? "Ouvir navegação, confirmação e retorno · use o controle para testar vibração" : "Use A para testar um pulso curto no controle ativo";
+        return Controller.Settings.SoundFeedbackEnabled ? "Hear navigation and confirmation · use the controller to test vibration" : InputHint("Press A to test a short pulse on the active controller", "Use the active controller to test vibration", "Use the active controller to test vibration");
     }
 }

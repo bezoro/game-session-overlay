@@ -388,7 +388,7 @@ internal static class SteamShortcutFocusTests
                     w.Back();
                     Complete(w.OperationTask, p.Effect);
                     Require(p.LastResult?.Kind == ResultKind.Unknown && p.Effect.Mask == 1 && p.Effect.NativeHeld == 1, "Fixture did not retain uncertain Shift after refused cleanup");
-                    Require(w.Controller.Operation is { State: "Não confirmado", Dispatched: true }, "Unknown cleanup left UI pending or denied accepted Shift");
+                    Require(w.Controller.Operation is { State: "Unconfirmed", Dispatched: true }, "Unknown cleanup left UI pending or denied accepted Shift");
                     var focus = p.Effect.FocusRequests;
                     var sends = p.Effect.Sends;
                     using var deadline = new CancellationTokenSource(200);
@@ -467,7 +467,7 @@ internal static class SteamShortcutFocusTests
 
                         Complete(w.OperationTask, p.Effect);
                         Require(p.LastResult?.Kind == ResultKind.Partial, "Fixture did not produce partial result");
-                        Require(w.Controller.Operation is { State: "Parcial", Dispatched: true }, "UI remained pending after terminal partial cleanup");
+                        Require(w.Controller.Operation is { State: "Partial", Dispatched: true }, "UI remained pending after terminal partial cleanup");
                     }
                     finally
                     {
@@ -488,7 +488,7 @@ internal static class SteamShortcutFocusTests
                     Commit(w);
                     DriveUntil(() => p.Effect.Events.Any(e => !e.Up), p.Effect);
                     w.Back();
-                    w.Controller.SetOperation("Concluído", "Later owned result", "focus", Game, false);
+                    w.Controller.SetOperation("Completed", "Later owned result", "focus", Game, false);
                     var later = w.Controller.Operation;
                     Complete(w.OperationTask, p.Effect);
                     Require(ReferenceEquals(later, w.Controller.Operation), "Old terminal result replaced later UI record");
@@ -811,7 +811,7 @@ internal static class SteamShortcutFocusTests
                     var w = Window(p);
                     try
                     {
-                        w.Controller.SetOperation("Solicitado", "Owned result fixture", "steam-overlay", Game, false);
+                        w.Controller.SetOperation("Requested", "Owned result fixture", "steam-overlay", Game, false);
                         w.RefreshRows();
                         w.Hide();
                         var before = w.AutomationSnapshot();
@@ -891,7 +891,7 @@ internal static class SteamShortcutFocusTests
                     var old = w.OperationTask;
                     w.OpenPanel();
                     Complete(w.OpeningTask, new Effects());
-                    w.Controller.SetOperation("Concluído", "Later owned result", "focus", Game, false);
+                    w.Controller.SetOperation("Completed", "Later owned result", "focus", Game, false);
                     var expected = w.Controller.Operation;
                     var root = w.Controller.Diagnostics.Root;
                     System.IO.Directory.CreateDirectory(System.IO.Path.Combine(root, "automation", System.Diagnostics.Process.GetCurrentProcess().SessionId.ToString(), "automation-ledger.json.tmp"));

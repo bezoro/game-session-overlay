@@ -25,7 +25,7 @@ internal static class UpdateChannelSettings
     internal static void Write(string directory, string channel)
     {
         if (channel is not ("stable" or "testing"))
-            throw new ArgumentException("Canal inválido.", nameof(channel));
+            throw new ArgumentException("Invalid channel.", nameof(channel));
         Directory.CreateDirectory(directory);
         var target = Path.Combine(directory, "update-channel.json");
         var temporary = target + "." + Guid.NewGuid().ToString("N") + ".tmp";

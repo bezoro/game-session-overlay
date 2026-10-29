@@ -20,6 +20,7 @@ public partial class MainWindow
         if (button.Content is ActionButtonContent content)
             content.Title.Text = title;
         AutomationProperties.SetName(button, title);
+        UpdateEntryAutomation(button);
     }
 
     private void SetEntryDescription(string id, string description)
@@ -35,10 +36,20 @@ public partial class MainWindow
         }
 
         AutomationProperties.SetHelpText(entry.Button, description);
+        UpdateEntryAutomation(entry.Button);
         entries[index] = entry with
         {
             Reason = description
         };
+    }
+
+    private static void UpdateEntryAutomation(Button button)
+    {
+        if (button.Resources["DescriptionTarget"] is not Border description)
+            return;
+        var help = AutomationProperties.GetHelpText(button);
+        AutomationProperties.SetName(description, AutomationProperties.GetName(button) + ". " + help);
+        AutomationProperties.SetHelpText(description, help);
     }
 
     private void FeedbackText(string text)
@@ -66,83 +77,47 @@ public partial class MainWindow
         });
     }
 
-    private void RetainOperation(string state, string message, string action = "", WindowRef? target = null, bool dispatched = false)
-    {
-        Controller.SetOperation(state, message, action, target, dispatched);
-        UpdatePersistentState();
-    }
-
     private void UpdatePersistentState()
     {
         PlaceCompactStatus();
+        RefreshOperationNotice(Environment.TickCount64);
         if (Rows.Children.Count > 0 && !Confirming)
         {
             var previous = entries.Select(e => e.Id).ToArray();
             var selectedFooter = IsFooterAction(navigation.Id) && previous.Contains(navigation.Id);
             entries.RemoveAll(e => e.Id is "save-pending" or "discard-pending" or "operation-details" || (e.Id == "dismiss-operation" && subpage != "operation"));
-            if (Controller.Operation is not null && subpage != "operation")
+            if (operationNotice.AllowsActions && subpage != "operation")
             {
-                entries.Add(new("operation-details", OperationDetailsButton, OpenOperation, !busy && !TransitionPending, "Ler o resultado completo"));
-                entries.Add(new("dismiss-operation", DismissOperationButton, DismissOperation, !busy && !TransitionPending, "Dispensar resultado"));
+                entries.Add(new("operation-details", OperationDetailsButton, OpenOperation, !busy && !TransitionPending, "Read the full result"));
+                entries.Add(new("dismiss-operation", DismissOperationButton, DismissOperation, !busy && !TransitionPending, "Dismiss result"));
             }
 
             if (Controller.SettingsDirty)
             {
-                entries.Add(new("save-pending", SaveSettingsButton, Save, true, "Salvar alterações"));
+                entries.Add(new("save-pending", SaveSettingsButton, Save, true, "Save changes"));
                 entries.Add(new("discard-pending", DiscardSettingsButton, () =>
                 {
                     Controller.Discard();
                     ApplySettings();
                     RefreshRows();
-                }, true, "Restaurar ajustes salvos"));
+                }, true, "Restore saved settings"));
             }
 
             if (selectedFooter && !entries.Any(e => e.Id == navigation.Id))
+            {
                 navigation = navigation with
                 {
-                    Id = Navigation.Preserve(navigation.Id, previous, entries.Select(e => e.Id).ToArray())
+                    Id = entries.Any(e => e.Id == lastContentSelection) ? lastContentSelection : Navigation.Preserve(navigation.Id, previous, entries.Select(e => e.Id).ToArray())
                 };
+                SetSelection(false);
+            }
         }
 
-        SetEntryDescription("exit", Controller.SettingsDirty ? "Alterações não salvas serão perdidas" : "Encerra observadores e remove o ícone da bandeja");
+        SetEntryDescription("exit", Controller.SettingsDirty ? "Unsaved changes will be lost" : "Stops background services and removes the tray icon");
         DirtyStrip.Visibility = Controller.SettingsDirty && !Confirming ? Visibility.Visible : Visibility.Collapsed;
-        DirtyLabel.Text = Controller.Platform.IsPreview ? "Prévia · alterações não persistentes" : "Alterações não salvas";
-        var operation = Controller.Operation;
-        UpdateOperationAppearance(operation?.State);
-        OperationPanel.Visibility = operation is null || Confirming || subpage == "operation" ? Visibility.Collapsed : Visibility.Visible;
-        var text = operation is null ? "" : operation.State + " · " + operation.Message;
-        if (OperationLabel.Text != text)
-        {
-            OperationLabel.Text = text;
-            System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(OperationLabel)?.RaiseAutomationEvent(System.Windows.Automation.Peers.AutomationEvents.LiveRegionChanged);
-        }
-
-        OperationDetailsButton.IsEnabled = !busy && !TransitionPending;
-        OperationLabel.ToolTip = text;
+        DirtyLabel.Text = Controller.Platform.IsPreview ? "Preview · changes are not saved" : "Unsaved changes";
         SaveSettingsButton.IsEnabled = !busy && !TransitionPending;
         DiscardSettingsButton.IsEnabled = !busy && !TransitionPending;
-        DismissOperationButton.IsEnabled = !busy && !TransitionPending;
-    }
-
-    private void OpenOperation()
-    {
-        if (!NavigationAllowed || busy || TransitionPending || Confirming || Controller.Operation is null)
-            return;
-        OpenView(new(OverlayRoute.OperationResult, view.Current.Target, "operation-text"));
-    }
-
-    private void DismissOperation()
-    {
-        if (!NavigationAllowed || busy || TransitionPending || Confirming)
-            return;
-        Controller.DismissOperation();
-        if (subpage == "operation")
-            Back();
-        else
-        {
-            UpdatePersistentState();
-            SetSelection(false);
-        }
     }
 
     internal void RefreshRows()
@@ -167,18 +142,18 @@ public partial class MainWindow
         CloseArea.Children.Clear();
         entries.Clear();
         operationText = null;
-        entries.Add(new("settings", SettingsGear, () => Page(2), true, "Abrir Sistema"));
+        entries.Add(new("settings", SettingsGear, () => Page(2), true, "Open System"));
         ContextCard.Visibility = view.Current.Route == OverlayRoute.Hub ? Visibility.Visible : Visibility.Collapsed;
         var target = Controller.Session.Anchor;
         var valid = target is not null && Controller.Platform.Valid(target);
         _ = UpdateSessionArtwork();
         SessionKicker.Visibility = Visibility.Collapsed;
         SessionCardButton.Padding = new Thickness(14, narrow ? 10 : 12, 14, narrow ? 10 : 12);
-        TargetLabel.Text = target?.Title ?? "Escolha uma janela";
+        TargetLabel.Text = target?.Title ?? "Choose a window";
         TargetLabel.ToolTip = target?.Title;
-        AutomationProperties.SetName(ContextCard, target?.Title ?? "Nenhuma janela selecionada");
-        SessionEvidence.Text = target?.ProcessName ?? "Aplicativos";
-        ContextStatus.Text = target is null ? "Sem seleção" : valid ? "Disponível" : "Janela indisponível";
+        AutomationProperties.SetName(ContextCard, target?.Title ?? "No window selected");
+        SessionEvidence.Text = target?.ProcessName ?? "Apps";
+        ContextStatus.Text = target is null ? "No selection" : valid ? "Available" : "Window unavailable";
         ContextStatusDot.Opacity = valid ? 1 : .3;
         ContextIcon.Source = target is null ? null : Controller.Platform.Icon(target);
         ContextIcon.Visibility = ContextIcon.Source is null ? Visibility.Collapsed : Visibility.Visible;
@@ -186,12 +161,11 @@ public partial class MainWindow
         ContextStatus.Visibility = valid ? Visibility.Collapsed : Visibility.Visible;
         ContextStatusDot.Visibility = Visibility.Collapsed;
         SessionEvidence.Visibility = target is not null && target.Title.Equals(target.ProcessName, StringComparison.OrdinalIgnoreCase) ? Visibility.Collapsed : Visibility.Visible;
-        SessionAudioLabel.Text = target is null ? "Selecione uma janela para ver o áudio" : !valid ? "Janela indisponível" : AudioFor(target) ? AudioBadge() : "Estado não confirmado";
-        ControllerStatusLabel.Text = controllerStatus.Replace(" · aguardando entrada", "");
+        SessionAudioLabel.Text = target is null ? "Select a window to view its audio" : !valid ? "Window unavailable" : AudioFor(target) ? AudioBadge() : "Status unconfirmed";
+        ControllerStatusLabel.Text = controllerStatus.Replace(" · waiting for input", "");
         BackButton.Visibility = view.Depth > 0 ? Visibility.Visible : Visibility.Collapsed;
         if (view.Depth > 0)
-            RegisterFixed("back-header", BackButton, Back, true, "Voltar ao contexto anterior");
-        UpdateHints();
+            RegisterFixed("back-header", BackButton, Back, true, "Return to the previous view");
         foreach (var pair in new[]
         {
             (HomeTab, 0),
@@ -211,32 +185,33 @@ public partial class MainWindow
             pair.Item1.SetResourceReference(ForegroundProperty, selected ? ThemeSupport.Text : ThemeSupport.SecondaryText);
             AutomationProperties.SetName(pair.Item1, (pair.Item2 switch
             {
-                0 => "Sessão",
-                1 => "Aplicativos",
-                _ => "Áudio"
-            }) + (selected ? " · selecionada" : ""));
-            AutomationProperties.SetItemStatus(pair.Item1, selected ? "Selecionada" : "Não selecionada");
+                0 => "Session",
+                1 => "Apps",
+                _ => "Audio"
+            }) + (selected ? " · selected" : ""));
+            AutomationProperties.SetItemStatus(pair.Item1, selected ? "Selected" : "Not selected");
         }
 
         PageTitle.Text = view.Current.Route switch
         {
-            OverlayRoute.WindowsAudio => "Áudio do Windows",
-            OverlayRoute.Details => "Detalhes da janela",
-            OverlayRoute.TargetOptions => "Opções da janela",
-            OverlayRoute.Integrations => "Integrações",
-            OverlayRoute.Customize => "Acesso rápido",
-            OverlayRoute.Setup => "Seu painel, do seu jeito",
-            OverlayRoute.OperationResult => "Resultado da operação",
-            OverlayRoute.Apps => view.Current.ChooseSession ? "Escolher janela" : "Aplicativos",
-            OverlayRoute.System => "Sistema",
-            OverlayRoute.PlayniteBrowser => "Escolher Playnite",
-            OverlayRoute.Updates => "Versão e atualizações",
-            OverlayRoute.UpdateReview => rollbackReview is null ? "Atualizar overlay" : "Voltar de versão",
-            _ => "Controle da sessão"
+            OverlayRoute.WindowsAudio => "Windows audio",
+            OverlayRoute.Details => "Window details",
+            OverlayRoute.TargetOptions => "Window options",
+            OverlayRoute.Integrations => "Integrations",
+            OverlayRoute.Customize => "Quick access",
+            OverlayRoute.Setup => "Make it yours",
+            OverlayRoute.OperationResult => "Command result",
+            OverlayRoute.Apps => view.Current.ChooseSession ? "Choose window" : "Apps",
+            OverlayRoute.System => "System",
+            OverlayRoute.PlayniteBrowser => "Find Playnite",
+            OverlayRoute.Updates => "Version and updates",
+            OverlayRoute.UpdateReview => rollbackReview is null ? "Update overlay" : "Restore an earlier version",
+            _ => "Session controls"
         };
         if (SessionFeatureTitle is { } featureTitle)
             PageTitle.Text = featureTitle;
         BuildCurrentView();
+        UpdateHints();
         renderedFeatureShape = FeatureViewShape();
         UpdatePersistentState();
         navigation = navigation with
@@ -250,13 +225,13 @@ public partial class MainWindow
         automationHost?.ObserveSnapshot(AutomationSnapshot());
     }
 
-    private string GuideDescription() => Controller.Platform.IsPreview ? "Prévia · conexão Guide não é consultada" : !Controller.Settings.GuideXInputEnabled ? "Desativado · abra pelo duplo clique na bandeja" : guideBackend?.Active == true ? guideBackend.Status : guideConnection?.Status ?? "Controle ou leitura Guide indisponível";
+    private string GuideDescription() => Controller.Platform.IsPreview ? "Preview · Guide connection is not queried" : !Controller.Settings.GuideXInputEnabled ? "Disabled · double-click the tray icon to open" : guideBackend?.Active == true ? guideBackend.Status : guideConnection?.Status ?? "Controller or Guide input unavailable";
     private Button MakeButton(string id, string title, string description, Action action, bool available, bool danger)
     {
         var glyph = ActionIcon(id.StartsWith("favorite:", StringComparison.Ordinal) ? id[9..] : id);
         var showIcon = !(page == 2
             && subpage == ""
-            && id is "deadzone" or "guide-limit" or "shortcut" or "integrations" or "save" or "side" or "ui-scale" or "sound-feedback" or "haptic-feedback" or "test-feedback" or "customize" or "setup");
+            && id is "deadzone" or "guide-limit" or "shortcut" or "integrations" or "save" or "side" or "ui-scale" or "sound-feedback" or "haptic-feedback" or "test-feedback" or "customize" or "setup" or "startup" or "last-operation");
         var grid = new ActionButtonContent(glyph, title, description, showIcon);
         var badge = new Border
         {

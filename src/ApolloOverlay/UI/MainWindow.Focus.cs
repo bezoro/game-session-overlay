@@ -51,7 +51,7 @@ public partial class MainWindow
             return;
         }
 
-        CancelSteamOwner("Reabertura solicitada; nenhum novo atalho enviado.");
+        CancelSteamOwner("Reopen requested; no new shortcut sent.");
         if (busy && steamOwner is null)
         {
             effectCancellation?.Cancel();
@@ -75,7 +75,7 @@ public partial class MainWindow
     {
         if (!diagnostic && !Controller.Platform.IsPreview)
             ShowUpdateRecoveryNotice();
-        CancelSteamOwner("Painel reaberto; solicitação anterior cancelada.");
+        CancelSteamOwner("Panel reopened; previous request cancelled.");
         if (exiting || closeRequested)
             return;
         if (updateBusy && !updateCommitting)
@@ -92,7 +92,7 @@ public partial class MainWindow
                 if (!IsVisible || fadingOut)
                     OpeningTask = OpenPanelCore();
                 else
-                    FeedbackText("Solicitação cancelada; aguardando o resultado.");
+                    FeedbackText("Request cancelled; waiting for the result.");
             }
 
             return;
@@ -155,7 +155,7 @@ public partial class MainWindow
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
             if (CurrentCycle(cycle))
-                FeedbackText("Não foi possível atualizar as janelas. Tente abrir novamente pela bandeja.");
+                FeedbackText("Could not refresh windows. Try opening again from the tray.");
         }
     }
 
@@ -201,7 +201,7 @@ public partial class MainWindow
             if (context.Active && context.OwnForeground)
                 return true;
             RevokeFocus("lost");
-            FeedbackFocusUnavailable("Foco perdido. Guide tenta novamente; B ou Esc oculta; bandeja: abrir.");
+            FeedbackFocusUnavailable(InputHint("Focus lost. Guide retries · B hides the panel.", "Focus lost. Esc hides · double-click the tray icon to retry.", "Focus lost. Double-click the tray icon to retry."));
             return false;
         }
     }
@@ -246,7 +246,7 @@ public partial class MainWindow
                     input.Cancel();
                     TrackApplicationAudio();
                     TraceFocus("confirmed", ResultKind.Completed);
-                    FeedbackText("Painel ativo. Use o controle para navegar.");
+                    FeedbackText("Panel ready. Navigate with your preferred input.");
                     return true;
                 }
 
@@ -255,7 +255,7 @@ public partial class MainWindow
                 if (attempt == 6)
                 {
                     TraceFocus("unconfirmed", requested ? ResultKind.Unknown : ResultKind.Failed);
-                    FeedbackFocusUnavailable("O Windows não confirmou o foco. Guide tenta novamente; B ou Esc oculta; bandeja: abrir.");
+                    FeedbackFocusUnavailable(InputHint("Windows did not confirm focus. Guide retries · B hides.", "Windows did not confirm focus. Esc hides · tray double-click retries.", "Windows did not confirm focus. Double-click the tray icon to retry."));
                     return false;
                 }
 

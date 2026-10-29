@@ -63,7 +63,7 @@ public sealed class GitHubUpdateSource : IUpdateSource
         ThrowIfDisposed();
         cancellation.ThrowIfCancellationRequested();
         if (feed?.Assets is null)
-            throw new InvalidDataException("O catálogo de versões do Velopack é inválido.");
+            throw new InvalidDataException("The Velopack version catalog is invalid.");
         var result = new Dictionary<string, UpdateCandidate>(StringComparer.Ordinal);
         foreach (var asset in feed.Assets.Where(a => a is not null && a.PackageId == VelopackInstallation.PackageId && a.Type == VelopackAssetType.Full))
         {
@@ -75,7 +75,7 @@ public sealed class GitHubUpdateSource : IUpdateSource
                     || previous.PackageName != candidate.PackageName
                     || previous.Size != candidate.Size
                     || !previous.Sha256.Equals(candidate.Sha256, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException("O mesmo identificador de versão foi publicado com pacotes diferentes.");
+                    throw new InvalidDataException("The same build identifier was published with different packages.");
                 continue;
             }
 
@@ -90,7 +90,7 @@ public sealed class GitHubUpdateSource : IUpdateSource
         ThrowIfDisposed();
         cancellation.ThrowIfCancellationRequested();
         if (candidate.Asset is not { } asset)
-            throw new InvalidDataException("Consulte novamente as versões antes de baixar a atualização.");
+            throw new InvalidDataException("Refresh the version list before downloading the update.");
         var verified = Describe(asset, candidate.Channel, candidate.PublishedAt);
         if (candidate.Version != verified.Version
             || candidate.BuildId != verified.BuildId
@@ -98,9 +98,9 @@ public sealed class GitHubUpdateSource : IUpdateSource
             || candidate.PackageName != verified.PackageName
             || candidate.Size != verified.Size
             || !candidate.Sha256.Equals(verified.Sha256, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("A versão selecionada mudou. Consulte novamente o catálogo.");
+            throw new InvalidDataException("The selected version changed. Refresh the catalog.");
         if (!VelopackInstallation.IsInstalled)
-            throw new InvalidOperationException("Instale a overlay pelo Setup para aplicar atualizações.");
+            throw new InvalidOperationException("Install the overlay using Setup to apply updates.");
         // Velopack cleans its own cache even after failed/cancelled downloads.
         // Retain the running version first, outside that disposable cache.
         await VelopackInstallation.RecordCurrentAsync(cancellation).ConfigureAwait(false);
@@ -122,10 +122,10 @@ public sealed class GitHubUpdateSource : IUpdateSource
         ThrowIfDisposed();
         cancellation.ThrowIfCancellationRequested();
         var downgrade = manager.CurrentVersion is { } current && asset.Version <= current;
-        await manager.DownloadUpdatesAsync(new UpdateInfo(asset, downgrade), percent => progress?.Report(new("Baixando atualização", Math.Clamp(percent, 0, 100), 100)), cancellation).ConfigureAwait(false);
+        await manager.DownloadUpdatesAsync(new UpdateInfo(asset, downgrade), percent => progress?.Report(new("Downloading update", Math.Clamp(percent, 0, 100), 100)), cancellation).ConfigureAwait(false);
         ThrowIfDisposed();
         cancellation.ThrowIfCancellationRequested();
-        progress?.Report(new("Verificando pacote"));
+        progress?.Report(new("Verifying package"));
         await LocalUpdateHistory.VerifyPackageAsync(path, asset, build, cancellation).ConfigureAwait(false);
         await VelopackInstallation.ArchiveVerifiedAsync(path, asset, build, cancellation).ConfigureAwait(false);
         ThrowIfDisposed();
@@ -143,11 +143,11 @@ public sealed class GitHubUpdateSource : IUpdateSource
             || asset.Size > 1024L * 1024 * 1024
             || !Regex.IsMatch(asset.SHA256 ?? "", "^[a-fA-F0-9]{64}$", RegexOptions.CultureInvariant)
             || !Regex.IsMatch(asset.SHA1 ?? "", "^[a-fA-F0-9]{40}$", RegexOptions.CultureInvariant))
-            throw new InvalidDataException("O pacote publicado não contém a identidade e os hashes completos do Velopack.");
+            throw new InvalidDataException("The published package does not contain the full Velopack identity and hashes.");
         LocalUpdateHistory.SafeFileName(asset.FileName);
         var notes = asset.NotesMarkdown ?? "";
         if (notes.Length > 65536)
-            throw new InvalidDataException("As notas de versão excedem o limite permitido.");
+            throw new InvalidDataException("The release notes exceed the allowed size.");
         var fields = new Dictionary<string, string>(StringComparer.Ordinal);
         var releaseNotes = new List<string>();
         foreach (var line in notes.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
@@ -167,7 +167,7 @@ public sealed class GitHubUpdateSource : IUpdateSource
                     continue;
                 metadata = true;
                 if (!fields.TryAdd(field, line[(field.Length + 1)..].Trim()))
-                    throw new InvalidDataException("As notas de versão contêm identidades duplicadas.");
+                    throw new InvalidDataException("The release notes contain duplicate identities.");
             }
 
             if (!metadata)
@@ -186,14 +186,14 @@ public sealed class GitHubUpdateSource : IUpdateSource
             || Regex.IsMatch(buildId.Split('.')[0], "^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
             || !Regex.IsMatch(commit, "^[a-fA-F0-9]{40}$", RegexOptions.CultureInvariant)
             || declaredChannel != channel)
-            throw new InvalidDataException("A identificação da versão não corresponde ao pacote ou ao canal selecionado.");
+            throw new InvalidDataException("The build identity does not match the package or selected channel.");
         return new(0, version, buildId, commit, channel, published, string.Join("\n", releaseNotes).Trim(), 0, asset.FileName, asset.Size, (asset.SHA256 ?? "").ToLowerInvariant(), asset);
     }
 
     private static void ValidateChannel(string channel)
     {
         if (channel is not ("testing" or "stable"))
-            throw new ArgumentException("Canal de atualização inválido.", nameof(channel));
+            throw new ArgumentException("Invalid update channel.", nameof(channel));
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
@@ -207,10 +207,10 @@ public sealed class GitHubUpdateSource : IUpdateSource
             const string endpoint = "https://api.github.com/repositories/1430327913/releases?per_page=100";
             var text = await Downloader.DownloadString(endpoint, GetRequestHeaders("application/vnd.github+json"), .75).ConfigureAwait(false);
             if (text.Length > 8 * 1024 * 1024)
-                throw new InvalidDataException("A lista de publicações excede o limite permitido.");
+                throw new InvalidDataException("The release list exceeds the allowed size.");
             using var document = JsonDocument.Parse(text);
             if (document.RootElement.ValueKind != JsonValueKind.Array)
-                throw new InvalidDataException("A lista de publicações é inválida.");
+                throw new InvalidDataException("The release list is invalid.");
             var matching = new List<(DateTimeOffset Date, GithubRelease Release)>();
             foreach (var item in document.RootElement.EnumerateArray())
             {
@@ -218,7 +218,7 @@ public sealed class GitHubUpdateSource : IUpdateSource
                     continue;
                 if (!item.GetProperty("assets").EnumerateArray().Any(a => a.GetProperty("name").GetString() == "releases." + channel + ".json"))
                     continue;
-                var release = JsonSerializer.Deserialize<GithubRelease>(item.GetRawText()) ?? throw new InvalidDataException("Publicação inválida.");
+                var release = JsonSerializer.Deserialize<GithubRelease>(item.GetRawText()) ?? throw new InvalidDataException("Invalid release.");
                 matching.Add((item.GetProperty("published_at").GetDateTimeOffset(), release));
             }
 

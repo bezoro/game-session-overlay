@@ -16,7 +16,7 @@ public partial class MainWindow
         if (view.Current.Route == OverlayRoute.AudioDevices)
         {
             foreach (var output in systemAudio.Current.Outputs)
-                SetEntryDescription("output:" + output.Id, output.Id == systemAudio.Current.ConsoleOutputId && output.Id == systemAudio.Current.MediaOutputId ? "Em uso para jogos e mídia" : "Usar para jogos e mídia");
+                SetEntryDescription("output:" + output.Id, output.Id == systemAudio.Current.ConsoleOutputId && output.Id == systemAudio.Current.MediaOutputId ? "In use for games and media" : "Use for games and media");
             SetEntryDescription("device-refresh", systemAudio.Current.Status);
             return;
         }
@@ -26,25 +26,28 @@ public partial class MainWindow
         foreach (var window in Controller.Apps.Where(item => !item.Protected).Take(12))
         {
             var state = mixerStates.GetValueOrDefault(WindowId(window));
-            SetEntryDescription("mix:" + WindowId(window), state?.CanSetVolume == true ? $"{state.VolumeMaximum:P0}" + (state.MuteState == ApplicationMuteState.Muted ? " · sem som" : "") : "Consultar áudio deste aplicativo");
+            SetEntryDescription("mix:" + WindowId(window), state?.CanSetVolume == true ? $"{state.VolumeMaximum:P0}" + (state.MuteState == ApplicationMuteState.Muted ? " · muted" : "") : "Check this app's audio");
         }
 
         if (mixerTarget is not { } target || mixerStates.GetValueOrDefault(WindowId(target)) is not { } selected)
             return;
-        SetFeatureEntry("mixer-volume", selected.CanSetVolume ? $"Volume · {selected.VolumeMaximum:P0}" : "Volume não informado", "← / → ajusta o volume", selected.CanSetVolume);
-        SetFeatureEntry("mixer-mute", selected.MuteState == ApplicationMuteState.Muted ? "Ativar áudio" : "Silenciar aplicativo", target.ProcessName, selected.CanSetMute);
+        SetFeatureEntry("mixer-volume", selected.CanSetVolume ? $"Volume · {selected.VolumeMaximum:P0}" : "Volume unavailable", InputHint("← / → adjusts volume", "Arrow keys adjust · Tab leaves the slider", "Drag to adjust volume"), selected.CanSetVolume);
+        SetFeatureEntry("mixer-mute", selected.MuteState == ApplicationMuteState.Muted ? "Unmute audio" : "Mute app", target.ProcessName, selected.CanSetMute);
         SyncSessionSlider("mixer-volume", selected.VolumeMaximum);
     }
 
     private static string VolumeRange(ApplicationAudioSnapshot state) => state.VolumeMaximum - state.VolumeMinimum > .01f ? $"{state.VolumeMinimum:P0}–{state.VolumeMaximum:P0}" : $"{state.VolumeMaximum:P0}";
-    private string GameVolumeTitle => appAudio.CanSetMute ? "Jogo · " + (appAudio.MuteState == ApplicationMuteState.Muted ? "sem som" : appAudio.MuteState == ApplicationMuteState.Mixed ? "áudio misto" : appAudio.CanSetVolume ? VolumeRange(appAudio) : "som ativo") : "Som do jogo";
-    private string GameVolumeDescription => (appAudio.Availability == ApplicationAudioAvailability.Partial ? "Áudio parcial · " : "") + (appAudio.CanSetVolume ? "← / → volume · A " + (appAudio.MuteState == ApplicationMuteState.Muted ? "ativa" : "silencia") : appAudio.CanSetMute ? "A " + (appAudio.MuteState == ApplicationMuteState.Muted ? "ativa" : "silencia") + " · volume não informado" : "Abra o jogo e inicie o áudio para ajustar");
-    private string WindowsVolumeTitle => audio.Current.Available ? audio.Current.Muted ? "Saída · sem som" : $"Saída · {audio.Current.Volume:P0}" : "Saída indisponível";
+    private string GameVolumeTitle => appAudio.CanSetMute ? "Game · " + (appAudio.MuteState == ApplicationMuteState.Muted ? "muted" : appAudio.MuteState == ApplicationMuteState.Mixed ? "mixed audio" : appAudio.CanSetVolume ? VolumeRange(appAudio) : "sound on") : "Game audio";
+    private string GameVolumeDescription => (appAudio.Availability == ApplicationAudioAvailability.Partial ? "Partial audio · " : "") + (appAudio.CanSetVolume
+        ? InputHint("← / → volume · A toggles mute", "Arrow keys adjust · Enter toggles mute", "Drag volume · click to toggle mute")
+        : appAudio.CanSetMute ? InputHint("A toggles mute · volume unavailable", "Enter toggles mute · volume unavailable", "Click to toggle mute · volume unavailable")
+        : "Start audio in the game to adjust it");
+    private string WindowsVolumeTitle => audio.Current.Available ? audio.Current.Muted ? "Output · muted" : $"Output · {audio.Current.Volume:P0}" : "Output unavailable";
     private string MicrophoneTitle => systemAudio.Current.MicrophoneMuted switch
     {
-        true => "Microfone · sem som",
-        false => "Microfone · ligado",
-        _ => "Microfone indisponível"
+        true => "Microphone · muted",
+        false => "Microphone · on",
+        _ => "Microphone unavailable"
     };
 
     private void UpdateSessionFeatureLabels()
@@ -55,7 +58,7 @@ public partial class MainWindow
         var media = CurrentMedia;
         SyncSessionSlider("session-volume", appAudio.VolumeMaximum);
         SyncSessionSlider("windows-volume", audio.Current.Available ? audio.Current.Volume : null);
-        SetEntryDescription("session-media", media is null ? "Reprodução nos aplicativos compatíveis" : (media.Playing ? "Tocando · " : "Pausado · ") + (media.Title.Length > 0 ? media.Title : "Reprodução de mídia"));
+        SetEntryDescription("session-media", media is null ? "Playback in supported apps" : (media.Playing ? "Playing · " : "Paused · ") + (media.Title.Length > 0 ? media.Title : "Media playback"));
     }
 
     private void SetFeatureEntry(string id, string title, string description, bool available)
@@ -105,7 +108,7 @@ public partial class MainWindow
         {
             if (!appAudio.CanSetVolume)
             {
-                FeedbackText("O volume do jogo não está confirmado. Use A para silenciar as sessões identificadas.");
+                FeedbackText(InputHint("Volume unconfirmed. Press A to mute.", "Volume unconfirmed. Press Enter to mute.", "Volume unconfirmed. Click to mute."));
                 return true;
             }
 
@@ -126,8 +129,8 @@ public partial class MainWindow
 
     private void BuildSessionMixer()
     {
-        Paragraph("Ajuste apenas o aplicativo escolhido. Sessões de outros processos ficam separadas.");
-        AddRow("mixer-refresh", "Atualizar aplicativos", "Consultar sessões de áudio", () =>
+        Paragraph("Adjust only the selected app. Other processes keep their own audio settings.");
+        AddRow("mixer-refresh", "Refresh apps", "Check audio sessions", () =>
         {
             nextFeatureRead = 0;
             StartFeatureRead();
@@ -136,12 +139,12 @@ public partial class MainWindow
         {
             Section(target.Title);
             var state = mixerStates.GetValueOrDefault(WindowId(target));
-            var volume = AddRow("mixer-volume", state?.CanSetVolume == true ? $"Volume · {state.VolumeMaximum:P0}" : "Volume não informado", "← / → ajusta o volume", () =>
+            var volume = AddRow("mixer-volume", state?.CanSetVolume == true ? $"Volume · {state.VolumeMaximum:P0}" : "Volume unavailable", "← / → adjusts volume", () =>
             {
             }, state?.CanSetVolume == true);
             if (state?.CanSetVolume == true)
                 AddSessionSlider(volume, state.VolumeMaximum!.Value, value => ChangeMixerVolume(target, value));
-            AddRow("mixer-mute", state?.MuteState == ApplicationMuteState.Muted ? "Ativar áudio" : "Silenciar aplicativo", target.ProcessName, () =>
+            AddRow("mixer-mute", state?.MuteState == ApplicationMuteState.Muted ? "Unmute audio" : "Mute app", target.ProcessName, () =>
             {
                 if (mixerStates.GetValueOrDefault(WindowId(target)) is not { CanSetMute: true } current)
                     return;
@@ -154,12 +157,12 @@ public partial class MainWindow
             }, state?.CanSetMute == true);
         }
 
-        Section("Aplicativos");
+        Section("Apps");
         foreach (var window in Controller.Apps.Where(item => !item.Protected).DistinctBy(item => (item.Pid, item.Started)).Take(12))
         {
             var selected = window;
             var state = mixerStates.GetValueOrDefault(WindowId(window));
-            AddRow("mix:" + WindowId(window), window.Title, state?.CanSetVolume == true ? $"{state.VolumeMaximum:P0}" + (state.MuteState == ApplicationMuteState.Muted ? " · sem som" : "") : "Consultar áudio deste aplicativo", () =>
+            AddRow("mix:" + WindowId(window), window.Title, state?.CanSetVolume == true ? $"{state.VolumeMaximum:P0}" + (state.MuteState == ApplicationMuteState.Muted ? " · muted" : "") : "Check this app's audio", () =>
             {
                 mixerTarget = selected;
                 RefreshRows();
@@ -170,8 +173,8 @@ public partial class MainWindow
             });
         }
 
-        AddRow("mixer-devices", "Saída e microfone", systemAudio.Current.OutputName, () => OpenFeature(OverlayRoute.AudioDevices, "device-refresh"));
-        AddRow("back", "Voltar", "Painel da sessão", Back);
+        AddRow("mixer-devices", "Output and microphone", systemAudio.Current.OutputName, () => OpenFeature(OverlayRoute.AudioDevices, "device-refresh"));
+        AddRow("back", "Back", "Session panel", Back);
     }
 
     private void ChangeMixerVolume(WindowRef target, float value)
@@ -217,7 +220,7 @@ public partial class MainWindow
         };
         slider.Style = (Style)FindResource("SessionVolumeSlider");
         button.Resources["SessionSlider"] = slider;
-        System.Windows.Automation.AutomationProperties.SetName(slider, "Volume em porcentagem");
+        System.Windows.Automation.AutomationProperties.SetName(slider, "Volume as a percentage");
         slider.ValueChanged += (_, _) =>
         {
             if (!synchronizingFeatureSlider && slider.IsKeyboardFocusWithin && !slider.IsMouseCaptureWithin && NavigationAllowed && !busy && !TransitionPending)
@@ -264,8 +267,8 @@ public partial class MainWindow
 
     private void BuildAudioDevices()
     {
-        Paragraph("Escolha a saída do Windows para jogos e mídia. O volume físico da TV é independente.");
-        AddRow("device-refresh", "Atualizar dispositivos", systemAudio.Current.Status, () =>
+        Paragraph("Choose the Windows output for games and media. The TV's own volume is separate.");
+        AddRow("device-refresh", "Refresh devices", systemAudio.Current.Status, () =>
         {
             nextFeatureRead = 0;
             StartFeatureRead();
@@ -274,7 +277,7 @@ public partial class MainWindow
         {
             var chosen = output;
             var current = systemAudio.Current;
-            AddRow("output:" + output.Id, output.Name, output.Id == current.ConsoleOutputId && output.Id == current.MediaOutputId ? "Em uso para jogos e mídia" : "Usar para jogos e mídia", () =>
+            AddRow("output:" + output.Id, output.Name, output.Id == current.ConsoleOutputId && output.Id == current.MediaOutputId ? "In use for games and media" : "Use for games and media", () =>
             {
                 var expected = systemAudio.Current;
                 StartAudioAction("audio-output", token => systemAudio.SelectOutputAsync(expected.ConsoleOutputId, expected.MediaOutputId, chosen.Id, token), RefreshRows);
@@ -282,6 +285,6 @@ public partial class MainWindow
         }
 
         AddRow("microphone", MicrophoneTitle, systemAudio.Current.MicrophoneName, ToggleMicrophone, systemAudio.Current.MicrophoneMuted is not null);
-        AddRow("back", "Voltar", "Áudio da sessão", Back);
+        AddRow("back", "Back", "Session audio", Back);
     }
 }

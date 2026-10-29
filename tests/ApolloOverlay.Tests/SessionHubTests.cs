@@ -213,7 +213,7 @@ internal static class SessionHubTests
             Pick(w, "application-mute");
             Click(w, "application-mute");
             Release(w);
-            Check(audio.Writes == 1 && w.Controller.Operation is { State: "Pendente", Dispatched: true }, "Fake audio command was not dispatched once");
+            Check(audio.Writes == 1 && w.Controller.Operation is { State: "Pending", Dispatched: true }, "Fake audio command was not dispatched once");
             var selected = w.SelectedAction;
             var entries = w.ActionIds.ToArray();
             var title = ((TextBlock)w.FindName("PageTitle")).Text;
@@ -231,9 +231,9 @@ internal static class SessionHubTests
             Check(w.IsVisible && w.SelectedAction == selected && w.ActionIds.SequenceEqual(entries) && ((TextBlock)w.FindName("PageTitle")).Text == title, "Busy input navigated, activated or hid the panel");
             Check(audio.Writes == 1 && p.Switches == 0 && p.Minimizes == 0 && !w.TransitionPending, "Busy input dispatched another operation");
             if (cancel)
-                Check(w.Controller.Operation is { State: "Não confirmado", Dispatched: true } operation && operation.Message.Contains("não pode ser desfeito"), "Cancellation claimed undo or confirmed success");
+                Check(w.Controller.Operation is { State: "Unconfirmed", Dispatched: true } operation && operation.Message.Contains("cannot be undone"), "Cancellation claimed undo or confirmed success");
             else
-                Check(w.Controller.Operation is { State: "Pendente", Dispatched: true }, "Non-B input changed pending outcome");
+                Check(w.Controller.Operation is { State: "Pending", Dispatched: true }, "Non-B input changed pending outcome");
             if (outcome == ResultKind.Unknown)
                 completion.SetCanceled(audio.Token);
             else
@@ -241,9 +241,9 @@ internal static class SessionHubTests
             Complete(w.OperationTask);
             var expected = outcome switch
             {
-                ResultKind.Partial => "Parcial",
-                ResultKind.Failed => "Falhou",
-                _ => "Não confirmado"
+                ResultKind.Partial => "Partial",
+                ResultKind.Failed => "Failed",
+                _ => "Unconfirmed"
             };
             Check(audio.Writes == 1 && w.Controller.Operation is { Dispatched: true } result && result.State == expected, "Late outcome was lost, retried or reported as success");
             Check(w.IsVisible && w.SelectedAction == selected && p.Switches == 0 && p.Minimizes == 0, "Late outcome navigated or hid the panel");
@@ -269,7 +269,7 @@ internal static class SessionHubTests
                 w.UpdateControllerTelemetry(Enumerable.Repeat(new PadFrame(false, PadButtons.None, ReadFailed: true), 4).ToArray(), null, 0);
                 var text = ((TextBlock)w.FindName("ControllerStatusLabel")).Text;
                 Console.WriteLine("TELEMETRY-FAILURE status=" + text + "; batteryReads=" + devices.Reads + "; feedbackSuspends=" + feedback.Suspends);
-                Check(text.Contains("indisponível") && !text.Contains("Nenhum"), "Failed/unknown connection was reported as disconnected");
+                Check(text.Contains("unavailable") && !text.Contains("No"), "Failed/unknown connection was reported as disconnected");
                 Check(devices.Reads == 0 && feedback.Suspends > 0, "Unknown input queried battery or retained feedback context");
             }
             finally
@@ -295,14 +295,14 @@ internal static class SessionHubTests
                     w.UpdateControllerTelemetry(new PadFrame[] { new(true, 0), default, default, default }, 0, 0);
                     Navigate(w, route, p);
                     Arrange(w, 572, 940);
-                    var paragraph = PremiumInterfaceTests.Descendants<TextBlock>((DependencyObject)w.FindName("Rows")).Single(t => t.Text.Contains("Controle 1") && t.Text.Contains("Bateria média"));
+                    var paragraph = PremiumInterfaceTests.Descendants<TextBlock>((DependencyObject)w.FindName("Rows")).Single(t => t.Text.Contains("Controller 1") && t.Text.Contains("Battery medium"));
                     var selected = w.SelectedAction;
                     var selectedButton = ReviewFixTests.Button(w, selected);
                     w.UpdateControllerTelemetry(new PadFrame[4], null, 1);
                     Console.WriteLine("TELEMETRY-LIVE route=" + route + "; afterDisconnect=" + paragraph.Text);
-                    Check(!paragraph.Text.Contains("Bateria média") && paragraph.Text.Contains("Nenhum"), "Visible paragraph retained disconnected controller battery");
+                    Check(!paragraph.Text.Contains("Battery medium") && paragraph.Text.Contains("No"), "Visible paragraph retained disconnected controller battery");
                     w.UpdateControllerTelemetry(new PadFrame[] { default, new(true, 0), default, default }, 1, 2);
-                    Check(paragraph.Text.Contains("Controle 2") && !paragraph.Text.Contains("Controle 1"), "Visible paragraph retained prior controller owner");
+                    Check(paragraph.Text.Contains("Controller 2") && !paragraph.Text.Contains("Controller 1"), "Visible paragraph retained prior controller owner");
                     Check(System.Windows.Automation.AutomationProperties.GetName(paragraph) == paragraph.Text, "Controller paragraph UIA name stale");
                     Check(ReferenceEquals(selectedButton, ReviewFixTests.Button(w, selected)) && w.SelectedAction == selected, "Telemetry rebuilt view/selection");
                     RequireFocus(w);
@@ -413,7 +413,7 @@ internal static class SessionHubTests
                 {
                     ReducedMotion = true
                 });
-                w.Controller.SetOperation("Parcial", "A operação não foi confirmada. Verifique a janela e o resultado completo antes de tentar novamente. Nenhum comando adicional foi enviado.");
+                w.Controller.SetOperation("Partial", "The operation was not confirmed. Check the window and read the full result before trying again. No additional command was sent.");
                 w.RefreshRows();
                 Arrange(w, 360, 480);
                 Pick(w, "session-card");
@@ -505,7 +505,7 @@ internal static class SessionHubTests
                 Release(w);
                 Check(p.Minimizes == 0, "Stale target dispatched");
                 Click(w, "choose-session");
-                Check(((TextBlock)w.FindName("PageTitle")).Text == "Escolher janela", "No explicit stale recovery");
+                Check(((TextBlock)w.FindName("PageTitle")).Text == "Choose window", "No explicit stale recovery");
             }
             finally
             {
@@ -674,14 +674,14 @@ internal static class SessionHubTests
                 w.OpenOptions(p.A);
                 Click(w, "application-mute");
                 Release(w);
-                Check(audio.Writes == 1 && w.Controller.Operation is { State: "Pendente", Dispatched: true }, "Queued versus dispatched confused");
+                Check(audio.Writes == 1 && w.Controller.Operation is { State: "Pending", Dispatched: true }, "Queued versus dispatched confused");
                 w.ActivateEntry();
                 Check(audio.Writes == 1, "Duplicate mutation dispatched");
                 w.Back();
-                Check(audio.Token.IsCancellationRequested && w.Controller.Operation?.State == "Não confirmado", "Post-dispatch Back claimed undo");
-                completion.SetResult(new(new(ResultKind.Partial, "Uma saída não foi confirmada; verifique o aplicativo."), audio.Snapshot(), 2, 1, 1, true));
+                Check(audio.Token.IsCancellationRequested && w.Controller.Operation?.State == "Unconfirmed", "Post-dispatch Back claimed undo");
+                completion.SetResult(new(new(ResultKind.Partial, "One output was not confirmed; check the app."), audio.Snapshot(), 2, 1, 1, true));
                 Complete(w.OperationTask);
-                Check(audio.Writes == 1 && w.Controller.Operation is { State: "Parcial" }, "Late partial outcome lost or retried");
+                Check(audio.Writes == 1 && w.Controller.Operation is { State: "Partial" }, "Late partial outcome lost or retried");
             }
             finally
             {
@@ -747,7 +747,7 @@ internal static class SessionHubTests
                 var before = feedback.Configures;
                 Click(w, "discard-pending");
                 Check(feedback.Configures == before + 1 && !feedback.Sound && !feedback.Haptics && !w.Controller.SettingsDirty && SessionHubSettings.Favorites(w.Controller.Settings).Length == 6, "Discard did not reapply complete snapshot exactly once");
-                Check(((TextBlock)w.FindName("PageTitle")).Text == "Sistema" && w.ActionIds.Contains(w.SelectedAction), "Discard reset view or invalidated selection");
+                Check(((TextBlock)w.FindName("PageTitle")).Text == "System" && w.ActionIds.Contains(w.SelectedAction), "Discard reset view or invalidated selection");
                 RequireFocus(w);
             }
             finally
@@ -765,7 +765,7 @@ internal static class SessionHubTests
                 Click(w, "clear-session");
                 Check(w.Controller.Session.Anchor is null && w.SelectedAction == "session-card" && p.Switches == 0 && w.Controller.Recent.Items.Count == 1, "Clear switched/promoted or kept anchor");
                 Click(w, "session-card");
-                Check(((TextBlock)w.FindName("PageTitle")).Text == "Escolher janela", "Empty card lost chooser action");
+                Check(((TextBlock)w.FindName("PageTitle")).Text == "Choose window", "Empty card lost chooser action");
             }
             finally
             {
@@ -834,7 +834,7 @@ internal static class SessionHubTests
                                 {
                                     ReducedMotion = true
                                 });
-                                w.Controller.SetOperation("Parcial", "Fixture retained result. Nenhum comando adicional foi enviado.");
+                                w.Controller.SetOperation("Partial", "Fixture retained result. No additional command was sent.");
                             }
 
                             w.RefreshRows();
@@ -1129,7 +1129,7 @@ internal static class SessionHubTests
                 }
                 else if (state is "result" or "dirty-result")
                 {
-                    w.Controller.SetOperation("Parcial", "A identidade da janela mudou durante a solicitação. Abra Aplicativos, escolha a janela novamente e verifique se há um diálogo de salvar antes de tentar outra vez. Nenhum comando adicional foi enviado.", "fixture", p.A, true);
+                    w.Controller.SetOperation("Partial", "The window identity changed during the request. Open Apps, select the window again, and check for a save dialog before trying again. No additional command was sent.", "fixture", p.A, true);
                     if (state == "result")
                     {
                         w.RefreshRows();
@@ -1283,7 +1283,7 @@ internal static class SessionHubTests
                         var button = ReviewFixTests.Button(w, "application-mute");
                         var label = ((StackPanel)((Grid)button.Content).Children[1]).Children.OfType<TextBlock>().Last();
                         // Keep a real multiline description close to wrapping boundaries.
-                        label.Text = "As sessões de áudio identificadas deste aplicativo podem ser silenciadas e restauradas nesta janela.";
+                        label.Text = "This app's identified audio sessions can be muted and restored in this window.";
                         void Layout()
                         {
                             Arrange(w, width, width == 360 ? 480 : 940);
@@ -1359,12 +1359,12 @@ internal static class SessionHubTests
                     audio.Emit();
                     var button = ReviewFixTests.Button(w, "application-mute");
                     string Title() => System.Windows.Automation.AutomationProperties.GetName(button);
-                    Check(Title().Contains("Silenciar"), "Initial action must clearly offer muting");
+                    Check(Title().Contains("Mute"), "Initial action must clearly offer muting");
                     var pending = new TaskCompletionSource<ApplicationAudioChange>();
                     audio.Next = pending.Task;
                     Click(w, "application-mute");
                     Release(w);
-                    Check(audio.Writes == 1 && audio.LastDesired && Title().Contains("Silenciar"), "Mute was optimistic or not explicit");
+                    Check(audio.Writes == 1 && audio.LastDesired && Title().Contains("Mute"), "Mute was optimistic or not explicit");
                     pending.SetResult(new(new(partial ? ResultKind.Partial : ResultKind.Completed, "Fixture observed mute"), audio.Snapshot(), 2, 2, 2, true));
                     Complete(w.OperationTask);
                     audio.Next = null;
@@ -1374,10 +1374,10 @@ internal static class SessionHubTests
                     Release(w);
                     Complete(w.OperationTask);
                     Check(audio.Writes == 2 && !audio.LastDesired && audio.LastTarget?.Same(p.A) == true && audio.LastGeneration == audio.Generation, "Restore did not target same validated session with desired=false");
-                    Check(mutedTitle.Contains("Restaurar áudio") && Title().Contains("Silenciar áudio"), "Toggle labels do not expose mute and restore");
+                    Check(mutedTitle.Contains("Unmute app audio") && Title().Contains("Mute app audio"), "Toggle labels do not expose mute and restore");
                     audio.Mute = ApplicationMuteState.Muted;
                     audio.Emit();
-                    Check(Title().Contains("Restaurar áudio"), "External mute not reflected");
+                    Check(Title().Contains("Unmute app audio"), "External mute not reflected");
                     audio.Next = Task.FromResult(new ApplicationAudioChange(new(ResultKind.Unknown, "Fixture read failure"), audio.Snapshot() with
                     {
                         MuteState = ApplicationMuteState.Unknown,
@@ -1386,7 +1386,7 @@ internal static class SessionHubTests
                     Click(w, "application-mute");
                     Release(w);
                     Complete(w.OperationTask);
-                    Check(!Title().Contains("Restaurar áudio") && w.Controller.Operation?.State == "Não confirmado", "Unknown result claimed known mute state");
+                    Check(!Title().Contains("Unmute app audio") && w.Controller.Operation?.State == "Unconfirmed", "Unknown result claimed known mute state");
                     audio.Next = null;
                     foreach (var state in new[]
                     {
@@ -1398,7 +1398,7 @@ internal static class SessionHubTests
                     {
                         audio.Mute = state;
                         audio.Emit();
-                        Check(!Title().Contains("Restaurar áudio"), "Mixed/unknown state guessed restoration");
+                        Check(!Title().Contains("Unmute app audio"), "Mixed/unknown state guessed restoration");
                         Click(w, "application-mute");
                         Release(w);
                         Complete(w.OperationTask);
@@ -1423,8 +1423,8 @@ internal static class SessionHubTests
 
     private sealed class HubPlatform : IPlatform
     {
-        internal readonly WindowRef A = new(101, 42, 100, "Documento de projeto · janela de demonstração com título completo", "fixture");
-        internal readonly WindowRef B = new(102, 52, 200, "Notas da sessão", "fixture-notes");
+        internal readonly WindowRef A = new(101, 42, 100, "Project document · demonstration window with a complete title", "fixture");
+        internal readonly WindowRef B = new(102, 52, 200, "Session notes", "fixture-notes");
         internal bool Stale, Empty;
         internal int Switches, Minimizes;
         internal WindowRef? LastSwitch, ForegroundWindow;
@@ -1468,7 +1468,7 @@ internal static class SessionHubTests
         internal bool LastDesired;
         internal Task<ApplicationAudioChange>? Next;
         internal CancellationToken Token;
-        internal ApplicationAudioSnapshot Snapshot() => new(Target, Generation, ++Revision, Availability, Mute, Identified, Availability == ApplicationAudioAvailability.Partial ? 1 : 0, "Fixture · sessões do processo identificado");
+        internal ApplicationAudioSnapshot Snapshot() => new(Target, Generation, ++Revision, Availability, Mute, Identified, Availability == ApplicationAudioAvailability.Partial ? 1 : 0, "Fixture · sessions of the identified process");
         internal void Emit() => Changed?.Invoke(Snapshot());
         internal void Raise(ApplicationAudioSnapshot value) => Changed?.Invoke(value);
         public void Track(WindowRef? target, bool visible, long generation)

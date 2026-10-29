@@ -43,7 +43,59 @@ function Read-Value([string]$Path, [string]$Name) {
 }
 $priorRun = Read-Value $runPath 'Bezoro.GameSessionOverlay'
 $priorMarker = Read-Value $settingsKey 'StartupConfigured'
+$approvedPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run'
+$programsDirectory = [Environment]::GetFolderPath([Environment+SpecialFolder]::Programs)
+$startMenuShortcut = Join-Path $programsDirectory 'Game Session Overlay.lnk'
+$registrySnapshots = @(
+    foreach ($entry in @(@($runPath, 'Bezoro.GameSessionOverlay'), @($settingsKey, 'StartupConfigured'), @($settingsKey, 'StartupEnabled'), @($approvedPath, 'Bezoro.GameSessionOverlay'))) {
+        $key = Get-Item -LiteralPath $entry[0] -ErrorAction SilentlyContinue
+        try {
+            $present = $key -and $key.GetValueNames().Contains($entry[1])
+            @{ Path = $entry[0]; Name = $entry[1]; Present = $present
+                Value = if ($present) { ,$key.GetValue($entry[1], $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames) } else { $null }
+                Kind = if ($present) { $key.GetValueKind($entry[1]) } else { $null }
+            }
+        }
+        finally {
+            if ($key) { $key.Dispose() }
+        }
+    }
+)
 Require (-not (Test-Path -LiteralPath $uninstallKey)) 'An installation with this application ID already exists; refusing to overwrite it.'
+Require (-not (Test-Path -LiteralPath $startMenuShortcut)) 'A same-name Start-menu shortcut already exists; refusing to overwrite it in the installation proof.'
+function Read-Shortcut([string]$Path) {
+    $shell = $null
+    $shortcut = $null
+    try {
+        $shell = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut($Path)
+        return @{ Target = $shortcut.TargetPath; Arguments = $shortcut.Arguments }
+    }
+    finally {
+        if ($shortcut) { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($shortcut) | Out-Null }
+        if ($shell) { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell) | Out-Null }
+    }
+}
+function Restore-UserIntegration {
+    foreach ($snapshot in $registrySnapshots) {
+        $relative = $snapshot.Path.Substring('HKCU:\'.Length)
+        $key = if ($snapshot.Present) { [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($relative) } else { [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($relative, $true) }
+        try {
+            if ($key) {
+                if ($snapshot.Present) { $key.SetValue($snapshot.Name, $snapshot.Value, $snapshot.Kind) }
+                else { $key.DeleteValue($snapshot.Name, $false) }
+            }
+        }
+        finally {
+            if ($key) { $key.Dispose() }
+        }
+    }
+    if (Test-Path -LiteralPath $startMenuShortcut) {
+        $shortcut = Read-Shortcut $startMenuShortcut
+        Require ($shortcut.Target -eq (Join-Path $installRoot 'Game Session Overlay.exe') -or $shortcut.Target -eq $expectedApp) 'Refusing to remove an unrelated Start-menu shortcut during proof cleanup.'
+        Remove-Item -LiteralPath $startMenuShortcut -Force
+    }
+}
 function Owned-Apps {
     return @(Get-Process -Name ApolloOverlay -ErrorAction SilentlyContinue | Where-Object {
             try {
@@ -184,13 +236,14 @@ function Verify-PackagedCli($Selected, [Diagnostics.Process]$App, $Ready, [strin
     } while ($watch.Elapsed.TotalSeconds -lt 30)
     throw "Installed CLI did not return a fresh Completed version receipt: $($lastReply.Outcome) $($lastReply.Reason)"
 }
-function Start-VerifiedApp($Selected, [string]$ExpectedDllHash, [string]$Label, [bool]$StartStub = $true) {
+function Start-VerifiedApp($Selected, [string]$ExpectedDllHash, [string]$Label, [bool]$StartStub = $true, [bool]$Hidden = $false) {
     $readyPath = Join-Path $dataRoot 'ready.json'
     if ($StartStub) {
         if (Test-Path -LiteralPath $readyPath) {
             Remove-Item -LiteralPath $readyPath -Force
         }
-        Require ((Run-Owned (Join-Path $installRoot 'Game Session Overlay.exe') @('--velopack-proof', $dataRoot, '--show') 30) -eq 0) 'Official execution stub returned failure.'
+        $launchMode = if ($Hidden) { '--startup' } else { '--show' }
+        Require ((Run-Owned (Join-Path $installRoot 'Game Session Overlay.exe') @('--velopack-proof', $dataRoot, $launchMode) 30) -eq 0) 'Official execution stub returned failure.'
     }
     Await { Test-Path -LiteralPath $readyPath } 45 'Published installed app did not confirm initialized startup.'
     $ready = Get-Content -LiteralPath $readyPath -Raw | ConvertFrom-Json
@@ -290,6 +343,37 @@ function Rollback-PackagedCli($Selected, $Running) {
         $client.Dispose()
     }
 }
+function Verify-Visibility([Diagnostics.Process]$App, [bool]$Visible, [string]$Label) {
+    $watch = [Diagnostics.Stopwatch]::StartNew()
+    do {
+        $start = [Diagnostics.ProcessStartInfo]::new((Join-Path $installRoot 'current/ApolloOverlay.Cli.exe'))
+        $start.UseShellExecute = $false
+        $start.RedirectStandardOutput = $true
+        $start.RedirectStandardError = $true
+        $start.ArgumentList.Add('status')
+        $client = [Diagnostics.Process]::Start($start)
+        try {
+            $output = $client.StandardOutput.ReadToEndAsync()
+            $errorOutput = $client.StandardError.ReadToEndAsync()
+            if (-not $client.WaitForExit(12000)) { Stop-Owned $client; throw 'Installed visibility query timed out.' }
+            $text = $output.GetAwaiter().GetResult()
+            $null = $errorOutput.GetAwaiter().GetResult()
+            Require ($text.Length -le 2097152) 'Visibility response exceeded its bound.'
+            if ($text) {
+                $reply = $text | ConvertFrom-Json
+                if ($client.ExitCode -eq 0 -and $reply.Outcome -ceq 'Completed' -and $reply.Snapshot.Pid -eq $App.Id -and $reply.Snapshot.Started -eq $App.StartTime.ToUniversalTime().Ticks -and $reply.Snapshot.Visible -eq $Visible) {
+                    [IO.File]::WriteAllText((Join-Path $evidence "visibility-$Label.json"), $text)
+                    return
+                }
+            }
+        }
+        finally {
+            $client.Dispose()
+        }
+        Start-Sleep -Milliseconds 100
+    } while ($watch.Elapsed.TotalSeconds -lt 30)
+    throw "The exact installed instance did not confirm visibility=$Visible."
+}
 $failure = $null
 try {
     Require ((Run-Owned $release.SetupPath @('--silent', '--installto', $installRoot, '--log', (Join-Path $evidence 'setup.log'))) -eq 0) 'Official Setup.exe returned failure.'
@@ -300,6 +384,21 @@ try {
         })
 
     $hashA = Package-DllHash $release.PackagePath
+    $expectedStartup = '"' + (Join-Path $installRoot 'Game Session Overlay.exe') + '" --startup'
+    Require ((Read-Value $runPath 'Bezoro.GameSessionOverlay') -eq $expectedStartup) 'Silent install did not register the stable hidden-startup command.'
+    Require ((Read-Value $settingsKey 'StartupConfigured') -eq 1) 'Silent install did not complete startup registration.'
+    Require (Test-Path -LiteralPath $startMenuShortcut) 'Silent install did not create a searchable Start-menu shortcut.'
+    $shortcut = Read-Shortcut $startMenuShortcut
+    Require ($shortcut.Target -eq (Join-Path $installRoot 'Game Session Overlay.exe') -and $shortcut.Arguments -ceq '--show') 'Searchable shortcut does not use the stable visible launcher.'
+    $cases.Add(@{ name = 'silent install registers hidden startup and a searchable stable-launcher shortcut'; passed = $true })
+    $hidden = Start-VerifiedApp $release $hashA 'A-startup' $true $true
+    Verify-Visibility $hidden.Process $false 'hidden-startup'
+    $cases.Add(@{ name = 'registered hidden-startup command initializes the exact installed instance without showing its panel'; passed = $true; pid = $hidden.Process.Id })
+    Start-Process -FilePath $startMenuShortcut | Out-Null
+    Verify-Visibility $hidden.Process $true 'shortcut-existing-instance'
+    Require ((Owned-Apps).Count -eq 1 -and (Owned-Apps)[0].Id -eq $hidden.Process.Id) 'Searchable shortcut created a duplicate installed instance.'
+    $cases.Add(@{ name = 'Start-menu shortcut opens the existing hidden instance instead of creating a duplicate or modal warning'; passed = $true; pid = $hidden.Process.Id })
+    Stop-Owned $hidden.Process
     $initial = Start-VerifiedApp $release $hashA 'A-initial'
     $app = $initial.Process
     $cases.Add(@{ name = 'official stable stub starts exact installed WPF app with isolated ready proof'
@@ -424,8 +523,9 @@ try {
     $cases.Add(@{ name = 'official uninstaller removes application while retaining user settings'
             passed = $true
         })
-    Require ((Read-Value $runPath 'Bezoro.GameSessionOverlay') -eq $priorRun -and (Read-Value $settingsKey 'StartupConfigured') -eq $priorMarker) 'Proof modified user startup registration.'
-    $cases.Add(@{ name = 'proof preserves hidden-startup user registration'
+    Restore-UserIntegration
+    Require ((Read-Value $runPath 'Bezoro.GameSessionOverlay') -eq $priorRun -and (Read-Value $settingsKey 'StartupConfigured') -eq $priorMarker) 'Proof did not restore user startup registration.'
+    $cases.Add(@{ name = 'proof restores user startup values and removes only its owned shortcut'
             passed = $true
         })
 }
@@ -457,6 +557,14 @@ finally {
         }
     }
     $cleanupErrors = @()
+    try {
+        Restore-UserIntegration
+    }
+    catch {
+        $cleanupErrors += $_.Exception.Message
+        if (!$failure) { $failure = 'Windows integration cleanup failed. See cleanupErrors.' }
+        Write-Warning "Windows integration cleanup failed: $($_.Exception.Message)"
+    }
     foreach ($directory in @($installRoot, $dataRoot, $variantRoot)) {
         try {
             Remove-ProofDirectory -LiteralPath $directory

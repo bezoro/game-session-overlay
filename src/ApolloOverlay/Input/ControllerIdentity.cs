@@ -67,6 +67,6 @@ public sealed class WindowsControllerIdentitySource : IControllerIdentitySource
         if (vendor == 0x057E && product == 0x2009)
             return (ControllerFamily.Nintendo, "Switch Pro");
         var name = new string((reported ?? "").Where(character => !char.IsControl(character)).Take(48).ToArray()).Trim();
-        return (ControllerFamily.Unknown, name.Length > 0 ? name : "Controle");
+        return (ControllerFamily.Unknown, name.Length > 0 ? name : "Controller");
     }
 }

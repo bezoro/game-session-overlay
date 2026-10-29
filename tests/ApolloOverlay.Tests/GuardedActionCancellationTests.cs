@@ -313,7 +313,7 @@ internal static class GuardedActionCancellationTests
                 window.AdvanceHandoff(new(new PadFrame[4], 100), 100);
                 Require(!window.OperationTask.IsCompleted && platform.Calls == 1, "Fixture did not dispatch a pending request");
                 window.Back();
-                Require(window.Controller.Operation?.State == "Não confirmado", "Back failed to mark the pending request uncertain");
+                Require(window.Controller.Operation?.State == "Unconfirmed", "Back failed to mark the pending request uncertain");
                 completion.SetResult(new(ResultKind.Requested, "Late external request already sent"));
                 Complete(window.OperationTask);
                 Require(window.IsVisible && platform.Calls == 1, "A late result dismissed the panel or retried the effect");

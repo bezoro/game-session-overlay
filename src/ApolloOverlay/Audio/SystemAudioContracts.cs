@@ -11,8 +11,8 @@ public sealed record SystemAudioSnapshot(
     string Status
 )
 {
-    public static SystemAudioSnapshot Empty { get; } = new([], "", "", "", "Microfone indisponível", null, "Áudio não consultado.");
-    public string OutputName => Outputs.FirstOrDefault(output => output.Id == ConsoleOutputId)?.Name ?? "Saída indisponível";
+    public static SystemAudioSnapshot Empty { get; } = new([], "", "", "", "Microphone unavailable", null, "Audio has not been queried.");
+    public string OutputName => Outputs.FirstOrDefault(output => output.Id == ConsoleOutputId)?.Name ?? "Output unavailable";
 }
 
 public interface ISystemAudioBackend

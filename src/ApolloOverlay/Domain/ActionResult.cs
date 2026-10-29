@@ -14,11 +14,11 @@ public enum ResultKind
 
 public sealed record ActionResult(ResultKind Kind, string Message)
 {
-    public override string ToString() => $"{Kind switch { ResultKind.Simulated => "Simulado", ResultKind.Requested => "Solicitado", ResultKind.Completed => "Concluído", ResultKind.Failed => "Falhou", ResultKind.Unavailable => "Indisponível", ResultKind.Partial => "Parcial", ResultKind.Unknown => "Não confirmado", _ => "Cancelado" }} · {Message}";
+    public override string ToString() => $"{Kind switch { ResultKind.Simulated => "Simulated", ResultKind.Requested => "Requested", ResultKind.Completed => "Completed", ResultKind.Failed => "Failed", ResultKind.Unavailable => "Unavailable", ResultKind.Partial => "Partial", ResultKind.Unknown => "Unconfirmed", _ => "Cancelled" }} · {Message}";
 }
 
 public static class Outcome
 {
-    public static ActionResult Keys(uint sent, uint expected) => sent == expected ? new(ResultKind.Requested, "Atalho enviado; abertura e visibilidade não confirmadas. Reabra pelo seu atalho ou combinação do controle.") : new(sent == 0 ? ResultKind.Failed : ResultKind.Partial, "O Windows recusou parte ou todo o atalho. Soltura de teclas tentada; não haverá repetição automática.");
-    public static ActionResult Closure(bool gone, bool deadline) => gone ? new(ResultKind.Completed, "A janela confirmada foi fechada.") : new(deadline ? ResultKind.Unknown : ResultKind.Requested, deadline ? "A janela continua aberta: pode haver diálogo de salvar ou recusa. Nenhuma escalada." : "WM_CLOSE enviado somente à janela confirmada.");
+    public static ActionResult Keys(uint sent, uint expected) => sent == expected ? new(ResultKind.Requested, "Shortcut sent; opening and visibility are unconfirmed. Reopen using your shortcut or controller combination.") : new(sent == 0 ? ResultKind.Failed : ResultKind.Partial, "Windows rejected some or all shortcut events. Key release was attempted; there will be no automatic retry.");
+    public static ActionResult Closure(bool gone, bool deadline) => gone ? new(ResultKind.Completed, "The verified window was closed.") : new(deadline ? ResultKind.Unknown : ResultKind.Requested, deadline ? "The window is still open: there may be a save dialog or a refusal. No escalation was attempted." : "WM_CLOSE was sent only to the verified window.");
 }

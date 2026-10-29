@@ -35,16 +35,23 @@ public static class VelopackInstallation
         if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true"
             || string.IsNullOrEmpty(temporary)
             || !path.StartsWith(Path.GetFullPath(temporary).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("A prova de atualização exige dados isolados no diretório temporário do runner.");
+            throw new InvalidOperationException("The update proof requires isolated data in the runner's temporary directory.");
         Retained = new(path);
         proofDataRoot = path;
     }
 
-    public static void Initialize(string[]? args = null, Action? beforeUninstall = null)
+    public static void Initialize(string[]? args = null, Action? beforeUninstall = null, Action? afterInstall = null, Action? afterUpdate = null)
     {
         var app = VelopackApp.Build().SetAutoApplyOnStartup(false).OnFirstRun(_ => FirstRun = true);
         if (beforeUninstall is not null && OperatingSystem.IsWindows())
             app.OnBeforeUninstallFastCallback(_ => beforeUninstall());
+        if (OperatingSystem.IsWindows())
+        {
+            if (afterInstall is not null)
+                app.OnAfterInstallFastCallback(_ => afterInstall());
+            if (afterUpdate is not null)
+                app.OnAfterUpdateFastCallback(_ => afterUpdate());
+        }
         if (args is not null)
             app.SetArgs(args);
         app.Run();
@@ -56,7 +63,7 @@ public static class VelopackInstallation
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidDataException)
             {
-                Notice = "Não foi possível recuperar o backup de ajustes. Os ajustes atuais foram preservados; confira o histórico antes de tentar outra reversão.";
+                Notice = "The settings backup could not be recovered. Current settings were preserved; check history before trying another rollback.";
             }
         }
     }
@@ -74,18 +81,18 @@ public static class VelopackInstallation
     public static string LocalPackagePath(VelopackAsset asset)
     {
         if (PackagesDirectory is not { } directory)
-            throw new InvalidOperationException("Instale a overlay pelo Setup para aplicar atualizações.");
+            throw new InvalidOperationException("Install the overlay using Setup to apply updates.");
         return Path.Combine(directory, LocalUpdateHistory.SafeFileName(asset.FileName));
     }
 
     public static async Task<PreparedVeloUpdate> PrepareRollbackAsync(string buildId, Action<int>? progress = null, CancellationToken cancellation = default)
     {
         if (!IsInstalled)
-            throw new InvalidOperationException("Instale a overlay pelo Setup para voltar a uma versão anterior.");
+            throw new InvalidOperationException("Install the overlay using Setup to roll back to a previous version.");
         await RecordCurrentAsync(cancellation).ConfigureAwait(false);
         var retained = await Retained.GetVerifiedAsync(buildId, cancellation).ConfigureAwait(false);
         if (retained.Build.BuildId == AppBuild.Current.BuildId)
-            throw new InvalidOperationException("Esta versão já está em execução.");
+            throw new InvalidOperationException("This version is already running.");
         var manager = new UpdateManager(new SimpleFileSource(new DirectoryInfo(Path.GetDirectoryName(retained.PackagePath)!)), new UpdateOptions { AllowVersionDowngrade = true, ExplicitChannel = retained.Build.Channel });
         var destination = LocalPackagePath(retained.Asset);
         if (File.Exists(destination))
@@ -109,9 +116,9 @@ public static class VelopackInstallation
     public static async Task ScheduleApplyAsync(PreparedVeloUpdate target, CancellationToken cancellation = default)
     {
         if (!IsInstalled)
-            throw new InvalidOperationException("Instale a overlay pelo Setup para aplicar atualizações.");
+            throw new InvalidOperationException("Install the overlay using Setup to apply updates.");
         if (!string.Equals(Path.GetFullPath(target.PackagePath), Path.GetFullPath(LocalPackagePath(target.Asset)), StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("O pacote preparado não corresponde ao cache de atualização do Velopack.");
+            throw new InvalidDataException("The prepared package does not match Velopack's update cache.");
         var build = await LocalUpdateHistory.ReadBuildInfoAsync(target.PackagePath, cancellation).ConfigureAwait(false);
         await LocalUpdateHistory.VerifyPackageAsync(target.PackagePath, target.Asset, build, cancellation).ConfigureAwait(false);
         await RecordCurrentAsync(cancellation).ConfigureAwait(false);

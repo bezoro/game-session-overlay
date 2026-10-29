@@ -32,7 +32,7 @@ public sealed class SessionMedia : ISessionMedia
     } = SessionMediaSnapshot.Empty;
 
     public event Action<SessionMediaSnapshot>? Changed;
-    private static nint Identity(GlobalSystemMediaTransportControlsSession session) => session is WinRT.IWinRTObject native ? native.NativeObject.ThisPtr : throw new InvalidOperationException("Sessão sem identidade nativa.");
+    private static nint Identity(GlobalSystemMediaTransportControlsSession session) => session is WinRT.IWinRTObject native ? native.NativeObject.ThisPtr : throw new InvalidOperationException("The session has no native identity.");
     private static string Text(string? value, int maximum = 180) => new((value ?? "").Where(c => !char.IsControl(c)).Take(maximum).ToArray());
     private static bool Failure(Exception error) => error is COMException or InvalidOperationException or UnauthorizedAccessException or NotSupportedException or ArgumentException;
     public void SetVisible(bool value)
@@ -196,7 +196,7 @@ public sealed class SessionMedia : ISessionMedia
 
             if (!visible || disposed || epoch != generation)
                 return;
-            Current = new(++revision, items.ToArray(), selected.Length > 0 ? selected : items.FirstOrDefault()?.Id ?? "", items.Count == 0 ? "Nenhuma mídia ativa." : "Controles de mídia do Windows.");
+            Current = new(++revision, items.ToArray(), selected.Length > 0 ? selected : items.FirstOrDefault()?.Id ?? "", items.Count == 0 ? "No active media." : "Windows media controls.");
             Changed?.Invoke(Current);
         }
         catch (OperationCanceledException)
@@ -206,7 +206,7 @@ public sealed class SessionMedia : ISessionMedia
         {
             if (visible && !disposed && epoch == generation)
             {
-                Current = new(++revision, [], "", "Mídia indisponível. Abra um aplicativo compatível e tente novamente.");
+                Current = new(++revision, [], "", "Media unavailable. Open a compatible app and try again.");
                 Changed?.Invoke(Current);
             }
         }
@@ -223,7 +223,7 @@ public sealed class SessionMedia : ISessionMedia
         if (!dispatcher.CheckAccess())
             return await dispatcher.InvokeAsync(() => CommandAsync(id, command, cancellation)).Task.Unwrap();
         if (!visible || disposed || !await owner.WaitAsync(0, cancellation))
-            return new(ResultKind.Unavailable, "A mídia está sendo atualizada. Tente novamente.");
+            return new(ResultKind.Unavailable, "Media is being refreshed. Try again.");
         var dispatched = false;
         var epoch = generation;
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
@@ -232,7 +232,7 @@ public sealed class SessionMedia : ISessionMedia
         {
             var entry = sessions.Values.SingleOrDefault(value => value.Id == id);
             if (entry is null || manager is null || !manager.GetSessions().Any(value => Identity(value) == Identity(entry.Session)))
-                return new(ResultKind.Unavailable, "A sessão de mídia mudou. Selecione a mídia novamente.");
+                return new(ResultKind.Unavailable, "The media session changed. Select it again.");
             var info = entry.Session.GetPlaybackInfo();
             var controls = info.Controls;
             var allowed = command switch
@@ -243,10 +243,10 @@ public sealed class SessionMedia : ISessionMedia
                 _ => false
             };
             if (!allowed)
-                return new(ResultKind.Unavailable, "Este aplicativo não oferece esse comando.");
+                return new(ResultKind.Unavailable, "This app does not support that command.");
             deadline.Token.ThrowIfCancellationRequested();
             if (!visible || disposed || generation != epoch)
-                return new(ResultKind.Cancelled, "Painel ocultado antes do envio.");
+                return new(ResultKind.Cancelled, "The panel was hidden before dispatch.");
             dispatched = true;
             var accepted = await (command switch
             {
@@ -257,23 +257,23 @@ public sealed class SessionMedia : ISessionMedia
                 _ => entry.Session.TrySkipNextAsync()
             }).AsTask(deadline.Token);
             if (!accepted)
-                return new(ResultKind.Failed, "O aplicativo recusou o comando de mídia.");
+                return new(ResultKind.Failed, "The app rejected the media command.");
             if (command == SessionMediaCommand.Toggle && visible && !disposed && generation == epoch)
             {
                 var after = entry.Session.GetPlaybackInfo().PlaybackStatus;
                 if (after != info.PlaybackStatus && after is GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing or GlobalSystemMediaTransportControlsSessionPlaybackStatus.Paused)
-                    return new(ResultKind.Completed, after == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing ? "Reprodução retomada." : "Reprodução pausada.");
+                    return new(ResultKind.Completed, after == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing ? "Playback resumed." : "Playback paused.");
             }
 
-            return new(ResultKind.Requested, "Comando aceito pelo aplicativo. Confira a reprodução.");
+            return new(ResultKind.Requested, "The app accepted the command. Check playback.");
         }
         catch (OperationCanceledException)
         {
-            return new(dispatched ? ResultKind.Unknown : ResultKind.Cancelled, dispatched ? "O comando pode ter sido enviado. Confira a mídia antes de repetir." : "Comando cancelado antes do envio.");
+            return new(dispatched ? ResultKind.Unknown : ResultKind.Cancelled, dispatched ? "The command may have been sent. Check the media before trying again." : "Command cancelled before dispatch.");
         }
         catch (Exception error) when (Failure(error))
         {
-            return new(dispatched ? ResultKind.Unknown : ResultKind.Unavailable, "A sessão de mídia não respondeu. Confira o aplicativo antes de repetir.");
+            return new(dispatched ? ResultKind.Unknown : ResultKind.Unavailable, "The media session did not respond. Check the app before trying again.");
         }
         finally
         {

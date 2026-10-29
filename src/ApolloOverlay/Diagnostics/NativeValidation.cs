@@ -173,7 +173,7 @@ internal static class NativeValidation
         var area = SystemParameters.WorkArea;
         var fixture = new Window
         {
-            Title = "Janela de teste própria",
+            Title = "Owned test window",
             WindowStyle = WindowStyle.None,
             AllowsTransparency = true,
             Topmost = true,
@@ -184,7 +184,7 @@ internal static class NativeValidation
             Background = new SolidColorBrush(Color.FromRgb(66, 78, 86)),
             Content = new TextBlock
             {
-                Text = "JANELA DE TESTE PRÓPRIA · NÃO É UM JOGO",
+                Text = "OWNED TEST WINDOW · NOT A GAME",
                 FontSize = 18,
                 Foreground = Brushes.White,
                 HorizontalAlignment = HorizontalAlignment.Right,
@@ -207,7 +207,7 @@ internal static class NativeValidation
             fixture.Show();
             fixture.Activate();
             var handle = NativeCapture.Handle(fixture);
-            var window = new WindowRef(handle, Environment.ProcessId, NativeCapture.StartTicks, fixture.Title, "janela de teste própria");
+            var window = new WindowRef(handle, Environment.ProcessId, NativeCapture.StartTicks, fixture.Title, "owned test window");
             overlay = new(renderOnly: true, platform: new PreviewPlatform(window));
             overlay.Controller.CaptureReturn();
             await overlay.Controller.Refresh();
@@ -520,7 +520,7 @@ internal static class NativeValidation
                 var refused = await native.Close(target, CancellationToken.None);
                 report.Cases.Add(new("actual WM_CLOSE refusal and blank caption remain unconfirmed", refused.Kind == ResultKind.Unknown && Native.IsWindow(handle), refused.Message));
                 fixture.Closing -= refuse;
-                fixture.Title = "Janela de teste própria";
+                fixture.Title = "Owned test window";
                 var closed = await native.Close(target, CancellationToken.None);
                 report.Cases.Add(new("actual cooperative close confirms owned window destruction", closed.Kind == ResultKind.Completed && !Native.IsWindow(handle), closed.Message));
             }

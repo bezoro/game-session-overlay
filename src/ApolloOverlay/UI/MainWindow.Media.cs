@@ -31,31 +31,31 @@ public partial class MainWindow
     {
         var media = CurrentMedia;
         if (media is null)
-            Paragraph("Abra música ou vídeo em um aplicativo compatível com os controles de mídia do Windows.");
+            Paragraph("Play music or video in an app that supports Windows media controls.");
         else
         {
-            Paragraph(media.Title.Length > 0 ? media.Title : "Reprodução de mídia", 24);
+            Paragraph(media.Title.Length > 0 ? media.Title : "Media playback", 24);
             if (media.Artist.Length > 0)
                 Paragraph(media.Artist);
         }
 
-        AddRow("media-toggle", media?.Playing == true ? "Pausar" : "Reproduzir", media is null ? "Nenhuma mídia ativa" : "Controlar a reprodução", () => MediaCommand(SessionMediaCommand.Toggle), media?.CanToggle == true);
+        AddRow("media-toggle", media?.Playing == true ? "Pause" : "Play", media is null ? "No active media" : "Control playback", () => MediaCommand(SessionMediaCommand.Toggle), media?.CanToggle == true);
         var first = Rows.RowDefinitions.Count;
-        AddRow("media-previous", "Anterior", "Voltar à faixa anterior", () => MediaCommand(SessionMediaCommand.Previous), media?.CanPrevious == true, row: narrow ? null : first, column: 0);
-        AddRow("media-next", "Próxima", "Avançar uma faixa", () => MediaCommand(SessionMediaCommand.Next), media?.CanNext == true, row: narrow ? null : first, column: 1);
+        AddRow("media-previous", "Previous", "Go to the previous track", () => MediaCommand(SessionMediaCommand.Previous), media?.CanPrevious == true, row: narrow ? null : first, column: 0);
+        AddRow("media-next", "Next", "Skip to the next track", () => MediaCommand(SessionMediaCommand.Next), media?.CanNext == true, row: narrow ? null : first, column: 1);
         if (sessionMedia.Current.Items.Count > 1)
             foreach (var item in sessionMedia.Current.Items)
             {
                 var selected = item;
-                AddRow("media-source:" + item.Id, item.Title.Length > 0 ? item.Title : "Reprodução de mídia", item.Id == media?.Id ? "Selecionada" : "Selecionar esta reprodução", () =>
+                AddRow("media-source:" + item.Id, item.Title.Length > 0 ? item.Title : "Media playback", item.Id == media?.Id ? "Selected" : "Select this playback source", () =>
                 {
                     selectedMedia = selected.Id;
                     RefreshRows();
                 });
             }
 
-        AddRow("media-refresh", "Atualizar mídia", sessionMedia.Current.Status, () => featureTask = sessionMedia.RefreshAsync());
-        AddRow("back", "Voltar", "Painel da sessão", Back);
+        AddRow("media-refresh", "Refresh media", sessionMedia.Current.Status, () => featureTask = sessionMedia.RefreshAsync());
+        AddRow("back", "Back", "Session panel", Back);
     }
 
     private void MediaCommand(SessionMediaCommand command)

@@ -14,7 +14,7 @@ public sealed class PreviewSessionMedia : ISessionMedia
     }
 
     public Task RefreshAsync(CancellationToken cancellation = default) => Task.CompletedTask;
-    public Task<ActionResult> CommandAsync(string id, SessionMediaCommand command, CancellationToken cancellation = default) => Task.FromResult(new ActionResult(ResultKind.Simulated, "Prévia de mídia; nenhum comando enviado."));
+    public Task<ActionResult> CommandAsync(string id, SessionMediaCommand command, CancellationToken cancellation = default) => Task.FromResult(new ActionResult(ResultKind.Simulated, "Media preview; no command was sent."));
     internal void SetFixture(SessionMediaSnapshot snapshot)
     {
         Current = snapshot;

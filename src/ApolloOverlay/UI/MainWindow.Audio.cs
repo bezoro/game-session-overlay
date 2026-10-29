@@ -7,7 +7,7 @@ namespace ApolloOverlay;
 public partial class MainWindow
 {
     private readonly IApplicationAudio applicationAudio;
-    private ApplicationAudioSnapshot appAudio = new(null, 0, 0, ApplicationAudioAvailability.Unavailable, ApplicationMuteState.Unknown, 0, 0, "Áudio indisponível");
+    private ApplicationAudioSnapshot appAudio = new(null, 0, 0, ApplicationAudioAvailability.Unavailable, ApplicationMuteState.Unknown, 0, 0, "Audio unavailable");
     private WindowRef? audioTarget;
     private long audioGeneration, audioRevision;
     private readonly WindowsAudio audio = new();
@@ -31,11 +31,11 @@ public partial class MainWindow
                 return;
             }
 
-            SetEntryText("volume", "Volume · " + (state.Available ? state.Volume.ToString("P0") : "indisponível"));
-            SetEntryText("mute", state.Muted ? "Ativar som" : "Silenciar");
+            SetEntryText("volume", "Volume · " + (state.Available ? state.Volume.ToString("P0") : "unavailable"));
+            SetEntryText("mute", state.Muted ? "Unmute" : "Mute");
         }
         else if (page == 0)
-            SetEntryDescription("audio", state.Available ? (state.Muted ? "Sem som" : state.Volume.ToString("P0")) : "Saída indisponível");
+            SetEntryDescription("audio", state.Available ? (state.Muted ? "Muted" : state.Volume.ToString("P0")) : "Output unavailable");
     }
 
     private void AdjustVolume(float delta) => AudioAction(audio.Set(audio.Current.Volume + delta));
@@ -43,19 +43,19 @@ public partial class MainWindow
     private bool AudioFor(WindowRef target) => audioTarget?.Same(target) == true && appAudio.Target?.Same(target) == true && appAudio.Generation == audioGeneration;
     private string AudioBadge() => appAudio.Availability switch
     {
-        ApplicationAudioAvailability.Partial => "Áudio parcialmente disponível",
-        ApplicationAudioAvailability.Unavailable => "Áudio indisponível",
-        ApplicationAudioAvailability.Unknown => "Estado não confirmado",
+        ApplicationAudioAvailability.Partial => "Audio partially available",
+        ApplicationAudioAvailability.Unavailable => "Audio unavailable",
+        ApplicationAudioAvailability.Unknown => "Status unconfirmed",
         _ => appAudio.MuteState switch
         {
-            ApplicationMuteState.Audible => "Som ativo",
-            ApplicationMuteState.Muted => "Aplicativo sem som",
-            ApplicationMuteState.Mixed => "Áudio misto",
-            _ => "Estado não confirmado"
+            ApplicationMuteState.Audible => "Sound on",
+            ApplicationMuteState.Muted => "App muted",
+            ApplicationMuteState.Mixed => "Mixed audio",
+            _ => "Status unconfirmed"
         }
     };
-    private string MuteActionTitle() => appAudio.MuteState == ApplicationMuteState.Muted ? "Restaurar áudio do aplicativo" : appAudio.Availability != ApplicationAudioAvailability.Available || appAudio.MuteState is ApplicationMuteState.Mixed or ApplicationMuteState.Unknown ? "Silenciar áudio disponível" : "Silenciar áudio do aplicativo";
-    private string AppAudioDescription() => AudioBadge() + " · " + (appAudio.Availability == ApplicationAudioAvailability.Available ? "Afeta também outras janelas deste aplicativo." : appAudio.Availability == ApplicationAudioAvailability.Partial ? "Algumas saídas não foram verificadas. Afeta as janelas deste aplicativo." : "Consulte os detalhes ou tente novamente.");
+    private string MuteActionTitle() => appAudio.MuteState == ApplicationMuteState.Muted ? "Unmute app audio" : appAudio.Availability != ApplicationAudioAvailability.Available || appAudio.MuteState is ApplicationMuteState.Mixed or ApplicationMuteState.Unknown ? "Mute available audio" : "Mute app audio";
+    private string AppAudioDescription() => AudioBadge() + " · " + (appAudio.Availability == ApplicationAudioAvailability.Available ? "Also affects other windows from this app." : appAudio.Availability == ApplicationAudioAvailability.Partial ? "Some outputs were not verified. Affects this app's windows." : "Read the details or try again.");
     private void TrackApplicationAudio()
     {
         if (exiting)
@@ -91,7 +91,7 @@ public partial class MainWindow
         audioTarget = target;
         audioGeneration++;
         audioRevision = -1;
-        appAudio = new(target, audioGeneration, 0, ApplicationAudioAvailability.Unknown, ApplicationMuteState.Unknown, 0, 0, "Consultando sessões do aplicativo…");
+        appAudio = new(target, audioGeneration, 0, ApplicationAudioAvailability.Unknown, ApplicationMuteState.Unknown, 0, 0, "Checking app audio sessions…");
         SessionAudioLabel.Text = AudioBadge();
         applicationAudio.Track(target, true, audioGeneration);
     }
@@ -149,7 +149,7 @@ public partial class MainWindow
     {
         if (!AudioFor(target) || !appAudio.CanSetMute)
         {
-            FeedbackText("Nenhuma sessão de áudio identificada; nada foi enviado.");
+            FeedbackText("No audio session identified; nothing was sent.");
             return;
         }
 

@@ -31,7 +31,7 @@ public partial class MainWindow
                     Confirm(t);
                 break;
             case "long-error":
-                FeedbackText("Não confirmado · A identidade da janela mudou. Selecione novamente em Apps. Nenhum comando adicional foi enviado.");
+                FeedbackText("Unconfirmed · The window identity changed. Select it again in Apps. No additional command was sent.");
                 break;
             case "steam-unavailable":
                 navigation = new("steam-overlay");

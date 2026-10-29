@@ -12,7 +12,7 @@ internal sealed class PreviewFeedbackService : IFeedbackService
         }
     }
 
-    public FeedbackStatus Status => new(false, false, "Prévia · sons e vibração não enviados");
+    public FeedbackStatus Status => new(false, false, "Preview · sound and haptics were not sent");
 
     public void Configure(bool sound, bool haptics)
     {

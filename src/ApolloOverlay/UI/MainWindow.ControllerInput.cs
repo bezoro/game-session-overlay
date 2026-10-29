@@ -12,7 +12,7 @@ public partial class MainWindow
     private uint? activeSlot;
     private long activeEpoch;
     private int connectedControllers;
-    private string controllerStatus = "Aguardando leitura do controle";
+    private string controllerStatus = "Waiting for controller input";
     private InputCoordinator input;
     private readonly DispatcherTimer timer;
     private XInputGuideBackend? guideBackend;
@@ -81,7 +81,10 @@ public partial class MainWindow
         if (fadingOut)
         {
             if (GuidePolling.Consume(ref guideToggleRequested, false))
+            {
+                SetInputMethod("controller");
                 OpenPanel();
+            }
             return;
         }
 
@@ -95,11 +98,12 @@ public partial class MainWindow
             || frames.Any(f => f.Buttons.HasFlag(PadButtons.B))
             || (PhysicalKeyReader(0x1B) & 0x8000) != 0
             || !SteamAlive(owner)))
-            CancelSteamOwner("Nova entrada ou contexto alterado durante foco.");
+            CancelSteamOwner("New input or context changed while focusing.");
         if (TransitionPending)
         {
             if (GuidePolling.Consume(ref guideToggleRequested, current.Toggle))
             {
+                SetInputMethod("controller");
                 Toggle(trustedDismiss: current.Toggle || guideBackend?.SnapshotValid == true);
                 return;
             }
@@ -113,18 +117,19 @@ public partial class MainWindow
 
         if (GuidePolling.Consume(ref guideToggleRequested, current.Toggle))
         {
+            SetInputMethod("controller");
             Toggle();
             return;
         }
 
         if (!IsVisible)
             return;
+        RefreshOperationNotice(now);
         PollSessionFeatures(now);
         var events = current.Events;
         if (events.Pressed != 0 || events.Direction != 0)
         {
-            inputMethod = "controller";
-            UpdateHints();
+            SetInputMethod("controller");
         }
 
         if (!NavigationAllowed)
@@ -154,6 +159,7 @@ public partial class MainWindow
             && Math.Abs((int)frames[scrollSlot].RY) > Controller.Settings.Deadzone
             && now >= nextConfirmationScroll)
         {
+            SetInputMethod("controller");
             ConfirmScroll.ScrollToVerticalOffset(ConfirmScroll.VerticalOffset + (frames[scrollSlot].RY < 0 ? 48 : -48));
             nextConfirmationScroll = now + 150;
         }
@@ -185,7 +191,7 @@ public partial class MainWindow
             else if (!Confirming)
                 CancelHold();
             HoldProgress.Value = closeHold.Progress;
-            ConfirmHint.Text = closeHold.Progress > 0 ? $"Mantenha pressionado… {closeHold.Progress:P0}" : "Solte e pressione novamente por 1,5 s.";
+            ConfirmHint.Text = closeHold.Progress > 0 ? $"Keep holding… {closeHold.Progress:P0}" : "Release, then hold again for 1.5 s.";
             return;
         }
 
@@ -254,24 +260,24 @@ public partial class MainWindow
         {
             activeEpoch = 0;
             nextBatteryRead = 0;
-            SetControllerStatus("Leitura do controle indisponível");
+            SetControllerStatus("Controller input unavailable");
             feedbackService.Suspend();
             return;
         }
 
         if (connectionsChanged || ownerChanged || activeSlot is null)
-            SetControllerStatus(activeSlot is { } selected ? "Controle " + (selected + 1) + " · Bateria não informada" : connectedControllers switch
+            SetControllerStatus(activeSlot is { } selected ? "Controller " + (selected + 1) + " · Battery unavailable" : connectedControllers switch
             {
-                0 => "Nenhum controle conectado",
-                1 => failed ? "1 controle confirmado · outras leituras indisponíveis" : "1 controle conectado · aguardando entrada",
-                _ => failed ? $"{connectedControllers} controles confirmados · outras leituras indisponíveis" : $"{connectedControllers} controles conectados · aguardando entrada"
+                0 => "No controller connected",
+                1 => failed ? "1 controller confirmed · other inputs unavailable" : "1 controller connected · waiting for input",
+                _ => failed ? $"{connectedControllers} controllers confirmed · other inputs unavailable" : $"{connectedControllers} controllers connected · waiting for input"
             });
         var context = InputContext;
         var confirmed = context.Visible && context.Confirmed && context.Active && context.OwnForeground && !context.Exiting && !context.OwnedDialog;
         if (!confirmed)
         {
             if (activeSlot is { } hiddenSlot)
-                SetControllerStatus("Controle " + (hiddenSlot + 1) + " · Bateria não informada");
+                SetControllerStatus("Controller " + (hiddenSlot + 1) + " · Battery unavailable");
             nextBatteryRead = 0;
             feedbackService.Suspend();
             return;
@@ -284,7 +290,7 @@ public partial class MainWindow
             var status = controllerDevices.Read(active);
             badgeBattery = status;
             activeEpoch = status.ConnectionEpoch;
-            SetControllerStatus("Controle " + (active + 1) + " · " + BatteryText(status));
+            SetControllerStatus("Controller " + (active + 1) + " · " + BatteryText(status));
         }
 
         feedbackService.SetContext(new(context.Visible, confirmed, activeSlot, activeEpoch));
@@ -293,7 +299,7 @@ public partial class MainWindow
     private void SetControllerStatus(string text)
     {
         controllerStatus = text;
-        ControllerStatusLabel.Text = text.Replace(" · aguardando entrada", "");
+        ControllerStatusLabel.Text = text.Replace(" · waiting for input", "");
         ControllerStatusLabel.ToolTip = text;
         UpdateControllerBadge();
         if (controllerStatusParagraph is not null)
@@ -303,18 +309,18 @@ public partial class MainWindow
         }
     }
 
-    private static string BatteryText(ControllerDeviceSnapshot status) => !status.Connected ? "Desconectado" : status.BatteryType == ControllerBatteryType.Wired ? "Com fio" : status.BatteryType is ControllerBatteryType.Alkaline or ControllerBatteryType.NickelMetalHydride ? status.BatteryLevel switch
+    private static string BatteryText(ControllerDeviceSnapshot status) => !status.Connected ? "Disconnected" : status.BatteryType == ControllerBatteryType.Wired ? "Wired" : status.BatteryType is ControllerBatteryType.Alkaline or ControllerBatteryType.NickelMetalHydride ? status.BatteryLevel switch
     {
-        ControllerBatteryLevel.Empty => "Bateria esgotada",
-        ControllerBatteryLevel.Low => "Bateria baixa",
-        ControllerBatteryLevel.Medium => "Bateria média",
-        ControllerBatteryLevel.Full => "Bateria cheia",
-        _ => "Bateria não informada"
-    } : "Bateria não informada";
+        ControllerBatteryLevel.Empty => "Battery empty",
+        ControllerBatteryLevel.Low => "Battery low",
+        ControllerBatteryLevel.Medium => "Battery medium",
+        ControllerBatteryLevel.Full => "Battery full",
+        _ => "Battery unavailable"
+    } : "Battery unavailable";
     private FeedbackDispatch RequestCue(FeedbackCue cue)
     {
         if (exiting)
-            return new(false, false, "Painel encerrado.");
+            return new(false, false, "Panel closed.");
         var context = InputContext;
         feedbackService.SetContext(new(context.Visible, context.Confirmed && context.Active && context.OwnForeground && !context.OwnedDialog && !context.Exiting, activeSlot, activeEpoch));
         var sourceKind = dispatchSource switch

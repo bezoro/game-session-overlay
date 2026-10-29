@@ -10,16 +10,20 @@ namespace ApolloOverlay;
 
 public static class Program
 {
-    internal const string AlreadyRunningMessage = "A overlay já está em execução. Dê duplo clique no ícone da bandeja ou escolha Abrir overlay no menu desse ícone.";
+    internal const string AlreadyRunningMessage = "The overlay is already running. Double-click its tray icon or choose Open overlay from the tray menu.";
     [STAThread]
     public static int Main(string[] args)
     {
-        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("pt-BR");
+        var culture = CultureInfo.GetCultureInfo("en-US");
+        CultureInfo.DefaultThreadCurrentCulture = culture;
+        CultureInfo.DefaultThreadCurrentUICulture = culture;
+        CultureInfo.CurrentCulture = culture;
+        CultureInfo.CurrentUICulture = culture;
         var proofRoot = ReadProofArguments(ref args);
         if (proofRoot is not null)
             VelopackInstallation.ConfigureDataRootForTests(proofRoot);
         // Official installer/update hooks must run before WPF, singleton or strict argument parsing.
-        VelopackInstallation.Initialize(args, () => StartupRegistration.TryRemoveMatching(VelopackInstallation.StartupExecutable));
+        VelopackInstallation.Initialize(args, RemoveInstalledIntegration, EnsureInstalledIntegration, EnsureInstalledIntegration);
         if (args.Length == 2 && args[0] is "--capture-native" or "--native-check" or "--capture-alpha")
         {
             var app = new Application
@@ -52,6 +56,7 @@ public static class Program
                     preview = true;
                     break;
                 case "--startup":
+                case "--hidden":
                     startup = true;
                     break;
                 case "--automation-bridge":
@@ -63,19 +68,21 @@ public static class Program
                     selfShutdown = true;
                     break;
                 default:
-                    MessageBox.Show("Uso: ApolloOverlay.exe [--show | --preview] [--automation-bridge PID:START:HWND --allow-self-shutdown]", "Game Session Overlay");
+                    MessageBox.Show("Usage: ApolloOverlay.exe [--show | --startup | --hidden | --preview] [--automation-bridge PID:START:HWND --allow-self-shutdown]", "Game Session Overlay");
                     return 2;
             }
 
         if (selfShutdown && bridge is null || bridge is not null && (!AutomationPipeSecurity.Elevated() || preview))
         {
-            MessageBox.Show("Ponte requer execução elevada explicitamente autorizada e alvo fixo. Nada foi elevado automaticamente.", "Game Session Overlay");
+            MessageBox.Show("The bridge requires explicitly authorized elevation and a fixed target. Nothing was elevated automatically.", "Game Session Overlay");
             return 2;
         }
 
         using var singleton = new Mutex(true, @"Local\Bezoro.GameSessionOverlay", out var created);
         if (!created)
         {
+            if (!startup && SingleInstanceActivation.TryOpenExisting())
+                return 0;
             if (!startup)
                 MessageBox.Show(AlreadyRunningMessage, "Game Session Overlay");
             return startup ? 0 : 3;
@@ -86,6 +93,9 @@ public static class Program
             && proofRoot is null
             && !StartupRegistration.TryEnsure(VelopackInstallation.IsInstalled ? VelopackInstallation.StartupExecutable : Environment.ProcessPath))
             new LocalDiagnostics().Log("startup-registration", ResultKind.Unavailable);
+        if (!preview && bridge is null && proofRoot is null && VelopackInstallation.IsInstalled
+            && !StartMenuRegistration.TryEnsure(VelopackInstallation.StartupExecutable))
+            new LocalDiagnostics().Log("start-menu-registration", ResultKind.Unavailable);
         var application = new Application
         {
             ShutdownMode = ShutdownMode.OnExplicitShutdown
@@ -103,7 +113,7 @@ public static class Program
                 {
                     var parts = bridge.Split(':');
                     if (parts.Length != 3)
-                        throw new InvalidOperationException("Alvo requer PID:START:HWND.");
+                        throw new InvalidOperationException("Target requires PID:START:HWND.");
                     grant = window.ResolveAutomationGrant(int.Parse(parts[0], CultureInfo.InvariantCulture), long.Parse(parts[1], CultureInfo.InvariantCulture), long.Parse(parts[2], CultureInfo.InvariantCulture), selfShutdown);
                 }
 
@@ -133,7 +143,7 @@ public static class Program
                     }));
                 }
 
-                if (show || preview || VelopackInstallation.FirstRun)
+                if (show || preview || !startup && bridge is null)
                     window.OpenPanel();
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or FormatException)
@@ -149,11 +159,27 @@ public static class Program
                     }
                 }
                 else
-                    MessageBox.Show("Não foi possível iniciar a overlay: " + error.Message, "Game Session Overlay");
+                    MessageBox.Show("Could not start the overlay: " + error.Message, "Game Session Overlay");
                 application.Shutdown(1);
             }
         };
         return application.Run();
+    }
+
+    private static void EnsureInstalledIntegration()
+    {
+        if (!VelopackInstallation.IsInstalled)
+            return;
+        var executable = VelopackInstallation.StartupExecutable;
+        StartupRegistration.TryEnsure(executable);
+        StartMenuRegistration.TryEnsure(executable);
+    }
+
+    private static void RemoveInstalledIntegration()
+    {
+        var executable = VelopackInstallation.StartupExecutable;
+        StartupRegistration.TryRemoveMatching(executable);
+        StartMenuRegistration.TryRemoveMatching(executable);
     }
 
     private static string? ReadProofArguments(ref string[] args)
@@ -163,11 +189,11 @@ public static class Program
             return null;
         var temporary = Environment.GetEnvironmentVariable("RUNNER_TEMP");
         if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true" || temporary is null || index + 1 >= args.Length)
-            throw new InvalidOperationException("Este modo é exclusivo do teste isolado de instalação no CI.");
+            throw new InvalidOperationException("This mode is reserved for the isolated CI installation test.");
         var root = Path.GetFullPath(args[index + 1]);
         if (!string.Equals(Path.GetDirectoryName(root), Path.GetFullPath(temporary).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase)
             || !Regex.IsMatch(Path.GetFileName(root), "^overlay-velopack-proof-[a-f0-9]{32}$"))
-            throw new InvalidOperationException("Diretório de teste inválido.");
+            throw new InvalidOperationException("Invalid test directory.");
         args = args.Where((_, i) => i != index && i != index + 1).ToArray();
         return root;
     }

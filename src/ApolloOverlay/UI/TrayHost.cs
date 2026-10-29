@@ -22,11 +22,11 @@ internal sealed class TrayHost : IDisposable
         this.dispatcher = dispatcher;
         this.open = open;
         this.exit = exit;
-        using var resource = Application.GetResourceStream(new Uri("/ApolloOverlay;component/Assets/overlay-controller.ico", UriKind.Relative))?.Stream ?? throw new InvalidOperationException("Ícone da bandeja ausente.");
+        using var resource = Application.GetResourceStream(new Uri("/ApolloOverlay;component/Assets/overlay-controller.ico", UriKind.Relative))?.Stream ?? throw new InvalidOperationException("Tray icon missing.");
         artwork = new Drawing.Icon(resource);
         Menu = new Forms.ContextMenuStrip();
-        Menu.Items.Add("Abrir overlay", null, (_, _) => Dispatch(open));
-        Menu.Items.Add("Sair", null, (_, _) => Dispatch(exit));
+        Menu.Items.Add("Open overlay", null, (_, _) => Dispatch(open));
+        Menu.Items.Add("Quit", null, (_, _) => Dispatch(exit));
         icon = new Forms.NotifyIcon
         {
             Icon = artwork,
@@ -49,7 +49,7 @@ internal sealed class TrayHost : IDisposable
     {
         if (disposed || !icon.Visible)
             return;
-        icon.ShowBalloonTip(5000, "Bezoro · resultado da operação", message, Forms.ToolTipIcon.Warning);
+        icon.ShowBalloonTip(5000, "Game Session Overlay · command result", message, Forms.ToolTipIcon.Warning);
     }
 
     private void Dispatch(Action action)

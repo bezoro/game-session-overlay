@@ -97,7 +97,7 @@ public sealed class OverlayController : IDisposable
         if (Platform.IsPreview)
         {
             Settings = new();
-            Status = "Prévia · ações de janela simuladas";
+            Status = "Preview · window actions are simulated";
         }
         else
         {
@@ -213,13 +213,13 @@ public sealed class OverlayController : IDisposable
     {
         if (Platform.IsPreview)
         {
-            Status = "Prévia · nada foi salvo; alterações apenas nesta sessão.";
+            Status = "Preview · nothing was saved; changes apply only to this session.";
             return;
         }
 
         Diagnostics.Save(Settings);
         SavedSettings = Settings;
-        Status = "Ajustes salvos em AppData.";
+        Status = "Settings saved.";
     }
 
     internal WindowRef? LaunchTarget(bool playnite) => Apps.FirstOrDefault(w => playnite ? w.ProcessName.Equals("Playnite.FullscreenApp", StringComparison.OrdinalIgnoreCase) : w.ProcessName.Equals("steam", StringComparison.OrdinalIgnoreCase));
@@ -227,27 +227,27 @@ public sealed class OverlayController : IDisposable
     {
         bool Allowed() => !disposed && !cancellation.IsCancellationRequested && (continuing?.Invoke() ?? true);
         if (!Allowed())
-            return new(ResultKind.Cancelled, "Solicitação cancelada; nenhuma inicialização enviada.");
+            return new(ResultKind.Cancelled, "Request cancelled; no launch command was sent.");
         var existing = LaunchTarget(playnite);
         if (playnite && existing is not null && Platform.Valid(existing))
         {
             var focused = await Platform.Switch(existing);
-            return Allowed() ? focused : new(ResultKind.Unknown, "Ativação solicitada antes do cancelamento; verifique a janela.");
+            return Allowed() ? focused : new(ResultKind.Unknown, "Activation was requested before cancellation; check the window.");
         }
 
         if (!playnite && existing is not null && Platform.Valid(existing))
         {
             var focused = await Platform.Switch(existing);
             if (!Allowed())
-                return new(ResultKind.Cancelled, "Foco já solicitado; inicialização cancelada antes do envio.");
+                return new(ResultKind.Cancelled, "Focus was already requested; launch cancelled before dispatch.");
             if (focused.Kind != ResultKind.Completed && focused.Kind != ResultKind.Simulated)
                 return focused;
         }
 
         if (!Allowed())
-            return new(ResultKind.Cancelled, "Solicitação cancelada antes da inicialização.");
+            return new(ResultKind.Cancelled, "Request cancelled before launch.");
         if (!playnite && !SteamAvailable && !Platform.IsPreview)
-            return new(ResultKind.Unavailable, "Steam não instalada ou protocolo indisponível.");
+            return new(ResultKind.Unavailable, "Steam is not installed or its protocol is unavailable.");
         return Platform.Launch(playnite, Settings.PlaynitePath);
     }
 

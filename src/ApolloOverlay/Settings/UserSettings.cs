@@ -28,7 +28,7 @@ public sealed record UserSettings(
     {
         using var original = JsonDocument.Parse(text);
         if (original.RootElement.ValueKind != JsonValueKind.Object)
-            throw new InvalidDataException("Configuração vazia.");
+            throw new InvalidDataException("Empty settings.");
         using var document = JsonDocument.Parse(SessionHubSettings.NormalizeJson(original.RootElement, out recovered));
         // Normalize only this optional field before typed deserialization: a wrong JSON type
         // must not discard unrelated valid settings or the explicit Guide opt-in.
@@ -54,21 +54,21 @@ public sealed record UserSettings(
             writer.WriteEndObject();
         }
 
-        var parsed = JsonSerializer.Deserialize(normalized.ToArray(), SettingsJson.Default.UserSettings) ?? throw new InvalidDataException("Configuração vazia.");
+        var parsed = JsonSerializer.Deserialize(normalized.ToArray(), SettingsJson.Default.UserSettings) ?? throw new InvalidDataException("Empty settings.");
         if (parsed.SteamShortcut is not ("Shift+Tab" or "Ctrl+Tab")
             || (parsed.PlaynitePath is not null
             && (!Path.IsPathFullyQualified(parsed.PlaynitePath)
             || !parsed.PlaynitePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))))
-            throw new InvalidDataException("Configuração inválida.");
+            throw new InvalidDataException("Invalid settings.");
         if (parsed.Version is not (1 or 2 or 3) || parsed.Deadzone < 8000 || parsed.Deadzone > 28000)
-            throw new InvalidDataException("Versão ou deadzone inválida.");
+            throw new InvalidDataException("Invalid version or deadzone.");
         try
         {
             _ = OpeningConfig.Parse(parsed.Hotkey, parsed.Chord, parsed.ChordHoldMs);
         }
         catch (ArgumentException e)
         {
-            throw new InvalidDataException("Atalho ou combinação inválida.", e);
+            throw new InvalidDataException("Invalid shortcut or button combination.", e);
         }
 
         return SessionHubSettings.Copy(parsed);
@@ -76,7 +76,7 @@ public sealed record UserSettings(
 
     public static UserSettings Load(string path, out string message)
     {
-        message = "Configuração padrão; nada será salvo automaticamente.";
+        message = "Default settings; nothing will be saved automatically.";
         if (!File.Exists(path))
             return new();
         try
@@ -91,12 +91,12 @@ public sealed record UserSettings(
             try
             {
                 var restored = Parse(File.ReadAllText(path + ".previous"));
-                message = "Configuração anterior recuperada em memória; salve para restaurar.";
+                message = "Previous settings recovered into memory; save to restore them.";
                 return restored;
             }
             catch (Exception back) when (back is JsonException or IOException or UnauthorizedAccessException or InvalidDataException)
             {
-                message = "Configuração inválida; usando padrão seguro.";
+                message = "Invalid settings; using safe defaults.";
                 return new();
             }
         }

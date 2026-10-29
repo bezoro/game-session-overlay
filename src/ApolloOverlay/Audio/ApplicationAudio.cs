@@ -110,7 +110,7 @@ public sealed class ApplicationAudio : IApplicationAudio
         }
 
         foreach (var work in cancel)
-            Invalidate(work, "O contexto de áudio mudou; faça uma nova consulta.");
+            Invalidate(work, "The audio context changed; refresh it again.");
         Interlocked.Exchange(ref releaseRequested, 1);
         Signal();
         if (isVisible && window is not null)
@@ -148,7 +148,7 @@ public sealed class ApplicationAudio : IApplicationAudio
                 MuteState = ApplicationMuteState.Unknown,
                 Reason = reason
             };
-            change = new(new(work.Dispatched ? ResultKind.Unknown : ResultKind.Cancelled, work.Dispatched ? reason + " Houve envio; não é possível desfazê-lo ou confirmar seu efeito." : reason + " Nenhuma alteração foi enviada."), snapshot, work.Attempted, work.Succeeded, work.Verified, work.Dispatched);
+            change = new(new(work.Dispatched ? ResultKind.Unknown : ResultKind.Cancelled, work.Dispatched ? reason + " A command was sent; it cannot be undone or its effect confirmed." : reason + " No change was sent."), snapshot, work.Attempted, work.Succeeded, work.Verified, work.Dispatched);
         }
 
         Finish(work, change);
@@ -165,14 +165,14 @@ public sealed class ApplicationAudio : IApplicationAudio
             DesiredMute = desired,
             DesiredVolume = volume,
             Deadline = clock() + (mutation ? 2000 : 1500),
-            Snapshot = Empty(window, context, "Consulta ainda não confirmada.")
+            Snapshot = Empty(window, context, "Query not yet confirmed.")
         };
         lock (gate)
         {
             work.Epoch = epoch;
             if (disposed || queued >= 32)
             {
-                var reason = disposed ? "Serviço de áudio encerrado." : "Fila de áudio cheia; tente novamente deliberadamente.";
+                var reason = disposed ? "The audio service has stopped." : "The audio queue is full; try again manually.";
                 work.Completion.SetResult(new(new(ResultKind.Unavailable, reason), work.Snapshot with
                 {
                     Reason = reason
@@ -184,10 +184,10 @@ public sealed class ApplicationAudio : IApplicationAudio
             queued++;
         }
 
-        work.Timer = new Timer(_ => Invalidate(work, "Prazo da consulta de áudio encerrado; uma chamada nativa pode continuar no proprietário."), null, mutation ? 2000 : 1500, Timeout.Infinite);
-        work.Cancellation = cancellation.Register(() => Invalidate(work, "Observação de áudio cancelada."));
+        work.Timer = new Timer(_ => Invalidate(work, "The audio query timed out; a native call may still be running in its owner."), null, mutation ? 2000 : 1500, Timeout.Infinite);
+        work.Cancellation = cancellation.Register(() => Invalidate(work, "Audio observation cancelled."));
         if (cancellation.IsCancellationRequested)
-            Invalidate(work, "Observação de áudio cancelada.");
+            Invalidate(work, "Audio observation cancelled.");
         if (work.Completion.Task.IsCompleted)
         {
             work.Timer?.Dispose();
@@ -204,7 +204,7 @@ public sealed class ApplicationAudio : IApplicationAudio
     public Task<ApplicationAudioChange> SetVolumeAsync(WindowRef window, float volume, long context, CancellationToken cancellation = default)
     {
         if (!float.IsFinite(volume) || volume is < 0 or > 1)
-            return Task.FromResult(new ApplicationAudioChange(new(ResultKind.Unavailable, "Escolha um volume entre 0 e 100%."), Empty(window, context, "Volume inválido."), 0, 0, 0, false));
+            return Task.FromResult(new ApplicationAudioChange(new(ResultKind.Unavailable, "Choose a volume between 0 and 100%."), Empty(window, context, "Invalid volume."), 0, 0, 0, false));
         return Submit(window, context, true, false, cancellation, volume);
     }
 
@@ -296,7 +296,7 @@ public sealed class ApplicationAudio : IApplicationAudio
                         queued--;
                     if (!Continuing(work))
                     {
-                        Invalidate(work, "Consulta obsoleta ou cancelada.");
+                        Invalidate(work, "Query superseded or cancelled.");
                         continue;
                     }
 
@@ -311,7 +311,7 @@ public sealed class ApplicationAudio : IApplicationAudio
                             Revision = Interlocked.Increment(ref revision),
                             Availability = ApplicationAudioAvailability.Unknown,
                             MuteState = ApplicationMuteState.Unknown,
-                            Reason = "Serviço de áudio ou dispositivo indisponível; resultado não confirmado."
+                            Reason = "The audio service or device is unavailable; the result is unconfirmed."
                         };
                         Complete(work, new(new(work.Dispatched ? ResultKind.Unknown : ResultKind.Unavailable, snapshot.Reason), snapshot, work.Attempted, work.Succeeded, work.Verified, work.Dispatched));
                         ReleaseCatalog();
@@ -345,7 +345,7 @@ public sealed class ApplicationAudio : IApplicationAudio
     {
         if (!Continuing(work))
         {
-            Invalidate(work, "O contexto ou prazo mudou durante a consulta.");
+            Invalidate(work, "The context or deadline changed during the query.");
             return;
         }
 
@@ -419,7 +419,7 @@ public sealed class ApplicationAudio : IApplicationAudio
 
         var availability = sessions.Count == 0 ? (gaps > 0 ? ApplicationAudioAvailability.Unknown : ApplicationAudioAvailability.Unavailable) : gaps > 0 ? ApplicationAudioAvailability.Partial : ApplicationAudioAvailability.Available;
         var mute = sessions.Count == 0 || unread > 0 ? ApplicationMuteState.Unknown : muted > 0 && audible > 0 ? ApplicationMuteState.Mixed : muted > 0 ? ApplicationMuteState.Muted : ApplicationMuteState.Audible;
-        var reason = sessions.Count == 0 ? (gaps > 0 ? "Descoberta incompleta; nenhuma sessão do processo foi identificada com segurança." : "Nenhuma sessão de áudio identificada para este processo.") : gaps > 0 ? $"{sessions.Count} sessão(ões) identificada(s); descoberta parcial. Sessões futuras não são afetadas." : $"{sessions.Count} sessão(ões) identificada(s) deste processo. Sessões futuras não são afetadas.";
+        var reason = sessions.Count == 0 ? (gaps > 0 ? "Discovery was incomplete; no session could be safely identified for this process." : "No audio session was identified for this process.") : gaps > 0 ? $"{sessions.Count} identified session(s); discovery is partial. Future sessions are not affected." : $"{sessions.Count} identified session(s) for this process. Future sessions are not affected.";
         return (new ApplicationAudioSnapshot(work.Target, work.Generation, Interlocked.Increment(ref revision), availability, mute, sessions.Count, gaps, reason) { VolumeSessions = volumes.Count, VolumeMinimum = volumes.Count > 0 ? volumes.Min() : null, VolumeMaximum = volumes.Count > 0 ? volumes.Max() : null }, sessions);
     }
 
@@ -427,7 +427,7 @@ public sealed class ApplicationAudio : IApplicationAudio
     {
         if (work.Target.Pid <= 0 || work.Target.Started <= 0 || work.Target.Protected || !valid(work.Target))
         {
-            var snapshot = Empty(work.Target, work.Generation, "Identidade da janela indisponível; nenhum áudio alterado.", ApplicationAudioAvailability.Unavailable);
+            var snapshot = Empty(work.Target, work.Generation, "Window identity unavailable; no audio was changed.", ApplicationAudioAvailability.Unavailable);
             Complete(work, new(new(ResultKind.Unavailable, snapshot.Reason), snapshot, 0, 0, 0, false));
             return;
         }
@@ -449,7 +449,7 @@ public sealed class ApplicationAudio : IApplicationAudio
 
         if (work.DesiredVolume is not null && !observed.Snapshot.CanSetVolume)
         {
-            Complete(work, new(new(ResultKind.Unavailable, "O volume não foi confirmado em todas as sessões identificadas. Nenhuma alteração enviada."), observed.Snapshot, 0, 0, 0, false));
+            Complete(work, new(new(ResultKind.Unavailable, "Volume was not confirmed in every identified session. No change was sent."), observed.Snapshot, 0, 0, 0, false));
             return;
         }
 
@@ -483,17 +483,17 @@ public sealed class ApplicationAudio : IApplicationAudio
 
         if (!Continuing(work))
         {
-            Invalidate(work, "Observação cancelada ou prazo encerrado após a descoberta.");
+            Invalidate(work, "Observation was cancelled or timed out after discovery.");
             return;
         }
 
         if (!valid(work.Target))
         {
-            Complete(work, new(new(work.Dispatched ? ResultKind.Unknown : ResultKind.Unavailable, "A identidade do processo mudou; nenhum envio adicional será feito."), work.Snapshot with
+            Complete(work, new(new(work.Dispatched ? ResultKind.Unknown : ResultKind.Unavailable, "The process identity changed; no further commands will be sent."), work.Snapshot with
             {
                 Availability = ApplicationAudioAvailability.Unknown,
                 MuteState = ApplicationMuteState.Unknown,
-                Reason = "Identidade do processo mudou."
+                Reason = "The process identity changed."
             }, work.Attempted, work.Succeeded, work.Verified, work.Dispatched));
             return;
         }
@@ -511,9 +511,9 @@ public sealed class ApplicationAudio : IApplicationAudio
             && after.Snapshot.Availability == ApplicationAudioAvailability.Available
             && work.Verified == keys.Count
             && work.Succeeded == keys.Count;
-        var reason = complete ? (work.DesiredVolume is { } level ? $"Volume de {level:P0} confirmado nas {work.Verified} sessão(ões) identificadas deste processo. Sessões futuras não são afetadas." : $"Estado {(work.DesiredMute ? "sem som" : "com som")} confirmado nas {work.Verified} sessão(ões) identificada(s) deste processo. Sessões futuras não são afetadas.") : $"Estado parcial ou não confirmado: {work.Verified}/{keys.Count} sessão(ões) verificadas; {work.Attempted} envio(s). Não haverá repetição automática.";
+        var reason = complete ? (work.DesiredVolume is { } level ? $"Volume of {level:P0} confirmed in {work.Verified} identified session(s) for this process. Future sessions are not affected." : $"State {(work.DesiredMute ? "muted" : "unmuted")} confirmed in {work.Verified} identified session(s) for this process. Future sessions are not affected.") : $"Partial or unconfirmed state: {work.Verified}/{keys.Count} session(s) verified; {work.Attempted} dispatch(es). There will be no automatic retry.";
         if (!complete && !finalMatches)
-            reason = "A observação final não corresponde ao estado solicitado. " + reason;
+            reason = "The final observation does not match the requested state. " + reason;
         var final = after.Snapshot with
         {
             Availability = complete ? ApplicationAudioAvailability.Available : after.Sessions.Count > 0 ? ApplicationAudioAvailability.Partial : ApplicationAudioAvailability.Unknown,
@@ -537,7 +537,7 @@ public sealed class ApplicationAudio : IApplicationAudio
         }
 
         foreach (var work in cancel)
-            Invalidate(work, "Observação suspensa.");
+            Invalidate(work, "Observation suspended.");
         Interlocked.Exchange(ref releaseRequested, 1);
         Signal();
     }
@@ -558,7 +558,7 @@ public sealed class ApplicationAudio : IApplicationAudio
         }
 
         foreach (var work in cancel)
-            Invalidate(work, "Serviço de áudio encerrado.");
+            Invalidate(work, "The audio service has stopped.");
         Interlocked.Exchange(ref releaseRequested, 1);
         Signal();
     }

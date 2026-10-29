@@ -41,7 +41,7 @@ public sealed class SessionProfiles
         private set;
     }
 
-    private SessionProfile[] profiles = [new("tv", "TV", null, 115, "Left"), new("desktop", "Computador", null, 100, "Left", Presentation: "Desktop")];
+    private SessionProfile[] profiles = [new("tv", "TV", null, 115, "Left"), new("desktop", "Desktop", null, 100, "Left", Presentation: "Desktop")];
     public IReadOnlyList<SessionProfile> Items => Array.AsReadOnly(profiles);
 
     public SessionProfiles(string root)
@@ -70,7 +70,7 @@ public sealed class SessionProfiles
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or InvalidDataException or ArgumentException)
         {
-            RecoveryNotice = "O arquivo de perfis não pôde ser lido. Seus ajustes atuais foram preservados; salve novamente os perfis para recuperá-los.";
+            RecoveryNotice = "The profiles file could not be read. Your current settings were preserved; save the profiles again to recover them.";
         }
     }
 
@@ -92,10 +92,10 @@ public sealed class SessionProfiles
     public void Save(SessionProfile profile)
     {
         if (!Valid(profile))
-            throw new ArgumentException("O perfil tem valores inválidos.");
+            throw new ArgumentException("The profile contains invalid values.");
         var next = profiles.Where(item => item.Id != profile.Id).Append(profile).OrderBy(item => item.Id == "tv" ? 0 : item.Id == "desktop" ? 1 : 2).ToArray();
         if (next.Length > 24)
-            throw new InvalidOperationException("O limite é de 24 perfis.");
+            throw new InvalidOperationException("You can save up to 24 profiles.");
         Write(next, ActiveId, AppliedPresentation);
         profiles = next;
     }
@@ -103,10 +103,10 @@ public sealed class SessionProfiles
     public void SetActive(string id, string? presentation = null)
     {
         if (id.Length > 0 && !profiles.Any(profile => profile.Id == id))
-            throw new ArgumentException("Perfil não encontrado.");
+            throw new ArgumentException("Profile not found.");
         var applied = presentation ?? profiles.FirstOrDefault(profile => profile.Id == id)?.Presentation ?? "TV";
         if (applied is not ("TV" or "Desktop"))
-            throw new ArgumentException("Apresentação inválida.");
+            throw new ArgumentException("Invalid presentation.");
         Write(profiles, id, applied);
         ActiveId = id;
         AppliedPresentation = applied;

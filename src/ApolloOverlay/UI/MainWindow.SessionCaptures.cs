@@ -17,7 +17,7 @@ public partial class MainWindow
     {
         if (diagnostic || Controller.Platform.IsPreview)
         {
-            RecordResult(new(ResultKind.Simulated, "Prévia: nenhuma captura da tela foi realizada."), "capture");
+            RecordResult(new(ResultKind.Simulated, "Preview: no screenshot was taken."), "capture");
             return;
         }
 
@@ -30,7 +30,7 @@ public partial class MainWindow
         var display = Native.GetMonitorInfo(monitor, ref info) ? Controller.RefreshDisplays().FirstOrDefault(item => item.Id == info.Device) : null;
         if (display is null)
         {
-            FeedbackText("O monitor da captura não está disponível.");
+            FeedbackText("The capture display is unavailable.");
             return;
         }
 
@@ -45,16 +45,16 @@ public partial class MainWindow
             if (IsVisible)
             {
                 CancelOpenAnimation();
-                return new(ResultKind.Cancelled, "A captura foi cancelada antes de ocultar o painel.");
+                return new(ResultKind.Cancelled, "Capture cancelled before hiding the panel.");
             }
 
             if (target is not null && (!Controller.Platform.Valid(target) || Native.GetForegroundWindow() != target.Handle))
-                return new(ResultKind.Cancelled, "A janela mudou antes da captura. Tente novamente no jogo desejado.");
-            var captured = await screenCaptures.CaptureAsync(display, target?.Title ?? "Monitor", target?.ProcessName ?? "", token);
+                return new(ResultKind.Cancelled, "The window changed before capture. Try again in the intended game.");
+            var captured = await screenCaptures.CaptureAsync(display, target?.Title ?? "Display", target?.ProcessName ?? "", token);
             if (captured.Item is { } item)
             {
                 captureItems = [item, .. captureItems.Where(old => old.Id != item.Id).Take(95)];
-                RequestResultNotification("Imagem salva. Abra Suas capturas para visualizar.");
+                RequestResultNotification("Screenshot saved. Open Your captures to view it.");
             }
 
             return captured.Result;
@@ -82,18 +82,18 @@ public partial class MainWindow
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             if (!exiting)
-                FeedbackText("Não foi possível abrir a galeria. Confira a pasta de capturas.");
+                FeedbackText("Could not open the gallery. Check the captures folder.");
         }
     }
 
     private void BuildCaptures()
     {
-        Paragraph("Imagens salvas neste computador. A overlay não grava sua tela continuamente.");
-        AddRow("capture-refresh", "Atualizar galeria", captureItems.Length + " capturas recentes", () => featureTask = LoadCaptures());
+        Paragraph("Screenshots saved on this computer. The overlay does not continuously record your screen.");
+        AddRow("capture-refresh", "Refresh gallery", captureItems.Length + " recent captures", () => featureTask = LoadCaptures());
         foreach (var capture in captureItems)
         {
             var selected = capture;
-            AddRow("capture:" + capture.Id, capture.Title.Length > 0 ? capture.Title : "Captura do monitor", capture.Created.ToLocalTime().ToString("dd MMM · HH:mm") + $" · {capture.Width}×{capture.Height}", () =>
+            AddRow("capture:" + capture.Id, capture.Title.Length > 0 ? capture.Title : "Display capture", capture.Created.ToLocalTime().ToString("dd MMM · HH:mm") + $" · {capture.Width}×{capture.Height}", () =>
             {
                 selectedCapture = selected;
                 OpenFeature(OverlayRoute.CaptureDetail, "capture-folder");
@@ -101,21 +101,21 @@ public partial class MainWindow
         }
 
         if (captureItems.Length == 0)
-            Paragraph("Sua primeira imagem aparecerá aqui. Use Capturar tela no painel da sessão.");
-        AddRow("capture-folder", "Abrir pasta", "Ver os arquivos PNG no Windows", OpenCaptureFolder, Directory.Exists(screenCaptures.DirectoryPath));
-        AddRow("back", "Voltar", "Painel da sessão", Back);
+            Paragraph("Your first screenshot will appear here. Use Capture screen in the session panel.");
+        AddRow("capture-folder", "Open folder", "View PNG files in Windows", OpenCaptureFolder, Directory.Exists(screenCaptures.DirectoryPath));
+        AddRow("back", "Back", "Session panel", Back);
     }
 
     private void BuildCaptureDetail()
     {
         if (selectedCapture is not { } capture)
         {
-            Paragraph("A captura selecionada não está disponível.");
-            AddRow("back", "Voltar", "Galeria", Back);
+            Paragraph("The selected screenshot is unavailable.");
+            AddRow("back", "Back", "Gallery", Back);
             return;
         }
 
-        Paragraph(capture.Title.Length > 0 ? capture.Title : "Captura do monitor", 22);
+        Paragraph(capture.Title.Length > 0 ? capture.Title : "Display capture", 22);
         var image = new Image
         {
             MaxHeight = 340,
@@ -131,9 +131,9 @@ public partial class MainWindow
         Grid.SetColumnSpan(image, 2);
         Rows.Children.Add(image);
         featureTask = LoadCaptureImage(capture, image);
-        Paragraph(capture.Created.ToLocalTime().ToString("dd/MM/yyyy HH:mm") + $" · {capture.Width}×{capture.Height}");
-        AddRow("capture-folder", "Abrir pasta", "Local dos arquivos PNG", OpenCaptureFolder);
-        AddRow("back", "Voltar", "Galeria", Back);
+        Paragraph(capture.Created.ToLocalTime().ToString("MMM d, yyyy HH:mm") + $" · {capture.Width}×{capture.Height}");
+        AddRow("capture-folder", "Open folder", "PNG file location", OpenCaptureFolder);
+        AddRow("back", "Back", "Gallery", Back);
     }
 
     private async Task LoadCaptureImage(ScreenCaptureItem capture, Image image)
@@ -147,7 +147,7 @@ public partial class MainWindow
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException or FormatException)
         {
             if (!exiting)
-                FeedbackText("A imagem foi removida ou não pôde ser lida. Atualize a galeria.");
+                FeedbackText("The screenshot was removed or could not be read. Refresh the gallery.");
         }
     }
 
@@ -156,13 +156,13 @@ public partial class MainWindow
         var folder = screenCaptures.DirectoryPath;
         if (diagnostic || Controller.Platform.IsPreview)
         {
-            RecordResult(new(ResultKind.Simulated, "Prévia: pasta não aberta."), "capture-folder");
+            RecordResult(new(ResultKind.Simulated, "Preview: folder not opened."), "capture-folder");
             return;
         }
 
         if (!Directory.Exists(folder))
         {
-            FeedbackText("A pasta será criada quando você salvar sua primeira captura.");
+            FeedbackText("The folder will be created when you save your first screenshot.");
             return;
         }
 
@@ -171,7 +171,7 @@ public partial class MainWindow
             LocalUpdateHistory.RejectLink(folder);
             var process = Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true });
             process?.Dispose();
-            return Task.FromResult(new ActionResult(ResultKind.Requested, "Pasta de capturas solicitada ao Windows."));
+            return Task.FromResult(new ActionResult(ResultKind.Requested, "Captures folder requested from Windows."));
         });
     }
 

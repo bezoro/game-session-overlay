@@ -13,14 +13,14 @@ public partial class MainWindow
 
     private void BuildSessionProfiles()
     {
-        Paragraph("Guarde monitor, tamanho do texto e saída de áudio para cada ambiente.");
+        Paragraph("Save display, text size and audio output for each setup.");
         if (sessionProfiles.RecoveryNotice is { } notice)
             Paragraph(notice);
         foreach (var profile in sessionProfiles.Items)
         {
             var chosen = profile;
-            AddRow("profile:" + profile.Id, profile.Name, (sessionProfiles.ActiveId == profile.Id ? "Último aplicado · " : profile.GameKey == Controller.Session.Anchor?.ProcessName ? "Sugerido para este jogo · " : "") + profile.ScalePercent + "% · " + DisplayName(profile.DisplayId) + (profile.OutputName is { } output ? " · " + output : ""), () => ApplySessionProfile(chosen), !Controller.SettingsDirty);
-            AddRow("profile-edit:" + profile.Id, "Ajustar " + profile.Name, "Monitor, texto e áudio deste perfil", () =>
+            AddRow("profile:" + profile.Id, profile.Name, (sessionProfiles.ActiveId == profile.Id ? "Last applied · " : profile.GameKey == Controller.Session.Anchor?.ProcessName ? "Suggested for this game · " : "") + profile.ScalePercent + "% · " + DisplayName(profile.DisplayId) + (profile.OutputName is { } output ? " · " + output : ""), () => ApplySessionProfile(chosen), !Controller.SettingsDirty);
+            AddRow("profile-edit:" + profile.Id, "Edit " + profile.Name, "Display, text size and audio for this profile", () =>
             {
                 editingProfile = chosen.Id;
                 profileDraft = chosen;
@@ -29,26 +29,26 @@ public partial class MainWindow
         }
 
         if (Controller.SettingsDirty)
-            Paragraph("Salve ou descarte os ajustes pendentes antes de aplicar um perfil.");
-        AddRow("profile-new", "Criar perfil", "Guardar outro ambiente ou uma configuração para um jogo", () =>
+            Paragraph("Save or discard pending settings before applying a profile.");
+        AddRow("profile-new", "Create profile", "Save another setup or a configuration for a game", () =>
         {
             var settings = Controller.Settings;
             editingProfile = Guid.NewGuid().ToString("N");
-            profileDraft = new(editingProfile, "Novo perfil", settings.DisplayId, settings.UiScalePercent, settings.PanelSide);
+            profileDraft = new(editingProfile, "New profile", settings.DisplayId, settings.UiScalePercent, settings.PanelSide);
             OpenFeature(OverlayRoute.ProfileEdit, "profile-name");
         });
         if (profileBefore is not null)
-            AddRow("profile-undo", "Desfazer último perfil", "Restaura somente valores que ainda correspondem ao perfil aplicado", UndoSessionProfile, !Controller.SettingsDirty);
-        AddRow("back", "Voltar", "Painel da sessão", Back);
+            AddRow("profile-undo", "Undo last profile", "Restores only values that still match the applied profile", UndoSessionProfile, !Controller.SettingsDirty);
+        AddRow("back", "Back", "Session panel", Back);
     }
 
-    private string DisplayName(string? id) => id is null ? "Monitor ativo" : Controller.Displays.FirstOrDefault(display => display.Id == id) is { } display ? $"Monitor {Array.IndexOf(Controller.Displays.ToArray(), display) + 1}" : "Monitor desconectado";
+    private string DisplayName(string? id) => id is null ? "Active display" : Controller.Displays.FirstOrDefault(display => display.Id == id) is { } display ? $"Display {Array.IndexOf(Controller.Displays.ToArray(), display) + 1}" : "Display disconnected";
     private void BuildProfileEditor()
     {
         var draft = profileDraft ?? sessionProfiles.Items.First(profile => profile.Id == editingProfile);
         profileDraft = draft;
-        AddRow("profile-name", "Nome · " + draft.Name, "Editar pelo controle ou teclado", () => OpenKeyboard(true));
-        AddRow("profile-presentation", "Interface · " + (draft.Presentation == "Desktop" ? "Computador" : "TV"), "Painel compacto ou leitura ampliada", () =>
+        AddRow("profile-name", "Name · " + draft.Name, "Edit with a controller or keyboard", () => OpenKeyboard(true));
+        AddRow("profile-presentation", "Interface · " + (draft.Presentation == "Desktop" ? "Desktop" : "TV"), "Compact panel or larger text", () =>
         {
             profileDraft = draft with
             {
@@ -56,7 +56,7 @@ public partial class MainWindow
             };
             RefreshRows();
         });
-        AddRow("profile-game", draft.GameKey is null ? "Jogo · sem associação" : "Jogo · " + draft.GameKey, "Sugerir este perfil quando o jogo estiver selecionado", () =>
+        AddRow("profile-game", draft.GameKey is null ? "Game · not linked" : "Game · " + draft.GameKey, "Suggest this profile when the game is selected", () =>
         {
             profileDraft = draft with
             {
@@ -64,7 +64,7 @@ public partial class MainWindow
             };
             RefreshRows();
         }, draft.GameKey is not null || Controller.Session.Anchor is not null);
-        AddRow("profile-monitor", "Monitor · " + DisplayName(draft.DisplayId), "Tela da overlay, sem alterar a resolução do jogo", () =>
+        AddRow("profile-monitor", "Display · " + DisplayName(draft.DisplayId), "Overlay display, without changing the game resolution", () =>
         {
             var ids = new string?[]
             {
@@ -76,7 +76,7 @@ public partial class MainWindow
             };
             RefreshRows();
         });
-        AddRow("profile-scale", "Texto · " + draft.ScalePercent + "%", "100 / 115 / 130 / 150%", () =>
+        AddRow("profile-scale", "Text · " + draft.ScalePercent + "%", "100 / 115 / 130 / 150%", () =>
         {
             var scales = new[]
             {
@@ -91,7 +91,7 @@ public partial class MainWindow
             };
             RefreshRows();
         });
-        AddRow("profile-side", "Painel · " + (draft.Side == "Right" ? "direita" : "esquerda"), "Posição neste ambiente", () =>
+        AddRow("profile-side", "Panel · " + (draft.Side == "Right" ? "right" : "left"), "Position in this setup", () =>
         {
             profileDraft = draft with
             {
@@ -99,7 +99,7 @@ public partial class MainWindow
             };
             RefreshRows();
         });
-        AddRow("profile-output", "Áudio · " + (draft.OutputName ?? "Manter saída atual"), "Alternar entre as saídas conectadas", () =>
+        AddRow("profile-output", "Audio · " + (draft.OutputName ?? "Keep current output"), "Cycle through connected outputs", () =>
         {
             var outputs = systemAudio.Current.Outputs;
             var index = outputs.ToList().FindIndex(output => output.Id == draft.OutputId);
@@ -111,7 +111,7 @@ public partial class MainWindow
             };
             RefreshRows();
         });
-        AddRow("profile-volume", draft.VolumePercent is { } volume ? $"Volume · {volume}%" : "Volume · manter atual", "Incluir o volume atual neste perfil ou preservar o volume em uso", () =>
+        AddRow("profile-volume", draft.VolumePercent is { } volume ? $"Volume · {volume}%" : "Volume · keep current", "Include the current volume in this profile or preserve the volume in use", () =>
         {
             profileDraft = draft with
             {
@@ -119,7 +119,7 @@ public partial class MainWindow
             };
             RefreshRows();
         });
-        AddRow("profile-current", "Usar disposição atual", "Copiar monitor, escala e lado atuais", () =>
+        AddRow("profile-current", "Use current layout", "Copy the current display, size and side", () =>
         {
             var settings = Controller.Settings;
             profileDraft = draft with
@@ -130,44 +130,44 @@ public partial class MainWindow
             };
             RefreshRows();
         });
-        AddRow("profile-save", "Salvar perfil", "Guardar este ambiente sem aplicá-lo agora", () =>
+        AddRow("profile-save", "Save profile", "Save this setup without applying it now", () =>
         {
             if (Controller.Platform.IsPreview)
             {
-                RecordResult(new(ResultKind.Simulated, "Prévia: o perfil não foi gravado."), "profile-save");
+                RecordResult(new(ResultKind.Simulated, "Preview: the profile was not saved."), "profile-save");
                 return;
             }
 
             try
             {
                 sessionProfiles.Save(profileDraft!);
-                RecordResult(new(ResultKind.Completed, "Perfil salvo."), "profile-save");
+                RecordResult(new(ResultKind.Completed, "Profile saved."), "profile-save");
                 Back();
             }
             catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
             {
-                RecordResult(new(ResultKind.Failed, "Não foi possível salvar o perfil. Os perfis anteriores foram preservados."), "profile-save");
+                RecordResult(new(ResultKind.Failed, "Could not save the profile. Existing profiles were preserved."), "profile-save");
             }
         });
-        AddRow("back", "Voltar", "Alterações do perfil só são guardadas ao salvar", Back);
+        AddRow("back", "Back", "Profile changes are kept only when you save", Back);
     }
 
     private void ApplySessionProfile(SessionProfile profile)
     {
         if (Controller.SettingsDirty)
         {
-            FeedbackText("Salve ou descarte os ajustes antes de aplicar um perfil.");
+            FeedbackText("Save or discard settings before applying a profile.");
             return;
         }
 
         StartAudioAction("profile-apply", async token =>
         {
             if (profile.DisplayId is { } id && !Controller.RefreshDisplays().Any(display => display.Id == id))
-                return new(ResultKind.Unavailable, "O monitor deste perfil está desconectado. Ajuste o perfil antes de aplicar.");
+                return new(ResultKind.Unavailable, "This profile's display is disconnected. Edit the profile before applying it.");
             var before = Controller.Settings;
             var state = await systemAudio.RefreshAsync(token);
             if (profile.OutputId is { } output && !state.Outputs.Any(device => device.Id == output))
-                return new(ResultKind.Unavailable, "A saída deste perfil está desconectada. Seus ajustes atuais foram mantidos.");
+                return new(ResultKind.Unavailable, "This profile's audio output is disconnected. Your current settings were preserved.");
             profileBefore = before;
             profileApplied = before;
             profileAudioBefore = state;
@@ -195,7 +195,7 @@ public partial class MainWindow
                     var changed = audio.Set(volume / 100f, expectedEndpoint: profile.OutputId ?? audio.Current.EndpointId);
                     profileMasterApplied = audio.Read();
                     if (changed.Kind != ResultKind.Completed)
-                        return new(ResultKind.Partial, "A saída foi aplicada, mas o volume não foi confirmado. Confira o áudio antes de continuar.");
+                        return new(ResultKind.Partial, "The output was applied, but volume was not confirmed. Check the audio before continuing.");
                 }
             }
 
@@ -212,10 +212,10 @@ public partial class MainWindow
             }
             catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException or InvalidOperationException)
             {
-                return new(ResultKind.Partial, "O ambiente foi aplicado, mas não pôde ser salvo por completo. Confira os ajustes pendentes.");
+                return new(ResultKind.Partial, "The setup was applied, but could not be fully saved. Check your pending settings.");
             }
 
-            return new(diagnostic || Controller.Platform.IsPreview ? ResultKind.Simulated : ResultKind.Completed, "Perfil " + profile.Name + " aplicado.");
+            return new(diagnostic || Controller.Platform.IsPreview ? ResultKind.Simulated : ResultKind.Completed, "Profile " + profile.Name + " applied.");
         }, RefreshRows);
     }
 
@@ -265,7 +265,7 @@ public partial class MainWindow
             profileBefore = null;
             profileApplied = null;
             profileMasterBefore = profileMasterApplied = null;
-            return new(skipped ? ResultKind.Partial : diagnostic || Controller.Platform.IsPreview ? ResultKind.Simulated : ResultKind.Completed, skipped ? "Disposição restaurada. O áudio mudou depois do perfil e foi preservado." : "Disposição anterior restaurada sem substituir ajustes posteriores.");
+            return new(skipped ? ResultKind.Partial : diagnostic || Controller.Platform.IsPreview ? ResultKind.Simulated : ResultKind.Completed, skipped ? "Layout restored. Audio changed after the profile was applied and was preserved." : "Previous layout restored without replacing later changes.");
         }, RefreshRows);
     }
 }
