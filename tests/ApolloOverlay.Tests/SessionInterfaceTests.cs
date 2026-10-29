@@ -25,6 +25,27 @@ internal static class SessionInterfaceTests
         DateTimeOffset.Parse("2026-10-28T12:00:00Z"), "Interface fixture release. No update is installed.\n• Clearer session navigation\n• Local capture previews\n• Custom appearance", 201, "fixture-only.nupkg", 8_388_608, new string('a', 64));
     internal static void Run(Action<string, Action> test)
     {
+        test("controller-loss evidence waits for the current identity epoch after an older read", () =>
+        {
+            var source = new PendingIdentitySource();
+            using var host = new Host(identitySource: source);
+            var window = host.Window;
+            try
+            {
+                host.Open();
+                AdaptiveInterfaceTests.UseController(window);
+                window.UpdateControllerTelemetry([new(true, 0), default, default, default], null, Environment.TickCount64 + 5001);
+                Complete(source.PendingRead.WaitAsync(TimeSpan.FromSeconds(5)));
+                window.UpdateControllerTelemetry([default, default, default, default], null, Environment.TickCount64 + 5002);
+                source.Items = [];
+                source.Release();
+                AwaitControllerDisconnect(window);
+                Require(((TextBlock)window.FindName("ControllerModelLabel")).Text == "Controller disconnected"
+                    && !((TextBlock)window.FindName("ControllerBatteryLabel")).IsVisible,
+                    "The old connected identity replaced fresh disconnect evidence");
+            }
+            finally { source.Release(); }
+        });
         test("activation glyph belongs only to the selected Resume action", () =>
         {
             using var host = new Host();
@@ -583,12 +604,7 @@ internal static class SessionInterfaceTests
                     AdaptiveInterfaceTests.UseController(window);
                     if (state == "controller-lost")
                     {
-                        window.UpdateControllerTelemetry([default, default, default, default], null, Environment.TickCount64);
-                        Complete(window.ControllerBadgeTask);
-                        Require(((FrameworkElement)window.FindName("ControllerInfoBar")).IsVisible
-                            && ((TextBlock)window.FindName("ControllerModelLabel")).Text == "Controller disconnected"
-                            && !((TextBlock)window.FindName("ControllerBatteryLabel")).IsVisible,
-                            "Disconnected evidence lacks recovery or retained a charge claim");
+                        AwaitControllerDisconnect(window);
                     }
                     if (state == "unavailable-action")
                         Pick(window, "steam-overlay");
@@ -925,6 +941,21 @@ internal static class SessionInterfaceTests
         w.UpdateLayout();
     }
 
+    private static void AwaitControllerDisconnect(MainWindow window)
+    {
+        // Diagnostic hosts have no frame timer. Keep delivering actual absent
+        // frames so a prior identity read can settle and this epoch can be read,
+        // just as the production polling loop does after a disconnect.
+        WaitUntil(() =>
+        {
+            window.UpdateControllerTelemetry([default, default, default, default], null, Environment.TickCount64);
+            return ((FrameworkElement)window.FindName("ControllerInfoBar")).IsVisible
+                && ((TextBlock)window.FindName("ControllerModelLabel")).Text == "Controller disconnected"
+                && !((TextBlock)window.FindName("ControllerBatteryLabel")).IsVisible;
+        }, "Disconnected evidence lacks fresh recovery or retained a charge claim");
+        window.UpdateLayout();
+    }
+
     private static void WaitUntil(Func<bool> condition, string message)
     {
         var deadline = Stopwatch.StartNew();
@@ -981,6 +1012,33 @@ internal static class SessionInterfaceTests
     }
 
     internal static void Complete(Task task) => ReviewFixTests.Complete(task);
+    private sealed class PendingIdentitySource : IControllerIdentitySource
+    {
+        private readonly TaskCompletionSource<bool> pending = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private ControllerIdentity[] items = [new("pending-xbox", "Xbox One", ControllerFamily.Xbox, true, 76, false)];
+        private int reads;
+        internal Task PendingRead => pending.Task;
+        internal ControllerIdentity[] Items
+        {
+            get => Volatile.Read(ref items);
+            set => Volatile.Write(ref items, value);
+        }
+
+        internal void Release() => released.TrySetResult(true);
+
+        public IReadOnlyList<ControllerIdentity> Read()
+        {
+            var snapshot = Items;
+            if (Interlocked.Increment(ref reads) == 2)
+            {
+                pending.TrySetResult(true);
+                released.Task.WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
+            }
+            return snapshot;
+        }
+    }
+
     internal sealed class Host : IDisposable
     {
         private readonly SynchronizationContext? previous = SynchronizationContext.Current;
@@ -994,7 +1052,7 @@ internal static class SessionInterfaceTests
         }
 
         internal Host(Action<string>? initialize = null, ISystemAudioBackend? backend = null, bool preview = true, string? gameTitle = null, ControllerIdentity[]? identities = null,
-            bool populateCaptures = false, bool emptyApps = false, bool emptyMedia = false)
+            bool populateCaptures = false, bool emptyApps = false, bool emptyMedia = false, IControllerIdentitySource? identitySource = null)
         {
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
             var app = Application.Current ?? new Application
@@ -1019,7 +1077,7 @@ internal static class SessionInterfaceTests
                     Title = gameTitle,
                     ProcessName = "eldenring"
                 };
-            Window = new(renderOnly: true, platform: platform, diagnostics: new(Root), appAudioService: Audio, media: Media, systemAudioBackend: backend ?? new PreviewSystemAudioBackend(), mixerAudioService: Mixer, updates: Updates, controllerIdentitySource: new PreviewControllerIdentitySource { Items = identities ?? [new("fixture-xbox", "Xbox One", ControllerFamily.Xbox, true, 76, false)] });
+            Window = new(renderOnly: true, platform: platform, diagnostics: new(Root), appAudioService: Audio, media: Media, systemAudioBackend: backend ?? new PreviewSystemAudioBackend(), mixerAudioService: Mixer, updates: Updates, controllerIdentitySource: identitySource ?? new PreviewControllerIdentitySource { Items = identities ?? [new("fixture-xbox", "Xbox One", ControllerFamily.Xbox, true, 76, false)] });
             Window.PhysicalKeyReader = _ => 0;
             Window.DpiReader = _ => 96;
             Window.Controller.CaptureReturn();
