@@ -124,6 +124,22 @@ internal static class SteamShortcutFocusTests
 
     internal static void SequenceChecks(Action<string, Action> test)
     {
+        // The driver pumps this dispatcher; keep controlled wait continuations on it
+        // rather than racing thread-pool scheduling on a cold runner.
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+        try
+        {
+            SequenceChecksCore(test);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+    }
+
+    private static void SequenceChecksCore(Action<string, Action> test)
+    {
         test("Steam sequence has four individual events after stable focus", () =>
         {
             var e = new Effects();

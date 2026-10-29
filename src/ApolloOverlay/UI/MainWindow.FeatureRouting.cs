@@ -30,7 +30,7 @@ public partial class MainWindow
     {
         var key = id.StartsWith("output:", StringComparison.Ordinal) ? "speaker" : id.StartsWith("capture:", StringComparison.Ordinal) ? "gallery" : id.StartsWith("mix:", StringComparison.Ordinal) ? "speaker" : id switch
         {
-            "mixer-refresh" => "refresh",
+            "mixer-refresh" or "device-refresh" or "media-refresh" or "capture-refresh" => "refresh",
             "session-volume" or "windows-volume" or "session-mixer" or "mixer-volume" => "speaker",
             "microphone" => "microphone",
             "session-profiles" or "profile-new" => "profile",
@@ -41,8 +41,8 @@ public partial class MainWindow
             "session-keyboard" or "keyboard-editor" => "keyboard",
             "keyboard-target" => "window",
             "session-capture" => "camera",
-            "session-gallery" or "capture-folder" or "capture-refresh" => "gallery",
-            "audio-devices" or "mixer-devices" or "device-refresh" => "speaker",
+            "session-gallery" or "capture-folder" => "gallery",
+            "audio-devices" or "mixer-devices" => "speaker",
             _ => null
         };
         if (key is null)
@@ -122,7 +122,7 @@ public partial class MainWindow
     private string? SessionFeatureTitle => view.Current.Route switch
     {
         OverlayRoute.Mixer => "App mixer",
-        OverlayRoute.AudioDevices => "Output and microphone",
+        OverlayRoute.AudioDevices => "Audio devices",
         OverlayRoute.Profiles => "Your setup",
         OverlayRoute.ProfileEdit => "Edit profile",
         OverlayRoute.Media => "Your music",

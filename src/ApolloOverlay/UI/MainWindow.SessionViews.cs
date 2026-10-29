@@ -138,7 +138,7 @@ public partial class MainWindow
                 AddRow(id, "Task View", "Open windows", () => RunEffect(Controller.Platform.TaskView), row: row, column: column, compactGrid: true);
                 break;
             case "audio":
-                AddRow(id, "Windows audio", audio.Current.Available ? audio.Current.Muted ? "Output muted" : audio.Current.Volume.ToString("P0") : "Output unavailable", () => Subpage("audio", "volume"), row: row, column: column, compactGrid: true);
+                AddRow(id, narrow ? "Audio" : "Windows audio", audio.Current.Available ? audio.Current.Muted ? "Output muted" : audio.Current.Volume.ToString("P0") : "Output unavailable", () => Subpage("audio", "volume"), row: row, column: column, compactGrid: true);
                 break;
         }
     }

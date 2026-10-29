@@ -41,8 +41,8 @@ public partial class MainWindow
 
         AddRow("media-toggle", media?.Playing == true ? "Pause" : "Play", media is null ? "No active media" : "Control playback", () => MediaCommand(SessionMediaCommand.Toggle), media?.CanToggle == true);
         var first = Rows.RowDefinitions.Count;
-        AddRow("media-previous", "Previous", "Go to the previous track", () => MediaCommand(SessionMediaCommand.Previous), media?.CanPrevious == true, row: narrow ? null : first, column: 0);
-        AddRow("media-next", "Next", "Skip to the next track", () => MediaCommand(SessionMediaCommand.Next), media?.CanNext == true, row: narrow ? null : first, column: 1);
+        AddRow("media-previous", "Previous", "Go to the previous track", () => MediaCommand(SessionMediaCommand.Previous), media?.CanPrevious == true, row: first, column: 0, compactGrid: true);
+        AddRow("media-next", "Next", "Skip to the next track", () => MediaCommand(SessionMediaCommand.Next), media?.CanNext == true, row: first, column: 1, compactGrid: true);
         if (sessionMedia.Current.Items.Count > 1)
             foreach (var item in sessionMedia.Current.Items)
             {

@@ -312,10 +312,22 @@ public partial class MainWindow
         StatusLabel.Visibility = compactChrome && !important ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    private void UpdateScrollContinuation() => ScrollContinuation.Visibility =
-        !Confirming && ContentScroll.ViewportHeight > 0 && ContentScroll.ScrollableHeight - ContentScroll.VerticalOffset > 1
-            ? Visibility.Visible
-            : Visibility.Hidden;
+    private readonly LinearGradientBrush scrollFade = new(
+        [new GradientStop(Colors.Black, 0), new GradientStop(Colors.Black, .94), new GradientStop(Colors.Transparent, 1)],
+        new Point(0, 0), new Point(0, 1));
+
+    private void UpdateScrollContinuation()
+    {
+        var more = !Confirming && ContentScroll.ViewportHeight > 0 && ContentScroll.ScrollableHeight - ContentScroll.VerticalOffset > 1;
+        ScrollContinuation.Visibility = more ? Visibility.Visible : Visibility.Hidden;
+        if (more && !SystemParameters.HighContrast)
+        {
+            scrollFade.GradientStops[1].Offset = 1 - Math.Min(.25, 24 / ContentScroll.ViewportHeight);
+            ContentScroll.OpacityMask = scrollFade;
+        }
+        else
+            ContentScroll.OpacityMask = null;
+    }
 
     private void ApplySessionCardDensity()
     {

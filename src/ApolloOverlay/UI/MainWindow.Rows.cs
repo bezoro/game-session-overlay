@@ -32,7 +32,7 @@ public partial class MainWindow
         if (entry.Button.Content is ActionButtonContent content)
         {
             content.Description.Text = description;
-            content.Description.Visibility = description.Length > 0 && !CompactFavorite(id) ? Visibility.Visible : Visibility.Collapsed;
+            content.Description.Visibility = description.Length > 0 && !CompactAction(id) ? Visibility.Visible : Visibility.Collapsed;
         }
 
         AutomationProperties.SetHelpText(entry.Button, description);
@@ -226,7 +226,7 @@ public partial class MainWindow
     }
 
     private string GuideDescription() => Controller.Platform.IsPreview ? "Preview · Guide connection is not queried" : !Controller.Settings.GuideXInputEnabled ? "Disabled · double-click the tray icon to open" : guideBackend?.Active == true ? guideBackend.Status : guideConnection?.Status ?? "Controller or Guide input unavailable";
-    private bool CompactFavorite(string id) => narrow && view.Current.Route == OverlayRoute.Hub && SessionHubSettings.Catalog.Contains(id);
+    private bool CompactAction(string id) => narrow && (view.Current.Route == OverlayRoute.Hub && SessionHubSettings.Catalog.Contains(id) || view.Current.Route == OverlayRoute.Media && id is "media-previous" or "media-next");
     private Button MakeButton(string id, string title, string description, Action action, bool available, bool danger)
     {
         var glyph = ActionIcon(id.StartsWith("favorite:", StringComparison.Ordinal) ? id[9..] : id);
@@ -254,8 +254,8 @@ public partial class MainWindow
         badge.SetResourceReference(BackgroundProperty, ThemeSupport.Success);
         Grid.SetColumn(badge, 0);
         grid.Children.Add(badge);
-        var compactFavorite = CompactFavorite(id);
-        if (compactFavorite)
+        var compactAction = CompactAction(id);
+        if (compactAction)
         {
             grid.Title.FontSize = 14;
             grid.Title.TextWrapping = TextWrapping.NoWrap;
@@ -291,9 +291,9 @@ public partial class MainWindow
         {
             Content = grid,
             Tag = id,
-            MinHeight = compactFavorite ? 52 : id == "return" ? 76 : 56,
+            MinHeight = compactAction ? 52 : id == "return" ? 76 : 56,
             IsEnabled = available,
-            Padding = compactFavorite ? new(6, 6, 6, 6) : new(12, 8, 12, 8)
+            Padding = compactAction ? new(6, 6, 6, 6) : new(12, 8, 12, 8)
         };
         if (page == 0 && subpage == "" && id == "apps")
         {

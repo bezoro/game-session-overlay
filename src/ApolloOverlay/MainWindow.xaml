@@ -765,9 +765,10 @@
         </ScrollViewer>
         <local:VectorIcon
           x:Name="ScrollContinuation"
+          IsHitTestVisible="False"
           Grid.Row="2"
-          Width="10"
-          Height="10"
+          Width="14"
+          Height="14"
           HorizontalAlignment="Right"
           VerticalAlignment="Bottom"
           Margin="0,0,0,3"

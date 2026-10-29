@@ -66,7 +66,7 @@ public sealed class GuardedActions(IWindowEffects effects, Action<SteamSequenceE
         if (!effects.Valid(window))
             return new(ResultKind.Failed, "The window identity changed or could not be verified. Select it again.")
             {
-                Summary = "Window changed. Select it again."
+                Summary = "Select window again."
             };
         if (!effects.RequestFocus(window))
             return new(ResultKind.Failed, "Windows rejected window activation.");

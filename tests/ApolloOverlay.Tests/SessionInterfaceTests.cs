@@ -344,7 +344,7 @@ internal static class SessionInterfaceTests
                     }
                     else if (state is "success" or "warning")
                     {
-                        window.Controller.SetOperation(state == "success" ? "Completed" : "Unconfirmed", state == "success" ? "Settings saved." : "The window changed. Select it again before trying another command.", summary: state == "warning" ? "Window changed. Select it again." : null);
+                        window.Controller.SetOperation(state == "success" ? "Completed" : "Unconfirmed", state == "success" ? "Settings saved." : "The window changed. Select it again before trying another command.", summary: state == "warning" ? "Select window again." : null);
                         window.RefreshRows();
                     }
                     window.RefreshOperationNotice(Environment.TickCount64 + 200);
@@ -682,7 +682,7 @@ internal static class SessionInterfaceTests
         {
             get;
             private set;
-        } = new(1, [new("music", "A moment between worlds", "Session soundtrack", "Fixture music", true, true, false, true)], "music", "Fixture media");
+        } = new(1, [new("music", "A moment between worlds", "Session soundtrack", "Fixture music", true, true, false, true)], "music", "Windows media controls.");
 
         public event Action<SessionMediaSnapshot>? Changed;
         internal int Commands;

@@ -45,11 +45,6 @@ public partial class MainWindow
         {
             Height = GridLength.Auto
         });
-        pane.RowDefinitions.Add(new()
-        {
-            Height = GridLength.Auto
-        });
-
         if (!keyboardForProfile)
         {
             var title = "To: " + (keyboardTarget?.Title ?? "Choose a window");
@@ -125,31 +120,33 @@ public partial class MainWindow
         };
         AddKeyboardButton(pane, editorButton, 1);
 
-        var characters = keyboardSymbols ? "1234567890@#$%&*()-_!?/:;+=%" : "qwertyuiopasdfghjklzxcvbnm,.?";
+        var keyRows = keyboardSymbols
+            ? new[] { "1234567890", "@#$%&*()-_", "!?/:;+=%" }
+            : new[] { "qwertyuiop", "asdfghjkl", "zxcvbnm,.?" };
         const int columns = 10;
         var board = new Grid();
         for (var column = 0; column < columns; column++)
             board.ColumnDefinitions.Add(new());
-        for (var row = 0; row < (characters.Length + columns - 1) / columns; row++)
+        for (var row = 0; row < keyRows.Length; row++)
             board.RowDefinitions.Add(new()
             {
                 Height = GridLength.Auto
             });
-        for (var index = 0; index < characters.Length; index++)
-        {
-            var character = characters[index].ToString();
-            var value = keyboardUpper ? character.ToUpperInvariant() : character;
-            var id = "key:" + character;
-            var button = KeyboardButton(id, value, () => AppendKeyboard(value), "Insert " + value, keyHeight);
-            button.FontSize = compact ? 17 : 19;
-            button.Padding = new(0);
-            AddKeyboardButton(board, button, index / columns, index % columns);
-        }
+        for (var row = 0; row < keyRows.Length; row++)
+            for (var column = 0; column < keyRows[row].Length; column++)
+            {
+                var character = keyRows[row][column].ToString();
+                var value = keyboardUpper ? character.ToUpperInvariant() : character;
+                var id = "key:" + character;
+                var button = KeyboardButton(id, value, () => AppendKeyboard(value), "Insert " + value, keyHeight);
+                button.FontSize = compact ? 17 : 19;
+                button.Padding = new(0);
+                AddKeyboardButton(board, button, row, column);
+            }
 
-        // The key grid alone can scroll on short displays; destination, text and Insert stay visible.
+        // Keys and editing tools scroll together; destination, text and Insert stay visible.
         var keyScroll = new ScrollViewer
         {
-            Content = board,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             Margin = new(0, 4, 0, 4),
@@ -188,8 +185,10 @@ public partial class MainWindow
             if (keyboardEditor is not null)
                 keyboardEditor.Text = "";
         }, "Clear the text being edited", actionHeight), 0, 4);
-        Grid.SetRow(edits, 3);
-        pane.Children.Add(edits);
+        var keyTools = new StackPanel();
+        keyTools.Children.Add(board);
+        keyTools.Children.Add(edits);
+        keyScroll.Content = keyTools;
 
         var commands = new Grid { Margin = new(0, 4, 0, 0) };
         commands.ColumnDefinitions.Add(new()
@@ -207,7 +206,7 @@ public partial class MainWindow
         insertContent.Children.Add(insertionHint);
         insert.Content = insertContent;
         AddKeyboardButton(commands, insert, 0, 1);
-        Grid.SetRow(commands, 4);
+        Grid.SetRow(commands, 3);
         pane.Children.Add(commands);
         AddVisual(pane);
     }
