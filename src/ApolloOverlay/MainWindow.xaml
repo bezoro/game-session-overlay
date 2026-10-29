@@ -421,7 +421,7 @@
             AutomationProperties.Name="Back to the previous page">
             <local:VectorIcon
               Data="{StaticResource Icon.back}"
-              Fill="{DynamicResource TextFillColorPrimaryBrush}"
+              Fill="{DynamicResource SessionIconNavigationBrush}"
               Width="20"
               Height="20" />
           </Button>
@@ -486,11 +486,13 @@
                 Fill="{DynamicResource TextFillColorSecondaryBrush}" />
               <StackPanel
                 DockPanel.Dock="Right"
-                Orientation="Horizontal">
+                Orientation="Horizontal"
+                Margin="12,0,0,0">
                 <Grid
+                  x:Name="ControllerBatteryMeter"
                   Width="22"
                   Height="13"
-                  Margin="12,0,4,0"
+                  Margin="0,0,4,0"
                   VerticalAlignment="Center">
                   <Border
                     Width="18"
@@ -553,7 +555,7 @@
             AutomationProperties.HelpText="Open system settings and integrations">
             <local:VectorIcon
               Data="{StaticResource Icon.settings}"
-              Fill="{DynamicResource TextFillColorPrimaryBrush}"
+              Fill="{DynamicResource SessionIconToolsBrush}"
               Width="22"
               Height="22" />
           </Button>
@@ -620,11 +622,6 @@
               BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
               BorderThickness="1">
               <Grid>
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition />
-                  <ColumnDefinition
-                    Width="48" />
-                </Grid.ColumnDefinitions>
                 <Border
                   Width="3"
                   Margin="0,18,0,18"
@@ -669,13 +666,12 @@
                       Margin="0,0,12,0"
                       Height="54">
                       <Grid>
-                        <TextBlock
+                        <local:VectorIcon
                           x:Name="ContextGlyph"
-                          Text=""
-                          FontFamily="Segoe Fluent Icons"
-                          FontSize="25"
-                          HorizontalAlignment="Center"
-                          VerticalAlignment="Center" />
+                          Data="{StaticResource Icon.window}"
+                          Fill="{DynamicResource SessionIconGameBrush}"
+                          Width="25"
+                          Height="25" />
                         <Image
                           x:Name="ContextIcon"
                           Width="42"
@@ -737,23 +733,6 @@
                     </StackPanel>
                   </Grid>
                 </Button>
-                <Button
-                  x:Name="SessionOptionsButton"
-                  VerticalAlignment="Center"
-                  Grid.Column="1"
-                  Content="⋯"
-                  Width="44"
-                  Height="44"
-                  MinWidth="44"
-                  MinHeight="44"
-                  FontSize="22"
-                  HorizontalContentAlignment="Center"
-                  VerticalContentAlignment="Center"
-                  Padding="4"
-                  Margin="0,0,4,0"
-                  Background="Transparent"
-                  BorderThickness="0"
-                  AutomationProperties.Name="Session window options" />
               </Grid>
             </Border>
             <Grid
@@ -893,8 +872,7 @@
             <Button
               x:Name="OperationDetailsButton"
               Grid.Column="2"
-              Content="Details"
-              Width="60"
+              Width="76"
               Height="40"
               MinHeight="40"
               FontSize="13"

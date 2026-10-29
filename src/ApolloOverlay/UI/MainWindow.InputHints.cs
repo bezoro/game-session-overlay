@@ -58,9 +58,9 @@ public partial class MainWindow
         SetEntryDescription("test-feedback", FeedbackDescription());
         var target = Controller.Session.Anchor;
         AutomationProperties.SetHelpText(SessionCardButton, target is not null && Controller.Platform.Valid(target)
-            ? InputHint("A resumes this window · X opens options", "Enter resumes this window · X opens options", "Click to resume · ·· opens options")
+            ? InputHint("A resumes this window · X opens options", "Enter resumes this window · X opens options", "Click resumes · right-click opens options")
             : "Choose a window in Apps");
-        if (HoldCloseButton.Content is TextBlock hold)
-            hold.Text = InputHint("Hold A · 1.5 s", "Hold Enter / Space · 1.5 s", "Press and hold · 1.5 s");
+        if (HoldCloseButton.Content is IconLabel hold)
+            hold.Label.Text = InputHint("Hold A · 1.5 s", "Hold Enter / Space · 1.5 s", "Press and hold · 1.5 s");
     }
 }

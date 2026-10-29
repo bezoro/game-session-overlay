@@ -66,15 +66,8 @@ public partial class MainWindow
             else
                 RunEffect(() => Controller.Switch(target), () => Controller.Platform.Valid(target));
         }, true, valid ? target!.Title : "Choose a window in Apps");
-        RegisterFixed("session-options", SessionOptionsButton, () =>
-        {
-            if (target is not null)
-                OpenOptions(target);
-            else
-                ChooseSession();
-        }, true, "Session window options");
         AutomationProperties.SetName(SessionCardButton, valid ? target!.Title + " · Resume window" : "Choose window");
-        AutomationProperties.SetHelpText(SessionCardButton, valid ? "A / Enter resumes this window. X opens options." : "Choose a window in Apps");
+        AutomationProperties.SetHelpText(SessionCardButton, valid ? "A / Enter resumes this window. X or right-click opens options." : "Choose a window in Apps");
         var windowCount = Controller.Apps.Count;
         var windowSummary = windowCount switch
         {
@@ -174,7 +167,7 @@ public partial class MainWindow
 
         var more = new Button
         {
-            Content = "···",
+            Content = ActionIconCatalog.Create(this, "options", 19),
             Width = 44,
             MinHeight = 44,
             Padding = new(4),

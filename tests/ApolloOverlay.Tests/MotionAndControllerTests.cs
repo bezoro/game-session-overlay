@@ -161,7 +161,18 @@ internal static class MotionAndControllerTests
             var measured = ControllerBadgeModel.Create(1, [new("one", "Xbox One", ControllerFamily.Xbox, true, 76, false)], xinput, "");
             Require(measured.BatteryText == "76%" && !measured.LowBattery && Math.Abs(measured.BatteryFraction - .76) < .001, "Categorical XInput overrode a measured charge");
             var wired = ControllerBadgeModel.Create(1, [new("usb", "Xbox", ControllerFamily.Xbox, false, null, false)], xinput, "");
-            Require(wired.Power == ControllerPowerState.Wired && wired.BatteryText == "USB" && wired.BatteryFraction == 0 && !wired.LowBattery, "USB power guessed a battery charge");
+            Require(wired.Power == ControllerPowerState.Wired && wired.BatteryText == "Not reported" && wired.BatteryFraction == 0 && !wired.LowBattery, "USB power guessed a battery charge");
+        });
+        test("unknown controller battery is not displayed as an empty battery", () =>
+        {
+            using var host = new Host();
+            var window = host.Window;
+            host.Source.Items = [];
+            Connect(window, 0);
+            Complete(window.ControllerBadgeTask);
+            Require(((TextBlock)window.FindName("ControllerBatteryLabel")).Text == "Not reported", "Unknown charge has no clear availability label");
+            Require(((FrameworkElement)window.FindName("ControllerBatteryMeter")).Visibility == Visibility.Collapsed, "Unknown charge looks like zero battery");
+            Require(((VectorIcon)window.FindName("ControllerPowerGlyph")).Visibility == Visibility.Visible, "Unavailable charge has no information icon");
         });
         test("Windows controller metadata projection loads through a read-only query", () =>
         {

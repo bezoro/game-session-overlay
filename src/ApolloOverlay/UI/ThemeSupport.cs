@@ -8,6 +8,7 @@ internal static class ThemeSupport
 {
     internal const string Surface = "ApplicationBackgroundBrush", Card = "CardBackgroundFillColorDefaultBrush", Control = "ControlFillColorDefaultBrush", Stroke = "ControlStrokeColorDefaultBrush", Text = "TextFillColorPrimaryBrush", SecondaryText = "TextFillColorSecondaryBrush", DisabledText = "TextFillColorDisabledBrush", Success = "SystemFillColorSuccessBrush", SuccessBackground = "SystemFillColorSuccessBackgroundBrush", Critical = "SystemFillColorCriticalBrush", CriticalBackground = "SystemFillColorCriticalBackgroundBrush";
     internal const string Focus = "SessionFocusBrush", FocusBackground = "SessionFocusBackgroundBrush", Accent = "SessionAccentBrush";
+    internal const string IconGame = "SessionIconGameBrush", IconNavigation = "SessionIconNavigationBrush", IconAudio = "SessionIconAudioBrush", IconTools = "SessionIconToolsBrush", IconCapture = "SessionIconCaptureBrush";
     private static ResourceDictionary? validation, contrast, palette;
     private static ResourceDictionary Palette(bool light)
     {
@@ -23,6 +24,11 @@ internal static class ThemeSupport
             (DisabledText, light ? "#FF657386" : "#FF8593A5"),
             (Focus, light ? "#FF24577F" : "#FF92BDEA"),
             (FocusBackground, light ? "#FFE0ECF8" : "#FF253B51"),
+            (IconGame, light ? "#FF267154" : "#FF86CEA8"),
+            (IconNavigation, light ? "#FF3266A0" : "#FF9BBEEC"),
+            (IconAudio, light ? "#FF8A5C1D" : "#FFE3BB7F"),
+            (IconTools, light ? "#FF7057A1" : "#FFBBA8E1"),
+            (IconCapture, light ? "#FFA14C70" : "#FFE2A0B9"),
             (Accent, light ? "#FF81562E" : "#FFC89A70"),
             (Success, light ? "#FF176A3C" : "#FF78C999"),
             (SuccessBackground, light ? "#FFE2F3E9" : "#FF20382D"),
@@ -83,7 +89,12 @@ internal static class ThemeSupport
                 Text,
                 SecondaryText,
                 Stroke,
-                Accent
+                Accent,
+                IconGame,
+                IconNavigation,
+                IconAudio,
+                IconTools,
+                IconCapture
             }
 
             )

@@ -99,10 +99,10 @@ internal static class MouseKeyboardTests
             Tap(w, Key.Tab);
             host.Modifiers = ModifierKeys.None;
             Require(w.SelectedAction == first, "Shift Tab did not return to the preceding action");
-            Tap(w, Key.Right);
-            Require(w.SelectedAction == "session-options", "Right did not reach session options");
-            Tap(w, Key.Left);
-            Require(w.SelectedAction == "session-card", "Left did not return to the session card");
+            Tap(w, Key.X);
+            Require(w.ActionIds.Contains("application-mute"), "X did not open session options");
+            Tap(w, Key.Escape);
+            Require(w.SelectedAction == "session-card", "Options did not return to the session card");
             Pick(w, "audio");
             Tap(w, Key.Enter);
             Require(w.ActionIds.Contains("volume") && w.ActionIds.Contains("back"), "Enter did not open Audio");
@@ -110,6 +110,20 @@ internal static class MouseKeyboardTests
             Tap(w, Key.Space);
             Require(w.ActionIds.Contains("session-card"), "Space did not operate the nested Back action");
             host.RequireOwnedFocus();
+        });
+        test("session right-click opens the game options and refuses unconfirmed focus", () =>
+        {
+            using var host = new Host();
+            var w = host.Window;
+            host.Open();
+            var card = (Button)w.FindName("SessionCardButton");
+            card.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Right) { RoutedEvent = UIElement.PreviewMouseRightButtonUpEvent });
+            Require(w.ActionIds.Contains("application-mute"), "Right-click did not open the session window options");
+            Tap(w, Key.Escape);
+            Require(w.SelectedAction == "session-card" && !w.ActionIds.Contains("session-options"), "Options did not return to the single full-width game card");
+            host.DenyConfirmation();
+            card.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Right) { RoutedEvent = UIElement.PreviewMouseRightButtonUpEvent });
+            Require(!w.ActionIds.Contains("application-mute") && !w.TransitionPending, "Unconfirmed focus admitted a pointer context action");
         });
         test("local keyboard and pointer remain usable after footer Save Discard and animated acknowledgement", () =>
         {

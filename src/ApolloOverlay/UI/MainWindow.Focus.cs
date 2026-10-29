@@ -200,7 +200,7 @@ public partial class MainWindow
             if (context.Active && context.OwnForeground)
                 return true;
             RevokeFocus("lost");
-            FeedbackFocusUnavailable(InputHint("Focus lost. Guide or B hides. Reopen to retry.", "Focus lost. Esc hides · double-click the tray icon to retry.", "Focus lost. Double-click the tray icon to retry."));
+            FeedbackFocusUnavailable("Window focus lost.");
             return false;
         }
     }
@@ -260,7 +260,7 @@ public partial class MainWindow
                 if (attempt == 6)
                 {
                     TraceFocus("unconfirmed", requested ? ResultKind.Unknown : ResultKind.Failed);
-                    FeedbackFocusUnavailable(InputHint("Focus unavailable. Guide or B hides. Reopen to retry.", "Windows did not confirm focus. Esc hides · tray double-click retries.", "Windows did not confirm focus. Double-click the tray icon to retry."));
+                    FeedbackFocusUnavailable("Windows did not confirm focus.");
                     return false;
                 }
 

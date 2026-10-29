@@ -71,6 +71,27 @@ internal static class AutomationTests
     internal static void Run(Action<string, Action> test)
     {
         Prerequisites(test);
+        test("session options command survives removal of its redundant visual control", () =>
+        {
+            var window = ReviewFixTests.Window();
+            try
+            {
+                var snapshot = window.AutomationSnapshot();
+                Require(!window.ActionIds.Contains("session-options") && snapshot.Actions.Any(action => action.Id == "session-options"), "Command compatibility introduced a hidden navigation control or lost the established ID");
+                var request = new AutomationRequest { ActionId = "session-options", Revision = snapshot.Revision, DryRun = true };
+                var dry = window.AutomationExecute(request, CancellationToken.None, _ => { }, () => true).GetAwaiter().GetResult();
+                Require(dry.Outcome == "DryRun" && window.AutomationSnapshot().Revision == snapshot.Revision, "Dry-run changed the options route");
+                var result = window.AutomationExecute(request with
+                {
+                    DryRun = false
+                }, CancellationToken.None, _ => { }, () => true).GetAwaiter().GetResult();
+                Require(result.Outcome == "Completed" && window.ActionIds.Contains("application-mute"), "Existing command did not open the selected session options");
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
         test("corrupt automation ledger leaves overlay usable and evidence intact", () =>
         {
             var previous = SynchronizationContext.Current;

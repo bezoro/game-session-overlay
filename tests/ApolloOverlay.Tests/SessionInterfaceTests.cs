@@ -298,6 +298,8 @@ internal static class SessionInterfaceTests
                 foreach (var route in new[]
                 {
                     "home",
+                    "system",
+                    "apps",
                     "mixer",
                     "devices",
                     "profiles",
@@ -330,10 +332,15 @@ internal static class SessionInterfaceTests
     {
         foreach (var light in new[] { false, true })
             foreach (var width in new[] { 572, 360 })
-                foreach (var state in new[] { "controller", "mouse", "success", "warning", "focus" })
+                foreach (var state in new[] { "controller", "mouse", "success", "warning", "focus", "unknown-controller", "wired-controller" })
                 {
                     ThemeSupport.ForceForValidation(app, light);
-                    using var host = new Host(gameTitle: "Elden Ring");
+                    using var host = new Host(gameTitle: "Elden Ring", identities: state switch
+                    {
+                        "unknown-controller" => [],
+                        "wired-controller" => [new("virtual-xbox", "Xbox 360", ControllerFamily.Xbox, false, null, false)],
+                        _ => null
+                    });
                     var window = host.Window;
                     var height = width == 572 ? 940 : 600;
                     host.Open(width, height, forCapture: true);
@@ -436,6 +443,12 @@ internal static class SessionInterfaceTests
     {
         switch (page)
         {
+            case "system":
+                w.Page(2);
+                break;
+            case "apps":
+                w.Page(1);
+                break;
             case "mixer":
                 Choose(w, "session-mixer");
                 Complete(w.FeatureTask);
@@ -526,7 +539,7 @@ internal static class SessionInterfaceTests
             get;
         }
 
-        internal Host(Action<string>? initialize = null, ISystemAudioBackend? backend = null, bool preview = true, string? gameTitle = null)
+        internal Host(Action<string>? initialize = null, ISystemAudioBackend? backend = null, bool preview = true, string? gameTitle = null, ControllerIdentity[]? identities = null)
         {
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
             var app = Application.Current ?? new Application
@@ -543,7 +556,7 @@ internal static class SessionInterfaceTests
                     Title = gameTitle,
                     ProcessName = "eldenring"
                 };
-            Window = new(renderOnly: true, platform: platform, diagnostics: new(Root), appAudioService: Audio, media: Media, systemAudioBackend: backend ?? new PreviewSystemAudioBackend(), mixerAudioService: Mixer, controllerIdentitySource: new PreviewControllerIdentitySource { Items = [new("fixture-xbox", "Xbox One", ControllerFamily.Xbox, true, 76, false)] });
+            Window = new(renderOnly: true, platform: platform, diagnostics: new(Root), appAudioService: Audio, media: Media, systemAudioBackend: backend ?? new PreviewSystemAudioBackend(), mixerAudioService: Mixer, controllerIdentitySource: new PreviewControllerIdentitySource { Items = identities ?? [new("fixture-xbox", "Xbox One", ControllerFamily.Xbox, true, 76, false)] });
             Window.PhysicalKeyReader = _ => 0;
             Window.DpiReader = _ => 96;
             Window.Controller.CaptureReturn();

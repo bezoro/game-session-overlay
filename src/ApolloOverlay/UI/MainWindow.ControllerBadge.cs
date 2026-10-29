@@ -79,12 +79,15 @@ public partial class MainWindow
         ControllerModelLabel.Text = model.Name;
         ControllerModelIcon.Data = (Geometry)FindResource("Icon." + model.IconKey);
         ControllerBatteryLabel.Text = model.BatteryText;
+        ControllerBatteryLabel.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, model.LowBattery ? ThemeSupport.Critical : ThemeSupport.SecondaryText);
+        ControllerBatteryMeter.Visibility = model.Power is ControllerPowerState.Battery or ControllerPowerState.Charging ? Visibility.Visible : Visibility.Collapsed;
         BatteryFill.Width = 14 * model.BatteryFraction;
         BatteryFill.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, model.LowBattery ? ThemeSupport.Critical : ThemeSupport.SecondaryText);
         var powerIcon = model.Power switch
         {
             ControllerPowerState.Charging => "charging",
             ControllerPowerState.Wired => "usb",
+            ControllerPowerState.Unknown => "info",
             _ => null
         };
         ControllerPowerGlyph.Visibility = powerIcon is null ? Visibility.Collapsed : Visibility.Visible;

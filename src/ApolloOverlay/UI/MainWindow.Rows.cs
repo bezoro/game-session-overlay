@@ -230,10 +230,7 @@ public partial class MainWindow
     private Button MakeButton(string id, string title, string description, Action action, bool available, bool danger)
     {
         var glyph = ActionIcon(id.StartsWith("favorite:", StringComparison.Ordinal) ? id[9..] : id);
-        var showIcon = !(page == 2
-            && subpage == ""
-            && id is "deadzone" or "guide-limit" or "shortcut" or "integrations" or "save" or "side" or "ui-scale" or "sound-feedback" or "haptic-feedback" or "test-feedback" or "customize" or "setup" or "startup" or "last-operation");
-        var grid = new ActionButtonContent(glyph, title, description, showIcon);
+        var grid = new ActionButtonContent(glyph, title, description, showIcon: true);
         var badge = new Border
         {
             CornerRadius = new(18),
@@ -332,36 +329,9 @@ public partial class MainWindow
         return button;
     }
 
-    private FrameworkElement ActionIcon(string id)
-    {
-        if (SessionFeatureIcon(id) is { } featureIcon)
-            return featureIcon;
-        var key = id.StartsWith("window:", StringComparison.Ordinal) || id.StartsWith("recent:", StringComparison.Ordinal) ? "apps" : id switch
-        {
-            "session-card" or "previous-window" or "back" => "back",
-            "steam" or "steam-overlay" or "test-steam" => "steam",
-            "gamebar" or "chord" or "guide" => "gamebar",
-            "apps" or "refresh-apps" or "next-apps" or "switch-detail" => "apps",
-            "taskview" or "display" or "minimize" => "taskview",
-            "audio" or "volume" or "volume-down" or "application-mute" => "speaker",
-            "mute" => audio.Current.Muted ? "speaker" : "mute",
-            "close" or "close-detail" or "exit" or "external-close" => "close",
-            "playnite" or "configure-playnite" => "playnite",
-            "select-session" => "controller",
-            _ => "settings"
-        };
-        var icon = new VectorIcon
-        {
-            Data = (Geometry)FindResource("Icon." + key),
-            Width = 26,
-            Height = 26,
-            SourceSize = key == "playnite" ? new Size(1024, 1024) : new Size(24, 24),
-            HorizontalAlignment = HorizontalAlignment.Left,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        icon.SetResourceReference(VectorIcon.FillProperty, id is "close" or "close-detail" ? ThemeSupport.Critical : ThemeSupport.Text);
-        return icon;
-    }
+    private FrameworkElement ActionIcon(string id) => ActionIconCatalog.Create(this, id,
+        muted: audio.Current.Muted, playing: CurrentMedia?.Playing == true,
+        rightSide: Controller.Settings.PanelSide == "Right");
 
     internal string Feedback => StatusLabel.Text;
 }

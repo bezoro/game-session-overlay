@@ -430,7 +430,7 @@ internal static class SessionHubTests
                 w.Close();
             }
         });
-        test("hub card body and sibling options focus resume exact target", () =>
+        test("hub card X options and Back preserve exact resume target", () =>
         {
             var w = Fixture(out var p, out _, out _, out _);
             try
@@ -441,13 +441,11 @@ internal static class SessionHubTests
                 w.ShowDiagnostic();
                 Arrange(w, 572, 940);
                 RequireFocus(w);
-                w.Move(NavDirection.Right);
-                Check(w.SelectedAction == "session-options", "Right misses sibling options");
-                RequireFocus(w);
-                w.ActivateEntry();
+                Check(!w.ActionIds.Contains("session-options"), "Removed sibling options remains a navigation stop");
+                w.Details();
                 Check(w.ActionIds.Contains("application-mute") && p.Switches == 0, "Opening options switched window");
                 w.Back();
-                Check(w.SelectedAction == "session-options", "Options Back lost origin");
+                Check(w.SelectedAction == "session-card", "Options Back lost the session card origin");
                 Pick(w, "session-card");
                 w.ActivateEntry();
                 Release(w);
@@ -1153,7 +1151,7 @@ internal static class SessionHubTests
                     });
                 w.RefreshRows();
                 if (state == "card-options")
-                    Pick(w, "session-options");
+                    Pick(w, "session-card");
                 var root = (FrameworkElement)w.Content;
                 w.Content = null;
                 root.Resources.MergedDictionaries.Add(w.Resources);

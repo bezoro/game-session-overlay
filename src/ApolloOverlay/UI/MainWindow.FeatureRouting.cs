@@ -1,6 +1,3 @@
-using System.Windows;
-using System.Windows.Media;
-
 namespace ApolloOverlay;
 
 public partial class MainWindow
@@ -24,38 +21,6 @@ public partial class MainWindow
             OpenPrimaryAudio();
         else
             Page(next);
-    }
-
-    private FrameworkElement? SessionFeatureIcon(string id)
-    {
-        var key = id.StartsWith("output:", StringComparison.Ordinal) ? "speaker" : id.StartsWith("capture:", StringComparison.Ordinal) ? "gallery" : id.StartsWith("mix:", StringComparison.Ordinal) ? "speaker" : id switch
-        {
-            "mixer-refresh" or "device-refresh" or "media-refresh" or "capture-refresh" => "refresh",
-            "session-volume" or "windows-volume" or "session-mixer" or "mixer-volume" => "speaker",
-            "microphone" => "microphone",
-            "session-profiles" or "profile-new" => "profile",
-            "session-media" => "play",
-            "media-toggle" => CurrentMedia?.Playing == true ? "pause" : "play",
-            "media-next" => "next",
-            "media-previous" => "previous",
-            "session-keyboard" or "keyboard-editor" => "keyboard",
-            "keyboard-target" => "window",
-            "session-capture" => "camera",
-            "session-gallery" or "capture-folder" => "gallery",
-            "audio-devices" or "mixer-devices" => "speaker",
-            _ => null
-        };
-        if (key is null)
-            return null;
-        var icon = new VectorIcon
-        {
-            Data = (Geometry)FindResource("Icon." + key),
-            Width = 26,
-            Height = 26,
-            HorizontalAlignment = HorizontalAlignment.Left
-        };
-        icon.SetResourceReference(VectorIcon.FillProperty, ThemeSupport.SecondaryText);
-        return icon;
     }
 
     private void BuildSessionDashboard()

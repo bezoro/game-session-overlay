@@ -29,3 +29,11 @@ The examined Apollo revision is `adc5c5a0bd80831ce495434bb16aee2cd4175fb8`. It c
 Neutralizing that public virtual device alone would also remove the overlay's navigation input. A separate authenticated channel must deliver original states to the overlay while the device owner confirms neutral states at every public write, including delayed writes, Guide and disconnects. This backend would remain optional so local PC use does not require Apollo.
 
 Isolation must not be reported until source access is excluded and public neutral input is confirmed. Release must wait for stable neutral input and handle reconnection, new input, IPC loss, crashes and expiration. Test the original and public states simultaneously in separate processes, then repeat with the actual controller, TV, Apollo/client versions and installed drivers. Screenshots and synthetic fixtures cannot establish that isolation works.
+
+## Streaming controller model and battery
+
+The host can identify only the device exposed to Windows. A physical Xbox Series X|S controller connected to the TV can appear as an Xbox 360 virtual controller on the PC. The overlay must not replace that reported model with an assumed physical one.
+
+In the examined Apollo revision, [the Windows battery handler](https://github.com/ClassicOldSong/Apollo/blob/adc5c5a0bd80831ce495434bb16aee2cd4175fb8/src/platform/windows/input.cpp#L1654-L1718) returns immediately for virtual controllers other than DualShock 4. Battery data therefore does not reach the Windows virtual Xbox 360 device through this path, even when a client sends a battery packet. Changing emulation would affect game input compatibility and is not performed by the overlay.
+
+Unavailable charge is labeled "Not reported" with an information or power icon. It does not render an empty battery gauge, infer zero percent or present a virtual wired device as proof of a physical USB connection. Confirmed battery categories and measured percentages remain distinct. Identity and power are queried during confirmed active use; loss of focus clears unassociated metadata.

@@ -287,7 +287,21 @@ public partial class MainWindow
         && entry.Id.StartsWith("window:", StringComparison.Ordinal)
         || entry.Id.StartsWith("options:", StringComparison.Ordinal)
         || entry.Id.StartsWith("favorite:", StringComparison.Ordinal) ? "Execute" : "RequiresInteractive";
-    internal AutomationSnapshot AutomationSnapshot() => new("", Environment.ProcessId, System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), automationRevision, view.Current.Route.ToString(), IsVisible, busy, AutomationWindows().Select(w => new AutomationTarget(TargetId(w), w.Handle.ToInt64(), w.Pid, w.Started, w.Generation, w.ProcessName)).ToArray(), entries.Select(e => new AutomationAction(e.Id, e.Available, e.Reason, Capability(e), e.Id is "volume" or "guide-limit" ? ["activate", "left", "right"] : ["activate"])).Concat(new[] { "home", "apps", "system", "audio", "integrations", "options", "details", "customize", "setup", "result" }.Select(r => new AutomationAction("route:" + r, !busy, "Explicit route navigation", "Execute", ["activate"]))).Concat([new("focus", !busy, "Target focus verified", "Execute", ["activate"]), new("steam-overlay", !busy, "Shortcut configured; visible interface is not guaranteed", "Execute", ["activate"])]).DistinctBy(a => a.Id).ToArray(), "unknown", PendingRequestId: steamOwner?.Id ?? "", Phase: Controller.Operation?.State ?? "", TargetsAtUtc: automationTargetsAt);
+    internal AutomationSnapshot AutomationSnapshot()
+    {
+        using var process = System.Diagnostics.Process.GetCurrentProcess();
+        IEnumerable<AutomationAction> actions = entries.Select(entry => new AutomationAction(entry.Id, entry.Available, entry.Reason, Capability(entry), entry.Id is "volume" or "guide-limit" ? ["activate", "left", "right"] : ["activate"]));
+        if (view.Current.Route == OverlayRoute.Hub)
+            actions = actions.Append(new("session-options", !busy, "Session window options", "Execute", ["activate"]));
+        actions = actions.Concat(new[] { "home", "apps", "system", "audio", "integrations", "options", "details", "customize", "setup", "result" }
+            .Select(route => new AutomationAction("route:" + route, !busy, "Explicit route navigation", "Execute", ["activate"])))
+            .Concat([new("focus", !busy, "Target focus verified", "Execute", ["activate"]), new("steam-overlay", !busy, "Shortcut configured; visible interface is not guaranteed", "Execute", ["activate"])]);
+        return new("", Environment.ProcessId, process.StartTime.ToUniversalTime().Ticks, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), automationRevision,
+            view.Current.Route.ToString(), IsVisible, busy,
+            AutomationWindows().Select(window => new AutomationTarget(TargetId(window), window.Handle.ToInt64(), window.Pid, window.Started, window.Generation, window.ProcessName)).ToArray(),
+            actions.DistinctBy(action => action.Id).ToArray(), "unknown", PendingRequestId: steamOwner?.Id ?? "", Phase: Controller.Operation?.State ?? "", TargetsAtUtc: automationTargetsAt);
+    }
+
     internal async Task<AutomationReply> AutomationExecute(AutomationRequest request, CancellationToken token, Action<AutomationReply> phase, Func<bool> continuing)
     {
         if (token.IsCancellationRequested || !continuing())
@@ -370,6 +384,24 @@ public partial class MainWindow
             }
 
             return AutomationReply.Error("Completed", "Route updated.");
+        }
+
+        // Keep the established command after removing its redundant visual button.
+        if (request.ActionId == "session-options")
+        {
+            if (view.Current.Route != OverlayRoute.Hub)
+                return AutomationReply.Error("Unavailable", "Session options are available from the session page.");
+            var session = Controller.Session.Anchor;
+            if (session is not null && !Controller.Platform.Valid(session))
+                return AutomationReply.Error("Unavailable", "The session window changed.");
+            if (request.DryRun)
+                return AutomationReply.Error("DryRun", "Session options available; no route change requested.");
+            token.ThrowIfCancellationRequested();
+            if (session is null)
+                ChooseSession();
+            else
+                OpenOptions(session);
+            return AutomationReply.Error("Completed", "Session options opened.");
         }
 
         // Passive acknowledgements have no buttons, but the retained reader and

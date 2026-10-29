@@ -55,7 +55,7 @@ public partial class MainWindow
                 keyboardTarget = targets.Length > 0 ? targets[(index + 1) % targets.Length] : null;
                 RefreshRows();
             }, "Choose the exact window that receives the text", compact ? 28 : 32);
-            ((TextBlock)destination.Content).TextAlignment = TextAlignment.Left;
+            destination.Content = new IconLabel(this, "keyboard-target", title, 14, 16) { HorizontalAlignment = HorizontalAlignment.Stretch };
             destination.FontSize = 14;
             destination.ToolTip = "Target window: " + (keyboardTarget?.Title ?? "None selected");
             AddKeyboardButton(pane, destination, 0);
@@ -196,11 +196,13 @@ public partial class MainWindow
             Width = new GridLength(64)
         });
         commands.ColumnDefinitions.Add(new());
-        AddKeyboardButton(commands, KeyboardButton("back", "Back", Back, "Return without sending text", compact ? 44 : 48), 0, 0);
+        var back = KeyboardButton("back", "Back", Back, "Return without sending text", compact ? 44 : 48);
+        back.Content = new IconLabel(this, "back", "Back");
+        AddKeyboardButton(commands, back, 0, 0);
         var insert = KeyboardButton("keyboard-insert", keyboardForProfile ? "Use name" : "Insert text", SubmitSessionKeyboard,
             keyboardForProfile ? "Return to the profile without sending text to another app" : "Sends text only; Enter is never sent", compact ? 44 : 48, keyboardForProfile || keyboardTarget is not null);
         var insertContent = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        insertContent.Children.Add(new TextBlock { Text = keyboardForProfile ? "Use name" : "Insert text", FontWeight = FontWeights.SemiBold, TextAlignment = TextAlignment.Center });
+        insertContent.Children.Add(new IconLabel(this, keyboardForProfile ? "profile-accept" : "keyboard-insert", keyboardForProfile ? "Use name" : "Insert text", 13, 16));
         var insertionHint = new TextBlock { Text = keyboardForProfile ? "Return to profile" : "Text only · never Enter", FontSize = 11, TextAlignment = TextAlignment.Center };
         insertionHint.SetResourceReference(ForegroundProperty, ThemeSupport.SecondaryText);
         insertContent.Children.Add(insertionHint);
@@ -227,6 +229,8 @@ public partial class MainWindow
             VerticalContentAlignment = VerticalAlignment.Center,
             ToolTip = description
         };
+        if (id is "keyboard-delete" or "keyboard-clear")
+            button.Content = ActionIconCatalog.Create(this, id, 19);
         button.Click += (_, _) => ActivatePointerEntry(button);
         button.GotKeyboardFocus += (_, _) =>
         {

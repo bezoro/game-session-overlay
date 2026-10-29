@@ -470,7 +470,7 @@ internal static class PremiumInterfaceTests
 
                         )
                         {
-                            var label = (TextBlock)((Button)w.FindName(name)).Content;
+                            var label = ((IconLabel)((Button)w.FindName(name)).Content).Label;
                             Require(label.FontFamily.Source == "Segoe UI Variable Text, Segoe UI" && label.FontSize == 16 && label.FontStyle == FontStyles.Normal, "Tab typography differs from the interface font: " + name);
                             GlyphTypeface? glyph = null;
                             foreach (var family in label.FontFamily.Source.Split(','))

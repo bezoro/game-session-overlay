@@ -165,18 +165,6 @@ public partial class MainWindow
             return;
         }
 
-        if (view.Current.Route == OverlayRoute.Hub
-            && (navigation.Id == "session-card"
-            && direction == NavDirection.Right
-            || navigation.Id == "session-options"
-            && direction == NavDirection.Left))
-        {
-            navigation = new(navigation.Id == "session-card" ? "session-options" : "session-card");
-            SetSelection();
-            RequestCue(FeedbackCue.Navigation);
-            return;
-        }
-
         if (view.Current.Route == OverlayRoute.Hub)
         {
             var next = (navigation.Id, direction) switch
@@ -364,27 +352,44 @@ public partial class MainWindow
         SettingsTab.Click += (_, _) => OpenPrimaryAudio();
         SettingsGear.Click += (_, _) => ActivatePointerEntry(SettingsGear);
         BackButton.Click += (_, _) => ActivatePointerEntry(BackButton);
-        foreach (var fixedButton in new[]
+        HomeTab.Content = new IconLabel(this, "session", "Session", 16, 16);
+        AppsTab.Content = new IconLabel(this, "apps", "Apps", 16, 16);
+        SettingsTab.Content = new IconLabel(this, "audio", "Audio", 16, 16);
+        SaveSettingsButton.Content = new IconLabel(this, "save-pending", "Save");
+        AutomationProperties.SetName(SaveSettingsButton, "Save changes");
+        AutomationProperties.SetHelpText(SaveSettingsButton, "Save pending settings on this computer");
+        AutomationProperties.SetName(DiscardSettingsButton, "Discard changes");
+        AutomationProperties.SetHelpText(DiscardSettingsButton, "Restore the last saved settings");
+        DiscardSettingsButton.Content = new IconLabel(this, "discard-pending", "Discard");
+        OperationDetailsButton.Content = new IconLabel(this, "operation-details", "Details", 13, 14);
+        CancelCloseButton.Content = new IconLabel(this, "back", "Cancel");
+        HoldCloseButton.Content = new IconLabel(this, "confirm-hold", "Hold to close", 16, 20);
+        SessionCardButton.Click += (_, _) => ActivatePointerEntry(SessionCardButton);
+        SessionCardButton.PreviewMouseRightButtonUp += (_, args) =>
         {
-            SessionCardButton,
-            SessionOptionsButton
-        }
-
-        )
+            if (!NavigationAllowed || busy || TransitionPending || Confirming || view.Current.Route != OverlayRoute.Hub)
+                return;
+            SetInputMethod("mouse");
+            navigation = new("session-card");
+            SetSelection(false, false);
+            args.Handled = true;
+            var target = Controller.Session.Anchor;
+            RunInterfaceAction(SessionCardButton, () =>
+            {
+                if (target is null)
+                    ChooseSession();
+                else
+                    OpenOptions(target);
+            }, FeedbackCue.Confirmation);
+        };
+        SessionCardButton.GotKeyboardFocus += (_, _) =>
         {
-            fixedButton.Click += (_, _) =>
+            if (navigation.Id != "session-card")
             {
-                ActivatePointerEntry(fixedButton);
-            };
-            fixedButton.GotKeyboardFocus += (_, _) =>
-            {
-                if (fixedButton.Tag is string id && navigation.Id != id)
-                {
-                    navigation = new(id);
-                    SetSelection(false);
-                }
-            };
-        }
+                navigation = new("session-card");
+                SetSelection(false);
+            }
+        };
 
         ContextCard.Focusable = true;
         SessionCardButton.Resources["DescriptionTarget"] = ContextCard;

@@ -259,7 +259,7 @@ public partial class MainWindow
         var context = InputContext;
         if (context.Visible && !context.Confirmed && !context.OwnedDialog)
         {
-            SessionHint.Text = "Waiting for window focus";
+            SessionHint.Text = "Focus not confirmed";
             System.Windows.Automation.AutomationProperties.SetHelpText(SessionCardButton, SessionHint.Text);
             ModeLabel.Text = InputHint("Guide / B hide · reopen to retry", "Esc hides · tray opens the panel", "Click the panel to retry · tray opens");
             return;
@@ -279,7 +279,7 @@ public partial class MainWindow
         } : inputMethod switch
         {
             "controller" => "A · Resume   X · Options",
-            "mouse" => "Click to resume · ·· Options",
+            "mouse" => "Click resumes · right-click options",
             _ => "Enter · Resume   X · Options"
         };
         var details = page == 1 || subpage == "details";
@@ -350,7 +350,7 @@ public partial class MainWindow
         SessionIconColumn.Width = new(compact ? 48 : 66);
         SessionIconHost.Height = compact ? 40 : 54;
         SessionIconHost.Margin = new(0, 0, compact ? 8 : 12, 0);
-        ContextGlyph.FontSize = compact ? 22 : 25;
+        ContextGlyph.Width = ContextGlyph.Height = compact ? 22 : 25;
         ContextIcon.Width = ContextIcon.Height = compact ? 32 : 42;
         SessionCardButton.Padding = compact ? new(10, 10, 10, 10) : new(14, 12, 14, 12);
         ContextCard.Margin = new(0, 0, 0, compact ? 8 : 12);
