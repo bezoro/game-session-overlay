@@ -421,12 +421,12 @@ internal static class SessionInterfaceTests
             Require(title.IsVisible && title.ActualWidth > 0 && title.ActualHeight > 0 && title.Text.Length > 0, "Capture game title is not rendered");
         }
 
-        var footer = ((TextBlock)window.FindName("ModeLabel")).Text;
+        var footer = InputPrompt.Read((TextBlock)window.FindName("ModeLabel"));
         var expectedPrompt = expectedInput switch
         {
             "controller" => "LB/RB",
             "controller-unfocused" => "Guide / B",
-            "mouse" => "Click",
+            "mouse" => "Left click",
             _ => "Enter"
         };
         Require(footer.Contains(expectedPrompt, StringComparison.Ordinal), $"Capture input mismatch: expected {expectedInput}; footer={footer}");

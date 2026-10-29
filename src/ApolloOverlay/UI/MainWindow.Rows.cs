@@ -23,7 +23,7 @@ public partial class MainWindow
         UpdateEntryAutomation(button);
     }
 
-    private void SetEntryDescription(string id, string description)
+    private void SetEntryDescription(string id, string description, string? inputPrompt = null)
     {
         var index = entries.FindIndex(e => e.Id == id);
         if (index < 0)
@@ -31,7 +31,13 @@ public partial class MainWindow
         var entry = entries[index];
         if (entry.Button.Content is ActionButtonContent content)
         {
-            content.Description.Text = description;
+            if (inputPrompt is not null)
+                RenderHint(content.Description, inputPrompt);
+            else
+            {
+                content.Description.Text = description;
+                AutomationProperties.SetName(content.Description, description);
+            }
             content.Description.Visibility = description.Length > 0 && !CompactAction(id) ? Visibility.Visible : Visibility.Collapsed;
         }
 
@@ -48,15 +54,14 @@ public partial class MainWindow
         if (button.Resources["DescriptionTarget"] is not Border description)
             return;
         var help = AutomationProperties.GetHelpText(button);
-        button.ToolTip = AutomationProperties.GetName(button) + "\n" + help;
         AutomationProperties.SetName(description, AutomationProperties.GetName(button) + ". " + help);
         AutomationProperties.SetHelpText(description, help);
     }
 
     private void FeedbackText(string text, bool important = false)
     {
-        UpdateStatusPresentation(important);
         StatusLabel.Text = text;
+        UpdateStatusPresentation(important);
     }
 
     private void FeedbackFocusUnavailable(string text)
@@ -110,7 +115,7 @@ public partial class MainWindow
                 {
                     Id = entries.Any(e => e.Id == lastContentSelection) ? lastContentSelection : Navigation.Preserve(navigation.Id, previous, entries.Select(e => e.Id).ToArray())
                 };
-                SetSelection(false);
+                SetSelection();
             }
         }
 
@@ -221,7 +226,7 @@ public partial class MainWindow
         SaveView();
         TrackApplicationAudio();
         revealPending = true;
-        SetSelection(false);
+        SetSelection();
         automationHost?.ObserveSnapshot(AutomationSnapshot());
     }
 
@@ -238,17 +243,8 @@ public partial class MainWindow
             Height = 30,
             HorizontalAlignment = HorizontalAlignment.Left,
             Visibility = Visibility.Hidden,
-            Child = new TextBlock
-            {
-                Text = "A",
-                FontSize = 18,
-                FontWeight = FontWeights.SemiBold,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                Foreground = new SolidColorBrush(Color.FromRgb(15, 38, 20))
-            }
+            Child = InputPrompt.CreateGlyph(this, "A", 26)
         };
-        badge.SetResourceReference(BackgroundProperty, ThemeSupport.Success);
         Grid.SetColumn(badge, 0);
         grid.Children.Add(badge);
         var compactAction = CompactAction(id);
@@ -261,7 +257,7 @@ public partial class MainWindow
             grid.ColumnDefinitions[0].Width = new GridLength(26);
             grid.Icon.Width = grid.Icon.Height = 20;
             badge.Width = badge.Height = 22;
-            ((TextBlock)badge.Child).FontSize = 14;
+            badge.Child = InputPrompt.CreateGlyph(this, "A", 20);
         }
         if (id == "apps")
         {
@@ -283,7 +279,6 @@ public partial class MainWindow
             grid.Resources["CountBadge"] = count;
         }
 
-        ((TextBlock)badge.Child).SetResourceReference(TextBlock.ForegroundProperty, SystemParameters.HighContrast ? SystemColors.HighlightTextBrushKey : ThemeSupport.Surface);
         var button = new Button
         {
             Content = grid,
@@ -311,14 +306,13 @@ public partial class MainWindow
             button.SetResourceReference(ForegroundProperty, ThemeSupport.Critical);
         AutomationProperties.SetName(button, title);
         AutomationProperties.SetHelpText(button, description);
-        button.ToolTip = title + "\n" + description;
         button.Resources["ABadge"] = badge;
         button.GotKeyboardFocus += (_, focus) =>
         {
             if (navigation.Id != id)
             {
                 navigation = new(id);
-                SetSelection(false, ReferenceEquals(focus.NewFocus, button));
+                SetSelection(restoreFocus: ReferenceEquals(focus.NewFocus, button));
             }
         };
         button.Click += (_, _) =>

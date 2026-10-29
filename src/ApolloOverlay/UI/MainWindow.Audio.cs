@@ -128,7 +128,7 @@ public partial class MainWindow
             if (entry.Button.Resources["DescriptionTarget"] is Border reason)
                 AutomationProperties.SetName(reason, MuteActionTitle() + ". " + AppAudioDescription());
             if (entry.Available != available && navigation.Id == entry.Id)
-                SetSelection(false);
+                SetSelection();
         }
     }
 

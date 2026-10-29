@@ -143,7 +143,7 @@ public partial class MainWindow
                 return;
             Place();
             RefreshRows();
-            SetSelection(false);
+            SetSelection();
         }
         catch (OperationCanceledException)
         {

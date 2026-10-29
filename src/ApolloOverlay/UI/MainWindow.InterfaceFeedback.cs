@@ -34,7 +34,7 @@ public partial class MainWindow
         try
         {
             navigation = new(id);
-            SetSelection(false);
+            SetSelection();
             if (id == "settings" && NavigationAllowed && !TransitionPending && !Confirming)
                 RunInterfaceAction(button, () => Page(2), FeedbackCue.Confirmation);
             else if (NavigationAllowed && (id == "back-header" || Confirming && id == "confirm-cancel"))

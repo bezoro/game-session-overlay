@@ -10,6 +10,20 @@ internal static class MotionAndControllerTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        test("enabled and unavailable actions render a single selection outline", () =>
+        {
+            using var host = new Host();
+            foreach (var id in new[] { "session-card", "steam-overlay" })
+            {
+                Pick(host.Window, id);
+                var button = id == "session-card" ? (Button)host.Window.FindName("SessionCardButton") : ReviewFixTests.Button(host.Window, id);
+                button.ApplyTemplate();
+                var strokes = Strokes(button);
+                if (!button.IsEnabled && button.Resources["DescriptionTarget"] is Border reason && HasStroke(reason))
+                    strokes++;
+                Require(strokes == 1, "Selection renders " + strokes + " overlapping outlines for " + id);
+            }
+        });
         test("selection breathing and sheen preserve geometry and stop on focus change and hide", () =>
         {
             using var host = new Host();
@@ -19,18 +33,22 @@ internal static class MotionAndControllerTests
             var breath = (Border)button.Template.FindName("SelectionBreath", button);
             var sheen = (Border)button.Template.FindName("SelectionSheen", button);
             var label = (TextBlock)w.FindName("TargetLabel");
-            var before = label.TranslatePoint(new Point(), w);
+            var before = System.Windows.Controls.Primitives.LayoutInformation.GetLayoutSlot(label);
+            var scale = (ScaleTransform)((Grid)button.Template.FindName("ButtonSurface", button)).RenderTransform;
             Require(InteractionMotion.GetIsSelected(button) == InteractionMotion.Allowed, "Visible selection did not follow the motion policy");
             Require(breath.HasAnimatedProperties == InteractionMotion.Allowed && sheen.Background.RelativeTransform.HasAnimatedProperties == InteractionMotion.Allowed, "Selection effects did not start");
             Pump(180);
-            Require(label.TranslatePoint(new Point(), w) == before, "Breathing changed text layout");
+            Require(System.Windows.Controls.Primitives.LayoutInformation.GetLayoutSlot(label) == before, "Breathing changed layout instead of only rendering scale");
+            Require(scale.HasAnimatedProperties == InteractionMotion.Allowed && scale.ScaleX is >= 1 and <= 1.0081 && scale.ScaleY == scale.ScaleX, "Breathing scale is missing, asymmetric or excessive");
             w.Sequential(1);
             Pump(10);
             Require(!breath.HasAnimatedProperties && !sheen.Background.RelativeTransform.HasAnimatedProperties, "Previous selection kept its animation clocks");
+            Require(!scale.HasAnimatedProperties && scale.ScaleX == 1 && scale.ScaleY == 1, "Previous selection kept its scale");
             Pick(w, "session-card");
             w.Hide();
             Pump(10);
             Require(!InteractionMotion.GetIsSelected(button) && !breath.HasAnimatedProperties && !sheen.Background.RelativeTransform.HasAnimatedProperties, "Hidden overlay kept selection animation clocks alive");
+            Require(!scale.HasAnimatedProperties && scale.ScaleX == 1, "Hidden overlay kept scale animation clocks alive");
         });
         test("press animation returns to neutral and obsolete motion preferences do not suppress it", () =>
         {
@@ -197,6 +215,17 @@ internal static class MotionAndControllerTests
     {
         if (!value)
             throw new Exception(message);
+    }
+
+    private static bool HasStroke(Border border) => border.IsVisible && border.Opacity > 0
+        && border.BorderThickness != new Thickness(0) && border.BorderBrush is SolidColorBrush { Color.A: > 0 };
+
+    private static int Strokes(DependencyObject root)
+    {
+        var count = root is Border border && HasStroke(border) ? 1 : 0;
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+            count += Strokes(VisualTreeHelper.GetChild(root, index));
+        return count;
     }
 
     private static void Complete(Task task) => ReviewFixTests.Complete(task);

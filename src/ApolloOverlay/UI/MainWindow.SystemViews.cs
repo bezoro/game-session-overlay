@@ -165,6 +165,7 @@ public partial class MainWindow
             Width = 44,
             Height = 44,
             Focusable = true,
+            FocusVisualStyle = null,
             Tag = "description:" + entryId,
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center,

@@ -266,7 +266,7 @@ internal static class ReviewFixTests
                     var button = PremiumInterfaceTests.Descendants<Button>(root).First(b => Equals(b.Tag, "session-card"));
                     button.ApplyTemplate();
                     if (state == "focus-template-simulation")
-                        ((Border)button.Template.FindName("FocusRing", button)).Visibility = Visibility.Visible;
+                        InteractionMotion.SetIsSelected(button, true);
                     else
                         ((Border)button.Template.FindName("Interaction", button)).Opacity = state == "hover-template-simulation" ? .06 : .13;
                 }

@@ -65,6 +65,7 @@ public partial class MainWindow
         var reason = new Border
         {
             Focusable = true,
+            FocusVisualStyle = null,
             Tag = "description:" + id,
             Margin = new(-2)
         };

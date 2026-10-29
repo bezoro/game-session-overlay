@@ -10,4 +10,8 @@ The overlay combines the destination monitor's usable work area, the Windows DPI
 
 Application copy and accessibility descriptions use English. The application culture is English even when Windows uses another language; this does not change Windows locale settings.
 
+Action rows do not repeat their visible name and description in a hover tooltip. Accessible names, help text and focusable explanations for unavailable actions remain available. Purpose-specific tooltips provide additional information, such as controller metadata or the complete build identity.
+
+Selecting a row does not copy its description into the footer. The footer keeps input instructions and operational feedback. Instructions use source vector glyphs for controller buttons, keyboard keys and mouse buttons, following the latest input without rebuilding controls. Explicit prompt tokens preserve complete accessible names. Selection has one outline; its breathing scale affects rendering only and stops when selection or visibility changes.
+
 Review screenshots in dark and light themes, at normal and compact widths, with controller and pointer instructions and both routine and uncertain results. Reviewers must see the rendered interface. Automated coverage also checks result expiry, retained messages, unchanged focus and controls when switching input, primary action order, and monitor geometry across DPI values.

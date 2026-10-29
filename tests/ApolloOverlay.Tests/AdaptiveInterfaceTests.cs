@@ -1,6 +1,8 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Input;
 using ApolloOverlay;
 
@@ -129,21 +131,44 @@ internal static class AdaptiveInterfaceTests
             {
                 w.ShowDiagnostic();
                 UseController(w);
-                Require(((TextBlock)w.FindName("ModeLabel")).Text.Contains("LB/RB"), "Controller activity did not update navigation prompts");
+                Require(InputPrompt.Read((TextBlock)w.FindName("ModeLabel")).Contains("LB/RB"), "Controller activity did not update navigation prompts");
+                Require(new[] { "A", "B", "LB", "RB", "Dpad" }.All(key => Glyphs((TextBlock)w.FindName("ModeLabel")).Contains(key)), "Controller instructions did not render button vectors");
                 w.Page(2);
                 var shortcut = ReviewFixTests.Button(w, "shortcut");
-                Require(((ActionButtonContent)shortcut.Content).Description.Text.StartsWith("A switches"), "Controller hint leaked keyboard-only instructions");
+                Require(InputPrompt.Read(((ActionButtonContent)shortcut.Content).Description).StartsWith("A switches"), "Controller hint leaked keyboard-only instructions");
                 var selected = w.SelectedAction;
                 var focused = Keyboard.FocusedElement;
                 w.ObservePointerPosition(new(100, 100));
                 w.ObservePointerPosition(new(101, 101));
-                Require(((TextBlock)w.FindName("ModeLabel")).Text.Contains("LB/RB"), "Pointer jitter replaced controller prompts");
+                Require(InputPrompt.Read((TextBlock)w.FindName("ModeLabel")).Contains("LB/RB"), "Pointer jitter replaced controller prompts");
                 w.ObservePointerPosition(new(120, 100));
-                Require(((TextBlock)w.FindName("ModeLabel")).Text.Contains("Click") && ((ActionButtonContent)shortcut.Content).Description.Text.StartsWith("Click"), "Deliberate pointer activity did not update contextual prompts");
+                Require(InputPrompt.Read((TextBlock)w.FindName("ModeLabel")).Contains("Left click") && InputPrompt.Read(((ActionButtonContent)shortcut.Content).Description).StartsWith("Left click"), "Deliberate pointer activity did not update contextual prompts");
+                Require(Glyphs((TextBlock)w.FindName("ModeLabel")).Contains("MouseLeft") && !Glyphs((TextBlock)w.FindName("ModeLabel")).Contains("A"), "Mouse instructions retained controller glyphs");
                 Require(w.SelectedAction == selected && ReferenceEquals(Keyboard.FocusedElement, focused) && ReferenceEquals(shortcut, ReviewFixTests.Button(w, "shortcut")), "Changing input mode moved selection, focus or rebuilt controls");
                 var source = PresentationSource.FromVisual(w)!;
                 w.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.LeftShift) { RoutedEvent = Keyboard.PreviewKeyDownEvent });
-                Require(((TextBlock)w.FindName("ModeLabel")).Text.Contains("Enter") && ((ActionButtonContent)shortcut.Content).Description.Text.StartsWith("Enter"), "Keyboard activity did not restore keyboard prompts");
+                Require(InputPrompt.Read((TextBlock)w.FindName("ModeLabel")).Contains("Enter") && InputPrompt.Read(((ActionButtonContent)shortcut.Content).Description).StartsWith("Enter"), "Keyboard activity did not restore keyboard prompts");
+                Require(new[] { "Enter", "Esc", "Arrows", "Tab", "PgUp", "PgDn" }.All(key => Glyphs((TextBlock)w.FindName("ModeLabel")).Contains(key)), "Keyboard instructions did not render keycap vectors");
+            }
+            finally
+            {
+                w.Close();
+            }
+        });
+        test("selection preserves operational feedback and does not duplicate action descriptions", () =>
+        {
+            var w = ReviewFixTests.Window();
+            try
+            {
+                w.ShowDiagnostic();
+                var status = w.Feedback;
+                for (var index = 0; index < w.ActionIds.Count; index++)
+                {
+                    w.Sequential(1);
+                    Require(w.Feedback == status, "Selecting an action replaced operational feedback with its description");
+                }
+                var playnite = ReviewFixTests.Button(w, "playnite");
+                Require(playnite.ToolTip is null && AutomationProperties.GetName(playnite) == "Playnite" && AutomationProperties.GetHelpText(playnite).Length > 0, "Removing duplicate tooltips lost accessible action information");
             }
             finally
             {
@@ -200,6 +225,8 @@ internal static class AdaptiveInterfaceTests
     }
 
     private static void Click(MainWindow window, string id) => ReviewFixTests.Button(window, id).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+    private static string[] Glyphs(TextBlock label) => label.Inlines.OfType<InlineUIContainer>()
+        .Select(inline => ((VectorIcon)inline.Child).Tag as string ?? "").ToArray();
     private static void Require(bool condition, string message)
     {
         if (!condition)

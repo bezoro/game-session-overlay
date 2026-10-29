@@ -132,7 +132,7 @@ public partial class MainWindow
             if (NavigationAllowed && navigationKeysArmed && !busy && !TransitionPending && !ownedDialog && !Confirming)
             {
                 if (modifiers.HasFlag(ModifierKeys.Shift))
-                    SetSelection(false);
+                    SetSelection();
                 else
                     Sequential(1);
             }

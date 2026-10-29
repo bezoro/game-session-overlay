@@ -83,7 +83,7 @@ public partial class MainWindow
                 InteractionMotion.Stop(entry.Button);
         }
         else if (IsVisible)
-            SetSelection(false, false);
+            SetSelection(restoreFocus: false);
         ThemeSupport.ApplySystemPalette(Application.Current);
         GlassSurface.Opacity = 1;
         GlassSurface.Effect = SystemParameters.HighContrast ? null : new System.Windows.Media.Effects.DropShadowEffect
@@ -259,43 +259,37 @@ public partial class MainWindow
         var context = InputContext;
         if (context.Visible && !context.Confirmed && !context.OwnedDialog)
         {
-            SessionHint.Text = "Focus not confirmed";
-            System.Windows.Automation.AutomationProperties.SetHelpText(SessionCardButton, SessionHint.Text);
-            ModeLabel.Text = InputHint("Guide / B hide · reopen to retry", "Esc hides · tray opens the panel", "Click the panel to retry · tray opens");
+            RenderHint(SessionHint, "Focus not confirmed");
+            System.Windows.Automation.AutomationProperties.SetHelpText(SessionCardButton, InputPrompt.Read(SessionHint));
+            RenderHint(ModeLabel, InputHint("{Guide} / {B} hide · reopen to retry", "{Esc} hides · tray opens the panel", "{MouseLeft} the panel to retry · tray opens"));
             return;
         }
         if (Confirming)
         {
-            ModeLabel.Text = inputMethod == "controller" ? "Hold A · B cancel · right stick scroll" : inputMethod == "mouse" ? "Hold to confirm · Cancel stops" : "Hold Enter / Space · Esc cancel · PgUp/PgDn scroll";
+            RenderHint(ModeLabel, InputHint("Hold {A} · {B} cancel · {RS} scroll", "Hold {Enter} / {Space} · {Esc} cancel · {PgUp}/{PgDn} scroll", "Hold {MouseLeft} to confirm · Cancel stops"));
             return;
         }
 
         var sessionTarget = Controller.Session.Anchor;
-        SessionHint.Text = (sessionTarget is null || !Controller.Platform.Valid(sessionTarget)) ? inputMethod switch
+        RenderHint(SessionHint, (sessionTarget is null || !Controller.Platform.Valid(sessionTarget)) ? inputMethod switch
         {
-            "controller" => "A · Choose window",
-            "mouse" => "Click to choose a window",
-            _ => "Enter · Choose window"
+            "controller" => "{A} Choose window",
+            "mouse" => "{MouseLeft} Choose window",
+            _ => "{Enter} Choose window"
         } : inputMethod switch
         {
-            "controller" => "A · Resume   X · Options",
-            "mouse" => "Click resumes · right-click options",
-            _ => "Enter · Resume   X · Options"
-        };
+            "controller" => "{A} Resume   {X} Options",
+            "mouse" => "{MouseLeft} Resume   {MouseRight} Options",
+            _ => "{Enter} Resume   {KeyX} Options"
+        });
         var details = page == 1 || subpage == "details";
-        ModeLabel.Text = inputMethod switch
+        var prompt = inputMethod switch
         {
-            "mouse" => "Click to select · drag to adjust",
-            "controller" => "A select · B back" + (details ? " · X options" : "") + "\nLB/RB tabs · D-pad move" + (Controller.Settings.GuideXInputEnabled && guideBackend?.Active == true ? " · Guide hide" : ""),
-            _ => "Enter select · Esc back" + (details ? " · X options" : "") + "\nArrows / Tab move · PgUp/PgDn tabs · tray: open"
+            "mouse" => "{MouseLeft} Select · {MouseScroll} Scroll" + (details ? " · {MouseRight} Options" : ""),
+            "controller" => "{A} select · {B} back" + (details ? " · {X} options" : "") + "\n{LB}/{RB} tabs · {Dpad} move" + (Controller.Settings.GuideXInputEnabled && guideBackend?.Active == true ? " · {Guide} hide" : ""),
+            _ => "{Enter} select · {Esc} back" + (details ? " · {KeyX} options" : "") + "\n{Arrows} / {Tab} move · {PgUp}/{PgDn} tabs"
         };
-        if (compactChrome)
-            ModeLabel.Text = inputMethod switch
-            {
-                "mouse" => "Click to select · tray: open",
-                "controller" => "A select · B back" + (details ? " · X options" : "") + "\nLB/RB tabs · D-pad move",
-                _ => "Enter select · Esc back" + (details ? " · X options" : "") + "\nArrows / Tab move · PgUp/PgDn tabs"
-            };
+        RenderHint(ModeLabel, prompt);
     }
 
     private void PlaceCompactStatus()
@@ -318,7 +312,7 @@ public partial class MainWindow
         StatusLabel.TextWrapping = compactChrome && important ? TextWrapping.Wrap : TextWrapping.NoWrap;
         StatusLabel.TextTrimming = compactChrome && important ? TextTrimming.None : TextTrimming.CharacterEllipsis;
         StatusLabel.MaxHeight = compactChrome && important ? 60 : double.PositiveInfinity;
-        StatusLabel.Visibility = compactChrome && !important ? Visibility.Collapsed : Visibility.Visible;
+        StatusLabel.Visibility = string.IsNullOrWhiteSpace(StatusLabel.Text) || compactChrome && !important ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private const double ScrollFadeHeight = 24;
@@ -402,7 +396,7 @@ public partial class MainWindow
         StatusLabel.FontSize = compact ? 12 : 14;
         StatusLabel.Margin = new(0, compact ? 2 : 4, 0, 0);
         ModeLabel.FontSize = compact ? 12 : 14;
-        ModeLabel.LineHeight = compact ? 17 : 19;
+        ModeLabel.LineHeight = compact ? 19 : 21;
         ModeLabel.Margin = new(0, compact ? 3 : 5, 0, 0);
         if (!compact)
         {
@@ -461,6 +455,6 @@ public partial class MainWindow
         if (Keyboard.FocusedElement is FrameworkElement editor && editor is TextBox or Slider && Rows.IsAncestorOf(editor))
             RevealTarget(editor);
         else
-            SetSelection(false);
+            SetSelection();
     }
 }

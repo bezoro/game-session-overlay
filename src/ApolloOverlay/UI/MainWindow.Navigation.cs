@@ -79,7 +79,7 @@ public partial class MainWindow
         "setup" => OverlayRoute.Setup,
         _ => OverlayRoute.OperationResult
     }, detail, first));
-    private void SetSelection(bool showReason = true, bool restoreFocus = true)
+    private void SetSelection(bool restoreFocus = true)
     {
         if (navigation.Id != "exit" && !IsFooterAction(navigation.Id) && entries.Any(entry => entry.Id == navigation.Id))
             lastContentSelection = navigation.Id;
@@ -90,6 +90,8 @@ public partial class MainWindow
             var primary = entry.Id == "session-card";
             entry.Button.BorderThickness = new(2);
             entry.Button.SetResourceReference(BorderBrushProperty, selected ? ThemeSupport.Focus : ThemeSupport.Stroke);
+            if (selected && !entry.Available && entry.Button.Resources["DescriptionTarget"] is Border)
+                entry.Button.BorderBrush = Brushes.Transparent;
             entry.Button.SetResourceReference(BackgroundProperty, selected ? ThemeSupport.FocusBackground : primary ? ThemeSupport.Card : ThemeSupport.Control);
             if (entry.Id == "close")
                 entry.Button.Background = Brushes.Transparent;
@@ -127,8 +129,6 @@ public partial class MainWindow
         var selectedEntry = entries.FirstOrDefault(entry => entry.Id == navigation.Id);
         if (selectedEntry is null)
             return;
-        if (showReason)
-            FeedbackText(selectedEntry.Available ? selectedEntry.Reason : "Unavailable · " + selectedEntry.Reason, important: !selectedEntry.Available);
         SaveView();
         if (!restoreFocus || !NavigationAllowed)
             return;
@@ -245,7 +245,7 @@ public partial class MainWindow
         keyboardDown = false;
         ReleasePointer();
         navigation = Navigation.Sequential(navigation, entries.Select(e => e.Id).ToArray(), step);
-        SetSelection(false);
+        SetSelection();
         RequestCue(FeedbackCue.Navigation);
     }
 
@@ -334,7 +334,7 @@ public partial class MainWindow
             SyncView();
             RefreshRows();
             ContentScroll.ScrollToVerticalOffset(view.Current.ScrollOffset);
-            SetSelection(false);
+            SetSelection();
             return;
         }
 
@@ -347,7 +347,7 @@ public partial class MainWindow
         HidePanel(true);
     }
 
-    internal void RevealSelection() => SetSelection(false);
+    internal void RevealSelection() => SetSelection();
     private FrameworkElement FocusTarget(Entry entry) => !entry.Available && entry.Button.Resources["DescriptionTarget"] is FrameworkElement reason ? reason : entry.Button;
     private void WireFixedActions()
     {
@@ -375,7 +375,7 @@ public partial class MainWindow
                 return;
             SetInputMethod("mouse");
             navigation = new("session-card");
-            SetSelection(false, false);
+            SetSelection(restoreFocus: false);
             args.Handled = true;
             var target = Controller.Session.Anchor;
             RunInterfaceAction(SessionCardButton, () =>
@@ -391,7 +391,7 @@ public partial class MainWindow
             if (navigation.Id != "session-card")
             {
                 navigation = new("session-card");
-                SetSelection(false);
+                SetSelection();
             }
         };
 

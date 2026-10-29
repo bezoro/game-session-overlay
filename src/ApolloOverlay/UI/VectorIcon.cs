@@ -10,6 +10,7 @@ public sealed class VectorIcon : Viewbox
     public static readonly DependencyProperty DataProperty = DependencyProperty.Register(nameof(Data), typeof(Geometry), typeof(VectorIcon), new PropertyMetadata(null, RefreshDrawing));
     public static readonly DependencyProperty FillProperty = DependencyProperty.Register(nameof(Fill), typeof(Brush), typeof(VectorIcon), new PropertyMetadata(null, RefreshDrawing));
     public static readonly DependencyProperty SourceSizeProperty = DependencyProperty.Register(nameof(SourceSize), typeof(Size), typeof(VectorIcon), new PropertyMetadata(new Size(24, 24), RefreshDrawing));
+    public static readonly DependencyProperty SourceOriginProperty = DependencyProperty.Register(nameof(SourceOrigin), typeof(Point), typeof(VectorIcon), new PropertyMetadata(new Point(), RefreshDrawing));
     private readonly Canvas frame = new();
     private readonly Path drawing = new();
     public Geometry? Data
@@ -26,6 +27,11 @@ public sealed class VectorIcon : Viewbox
     {
         get => (Size)GetValue(SourceSizeProperty);
         set => SetValue(SourceSizeProperty, value);
+    }
+    public Point SourceOrigin
+    {
+        get => (Point)GetValue(SourceOriginProperty);
+        set => SetValue(SourceOriginProperty, value);
     }
 
     public VectorIcon()
@@ -46,6 +52,7 @@ public sealed class VectorIcon : Viewbox
     {
         drawing.Data = Data;
         drawing.Fill = Fill;
+        drawing.RenderTransform = new TranslateTransform(-SourceOrigin.X, -SourceOrigin.Y);
         frame.Width = SourceSize.Width;
         frame.Height = SourceSize.Height;
     }

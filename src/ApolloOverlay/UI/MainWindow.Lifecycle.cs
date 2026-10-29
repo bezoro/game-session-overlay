@@ -111,7 +111,7 @@ public partial class MainWindow
         focusCycle++;
         focusConfirmed = IsActive && OwnForeground;
         navigationKeysArmed = true;
-        SetSelection(false);
+        SetSelection();
     }
 
     internal void ValidationHost(bool visible)

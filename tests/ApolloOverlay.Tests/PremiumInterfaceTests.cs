@@ -136,7 +136,7 @@ internal static class PremiumInterfaceTests
             try
             {
                 var mode = (TextBlock)w.FindName("ModeLabel");
-                Require(!mode.Text.Contains("Guide ·"), "Disabled Guide is advertised");
+                Require(!InputPrompt.Read(mode).Contains("Guide ·"), "Disabled Guide is advertised");
             }
             finally
             {
@@ -149,7 +149,7 @@ internal static class PremiumInterfaceTests
             var w = new MainWindow(renderOnly: true, platform: new FixturePlatform(false), diagnostics: new(folder));
             try
             {
-                Require(!((TextBlock)w.FindName("ModeLabel")).Text.Contains("Guide"), "Disabled Guide advertised on normal path");
+                Require(!InputPrompt.Read((TextBlock)w.FindName("ModeLabel")).Contains("Guide"), "Disabled Guide advertised on normal path");
             }
             finally
             {

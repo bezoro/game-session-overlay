@@ -75,7 +75,7 @@ public partial class MainWindow
         else
         {
             UpdatePersistentState();
-            SetSelection(false);
+            SetSelection();
         }
     }
 }

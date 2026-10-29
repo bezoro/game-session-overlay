@@ -8,6 +8,10 @@ public partial class MainWindow
 {
     private Point? pointerPosition;
 
+    private void RenderHint(System.Windows.Controls.TextBlock target, string template) => InputPrompt.Apply(target, template, this);
+
+    private void SetEntryPrompt(string id, string template) => SetEntryDescription(id, InputPrompt.PlainText(template), template);
+
     private string InputHint(string controller, string keyboard, string mouse) => inputMethod switch
     {
         "controller" => controller,
@@ -23,7 +27,7 @@ public partial class MainWindow
         Cursor = method == "controller" ? Cursors.None : Cursors.Arrow;
         UpdateHints();
         // Update button prompts without moving focus, scrolling or rebuilding editors.
-        SetSelection(false, false);
+        SetSelection(restoreFocus: false);
     }
 
     internal void ObservePointerPosition(Point screenPosition)
@@ -45,14 +49,15 @@ public partial class MainWindow
 
     private void UpdateContextualHints()
     {
-        var read = InputHint("A to read · D-pad scrolls · B goes back", "Enter to read · arrows scroll · Esc goes back", "Click to read · scroll for more");
-        SetEntryDescription("operation-text", read);
-        SetEntryDescription("window-information", read);
-        SetEntryDescription("update-notes", read);
-        SetEntryDescription("shortcut", InputHint("A switches Shift+Tab / Ctrl+Tab", "Enter switches Shift+Tab / Ctrl+Tab", "Click to switch Shift+Tab / Ctrl+Tab"));
-        SetEntryDescription("keyboard-target", InputHint("Text destination · A changes the window", "Text destination · Enter changes the window", "Click to choose the text destination"));
-        SetEntryDescription("prepare-update", InputHint("B cancels download · current installation preserved", "Esc cancels download · current installation preserved", "Cancel stops the download · current installation preserved"));
-        SetEntryDescription("mixer-volume", InputHint("← / → adjusts volume", "Arrow keys adjust · Tab leaves the slider", "Drag to adjust volume"));
+        var read = InputHint("{A} to read · {Dpad} scrolls · {B} goes back", "{Enter} to read · {Arrows} scroll · {Esc} goes back", "{MouseLeft} to read · {MouseScroll} for more");
+        SetEntryPrompt("operation-text", read);
+        SetEntryPrompt("window-information", read);
+        SetEntryPrompt("update-notes", read);
+        SetEntryPrompt("shortcut", InputHint("{A} switches {Shift}+{Tab} / {Ctrl}+{Tab}", "{Enter} switches {Shift}+{Tab} / {Ctrl}+{Tab}", "{MouseLeft} to switch {Shift}+{Tab} / {Ctrl}+{Tab}"));
+        SetEntryPrompt("keyboard-target", InputHint("Text destination · {A} changes the window", "Text destination · {Enter} changes the window", "{MouseLeft} to choose the text destination"));
+        SetEntryPrompt("prepare-update", InputHint("{B} cancels download · current installation preserved", "{Esc} cancels download · current installation preserved", "{MouseLeft} Cancel stops the download · current installation preserved"));
+        SetEntryPrompt("mixer-volume", InputHint("{DpadHorizontal} adjusts volume", "{ArrowsHorizontal} adjust · {Tab} leaves the slider", "{MouseLeft} drag to adjust volume"));
+        SetEntryPrompt("guide-limit", InputHint("{DpadHorizontal} adjusts · 0.5–3.0 s", "{ArrowsHorizontal} adjusts · 0.5–3.0 s", "{MouseLeft} drag · 0.5–3.0 s"));
         SetEntryDescription("session-volume", GameVolumeDescription);
         SetEntryDescription("test-feedback", FeedbackDescription());
         var target = Controller.Session.Anchor;
@@ -60,6 +65,6 @@ public partial class MainWindow
             ? InputHint("A resumes this window · X opens options", "Enter resumes this window · X opens options", "Click resumes · right-click opens options")
             : "Choose a window in Apps");
         if (HoldCloseButton.Content is IconLabel hold)
-            hold.Label.Text = InputHint("Hold A · 1.5 s", "Hold Enter / Space · 1.5 s", "Press and hold · 1.5 s");
+            RenderHint(hold.Label, InputHint("Hold {A} · 1.5 s", "Hold {Enter} / {Space} · 1.5 s", "Hold {MouseLeft} · 1.5 s"));
     }
 }

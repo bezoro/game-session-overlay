@@ -239,7 +239,7 @@ public partial class MainWindow
         button.GotKeyboardFocus += (_, _) =>
         {
             navigation = new(id);
-            SetSelection(false, false);
+            SetSelection(restoreFocus: false);
         };
         AutomationProperties.SetName(button, title);
         AutomationProperties.SetHelpText(button, description);

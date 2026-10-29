@@ -217,7 +217,7 @@ internal static class TvUsabilityTests
                 Require(window.Controller.Session.Anchor is null, "The initial fixture unexpectedly selected a window");
                 Require(hint.Text.Contains("Choose", StringComparison.OrdinalIgnoreCase), "Empty session advertises resuming a window");
                 UseController(window);
-                Require(hint.Text.Contains("A", StringComparison.Ordinal) && hint.Text.Contains("Choose", StringComparison.OrdinalIgnoreCase), "Controller hint does not explain the empty session action");
+                Require(InputPrompt.Read(hint).Contains("A", StringComparison.Ordinal) && InputPrompt.Read(hint).Contains("Choose", StringComparison.OrdinalIgnoreCase), "Controller hint does not explain the empty session action");
                 window.Controller.CaptureReturn();
                 window.RefreshRows();
                 Require(hint.Text.Contains("Resume", StringComparison.OrdinalIgnoreCase), "Selected session does not advertise resuming");
@@ -234,10 +234,10 @@ internal static class TvUsabilityTests
             {
                 UseController(window);
                 window.Page(2);
-                var hint = ((TextBlock)window.FindName("ModeLabel")).Text;
+                var hint = InputPrompt.Read((TextBlock)window.FindName("ModeLabel"));
                 Require(!hint.Contains("X options", StringComparison.Ordinal), "System page misleadingly advertises contextual options");
                 window.Page(1);
-                hint = ((TextBlock)window.FindName("ModeLabel")).Text;
+                hint = InputPrompt.Read((TextBlock)window.FindName("ModeLabel"));
                 Require(hint.Contains("X options", StringComparison.Ordinal), "Apps page lost its contextual options hint");
             }
             finally

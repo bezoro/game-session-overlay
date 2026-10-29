@@ -216,7 +216,7 @@ public partial class MainWindow
                 Controller.ClearSelection();
                 Page(0);
                 navigation = new("session-card");
-                SetSelection(false);
+                SetSelection();
             });
             AddRow("back", "Back", "Keeps the previous selection", Back);
         }

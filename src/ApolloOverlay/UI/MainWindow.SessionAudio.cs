@@ -76,7 +76,7 @@ public partial class MainWindow
         SetEntryText(id, title);
         SetEntryDescription(id, description);
         if (entry.Available != available && navigation.Id == id)
-            SetSelection(false);
+            SetSelection();
     }
 
     private void ToggleGameAudio()
@@ -167,7 +167,7 @@ public partial class MainWindow
                 mixerTarget = selected;
                 RefreshRows();
                 navigation = new("mixer-volume");
-                SetSelection(false);
+                SetSelection();
                 nextFeatureRead = 0;
                 StartFeatureRead();
             });

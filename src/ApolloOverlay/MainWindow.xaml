@@ -24,6 +24,8 @@
       <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary
           Source="Assets/Icons/Icons.xaml" />
+        <ResourceDictionary
+          Source="Assets/Icons/InputGlyphs.xaml" />
       </ResourceDictionary.MergedDictionaries>
       <Style
         TargetType="Image">
@@ -71,8 +73,14 @@
           <Setter.Value>
             <ControlTemplate
               TargetType="Button">
-              <Grid>
+              <Grid
+                x:Name="ButtonSurface"
+                RenderTransformOrigin="0.5,0.5">
+                <Grid.RenderTransform>
+                  <ScaleTransform />
+                </Grid.RenderTransform>
                 <Border
+                  x:Name="SurfaceBorder"
                   Background="{TemplateBinding Background}"
                   BorderBrush="{TemplateBinding BorderBrush}"
                   BorderThickness="{TemplateBinding BorderThickness}"
@@ -86,7 +94,7 @@
                 </Border>
                 <Border
                   x:Name="SelectionBreath"
-                  Margin="-1"
+                  Margin="2"
                   BorderBrush="{DynamicResource SessionFocusBrush}"
                   BorderThickness="2"
                   CornerRadius="11"
@@ -135,24 +143,15 @@
                   IsHitTestVisible="False"
                   Background="{DynamicResource TextFillColorPrimaryBrush}"
                   Opacity="0" />
-                <Border
-                  x:Name="FocusRing"
-                  Margin="2"
-                  BorderBrush="{DynamicResource TextFillColorPrimaryBrush}"
-                  BorderThickness="3"
-                  CornerRadius="10"
-                  IsHitTestVisible="False"
-                  Visibility="Collapsed">
-                  <Border
-                    BorderBrush="{DynamicResource ApplicationBackgroundBrush}"
-                    BorderThickness="1"
-                    CornerRadius="6" />
-                </Border>
               </Grid>
               <ControlTemplate.Triggers>
                 <Trigger
                   Property="local:InteractionMotion.IsSelected"
                   Value="True">
+                  <Setter
+                    TargetName="SurfaceBorder"
+                    Property="BorderBrush"
+                    Value="Transparent" />
                   <Trigger.EnterActions>
                     <BeginStoryboard
                       Name="SelectionMotion">
@@ -160,11 +159,37 @@
                         <DoubleAnimation
                           Storyboard.TargetName="SelectionBreath"
                           Storyboard.TargetProperty="Opacity"
-                          From="0.3"
-                          To="0.9"
+                          From="0.65"
+                          To="1"
                           Duration="0:0:1.5"
                           AutoReverse="True"
                           RepeatBehavior="Forever" />
+                        <DoubleAnimation
+                          Storyboard.TargetName="ButtonSurface"
+                          Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                          From="1"
+                          To="1.008"
+                          Duration="0:0:1.5"
+                          AutoReverse="True"
+                          RepeatBehavior="Forever">
+                          <DoubleAnimation.EasingFunction>
+                            <SineEase
+                              EasingMode="EaseInOut" />
+                          </DoubleAnimation.EasingFunction>
+                        </DoubleAnimation>
+                        <DoubleAnimation
+                          Storyboard.TargetName="ButtonSurface"
+                          Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                          From="1"
+                          To="1.008"
+                          Duration="0:0:1.5"
+                          AutoReverse="True"
+                          RepeatBehavior="Forever">
+                          <DoubleAnimation.EasingFunction>
+                            <SineEase
+                              EasingMode="EaseInOut" />
+                          </DoubleAnimation.EasingFunction>
+                        </DoubleAnimation>
                         <DoubleAnimation
                           Storyboard.TargetName="SelectionSheen"
                           Storyboard.TargetProperty="Opacity"
@@ -218,12 +243,16 @@
                     Value="0.13" />
                 </Trigger>
                 <Trigger
-                  Property="IsKeyboardFocused"
+                  Property="IsKeyboardFocusWithin"
                   Value="True">
                   <Setter
-                    TargetName="FocusRing"
-                    Property="Visibility"
-                    Value="Visible" />
+                    TargetName="SurfaceBorder"
+                    Property="BorderBrush"
+                    Value="Transparent" />
+                  <Setter
+                    TargetName="SelectionBreath"
+                    Property="Opacity"
+                    Value="1" />
                 </Trigger>
                 <Trigger
                   Property="IsEnabled"
@@ -616,6 +645,7 @@
             Margin="0,0,10,0">
             <Border
               x:Name="ContextCard"
+              FocusVisualStyle="{x:Null}"
               Margin="0,0,0,14"
               CornerRadius="18"
               Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
@@ -955,7 +985,7 @@
             AutomationProperties.Name="Controller input may also reach the game while this panel is open." />
           <TextBlock
             x:Name="StatusLabel"
-            Text="Ready"
+            Visibility="Collapsed"
             FontSize="14"
             Margin="0,4,0,0"
             TextTrimming="CharacterEllipsis"

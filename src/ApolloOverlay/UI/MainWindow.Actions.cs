@@ -124,7 +124,7 @@ public partial class MainWindow
         ConfirmHint.Text = "Waiting for release…";
         FeedbackText("No close command sent.");
         UpdateHints();
-        SetSelection(false);
+        SetSelection();
     }
 
     internal bool AdvancePointerHold(bool down, bool captured, bool inside, long now)

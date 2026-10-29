@@ -161,7 +161,7 @@ public partial class MainWindow
                 {
                     if (view.Current.Route == OverlayRoute.PlayniteBrowser)
                         RefreshRows();
-                    SetSelection(false);
+                    SetSelection();
                 }
             }
         }
