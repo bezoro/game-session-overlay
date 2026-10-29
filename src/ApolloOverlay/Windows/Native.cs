@@ -108,6 +108,9 @@ internal static class Native
     internal static extern int GetClassName(nint hwnd, StringBuilder text, int count);
     [DllImport("user32.dll")]
     internal static extern bool SetForegroundWindow(nint hwnd);
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool AllowSetForegroundWindow(uint pid);
     [StructLayout(LayoutKind.Sequential)]
     internal struct Message
     {

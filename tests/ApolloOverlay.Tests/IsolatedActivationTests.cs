@@ -45,7 +45,7 @@ internal static class IsolatedActivationTests
         test("isolated activation transfers real native and WPF focus across GUI threads", () =>
         {
             using var windows = new Windows();
-            var client = new IsolatedWindowActivation();
+            var client = new IsolatedWindowActivation(trace: Trace);
             Require(Complete(client.RequestAsync(windows.TargetHandle, windows.ForegroundHandle, CancellationToken.None, timeoutMs: 3000)), "The real authenticated helper did not confirm activation");
             Require(Native.GetForegroundWindow() == windows.TargetHandle && windows.Target.IsActive, "Helper success did not correspond to native and WPF activation");
         });
@@ -56,7 +56,7 @@ internal static class IsolatedActivationTests
             var starts = 0;
             var client = new IsolatedWindowActivation(encoded => ++starts == 1
                 ? ProbeStart(HangArgument, probe.ReadyName, probe.IdentityPath)
-                : IsolatedWindowActivation.CreateStartInfo(encoded));
+                : IsolatedWindowActivation.CreateStartInfo(encoded), Trace);
             var elapsed = Stopwatch.StartNew();
             var blocked = client.RequestAsync(windows.TargetHandle, windows.ForegroundHandle, CancellationToken.None, timeoutMs: 2000);
             PumpUntil(() => probe.Ready.WaitOne(0), "The helper never entered its blocking fixture");
@@ -76,7 +76,7 @@ internal static class IsolatedActivationTests
             var starts = 0;
             var client = new IsolatedWindowActivation(encoded => ++starts == 1
                 ? ProbeStart(HangArgument, probe.ReadyName, probe.IdentityPath)
-                : IsolatedWindowActivation.CreateStartInfo(encoded));
+                : IsolatedWindowActivation.CreateStartInfo(encoded), Trace);
             var pending = client.RequestAsync(windows.TargetHandle, windows.ForegroundHandle, cancellation.Token, timeoutMs: 4000);
             PumpUntil(() => probe.Ready.WaitOne(0), "The cancellable helper never started");
             var child = probe.Identity();
@@ -92,7 +92,7 @@ internal static class IsolatedActivationTests
             using var windows = new Windows();
             using var probe = new Probe();
             using var cancellation = new CancellationTokenSource();
-            var client = new IsolatedWindowActivation(_ => ProbeStart(HangArgument, probe.ReadyName, probe.IdentityPath));
+            var client = new IsolatedWindowActivation(_ => ProbeStart(HangArgument, probe.ReadyName, probe.IdentityPath), Trace);
             var pending = client.RequestAsync(windows.TargetHandle, windows.ForegroundHandle, cancellation.Token, timeoutMs: 2000);
             try
             {
@@ -123,7 +123,7 @@ internal static class IsolatedActivationTests
             {
                 starts++;
                 return ProbeStart(HangArgument, probe.ReadyName, probe.IdentityPath);
-            });
+            }, Trace);
             var first = client.RequestAsync(windows.TargetHandle, windows.ForegroundHandle, cancellation.Token, timeoutMs: 4000);
             try
             {
@@ -189,7 +189,7 @@ internal static class IsolatedActivationTests
                             break;
                     }
                     return IsolatedWindowActivation.CreateStartInfo(Convert.ToBase64String(Encoding.UTF8.GetBytes(request.ToJsonString())));
-                });
+                }, Trace);
                 Require(!Complete(client.RequestAsync(windows.TargetHandle, windows.ForegroundHandle, CancellationToken.None, timeoutMs: 3000)), "A forged host request was accepted");
                 Require(Native.GetForegroundWindow() == windows.ForegroundHandle && !windows.Target.IsActive, "Rejected input still changed focus");
             });
@@ -229,6 +229,8 @@ internal static class IsolatedActivationTests
                 Require(IsolatedWindowActivation.RunHost(payload) == 4, "Malformed host input did not fail closed");
         });
     }
+
+    private static void Trace(string message, ResultKind kind) => Console.WriteLine("ACTIVATION " + kind + " " + message);
 
     private static ProcessStartInfo ProbeStart(params string[] arguments)
     {
@@ -310,20 +312,20 @@ internal static class IsolatedActivationTests
     private sealed class Windows : IDisposable
     {
         private readonly SynchronizationContext? previous = SynchronizationContext.Current;
-        private readonly Thread foregroundThread;
-        private readonly Dispatcher foregroundDispatcher;
-        private readonly Action closeForeground;
+        private Thread? foregroundThread;
+        private Dispatcher? foregroundDispatcher;
+        private Action? closeForeground;
         internal Window Target
         {
             get;
         }
         internal nint TargetHandle
         {
-            get;
+            get; private set;
         }
         internal nint ForegroundHandle
         {
-            get;
+            get; private set;
         }
 
         internal Windows()
@@ -338,57 +340,82 @@ internal static class IsolatedActivationTests
                 Left = -12000,
                 Top = -12000
             };
-            Target.Show();
-            TargetHandle = new WindowInteropHelper(Target).Handle;
-            var ready = new TaskCompletionSource<(Dispatcher Dispatcher, nint Handle, Action Close)>(TaskCreationOptions.RunContinuationsAsynchronously);
-            foregroundThread = new Thread(() =>
+            try
             {
-                try
+                Target.Show();
+                TargetHandle = new WindowInteropHelper(Target).Handle;
+                Target.Activate();
+                Native.SetForegroundWindow(TargetHandle);
+                PumpUntil(() => Native.GetForegroundWindow() == TargetHandle && Target.IsActive,
+                    "The initial target fixture did not obtain real foreground ownership");
+                var ready = new TaskCompletionSource<(Dispatcher Dispatcher, nint Handle, Action Close)>(TaskCreationOptions.RunContinuationsAsynchronously);
+                foregroundThread = new Thread(() =>
                 {
+                    Window? window = null;
                     var dispatcher = Dispatcher.CurrentDispatcher;
-                    var window = new Window { Title = "Activation foreground fixture", Width = 180, Height = 100, Left = -12000, Top = -12000 };
-                    window.Show();
-                    var handle = new WindowInteropHelper(window).Handle;
-                    ready.SetResult((dispatcher, handle, () =>
+                    try
                     {
-                        window.Close();
-                        dispatcher.BeginInvokeShutdown(DispatcherPriority.Background);
+                        window = new Window { Title = "Activation foreground fixture", Width = 180, Height = 100, Left = -12000, Top = -12000 };
+                        window.Show();
+                        var handle = new WindowInteropHelper(window).Handle;
+                        ready.SetResult((dispatcher, handle, () => dispatcher.BeginInvokeShutdown(DispatcherPriority.Background)));
+                        Dispatcher.Run();
                     }
-                    ));
-                    Dispatcher.Run();
-                }
-                catch (Exception error)
+                    catch (Exception error)
+                    {
+                        ready.TrySetException(error);
+                    }
+                    finally
+                    {
+                        window?.Close();
+                    }
+                })
                 {
-                    ready.TrySetException(error);
-                }
-            })
+                    IsBackground = true,
+                    Name = "Activation foreground fixture"
+                };
+                foregroundThread.SetApartmentState(ApartmentState.STA);
+                foregroundThread.Start();
+                Complete(ready.Task);
+                var other = ready.Task.Result;
+                foregroundDispatcher = other.Dispatcher;
+                ForegroundHandle = other.Handle;
+                closeForeground = other.Close;
+                foregroundDispatcher.BeginInvoke(DispatcherPriority.Normal, () => Native.SetForegroundWindow(ForegroundHandle));
+                PumpUntil(() => Native.GetForegroundWindow() == ForegroundHandle && !Target.IsActive,
+                    "The independent foreground GUI thread was not activated");
+                Console.WriteLine($"ACTIVATION fixture/target=0x{TargetHandle:X}/foreground=0x{ForegroundHandle:X}/target-thread={Native.GetWindowThreadProcessId(TargetHandle, out _)}/other-thread={Native.GetWindowThreadProcessId(ForegroundHandle, out _)}");
+            }
+            catch
             {
-                IsBackground = true,
-                Name = "Activation foreground fixture"
-            };
-            foregroundThread.SetApartmentState(ApartmentState.STA);
-            foregroundThread.Start();
-            Complete(ready.Task);
-            var other = ready.Task.Result;
-            foregroundDispatcher = other.Dispatcher;
-            ForegroundHandle = other.Handle;
-            closeForeground = other.Close;
-            foregroundDispatcher.BeginInvoke(DispatcherPriority.Normal, () => Native.SetForegroundWindow(ForegroundHandle));
-            PumpUntil(() => Native.GetForegroundWindow() == ForegroundHandle && !Target.IsActive, "The independent foreground GUI thread was not activated");
+                Console.WriteLine($"ACTIVATION fixture/rejected/observed=0x{Native.GetForegroundWindow():X}/target=0x{TargetHandle:X}/other=0x{ForegroundHandle:X}/active={Target.IsActive}");
+                Cleanup(requireStopped: false);
+                throw;
+            }
         }
 
-        public void Dispose()
+        public void Dispose() => Cleanup(requireStopped: true);
+
+        private void Cleanup(bool requireStopped)
         {
             try
             {
-                Target.Close();
-                foregroundDispatcher.BeginInvoke(DispatcherPriority.Normal, closeForeground);
-                var joined = Task.Run(() => foregroundThread.Join(TimeSpan.FromSeconds(3)));
-                Complete(joined);
-                Require(joined.Result, "Foreground fixture GUI thread did not shut down");
+                var dispatcher = foregroundDispatcher ?? (foregroundThread is null ? null : Dispatcher.FromThread(foregroundThread));
+                if (dispatcher is { HasShutdownStarted: false })
+                    dispatcher.BeginInvoke(DispatcherPriority.Normal, closeForeground ?? (() => dispatcher.BeginInvokeShutdown(DispatcherPriority.Background)));
+                if (foregroundThread is { IsAlive: true } thread)
+                {
+                    var joined = Task.Run(() => thread.Join(TimeSpan.FromSeconds(3)));
+                    Complete(joined);
+                    if (requireStopped)
+                        Require(joined.Result, "Foreground fixture GUI thread did not shut down");
+                    else if (!joined.Result)
+                        Console.WriteLine("ACTIVATION fixture/cleanup-thread-did-not-stop");
+                }
             }
             finally
             {
+                Target.Close();
                 SynchronizationContext.SetSynchronizationContext(previous);
             }
         }

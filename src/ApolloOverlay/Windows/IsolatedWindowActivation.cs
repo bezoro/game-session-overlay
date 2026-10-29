@@ -36,7 +36,10 @@ internal sealed class IsolatedWindowActivation
             var owner = Native.GetWindowThreadProcessId(window, out var pid);
             var other = Native.GetWindowThreadProcessId(foreground, out var otherPid);
             if (pid != Environment.ProcessId || owner != Native.GetCurrentThreadId() || other == 0)
+            {
+                trace?.Invoke($"focus-host/rejected/window-pid={pid}/owner-thread={owner}/caller-thread={Native.GetCurrentThreadId()}/foreground-thread={other}", ResultKind.Unavailable);
                 return false;
+            }
             var peer = AutomationPipeSecurity.Current();
             job = new ActivationProcessJob();
             var request = new ActivationRequest(peer, window.ToInt64(), foreground.ToInt64(), owner, other, otherPid, job.Name);
@@ -46,6 +49,12 @@ internal sealed class IsolatedWindowActivation
             child = Process.Start(startInfo(encoded));
             if (child is null)
                 return false;
+            // If this process already owns foreground authority, delegate it to
+            // this exact child before its job-membership gate permits native work.
+            // A game-owned foreground may refuse delegation; the guarded native
+            // attempt and final foreground observations still decide the result.
+            var delegated = Native.AllowSetForegroundWindow(checked((uint)child.Id));
+            trace?.Invoke("focus-host/foreground-delegated=" + delegated, ResultKind.Requested);
             try
             {
                 job.Attach(child);
@@ -60,7 +69,7 @@ internal sealed class IsolatedWindowActivation
             trace?.Invoke("focus-host/start/pid=" + child.Id, ResultKind.Requested);
             // Deadline cleanup must run even if the WPF dispatcher stops pumping.
             await child.WaitForExitAsync(deadline.Token).ConfigureAwait(false);
-            trace?.Invoke("focus-host/exit/code=" + child.ExitCode, child.ExitCode == 0 ? ResultKind.Completed : ResultKind.Failed);
+            trace?.Invoke($"focus-host/exit/code={child.ExitCode}/stage={ExitStage(child.ExitCode)}/foreground=0x{Native.GetForegroundWindow():X}", child.ExitCode == 0 ? ResultKind.Completed : ResultKind.Failed);
             return !deadline.IsCancellationRequested && child.ExitCode == 0;
         }
         catch (OperationCanceledException)
@@ -93,6 +102,21 @@ internal sealed class IsolatedWindowActivation
         }
     }
 
+    private static string ExitStage(int code) => code switch
+    {
+        0 => "confirmed",
+        1 => "native-guard-or-observation",
+        2 => "foreground-request-refused",
+        4 => "invalid-envelope-or-peer-read",
+        5 => "target-or-original-foreground-changed",
+        6 => "owning-job-unavailable",
+        7 => "parent-process-mismatch",
+        8 => "parent-identity-mismatch",
+        >= 0x10000 and < 0x20000 => "queue-attachment-failed",
+        >= 0x20000 and < 0x30000 => "activation-acknowledgement-failed",
+        _ => "host-error"
+    };
+
     internal static ProcessStartInfo CreateStartInfo(string encoded)
     {
         var info = new ProcessStartInfo(Environment.ProcessPath ?? throw new InvalidOperationException("Application executable unavailable."))
@@ -114,13 +138,15 @@ internal sealed class IsolatedWindowActivation
             if (string.IsNullOrEmpty(encoded) || encoded.Length > 4096)
                 return 4;
             var request = JsonSerializer.Deserialize<ActivationRequest>(Convert.FromBase64String(encoded));
-            if (request is null || request.Parent is null || string.IsNullOrEmpty(request.Job) || request.Parent.Pid != ParentProcessId()
-                || request.Parent.Pid == Environment.ProcessId || request.Window == 0 || request.Foreground == 0)
+            if (request is null || request.Parent is null || string.IsNullOrEmpty(request.Job)
+                || request.Window == 0 || request.Foreground == 0)
                 return 4;
+            if (request.Parent.Pid != ParentProcessId() || request.Parent.Pid == Environment.ProcessId)
+                return 7;
             var actualParent = AutomationPipeSecurity.ReadPeer(request.Parent.Pid);
             if (actualParent.Started != request.Parent.Started || actualParent != request.Parent
                 || !AutomationPipeSecurity.SameSession(AutomationPipeSecurity.Current(), actualParent))
-                return 4;
+                return 8;
             var membership = Stopwatch.StartNew();
             while (!ActivationProcessJob.ContainsCurrentProcess(request.Job))
             {

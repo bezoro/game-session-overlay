@@ -18,7 +18,7 @@ internal static class MouseKeyboardTests
             host.Open();
             w.Page(2);
             Pick(w, "sound-feedback");
-            host.DenyConfirmation();
+            host.RevokeAdmission();
             host.RestoreNativeFocus();
             var before = w.Controller.Settings.SoundFeedbackEnabled;
             var press = SendMouse(ReviewFixTests.Button(w, "sound-feedback"), true);
@@ -37,7 +37,7 @@ internal static class MouseKeyboardTests
             host.Open();
             w.Page(2);
             Pick(w, "sound-feedback");
-            host.DenyConfirmation();
+            host.RevokeAdmission();
             host.RestoreNativeFocus();
             var before = w.Controller.Settings.SoundFeedbackEnabled;
             Require(SendKey(w, Key.Enter, true).Handled, "Recovery Enter escaped the overlay");
@@ -67,7 +67,7 @@ internal static class MouseKeyboardTests
             };
             w.OpenPanel();
             Complete(w.OpeningTask);
-            Require(w.IsVisible && Native.GetForegroundWindow() == host.OtherHandle, "PRECONDITION: foreign foreground was not established");
+            Require(!w.IsVisible && Native.GetForegroundWindow() == host.OtherHandle, "PRECONDITION: refused acquisition did not hide the panel and preserve foreign foreground");
             var before = w.Controller.Settings;
             void Refused(string gesture)
             {
@@ -121,7 +121,7 @@ internal static class MouseKeyboardTests
             Require(w.ActionIds.Contains("application-mute"), "Right-click did not open the session window options");
             Tap(w, Key.Escape);
             Require(w.SelectedAction == "session-card" && !w.ActionIds.Contains("session-options"), "Options did not return to the single full-width game card");
-            host.DenyConfirmation();
+            host.RevokeAdmission();
             card.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Right) { RoutedEvent = UIElement.PreviewMouseRightButtonUpEvent });
             Require(!w.ActionIds.Contains("application-mute") && !w.TransitionPending, "Unconfirmed focus admitted a pointer context action");
         });
@@ -379,13 +379,15 @@ internal static class MouseKeyboardTests
             RequireOwnedFocus();
         }
 
-        internal void DenyConfirmation()
+        internal void RevokeAdmission()
         {
+            // Model a transient ownership observation without changing the actual
+            // active HWND. The next local gesture must reconfirm admission and
+            // consume its own press, rather than activating the selected setting.
             Window.FocusForeground = () => OtherHandle;
-            Window.FocusRequest = _ => false;
-            Window.OpenPanel();
-            Complete(Window.OpeningTask);
-            Require(Window.IsVisible && Window.Feedback.Contains("did not confirm"), "PRECONDITION: native confirmation refusal was not established");
+            Window.Move(NavDirection.Down);
+            Require(Window.IsVisible && Window.Feedback.Contains("focus lost", StringComparison.OrdinalIgnoreCase), "PRECONDITION: navigation admission was not revoked");
+            Require(Native.GetForegroundWindow() == Handle && Window.IsActive, "PRECONDITION: transient observation changed the actual HWND");
         }
 
         internal void RestoreNativeFocus()
