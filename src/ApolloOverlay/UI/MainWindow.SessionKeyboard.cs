@@ -230,7 +230,11 @@ public partial class MainWindow
             ToolTip = description
         };
         if (id is "keyboard-delete" or "keyboard-clear")
-            button.Content = ActionIconCatalog.Create(this, id, 19);
+        {
+            var compact = narrow || Rows.ActualWidth < 400;
+            var caption = id == "keyboard-delete" ? compact ? "Del" : "Delete" : "Clear";
+            button.Content = new IconLabel(this, id, caption, compact ? 12 : 13, compact ? 14 : 16, gap: compact ? 3 : 6);
+        }
         button.Click += (_, _) => ActivatePointerEntry(button);
         button.GotKeyboardFocus += (_, _) =>
         {

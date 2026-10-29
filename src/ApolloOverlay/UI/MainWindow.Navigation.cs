@@ -120,18 +120,22 @@ public partial class MainWindow
             }
 
             AutomationProperties.SetItemStatus(entry.Button, selected ? (entry.Available ? "Selected" : "Selected · unavailable") : entry.Available ? "" : "Unavailable");
-            if (selected)
-            {
-                if (showReason)
-                    FeedbackText(entry.Available ? entry.Reason : "Unavailable · " + entry.Reason, important: !entry.Available);
-                SaveView();
-                if (restoreFocus && NavigationAllowed)
-                {
-                    FocusTarget(entry).Focus();
-                    FocusTarget(entry).BringIntoView();
-                }
-            }
         }
+
+        // Focus/admission can synchronously rebuild entries through WPF events.
+        // Finish visual enumeration before any of those callbacks are possible.
+        var selectedEntry = entries.FirstOrDefault(entry => entry.Id == navigation.Id);
+        if (selectedEntry is null)
+            return;
+        if (showReason)
+            FeedbackText(selectedEntry.Available ? selectedEntry.Reason : "Unavailable · " + selectedEntry.Reason, important: !selectedEntry.Available);
+        SaveView();
+        if (!restoreFocus || !NavigationAllowed)
+            return;
+        var target = FocusTarget(selectedEntry);
+        target.Focus();
+        if (target.IsVisible && entries.Any(entry => entry.Id == navigation.Id && ReferenceEquals(FocusTarget(entry), target)))
+            RevealTarget(target);
     }
 
     private static string WindowId(WindowRef w) => $"window:{w.Handle}:{w.Pid}:{w.Started}:{w.Generation}";

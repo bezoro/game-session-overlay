@@ -113,7 +113,7 @@ internal sealed class IconLabel : Grid
         get;
     }
 
-    internal IconLabel(FrameworkElement owner, string action, string caption, double fontSize = 13, double iconSize = 16)
+    internal IconLabel(FrameworkElement owner, string action, string caption, double fontSize = 13, double iconSize = 16, double gap = 6)
     {
         HorizontalAlignment = HorizontalAlignment.Center;
         VerticalAlignment = VerticalAlignment.Center;
@@ -123,7 +123,7 @@ internal sealed class IconLabel : Grid
         });
         ColumnDefinitions.Add(new());
         var icon = ActionIconCatalog.Create(owner, action, iconSize);
-        icon.Margin = new(0, 0, 6, 0);
+        icon.Margin = new(0, 0, gap, 0);
         Children.Add(icon);
         Label = new()
         {

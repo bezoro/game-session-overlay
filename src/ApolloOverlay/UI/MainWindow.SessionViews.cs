@@ -165,9 +165,11 @@ public partial class MainWindow
             grid.ReplaceIcon(new Image { Source = icon, Width = 26, Height = 26, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center });
         }
 
+        var moreIcon = ActionIconCatalog.Create(this, "options", 19);
+        moreIcon.HorizontalAlignment = HorizontalAlignment.Center;
         var more = new Button
         {
-            Content = ActionIconCatalog.Create(this, "options", 19),
+            Content = moreIcon,
             Width = 44,
             MinHeight = 44,
             Padding = new(4),

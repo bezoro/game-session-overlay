@@ -294,7 +294,7 @@ public partial class MainWindow
             {
                 "mouse" => "Click to select · tray: open",
                 "controller" => "A select · B back" + (details ? " · X options" : "") + "\nLB/RB tabs · D-pad move",
-                _ => "Enter select · Esc back\nArrows / Tab move · PgUp/PgDn tabs"
+                _ => "Enter select · Esc back" + (details ? " · X options" : "") + "\nArrows / Tab move · PgUp/PgDn tabs"
             };
     }
 
@@ -321,6 +321,7 @@ public partial class MainWindow
         StatusLabel.Visibility = compactChrome && !important ? Visibility.Collapsed : Visibility.Visible;
     }
 
+    private const double ScrollFadeHeight = 24;
     private readonly LinearGradientBrush scrollFade = new(
         [new GradientStop(Colors.Black, 0), new GradientStop(Colors.Black, .94), new GradientStop(Colors.Transparent, 1)],
         new Point(0, 0), new Point(0, 1));
@@ -331,11 +332,19 @@ public partial class MainWindow
         ScrollContinuation.Visibility = more ? Visibility.Visible : Visibility.Hidden;
         if (more && !SystemParameters.HighContrast)
         {
-            scrollFade.GradientStops[1].Offset = 1 - Math.Min(.25, 24 / ContentScroll.ViewportHeight);
+            scrollFade.GradientStops[1].Offset = 1 - Math.Min(.25, ScrollFadeHeight / ContentScroll.ViewportHeight);
             ContentScroll.OpacityMask = scrollFade;
         }
         else
             ContentScroll.OpacityMask = null;
+    }
+
+    private void RevealTarget(FrameworkElement target)
+    {
+        if (ContentScroll.IsAncestorOf(target) && target.ActualWidth > 0 && target.ActualHeight > 0)
+            target.BringIntoView(new Rect(0, -2, target.ActualWidth, target.ActualHeight + ScrollFadeHeight + 4));
+        else
+            target.BringIntoView();
     }
 
     private void ApplySessionCardDensity()
@@ -423,7 +432,7 @@ public partial class MainWindow
             {
                 revealPending = false;
                 if (Keyboard.FocusedElement is FrameworkElement editor && editor is TextBox or Slider && Rows.IsAncestorOf(editor))
-                    editor.BringIntoView();
+                    RevealTarget(editor);
                 else
                     SetSelection(false);
             }

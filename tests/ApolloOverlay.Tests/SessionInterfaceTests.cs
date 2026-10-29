@@ -60,6 +60,17 @@ internal static class SessionInterfaceTests
                     var w = host.Window;
                     host.Open(dimensions.Item1, dimensions.Item2);
                     Navigate(w, page);
+                    if (page == "system")
+                    {
+                        w.UpdateLayout();
+                        var scroll = (ScrollViewer)w.FindName("ContentScroll");
+                        var selected = ReviewFixTests.Button(w, w.SelectedAction);
+                        if (scroll.IsAncestorOf(selected) && scroll.ScrollableHeight - scroll.VerticalOffset > 1)
+                        {
+                            var bounds = selected.TransformToAncestor(scroll).TransformBounds(new Rect(new Size(selected.ActualWidth, selected.ActualHeight)));
+                            Require(bounds.Bottom <= scroll.ViewportHeight - 24, "Focused system action is covered by the continuation fade");
+                        }
+                    }
                     for (var index = 0; index < w.ActionIds.Count; index++)
                     {
                         w.Sequential(1);

@@ -30,13 +30,13 @@ internal sealed record ControllerBadgeModel(
         var percent = known?.BatteryPercent is >= 0 and <= 100 ? known.BatteryPercent : null;
         var category = battery?.Connected == true ? battery.BatteryLevel : null;
         var wired = percent is null && (known is { Wireless: false } || battery?.BatteryType == ControllerBatteryType.Wired);
-        var text = percent is { } value ? $"{value}%" : wired ? "Not reported" : category switch
+        var text = percent is { } value ? $"{value}%" : wired ? "Battery N/A" : category switch
         {
             ControllerBatteryLevel.Empty => "Empty",
             ControllerBatteryLevel.Low => "Low",
             ControllerBatteryLevel.Medium => "Medium",
             ControllerBatteryLevel.Full => "Full",
-            _ => "Not reported"
+            _ => "Battery N/A"
         };
         var fraction = percent is { } measured ? measured / 100d : !wired && category is { } level ? (int)level / 3d : 0;
         var low = percent is { } charge ? charge <= 20 : !wired && category is ControllerBatteryLevel.Empty or ControllerBatteryLevel.Low;
