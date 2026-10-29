@@ -251,9 +251,9 @@ public partial class MainWindow
     }
 
     private string GuideDescription() => Controller.Platform.IsPreview ? "Prévia · conexão Guide não é consultada" : !Controller.Settings.GuideXInputEnabled ? "Desativado · abra pelo duplo clique na bandeja" : guideBackend?.Active == true ? guideBackend.Status : guideConnection?.Status ?? "Controle ou leitura Guide indisponível";
-    private Button MakeButton(string id, string title, string description, Action action, bool available, string icon, bool danger)
+    private Button MakeButton(string id, string title, string description, Action action, bool available, bool danger)
     {
-        var glyph = ActionIcon(id.StartsWith("favorite:", StringComparison.Ordinal) ? id[9..] : id, icon);
+        var glyph = ActionIcon(id.StartsWith("favorite:", StringComparison.Ordinal) ? id[9..] : id);
         var showIcon = !(page == 2
             && subpage == ""
             && id is "deadzone" or "guide-limit" or "shortcut" or "integrations" or "save" or "side" or "ui-scale" or "sound-feedback" or "haptic-feedback" or "test-feedback" or "customize" or "setup");
@@ -344,7 +344,7 @@ public partial class MainWindow
         return button;
     }
 
-    private FrameworkElement ActionIcon(string id, string fallback)
+    private FrameworkElement ActionIcon(string id)
     {
         if (SessionFeatureIcon(id) is { } featureIcon)
             return featureIcon;

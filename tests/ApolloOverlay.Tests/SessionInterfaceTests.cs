@@ -242,12 +242,17 @@ internal static class SessionInterfaceTests
             var w = host.Window;
             host.Open();
             Navigate(w, "media");
+            var initialIcon = (VectorIcon)((ActionButtonContent)ReviewFixTests.Button(w, "media-toggle").Content).Icon;
+            Require(ReferenceEquals(initialIcon.Data, w.FindResource("Icon.pause")), "Playing media has no pause icon");
             Pick(w, "media-toggle");
             w.ActivateEntry();
             Release(w);
             Complete(w.OperationTask);
             Require(host.Media.Commands == 1 && host.Media.LastId == "music" && !host.Media.Current.Items[0].Playing, "Media command missed its explicit source");
             Require(AutomationProperties.GetName(ReviewFixTests.Button(w, "media-toggle")).Contains("Reproduzir"), "Paused state was not reflected visually");
+
+            var pausedIcon = (VectorIcon)((ActionButtonContent)ReviewFixTests.Button(w, "media-toggle").Content).Icon;
+            Require(ReferenceEquals(pausedIcon.Data, w.FindResource("Icon.play")), "Paused media kept the pause icon");
         });
     }
 

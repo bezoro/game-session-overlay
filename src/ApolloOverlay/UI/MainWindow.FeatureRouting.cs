@@ -33,14 +33,15 @@ public partial class MainWindow
             "session-volume" or "windows-volume" or "session-mixer" or "mixer-volume" or "mixer-refresh" => "speaker",
             "microphone" => "microphone",
             "session-profiles" or "profile-new" => "profile",
-            "session-media" or "media-toggle" => "play",
+            "session-media" => "play",
+            "media-toggle" => CurrentMedia?.Playing == true ? "pause" : "play",
             "media-next" => "next",
             "media-previous" => "previous",
             "session-keyboard" or "keyboard-editor" => "keyboard",
             "keyboard-target" => "window",
             "session-capture" => "camera",
             "session-gallery" or "capture-folder" or "capture-refresh" => "gallery",
-            "audio-devices" => "speaker",
+            "audio-devices" or "mixer-devices" or "device-refresh" => "speaker",
             _ => null
         };
         if (key is null)

@@ -87,7 +87,6 @@ public partial class MainWindow
         {
             var selected = entry.Id == navigation.Id;
             InteractionMotion.SetIsSelected(entry.Button, selected && entry.Available && IsVisible && focusConfirmed && IsActive && OwnForeground && InteractionMotion.Allowed);
-            var danger = entry.Id is "close" or "close-detail";
             var primary = entry.Id == "session-card";
             entry.Button.BorderThickness = new(2);
             entry.Button.SetResourceReference(BorderBrushProperty, selected ? ThemeSupport.Focus : ThemeSupport.Stroke);

@@ -56,7 +56,7 @@ public partial class MainWindow
             {
                 Height = GridLength.Auto
             });
-        var button = MakeButton(id, title, description, action, available, "", danger);
+        var button = MakeButton(id, title, description, action, available, danger);
         Grid.SetRow(button, index);
         Grid.SetColumn(button, row is null ? 0 : column);
         Grid.SetColumnSpan(button, row is null ? 2 : 1);
