@@ -102,11 +102,11 @@ public partial class MainWindow
         var count = new TextBlock
         {
             Text = keyboardText.Length + "/" + KeyboardTextLimit,
-            FontSize = 11,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center
         };
         count.SetResourceReference(ForegroundProperty, ThemeSupport.SecondaryText);
+        count.SetResourceReference(TextBlock.FontSizeProperty, "SessionType.Caption");
         Grid.SetColumn(count, 1);
         editorContent.Children.Add(keyboardEditor);
         editorContent.Children.Add(count);
@@ -218,8 +218,9 @@ public partial class MainWindow
             KeyboardIsLocal ? "Use this value locally; no text is sent to another app" : "Sends text only; Enter is never sent", compact ? 44 : 48, KeyboardIsLocal || keyboardTarget is not null);
         var insertContent = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         insertContent.Children.Add(new IconLabel(this, KeyboardIsLocal ? "profile-accept" : "keyboard-insert", command, 13, 16));
-        var insertionHint = new TextBlock { Text = KeyboardForColor ? "Local color only" : KeyboardForProfile ? "Return to profile" : "Text only · never Enter", FontSize = 11, TextAlignment = TextAlignment.Center };
+        var insertionHint = new TextBlock { Text = KeyboardForColor ? "Local color only" : KeyboardForProfile ? "Return to profile" : "Text only · never Enter", TextAlignment = TextAlignment.Center };
         insertionHint.SetResourceReference(ForegroundProperty, ThemeSupport.SecondaryText);
+        insertionHint.SetResourceReference(TextBlock.FontSizeProperty, "SessionType.Caption");
         insertContent.Children.Add(insertionHint);
         insert.Content = insertContent;
         AddKeyboardButton(commands, insert, 0, 1);

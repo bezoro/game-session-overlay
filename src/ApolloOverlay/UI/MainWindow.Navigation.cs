@@ -89,7 +89,7 @@ public partial class MainWindow
             var selected = entry.Id == navigation.Id;
             InteractionMotion.SetIsSelected(entry.Button, selected && entry.Available && IsVisible && focusConfirmed && IsActive && OwnForeground && InteractionMotion.Allowed);
             var primary = entry.Id == "session-card";
-            entry.Button.BorderThickness = new(2);
+            entry.Button.BorderThickness = new(selected ? 2 : 1);
             entry.Button.SetResourceReference(BorderBrushProperty, selected ? ThemeSupport.Focus : ThemeSupport.Stroke);
             if (selected && !entry.Available && entry.Button.Resources["DescriptionTarget"] is Border)
                 entry.Button.BorderBrush = Brushes.Transparent;
@@ -380,8 +380,10 @@ public partial class MainWindow
         CancelCloseButton.Content = new IconLabel(this, "back", "Cancel");
         HoldCloseButton.Content = new IconLabel(this, "confirm-hold", "Hold to close", 16, 20);
         SessionCardButton.Click += (_, _) => ActivatePointerEntry(SessionCardButton);
-        ContextCard.PreviewMouseRightButtonUp += (_, args) =>
+        ContextCard.PreviewMouseUp += (_, args) =>
         {
+            if (args.ChangedButton != System.Windows.Input.MouseButton.Right)
+                return;
             if (!NavigationAllowed || busy || TransitionPending || Confirming || view.Current.Route != OverlayRoute.Hub)
                 return;
             SetInputMethod("mouse");

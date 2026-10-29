@@ -78,15 +78,20 @@ public partial class MainWindow
         {
             Height = GridLength.Auto
         });
-        content = new StackPanel();
+        var body = new StackPanel();
+        content = body;
         var scroll = new ScrollViewer
         {
-            Content = content,
+            Content = body,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             Focusable = false,
             Margin = new(0, 0, 0, 8)
         };
+        // This pane owns a smaller viewport than ContentScroll because its actions
+        // stay pinned. Reveal a complete control here before the request can scroll
+        // the outer page or add clearance calculated for that larger viewport.
+        body.RequestBringIntoView += (_, args) => RevealAppearanceControl(scroll, body, args);
         AutomationProperties.SetName(scroll, "Appearance controls");
         pane.Children.Add(scroll);
         commands = new Grid();
@@ -139,11 +144,36 @@ public partial class MainWindow
     {
         var margin = button.Margin;
         button.Margin = new(0);
-        var host = new Border { Child = button, Margin = margin, Focusable = !available, FocusVisualStyle = null };
+        var host = new Border
+        {
+            Child = button,
+            Margin = margin,
+            Focusable = !available,
+            FocusVisualStyle = null,
+            Tag = "description:" + button.Tag
+        };
         AutomationProperties.SetName(host, AutomationProperties.GetName(button) + ". " + AutomationProperties.GetHelpText(button));
         AutomationProperties.SetHelpText(host, AutomationProperties.GetHelpText(button));
         button.Resources["DescriptionTarget"] = host;
         return host;
+    }
+
+    private static void RevealAppearanceControl(ScrollViewer scroll, StackPanel body, RequestBringIntoViewEventArgs args)
+    {
+        if (args.TargetObject is not FrameworkElement target || !body.IsAncestorOf(target)
+            || target.ActualHeight <= 0 || scroll.ViewportHeight <= 0)
+            return;
+        var bounds = target.TransformToAncestor(body).TransformBounds(new Rect(target.RenderSize));
+        var clearance = bounds.Height + 4 <= scroll.ViewportHeight ? 2 : 0;
+        var top = bounds.Top - clearance;
+        var bottom = bounds.Bottom + clearance;
+        var offset = scroll.VerticalOffset;
+        if (top < offset || bounds.Height > scroll.ViewportHeight)
+            offset = top;
+        else if (bottom > offset + scroll.ViewportHeight)
+            offset = bottom - scroll.ViewportHeight;
+        scroll.ScrollToVerticalOffset(Math.Clamp(offset, 0, scroll.ScrollableHeight));
+        args.Handled = true;
     }
 
     private static void AppearanceSection(StackPanel panel, string title)

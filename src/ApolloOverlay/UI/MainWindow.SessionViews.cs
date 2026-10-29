@@ -240,7 +240,7 @@ public partial class MainWindow
         AddRow("choose-session", "Choose another window", "Choose what to resume", ChooseSession);
         AddRow("details", "Window details", "View full details", () => OpenView(new(OverlayRoute.Details, target, "switch-detail")));
         AddRow("close", "Close window…", target.CanClose && valid ? "Confirm with a fresh 1.5-second hold" : "Window protected or unavailable", () => Confirm(target), valid && target.CanClose, true);
-        AddRow("back", "Back", "Back", Back);
+        AddRow("back", "Back", "", Back);
     }
 
     private void BuildDetails()
@@ -300,32 +300,4 @@ public partial class MainWindow
         AddRow("back", "Back", state.Status, Back);
     }
 
-    private void BuildResult()
-    {
-        if (Controller.Operation is not { } result)
-        {
-            AddRow("back", "Back", "No retained result", Back);
-            return;
-        }
-
-        AddRow("operation-text", "Read full message", "Arrows to scroll · B / Esc to go back", () => operationText?.Focus());
-        operationText = new TextBox
-        {
-            Text = result.Message,
-            IsReadOnly = true,
-            TextWrapping = TextWrapping.Wrap,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            MinHeight = 120,
-            MaxHeight = 160,
-            FontSize = 16,
-            Padding = new(12),
-            Margin = new(0, 8, 0, 8)
-        };
-        operationText.SetResourceReference(BackgroundProperty, ThemeSupport.Card);
-        operationText.SetResourceReference(ForegroundProperty, ThemeSupport.Text);
-        AutomationProperties.SetName(operationText, "Full result · " + result.State);
-        AddVisual(operationText);
-        AddRow("dismiss-operation", "Dismiss result", "Removes only this message", DismissOperation);
-        AddRow("back", "Back to panel", "Keeps the result available", Back);
-    }
 }

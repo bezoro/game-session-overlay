@@ -11,6 +11,35 @@ internal static class AppearanceTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        test("critical text requires body contrast on every action surface", () =>
+        {
+            var palette = AppearanceCatalog.Resolve(new(), false) with
+            {
+                Critical = "#888888",
+                CriticalBackground = "#000000"
+            };
+            Require(AppearanceCatalog.Contrast(palette.Critical, palette.CriticalBackground) >= 4.5,
+                "The fixture must satisfy dedicated status contrast");
+            Require(AppearanceCatalog.Contrast(palette.Critical, palette.FocusBackground) is >= 3 and < 4.5,
+                "The fixture must distinguish icon contrast from body contrast");
+            Require(!AppearanceCatalog.TryValidate(palette, out var reason) && reason.Contains("4.5:1", StringComparison.Ordinal),
+                "A color readable as an icon was accepted for destructive action text");
+        });
+        test("discard restores the original theme after previewing the opposite palette", () =>
+        {
+            using var host = DarkHost();
+            var window = host.Window;
+            host.Open(360, 480);
+            var original = ResourceColor(window, ThemeSupport.Surface);
+            var settings = window.Controller.Settings;
+            window.OpenAppearance();
+            SessionInterfaceTests.Choose(window, "appearance-preview");
+            Require(ResourceColor(window, ThemeSupport.Surface) != original, "The opposite palette was not actually previewed");
+            SessionInterfaceTests.Choose(window, "appearance-preset:Ember");
+            SessionInterfaceTests.Choose(window, "appearance-discard");
+            Require(ResourceColor(window, ThemeSupport.Surface) == original && !window.AppearanceDirty
+                && SessionHubSettings.Equivalent(settings, window.Controller.Settings), "Discard kept the preview theme or changed saved settings");
+        });
         test("explicit appearance mode overrides the simulated Windows preference used by previews", () =>
         {
             var app = Application.Current ?? new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };

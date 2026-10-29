@@ -15,8 +15,11 @@ public partial class MainWindow
         var changed = operationNotice.Update(Controller.Operation, now);
         var operation = operationNotice.Operation;
         var show = operationNotice.Visible && !Confirming && subpage != "operation";
-        // Reserve one quiet line so acknowledgements never move the selected action.
-        OperationPanel.Visibility = Confirming ? Visibility.Collapsed : show ? Visibility.Visible : Visibility.Hidden;
+        // A desktop panel reserves its quiet line. Compact panels reclaim empty
+        // space and reveal the current selection when the viewport changes.
+        OperationPanel.Visibility = Confirming || compactChrome && !show
+            ? Visibility.Collapsed : show ? Visibility.Visible : Visibility.Hidden;
+        OperationPanel.Height = compactChrome && !operationNotice.AllowsActions ? 24 : 44;
         OperationPanel.Opacity = show && IsVisible && OpenAnimationAllowed ? operationNotice.Opacity(now) : 1;
         var actions = operationNotice.AllowsActions ? Visibility.Visible : Visibility.Collapsed;
         OperationDetailsButton.Visibility = actions;

@@ -131,7 +131,8 @@ public partial class MainWindow
         automationRevision++;
         NoteAutomationTargets();
         HeaderIdentity.Text = "v" + AppBuild.Current.Version.Split('+')[0];
-        HeaderBrand.Visibility = narrow || compactChrome ? Visibility.Collapsed : Visibility.Visible;
+        HeaderBrand.Visibility = Visibility.Visible;
+        HeaderBrand.FontSize = ResourceNumber(compactChrome || narrow ? "SessionType.Caption" : "SessionType.CompactBody", compactChrome || narrow ? 13 : 14);
         HeaderIdentity.ToolTip = AppBuild.Current.Display + " · " + AppBuild.Current.BuildId + " · " + AppBuild.Current.Commit;
         if (Confirming)
         {
@@ -165,7 +166,7 @@ public partial class MainWindow
         ContextGlyph.Visibility = ContextIcon.Source is null ? Visibility.Visible : Visibility.Collapsed;
         ContextStatus.Visibility = valid ? Visibility.Collapsed : Visibility.Visible;
         ContextStatusDot.Visibility = Visibility.Collapsed;
-        SessionEvidence.Visibility = target is not null && string.Concat(target.Title.Where(char.IsLetterOrDigit)).Equals(string.Concat(target.ProcessName.Where(char.IsLetterOrDigit)), StringComparison.OrdinalIgnoreCase) ? Visibility.Collapsed : Visibility.Visible;
+        SessionEvidence.Visibility = compactChrome || target is not null && string.Concat(target.Title.Where(char.IsLetterOrDigit)).Equals(string.Concat(target.ProcessName.Where(char.IsLetterOrDigit)), StringComparison.OrdinalIgnoreCase) ? Visibility.Collapsed : Visibility.Visible;
         SessionAudioLabel.Text = target is null ? "Select a window to view its audio" : !valid ? "Window unavailable" : AudioFor(target) ? AudioBadge() : "Status unconfirmed";
         ControllerStatusLabel.Text = controllerStatus.Replace(" · waiting for input", "");
         BackButton.Visibility = view.Depth > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -209,8 +210,14 @@ public partial class MainWindow
             OverlayRoute.Apps => view.Current.ChooseSession ? "Choose window" : "Apps",
             OverlayRoute.System => "System",
             OverlayRoute.PlayniteBrowser => "Find Playnite",
-            OverlayRoute.Updates => "Version and updates",
-            OverlayRoute.UpdateReview => rollbackReview is null ? "Update overlay" : "Restore an earlier version",
+            OverlayRoute.Updates => compactChrome ? "Updates" : "Version and updates",
+            OverlayRoute.UpdateReview => (compactChrome, rollbackReview is null) switch
+            {
+                (true, true) => "Review update",
+                (true, false) => "Restore version",
+                (false, true) => "Update overlay",
+                _ => "Restore an earlier version"
+            },
             _ => "Session controls"
         };
         if (SessionFeatureTitle is { } featureTitle)
@@ -232,7 +239,8 @@ public partial class MainWindow
 
     private string GuideDescription() => Controller.Platform.IsPreview ? "Preview · Guide connection is not queried" : !Controller.Settings.GuideXInputEnabled ? "Disabled · double-click the tray icon to open" : guideBackend?.Active == true ? guideBackend.Status : guideConnection?.Status ?? "Controller or Guide input unavailable";
     private bool QuickAccessAction(string id) => view.Current.Route == OverlayRoute.Hub && SessionHubSettings.Catalog.Contains(id);
-    private bool CompactAction(string id) => narrow && (view.Current.Route == OverlayRoute.Hub && SessionHubSettings.Catalog.Contains(id) || view.Current.Route == OverlayRoute.Media && id is "media-previous" or "media-next");
+    private bool CompactAction(string id) => view.Current.Route == OverlayRoute.OperationResult
+        || narrow && (view.Current.Route == OverlayRoute.Hub && SessionHubSettings.Catalog.Contains(id) || view.Current.Route == OverlayRoute.Media && id is "media-previous" or "media-next");
     private string ActionDescription(string id, string description, bool available) => QuickAccessAction(id) && !available ? id switch
     {
         "playnite" => "Set up in System",

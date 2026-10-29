@@ -25,6 +25,28 @@ internal static class SessionInterfaceTests
         DateTimeOffset.Parse("2026-10-28T12:00:00Z"), "Interface fixture release. No update is installed.\n• Clearer session navigation\n• Local capture previews\n• Custom appearance", 201, "fixture-only.nupkg", 8_388_608, new string('a', 64));
     internal static void Run(Action<string, Action> test)
     {
+        foreach (var compact in new[] { false, true })
+            test("result reader keeps recovery actions pinned with one scroll context compact=" + compact, () =>
+            {
+                using var host = new Host();
+                var window = host.Window;
+                host.Open(compact ? 360 : 572, compact ? 480 : 940);
+                Navigate(window, "operation", host);
+                window.UpdateLayout();
+                var viewport = (ScrollViewer)window.FindName("ContentScroll");
+                Require(viewport.ScrollableHeight <= 1, "Result page adds a second scrolling context");
+                var reader = CaptureVisuals<TextBox>((DependencyObject)window.FindName("Rows")).Single();
+                Require(reader.ActualHeight >= 80, "The pinned commands leave no useful message area");
+                foreach (var id in new[] { "operation-text", "dismiss-operation", "back" })
+                {
+                    Pick(window, id);
+                    window.UpdateLayout();
+                    var button = ReviewFixTests.Button(window, id);
+                    var bounds = button.TransformToAncestor(viewport).TransformBounds(new Rect(button.RenderSize));
+                    Require(bounds.Top >= -1 && bounds.Bottom <= viewport.ViewportHeight + 1,
+                        "A result recovery action is clipped: " + id);
+                }
+            });
         foreach (var height in new[] { 480, 600 })
             test("compact keyboard keeps target buffer and explicit insertion visible " + height, () =>
             {
@@ -300,6 +322,7 @@ internal static class SessionInterfaceTests
             foreach (var width in new[] { 572, 360 })
                 foreach (var route in scenarios)
                 {
+                    Console.WriteLine($"CAPTURE START theme={(light ? "light" : "dark")}; requested={width}x{(width == 572 ? 940 : 480)}; route={route}");
                     ThemeSupport.ForceForValidation(app, light);
                     using var host = CaptureHost(route);
                     var window = host.Window;
@@ -345,6 +368,7 @@ internal static class SessionInterfaceTests
         foreach (var width in new[] { 572, 360 })
             foreach (var route in new[] { "home", "devices", "edit", "confirmation", "keyboard", "appearance", "color-editor", "operation", "media-empty" })
             {
+                Console.WriteLine($"CAPTURE START theme=high-contrast-palette; requested={width}x{(width == 572 ? 940 : 480)}; route={route}");
                 ThemeSupport.ForceHighContrastForValidation(app);
                 using var host = CaptureHost(route);
                 var height = width == 572 ? 940 : 480;
@@ -477,6 +501,7 @@ internal static class SessionInterfaceTests
             foreach (var width in new[] { 572, 360 })
                 foreach (var state in new[] { "controller", "mouse", "success", "warning", "unknown-controller", "wired-controller", "controller-lost", "unavailable-action", "selected-audio", "focused-action" })
                 {
+                    Console.WriteLine($"CAPTURE START theme={(light ? "light" : "dark")}; requested={width}x{(width == 572 ? 940 : 480)}; notice={state}");
                     ThemeSupport.ForceForValidation(app, light);
                     using var host = new Host(gameTitle: "Elden Ring", identities: state switch
                     {
@@ -534,10 +559,16 @@ internal static class SessionInterfaceTests
         var buttons = CaptureVisuals<Button>(root)
             .Where(button => button.IsVisible && button.ActualWidth > 0 && button.ActualHeight > 0)
             .ToArray();
-        Require(buttons.Length >= 4, "Capture has no rendered command buttons");
+        var confirmation = ((FrameworkElement)window.FindName("ConfirmPanel")).IsVisible;
+        if (confirmation)
+            Require(buttons.Any(button => Equals(button.Tag, "confirm-hold"))
+                && buttons.Any(button => Equals(button.Tag, "confirm-cancel")),
+                "Confirmation capture is missing its actual hold or cancel command");
+        else
+            Require(buttons.Length >= 4, "Capture has no rendered command buttons: selected=" + window.SelectedAction + "; visible=" + buttons.Length
+                + "; all=" + string.Join(", ", CaptureVisuals<Button>(root).Select(button => $"{button.Tag}:{button.Visibility}/{button.IsVisible}/{button.ActualWidth:F1}x{button.ActualHeight:F1}")));
         var rows = (FrameworkElement)window.FindName("Rows");
-        Require(buttons.Any(button => rows.IsAncestorOf(button))
-            || ((FrameworkElement)window.FindName("ConfirmPanel")).IsVisible && buttons.Any(button => Equals(button.Tag, "confirm-hold")),
+        Require(buttons.Any(button => rows.IsAncestorOf(button)) || confirmation,
             "Capture has chrome but no rendered page actions");
         foreach (var button in buttons)
         {
@@ -547,16 +578,24 @@ internal static class SessionInterfaceTests
             else if (button.Content is string text && text.Length > 0)
                 Require(CaptureVisuals<TextBlock>(button).Any(label => label.IsVisible && label.ActualWidth > 0 && label.ActualHeight > 0 && label.Text.Length > 0), "Capture button text is not rendered: " + button.Tag);
         }
-        if (((Border)window.FindName("ContextCard")).Visibility == Visibility.Visible)
+        if (((Border)window.FindName("ContextCard")).IsVisible)
         {
             var title = (TextBlock)window.FindName("TargetLabel");
             Require(title.IsVisible && title.ActualWidth > 0 && title.ActualHeight > 0 && title.Text.Length > 0, "Capture game title is not rendered");
         }
+        if (confirmation)
+        {
+            var target = (TextBlock)window.FindName("ConfirmTarget");
+            Require(target.IsVisible && target.ActualWidth > 0 && target.ActualHeight > 0 && target.Text.Length > 0,
+                "Confirmation capture does not identify its actual close target");
+        }
 
-        var footer = InputPrompt.Read((TextBlock)window.FindName("ModeLabel"));
+        var footer = confirmation && ((Button)window.FindName("HoldCloseButton")).Content is IconLabel hold
+            ? InputPrompt.Read(hold.Label)
+            : InputPrompt.Read((TextBlock)window.FindName("ModeLabel"));
         var expectedPrompt = expectedInput switch
         {
-            "controller" => "LB/RB",
+            "controller" => confirmation ? "A" : "LB/RB",
             "mouse" => "Left click",
             _ => "Enter"
         };

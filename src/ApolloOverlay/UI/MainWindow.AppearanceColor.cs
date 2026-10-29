@@ -41,7 +41,7 @@ public partial class MainWindow
         Grid.SetColumn(appearanceColorLabel, 1);
         preview.Children.Add(appearanceColorLabel);
         content.Children.Add(preview);
-        AppearanceParagraph(content, "Adjust a channel or enter a hex color. Keep color adds it to your draft; Save colors makes it permanent.");
+        AppearanceParagraph(content, "Adjust a channel from 0–255 or enter a hex color. Keep color adds it to your draft; Save colors makes it permanent.");
         var color = ReadAppearanceColor();
         AddAppearanceChannel(content, "color-red", "Red", color.R, value => Color.FromRgb(value, ReadAppearanceColor().G, ReadAppearanceColor().B));
         AddAppearanceChannel(content, "color-green", "Green", color.G, value => Color.FromRgb(ReadAppearanceColor().R, value, ReadAppearanceColor().B));
@@ -88,7 +88,10 @@ public partial class MainWindow
         AutomationProperties.SetName(slider, name + " color channel, zero to 255");
         row.Resources["SessionSlider"] = slider;
         if (row.Content is ActionButtonContent body)
+        {
+            body.Description.Visibility = Visibility.Collapsed;
             body.Texts.Children.Add(slider);
+        }
         slider.ValueChanged += (_, _) =>
         {
             if (!NavigationAllowed || busy || TransitionPending)

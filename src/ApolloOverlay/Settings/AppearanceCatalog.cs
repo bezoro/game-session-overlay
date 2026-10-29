@@ -421,7 +421,9 @@ public static class AppearanceCatalog
             PaletteRole.PromptA, PaletteRole.PromptB, PaletteRole.PromptX, PaletteRole.PromptY, PaletteRole.PromptShoulder, PaletteRole.PromptDpad,
             PaletteRole.PromptGuide, PaletteRole.PromptKeyboard, PaletteRole.PromptMouse })
             foreach (var background in surfaces)
-                yield return (foreground, background, 3);
+                // Critical also labels destructive actions, battery warnings and
+                // validation errors; it must remain readable as body text.
+                yield return (foreground, background, foreground == PaletteRole.Critical ? 4.5 : 3);
         foreach (var background in new[] { PaletteRole.PromptA, PaletteRole.PromptB, PaletteRole.PromptX, PaletteRole.PromptY,
             PaletteRole.PromptShoulder, PaletteRole.PromptDpad, PaletteRole.PromptGuide, PaletteRole.PromptKeyboard, PaletteRole.PromptMouse })
             yield return (PaletteRole.PromptForeground, background, 4.5);

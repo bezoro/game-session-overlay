@@ -315,7 +315,8 @@ public partial class MainWindow
         StatusLabel.TextWrapping = compactChrome && important ? TextWrapping.Wrap : TextWrapping.NoWrap;
         StatusLabel.TextTrimming = compactChrome && important ? TextTrimming.None : TextTrimming.CharacterEllipsis;
         StatusLabel.MaxHeight = compactChrome && important ? 60 : double.PositiveInfinity;
-        StatusLabel.Visibility = string.IsNullOrWhiteSpace(StatusLabel.Text) || compactChrome && !important ? Visibility.Collapsed : Visibility.Visible;
+        var updateDetailAlreadyVisible = (view.Current.Route is OverlayRoute.Updates or OverlayRoute.UpdateReview) && StatusLabel.Text == updateStatus;
+        StatusLabel.Visibility = string.IsNullOrWhiteSpace(StatusLabel.Text) || compactChrome && !important || updateDetailAlreadyVisible ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private const double ScrollFadeHeight = 24;
@@ -363,7 +364,7 @@ public partial class MainWindow
         SessionIconColumn.Width = new(compact ? 48 : 66);
         SessionIconHost.Height = compact ? 40 : 54;
         SessionIconHost.Margin = new(0, 0, compact ? 8 : 12, 0);
-        SessionIdentity.Margin = compact ? new(12, 12, 12, 8) : new(16, 14, 16, 12);
+        SessionIdentity.Margin = compact ? new(12, 8, 12, 8) : new(16, 14, 16, 12);
         ContextGlyph.Width = ContextGlyph.Height = compact ? 22 : 25;
         ContextIcon.Width = ContextIcon.Height = compact ? 32 : 42;
         SessionCardButton.Padding = new(12, 8, 12, 8);
@@ -383,21 +384,23 @@ public partial class MainWindow
         if (pointerDown)
             CancelHold();
         HeaderIdentity.Visibility = Visibility.Visible;
-        HeaderBrand.Visibility = compact || narrow ? Visibility.Collapsed : Visibility.Visible;
+        HeaderBrand.Visibility = Visibility.Visible;
+        HeaderBrand.FontSize = ResourceNumber(compact || narrow ? "SessionType.Caption" : "SessionType.CompactBody", compact || narrow ? 13 : 14);
         ControllerStatusLabel.Visibility = Visibility.Collapsed;
         DirtyLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        HeaderArea.Margin = new(0, 0, 0, compact ? 8 : 12);
+        HeaderArea.Margin = new(0, 0, 0, compact ? 4 : 12);
         HeaderIdentityRow.Margin = new(0);
         HeaderIdentityBadge.Padding = compact ? new(4, 2, 4, 2) : new(6, 3, 6, 3);
         HeaderIdentity.FontSize = 12;
         HeaderIdentityRow.HorizontalAlignment = HorizontalAlignment.Stretch;
         PageTitle.FontSize = compact ? 24 : ResourceNumber("SessionType.Title", 26);
         PageTitle.Margin = new(0, 12, 0, 0);
-        ControllerInfoBar.Margin = new(0, 8, 0, 0);
+        ControllerInfoBar.Margin = new(0, compact ? 4 : 8, 0, 0);
         DirtyStrip.Margin = new(0, compact ? 8 : 12, 0, 0);
         DirtyStrip.Padding = new(12, compact ? 6 : 8, 12, compact ? 6 : 8);
-        TabArea.Margin = new(0, 0, 0, compact ? 8 : 12);
-        Sidebar.Padding = compact ? new(16, 12, 16, 12) : new(24, 20, 24, 20);
+        TabArea.Margin = new(0, 0, 0, compact ? 4 : 12);
+        TabArea.Padding = compact ? new(0) : new(0, 0, 0, 4);
+        Sidebar.Padding = compact ? new(16, 10, 16, 10) : new(24, 20, 24, 20);
         FooterArea.Margin = new(0, compact ? 6 : 10, 0, 0);
         FooterDivider.Margin = new(0, 0, 0, compact ? 4 : 8);
         SharedControlNotice.FontSize = ResourceNumber("SessionType.Caption", 13);
@@ -416,6 +419,7 @@ public partial class MainWindow
 
         // Header, navigation, notices and Save/Discard keep their fixed grid rows.
         ApplySessionCardDensity();
+        RefreshOperationNotice(Environment.TickCount64);
         UpdateStatusPresentation(importantStatus);
         PlaceCompactStatus();
         revealPending = true;

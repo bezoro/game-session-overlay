@@ -25,6 +25,8 @@
         <ResourceDictionary
           Source="Resources/PresentationTokens.xaml" />
         <ResourceDictionary
+          Source="Resources/OverlayControls.xaml" />
+        <ResourceDictionary
           Source="Assets/Icons/Icons.xaml" />
         <ResourceDictionary
           Source="Assets/Icons/InputGlyphs.xaml" />
@@ -87,113 +89,6 @@
             </ControlTemplate>
           </Setter.Value>
         </Setter>
-      </Style>
-      <ControlTemplate
-        x:Key="ScrollPageButton"
-        TargetType="RepeatButton">
-        <Border
-          Background="Transparent" />
-      </ControlTemplate>
-      <Style
-        TargetType="ScrollBar">
-        <Setter
-          Property="Width"
-          Value="8" />
-        <Setter
-          Property="Background"
-          Value="Transparent" />
-        <Setter
-          Property="Focusable"
-          Value="False" />
-        <Setter
-          Property="Template">
-          <Setter.Value>
-            <ControlTemplate
-              TargetType="ScrollBar">
-              <Grid
-                Background="{TemplateBinding Background}">
-                <Track
-                  x:Name="PART_Track"
-                  Orientation="{TemplateBinding Orientation}"
-                  IsDirectionReversed="True"
-                  Minimum="{TemplateBinding Minimum}"
-                  Maximum="{TemplateBinding Maximum}"
-                  ViewportSize="{TemplateBinding ViewportSize}"
-                  Value="{Binding Value, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
-                  <Track.DecreaseRepeatButton>
-                    <RepeatButton
-                      x:Name="DecreasePage"
-                      Command="{x:Static ScrollBar.PageUpCommand}"
-                      Template="{StaticResource ScrollPageButton}"
-                      Focusable="False" />
-                  </Track.DecreaseRepeatButton>
-                  <Track.Thumb>
-                    <Thumb
-                      x:Name="ScrollThumb"
-                      MinHeight="24"
-                      MinWidth="6"
-                      Margin="1"
-                      Opacity="0.65">
-                      <Thumb.Template>
-                        <ControlTemplate
-                          TargetType="Thumb">
-                          <Border
-                            Background="{DynamicResource SessionSliderThumbBrush}"
-                            CornerRadius="3" />
-                        </ControlTemplate>
-                      </Thumb.Template>
-                    </Thumb>
-                  </Track.Thumb>
-                  <Track.IncreaseRepeatButton>
-                    <RepeatButton
-                      x:Name="IncreasePage"
-                      Command="{x:Static ScrollBar.PageDownCommand}"
-                      Template="{StaticResource ScrollPageButton}"
-                      Focusable="False" />
-                  </Track.IncreaseRepeatButton>
-                </Track>
-              </Grid>
-              <ControlTemplate.Triggers>
-                <Trigger
-                  Property="Orientation"
-                  Value="Horizontal">
-                  <Setter
-                    TargetName="PART_Track"
-                    Property="IsDirectionReversed"
-                    Value="False" />
-                  <Setter
-                    TargetName="ScrollThumb"
-                    Property="MinHeight"
-                    Value="6" />
-                  <Setter
-                    TargetName="ScrollThumb"
-                    Property="MinWidth"
-                    Value="24" />
-                  <Setter
-                    TargetName="DecreasePage"
-                    Property="Command"
-                    Value="{x:Static ScrollBar.PageLeftCommand}" />
-                  <Setter
-                    TargetName="IncreasePage"
-                    Property="Command"
-                    Value="{x:Static ScrollBar.PageRightCommand}" />
-                </Trigger>
-              </ControlTemplate.Triggers>
-            </ControlTemplate>
-          </Setter.Value>
-        </Setter>
-        <Style.Triggers>
-          <Trigger
-            Property="Orientation"
-            Value="Horizontal">
-            <Setter
-              Property="Width"
-              Value="Auto" />
-            <Setter
-              Property="Height"
-              Value="8" />
-          </Trigger>
-        </Style.Triggers>
       </Style>
       <Style
         TargetType="ProgressBar">
@@ -466,6 +361,64 @@
         <Setter
           Property="HorizontalContentAlignment"
           Value="Center" />
+        <Setter
+          Property="Template">
+          <Setter.Value>
+            <ControlTemplate
+              TargetType="Button">
+              <Grid
+                Background="Transparent">
+                <Border
+                  x:Name="TabInteraction"
+                  Background="{DynamicResource SessionHoverBrush}"
+                  Opacity="0" />
+                <ContentPresenter
+                  Margin="{TemplateBinding Padding}"
+                  VerticalAlignment="Center"
+                  HorizontalAlignment="Center" />
+                <Border
+                  Height="2"
+                  Margin="12,0"
+                  VerticalAlignment="Bottom"
+                  Background="{TemplateBinding BorderBrush}" />
+                <Border
+                  x:Name="TabFocus"
+                  Margin="1"
+                  BorderThickness="2"
+                  CornerRadius="6"
+                  BorderBrush="{DynamicResource SessionFocusBrush}"
+                  Opacity="0"
+                  IsHitTestVisible="False" />
+              </Grid>
+              <ControlTemplate.Triggers>
+                <Trigger
+                  Property="IsMouseOver"
+                  Value="True">
+                  <Setter
+                    TargetName="TabInteraction"
+                    Property="Opacity"
+                    Value="0.06" />
+                </Trigger>
+                <Trigger
+                  Property="IsPressed"
+                  Value="True">
+                  <Setter
+                    TargetName="TabInteraction"
+                    Property="Opacity"
+                    Value="0.12" />
+                </Trigger>
+                <Trigger
+                  Property="IsKeyboardFocused"
+                  Value="True">
+                  <Setter
+                    TargetName="TabFocus"
+                    Property="Opacity"
+                    Value="1" />
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
       </Style>
       <Style
         x:Key="VolumeTrackButton"
@@ -814,6 +767,7 @@
         </Border>
         <ScrollViewer
           x:Name="ContentScroll"
+          Style="{StaticResource OverlayScrollViewer}"
           Grid.Row="2"
           VerticalScrollBarVisibility="Auto"
           HorizontalScrollBarVisibility="Disabled"
@@ -999,7 +953,10 @@
           Visibility="Collapsed"
           Background="{DynamicResource ApplicationBackgroundBrush}"
           CornerRadius="{DynamicResource SessionRadius.Panel}">
-          <Grid>
+          <Grid
+            x:Name="ConfirmationGroup"
+            MaxHeight="460"
+            VerticalAlignment="Center">
             <Grid.RowDefinitions>
               <RowDefinition />
               <RowDefinition
@@ -1007,6 +964,7 @@
             </Grid.RowDefinitions>
             <ScrollViewer
               x:Name="ConfirmScroll"
+              Style="{StaticResource OverlayScrollViewer}"
               VerticalScrollBarVisibility="Auto">
               <StackPanel
                 x:Name="ConfirmationInfo"

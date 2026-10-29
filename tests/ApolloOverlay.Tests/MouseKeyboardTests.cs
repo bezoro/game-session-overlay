@@ -117,12 +117,12 @@ internal static class MouseKeyboardTests
             var w = host.Window;
             host.Open();
             var card = (Button)w.FindName("SessionCardButton");
-            card.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Right) { RoutedEvent = UIElement.PreviewMouseRightButtonUpEvent });
+            card.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Right) { RoutedEvent = Mouse.PreviewMouseUpEvent });
             Require(w.ActionIds.Contains("application-mute"), "Right-click did not open the session window options");
             Tap(w, Key.Escape);
             Require(w.SelectedAction == "session-card" && !w.ActionIds.Contains("session-options"), "Options did not return to the single full-width game card");
             host.RevokeAdmission();
-            card.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Right) { RoutedEvent = UIElement.PreviewMouseRightButtonUpEvent });
+            card.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Right) { RoutedEvent = Mouse.PreviewMouseUpEvent });
             Require(!w.ActionIds.Contains("application-mute") && !w.TransitionPending, "Unconfirmed focus admitted a pointer context action");
         });
         test("local keyboard and pointer remain usable after footer Save Discard and animated acknowledgement", () =>

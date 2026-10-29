@@ -125,6 +125,7 @@ public partial class MainWindow
     {
         appearanceDraft = AppearanceCatalog.Normalize(Controller.Settings.Appearance);
         appearanceSafePreview = appearanceDraft;
+        appearancePreviewLight = ThemeSupport.UsesLightPalette(Controller.Settings.Appearance);
         appearanceColorRole = null;
         appearanceColorProposal = null;
         ApplyAppearanceTheme();

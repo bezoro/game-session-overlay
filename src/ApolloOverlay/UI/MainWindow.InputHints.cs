@@ -55,7 +55,8 @@ public partial class MainWindow
         SetEntryPrompt("update-notes", read);
         SetEntryPrompt("shortcut", InputHint("{A} switches {Shift}+{Tab} / {Ctrl}+{Tab}", "{Enter} switches {Shift}+{Tab} / {Ctrl}+{Tab}", "{MouseLeft} to switch {Shift}+{Tab} / {Ctrl}+{Tab}"));
         SetEntryPrompt("keyboard-target", InputHint("Text destination · {A} changes the window", "Text destination · {Enter} changes the window", "{MouseLeft} to choose the text destination"));
-        SetEntryPrompt("prepare-update", InputHint("{B} cancels download · current installation preserved", "{Esc} cancels download · current installation preserved", "{MouseLeft} Cancel stops the download · current installation preserved"));
+        SetEntryPrompt("prepare-update", (updateReview is { } candidate ? UpdateActionContext(candidate) + " · " : "")
+            + InputHint("{B} cancels download", "{Esc} cancels download", "{MouseLeft} Cancel stops the download"));
         SetEntryPrompt("mixer-volume", InputHint("{DpadHorizontal} adjusts volume", "{Left}/{Right} adjust · {Tab} leaves the slider", "{MouseLeft} drag to adjust volume"));
         SetEntryPrompt("guide-limit", InputHint("{DpadHorizontal} adjusts · 0.5–3.0 s", "{Left}/{Right} adjusts · 0.5–3.0 s", "{MouseLeft} drag · 0.5–3.0 s"));
         SetEntryDescription("session-volume", GameVolumeDescription);
