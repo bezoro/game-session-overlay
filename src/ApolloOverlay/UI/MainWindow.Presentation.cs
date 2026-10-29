@@ -306,6 +306,9 @@ public partial class MainWindow
     private void UpdateStatusPresentation(bool important)
     {
         importantStatus = important;
+        StatusLabel.TextWrapping = compactChrome && important ? TextWrapping.Wrap : TextWrapping.NoWrap;
+        StatusLabel.TextTrimming = compactChrome && important ? TextTrimming.None : TextTrimming.CharacterEllipsis;
+        StatusLabel.MaxHeight = compactChrome && important ? 60 : double.PositiveInfinity;
         StatusLabel.Visibility = compactChrome && !important ? Visibility.Collapsed : Visibility.Visible;
     }
 

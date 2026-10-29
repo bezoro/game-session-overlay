@@ -312,13 +312,11 @@ internal static class SessionInterfaceTests
                     using var host = new Host(gameTitle: "Elden Ring");
                     var w = host.Window;
                     var height = width == 572 ? 940 : 600;
-                    host.Open(width, height);
+                    host.Open(width, height, forCapture: true);
                     Navigate(w, route);
                     w.RefreshOperationNotice(Environment.TickCount64 + 200);
                     w.UpdateLayout();
-                    var root = PrepareCapture(w, width, height);
-                    var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
-                    bitmap.Render(root);
+                    var bitmap = RenderCapture(w, width, height, "keyboard");
                     var png = new PngBitmapEncoder();
                     png.Frames.Add(BitmapFrame.Create(bitmap));
                     using var file = File.Create(Path.Combine(output, $"{(light ? "light" : "dark")}-{width}-{route}.png"));
@@ -337,7 +335,7 @@ internal static class SessionInterfaceTests
                     using var host = new Host(gameTitle: "Elden Ring");
                     var window = host.Window;
                     var height = width == 572 ? 940 : 600;
-                    host.Open(width, height);
+                    host.Open(width, height, forCapture: true);
                     AdaptiveInterfaceTests.UseController(window);
                     if (state == "mouse")
                     {
@@ -350,9 +348,7 @@ internal static class SessionInterfaceTests
                         window.RefreshRows();
                     }
                     window.RefreshOperationNotice(Environment.TickCount64 + 200);
-                    var root = PrepareCapture(window, width, height);
-                    var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
-                    bitmap.Render(root);
+                    var bitmap = RenderCapture(window, width, height, state == "mouse" ? "mouse" : "controller");
                     var png = new PngBitmapEncoder();
                     png.Frames.Add(BitmapFrame.Create(bitmap));
                     using var file = File.Create(Path.Combine(output, $"{(light ? "light" : "dark")}-{width}-notice-{state}.png"));
@@ -360,24 +356,55 @@ internal static class SessionInterfaceTests
                 }
     }
 
-    private static FrameworkElement PrepareCapture(MainWindow window, int width, int height)
+    private static RenderTargetBitmap RenderCapture(MainWindow window, int requestedWidth, int requestedHeight, string expectedInput)
     {
         var root = (FrameworkElement)window.Content;
-        // Render the actual WPF tree at the requested size without the runner's
-        // native maximum tracking height clipping an off-screen test window.
-        window.Content = null;
-        root.Resources.MergedDictionaries.Add(window.Resources);
-        root.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, ThemeSupport.Text);
-        root.SetValue(System.Windows.Documents.TextElement.FontFamilyProperty, window.FontFamily);
-        root.SetValue(System.Windows.Documents.TextElement.FontSizeProperty, window.FontSize);
-        root.Language = window.Language;
-        root.UseLayoutRounding = window.UseLayoutRounding;
-        root.SnapsToDevicePixels = window.SnapsToDevicePixels;
-        TextOptions.SetTextFormattingMode(root, TextOptions.GetTextFormattingMode(window));
-        root.Measure(new Size(width, height));
-        root.Arrange(new Rect(0, 0, width, height));
+        // Keep the native, loaded tree attached. Detaching it loses inherited
+        // implicit templates and can render empty buttons with otherwise valid geometry.
+        Require(root.IsLoaded && PresentationSource.FromVisual(root) is not null, "Capture tree is detached from its real WPF presentation source");
+        var buttons = PremiumInterfaceTests.Descendants<Button>(root)
+            .Where(button => button.IsVisible && button.ActualWidth > 0 && button.ActualHeight > 0)
+            .ToArray();
+        Require(buttons.Length >= 4, "Capture has no rendered command buttons");
+        var rows = (FrameworkElement)window.FindName("Rows");
+        Require(buttons.Any(button => rows.IsAncestorOf(button)), "Capture has chrome but no rendered page actions");
+        foreach (var button in buttons)
+            button.ApplyTemplate();
+        window.UpdateLayout();
         root.UpdateLayout();
-        return root;
+        window.Dispatcher.Invoke(DispatcherPriority.Render, new Action(() => { }));
+        foreach (var button in buttons)
+        {
+            Require(button.Template is not null && VisualTreeHelper.GetChildrenCount(button) > 0, "Capture button has no template visuals: " + button.Tag);
+            if (button.Content is FrameworkElement content)
+                Require(content.IsVisible && content.ActualWidth > 0 && content.ActualHeight > 0 && PresentationSource.FromVisual(content) is not null, "Capture button content is disconnected or empty: " + button.Tag);
+            else if (button.Content is string text && text.Length > 0)
+                Require(PremiumInterfaceTests.Descendants<TextBlock>(button).Any(label => label.IsVisible && label.ActualWidth > 0 && label.ActualHeight > 0 && label.Text.Length > 0), "Capture button text is not rendered: " + button.Tag);
+        }
+        if (((Border)window.FindName("ContextCard")).Visibility == Visibility.Visible)
+        {
+            var title = (TextBlock)window.FindName("TargetLabel");
+            Require(title.IsVisible && title.ActualWidth > 0 && title.ActualHeight > 0 && title.Text.Length > 0, "Capture game title is not rendered");
+        }
+
+        var footer = ((TextBlock)window.FindName("ModeLabel")).Text;
+        var expectedPrompt = expectedInput switch
+        {
+            "controller" => "LB/RB",
+            "mouse" => "Click",
+            _ => "Enter"
+        };
+        Require(footer.Contains(expectedPrompt, StringComparison.Ordinal), $"Capture input mismatch: expected {expectedInput}; footer={footer}");
+        Require(window.IsVisible && window.IsActive && Native.GetForegroundWindow() == new WindowInteropHelper(window).Handle, "Capture lost its actual native foreground window");
+
+        // If a runner still constrains the native window, capture its actual viewport.
+        // Never label black padding as additional rendered screen space.
+        var width = Math.Max(1, (int)Math.Ceiling(window.ActualWidth));
+        var height = Math.Max(1, (int)Math.Ceiling(window.ActualHeight));
+        Console.WriteLine($"CAPTURE GEOMETRY requested={requestedWidth}x{requestedHeight}; actual={width}x{height}; root={root.ActualWidth:F1}x{root.ActualHeight:F1}; buttons={buttons.Length}; input={expectedInput}; footer={footer.Replace("\n", " | ", StringComparison.Ordinal)}");
+        var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(window);
+        return bitmap;
     }
 
     private static void Navigate(MainWindow w, string page)
@@ -499,10 +526,17 @@ internal static class SessionInterfaceTests
             Window.RefreshRows();
         }
 
-        internal void Open(int width = 572, int height = 940)
+        internal void Open(int width = 572, int height = 940, bool forCapture = false)
         {
             Window.Left = -12000;
             Window.Top = -12000;
+            if (forCapture)
+            {
+                // Capture-only native tracking bounds keep tall reference layouts
+                // independent of the hosted runner's desktop resolution.
+                Window.MinWidth = Window.MaxWidth = width;
+                Window.MinHeight = Window.MaxHeight = height;
+            }
             Window.Width = width;
             Window.Height = height;
             Window.ShowDiagnostic();

@@ -41,7 +41,7 @@ public partial class MainWindow
         input.Cancel();
         if (!dismiss)
             RetainOperation("Pending", InputHint("Release the controller to continue · B cancels before sending.", "Release the keys to continue · Esc cancels before sending.", "Release the mouse button to continue."));
-        FeedbackText(dismiss ? "Release the controls to hide the panel." : InputHint("Release the controller to continue · B cancels.", "Release the keys to continue · Esc cancels.", "Release the mouse button to continue."));
+        FeedbackText(dismiss ? "Release the controls to hide the panel." : InputHint("Release the controller to continue · B cancels.", "Release the keys to continue · Esc cancels.", "Release the mouse button to continue."), important: dismiss);
     }
 
     private void CancelHandoff(bool terminalize = true)
@@ -78,7 +78,7 @@ public partial class MainWindow
         degradedSince = null;
         releaseGate.Reset();
         input.Cancel();
-        FeedbackText("Input or context uncertain. Release the controls to hide without returning to the app.");
+        FeedbackText("Input or context uncertain. Release the controls to hide without returning to the app.", important: true);
     }
 
     private void CompleteDegradedDismiss()
@@ -103,7 +103,7 @@ public partial class MainWindow
         if (handoffInputs.UnknownHeld && !degradedExplicit)
         {
             degradedSince = null;
-            FeedbackText("Input unavailable. Press and release Esc to hide without returning to the app.");
+            FeedbackText("Input unavailable. Press and release Esc to hide safely.", important: true);
             return;
         }
 
@@ -119,7 +119,7 @@ public partial class MainWindow
             return;
         degradedExplicit = true;
         degradedSince = null;
-        FeedbackText("Release available inputs to hide without returning to the app.");
+        FeedbackText("Release available inputs to hide without returning to the app.", important: true);
     }
 
     private void CommitHandoff()

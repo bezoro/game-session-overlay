@@ -56,8 +56,6 @@ public partial class MainWindow
     private void FeedbackText(string text, bool important = false)
     {
         UpdateStatusPresentation(important);
-        StatusLabel.TextWrapping = TextWrapping.NoWrap;
-        StatusLabel.TextTrimming = TextTrimming.CharacterEllipsis;
         StatusLabel.Text = text;
     }
 

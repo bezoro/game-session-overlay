@@ -1837,6 +1837,9 @@ internal static unsafe class GuideAbiTests
             var w = Host(p);
             try
             {
+                w.Width = 360;
+                w.Height = 480;
+                w.UpdateLayout();
                 w.HandoffSampleFixture = new(new PadFrame[] { new(true, PadButtons.A), default, default, default }, Environment.TickCount64 - 1000);
                 w.Toggle();
                 var failed = new PadFrame[]
@@ -1849,6 +1852,8 @@ internal static unsafe class GuideAbiTests
                 w.AdvanceHandoff(new(failed, 0), 0);
                 w.AdvanceHandoff(new(failed, 1000), 1000);
                 Require(w.IsVisible && w.TransitionPending && p.Switches == 0, "Stale active input was forgotten when reading failed");
+                var recovery = (System.Windows.Controls.TextBlock)w.FindName("StatusLabel");
+                Require(recovery.Visibility == System.Windows.Visibility.Visible && recovery.Text.Contains("Press and release Esc") && recovery.TextWrapping == System.Windows.TextWrapping.Wrap, "Compact layout hid the only explicit dismissal recovery instruction");
                 Key(w, System.Windows.Input.Key.Escape, true);
                 Key(w, System.Windows.Input.Key.Escape, false);
                 w.AdvanceHandoff(new(failed, 2000), 2000);
