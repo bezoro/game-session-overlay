@@ -82,7 +82,7 @@ internal static class SessionInterfaceTests
                         {
                             var scroll = (ScrollViewer)w.FindName("ContentScroll");
                             var bounds = focused.TransformToAncestor(scroll).TransformBounds(new Rect(new Size(focused.ActualWidth, focused.ActualHeight)));
-                            Require(bounds.Top >= -3 && bounds.Bottom <= scroll.ActualHeight + 3, "Focused action was clipped: " + w.SelectedAction);
+                            Require(bounds.Top >= -3 && bounds.Bottom <= scroll.ActualHeight + 3, "Focused action was clipped: " + w.SelectedAction + " bounds=" + bounds + " viewport=" + scroll.ViewportHeight);
                         }
                     }
 

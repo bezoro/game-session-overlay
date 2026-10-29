@@ -83,7 +83,7 @@ public sealed record UserSettings(
         {
             var value = Parse(File.ReadAllText(path), out var recovered);
             if (recovered)
-                message = "Alguns ajustes opcionais foram recuperados; outros valores foram preservados.";
+                message = "Some optional settings were recovered; other values were preserved.";
             return value;
         }
         catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException or InvalidDataException)

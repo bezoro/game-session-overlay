@@ -160,6 +160,10 @@ public partial class MainWindow
         var grid = (ActionButtonContent)button.Content;
         var texts = grid.Texts;
         texts.Margin = new(0, 0, 48, 0);
+        grid.Title.LineHeight = 24;
+        grid.Title.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
+        grid.Title.MaxHeight = 48;
+        grid.Title.TextTrimming = TextTrimming.CharacterEllipsis;
         if (Controller.Platform.Icon(target) is { } icon)
         {
             grid.ReplaceIcon(new Image { Source = icon, Width = 26, Height = 26, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center });

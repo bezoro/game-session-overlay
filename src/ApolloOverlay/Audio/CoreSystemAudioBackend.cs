@@ -130,7 +130,7 @@ internal sealed class CoreSystemAudioBackend : ISystemAudioBackend
             if (!continuing() || Default(enumerator, 1, 2) != expectedId)
                 return new(ResultKind.Unknown, "The microphone may have changed after dispatch. Check its state.");
             Check(volume.GetMute(out var after));
-            return new(after == muted ? ResultKind.Completed : ResultKind.Unknown, after == muted ? muted ? "Microfone silenciado." : "Microfone ativado." : "The microphone did not confirm the requested state.");
+            return new(after == muted ? ResultKind.Completed : ResultKind.Unknown, after == muted ? muted ? "Microphone muted." : "Microphone unmuted." : "The microphone did not confirm the requested state.");
         }
         catch (COMException)
         {

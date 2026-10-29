@@ -429,19 +429,14 @@ public partial class MainWindow
         {
             UpdateScrollContinuation();
             if (args.ViewportHeightChange != 0)
-                _ = UpdateSessionArtwork();
-        };
-        Rows.LayoutUpdated += (_, _) =>
-        {
-            if (revealPending && Rows.IsArrangeValid && ContentScroll.ViewportHeight > 0)
             {
-                revealPending = false;
-                if (Keyboard.FocusedElement is FrameworkElement editor && editor is TextBox or Slider && Rows.IsAncestorOf(editor))
-                    RevealTarget(editor);
-                else
-                    SetSelection(false);
+                // Status and input hints can resize the viewport after initial selection.
+                revealPending = true;
+                RevealSelectionAfterLayout();
+                _ = UpdateSessionArtwork();
             }
         };
+        Rows.LayoutUpdated += (_, _) => RevealSelectionAfterLayout();
         Rows.SizeChanged += (_, e) =>
         {
             var compact = e.NewSize.Width < 390;
@@ -456,5 +451,16 @@ public partial class MainWindow
                 }
             }
         };
+    }
+
+    private void RevealSelectionAfterLayout()
+    {
+        if (!revealPending || exiting || !Rows.IsArrangeValid || ContentScroll.ViewportHeight <= 0)
+            return;
+        revealPending = false;
+        if (Keyboard.FocusedElement is FrameworkElement editor && editor is TextBox or Slider && Rows.IsAncestorOf(editor))
+            RevealTarget(editor);
+        else
+            SetSelection(false);
     }
 }

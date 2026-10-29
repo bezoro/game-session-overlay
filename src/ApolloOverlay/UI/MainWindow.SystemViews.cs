@@ -29,7 +29,7 @@ public partial class MainWindow
         AddScale();
         Section("Controller");
         controllerStatusParagraph = Paragraph(controllerStatus);
-        AddRow("deadzone", "Deadzone · " + Controller.Settings.Deadzone, "Adjust thumbstick sensitivity", () => Change(Controller.Settings with { Deadzone = Controller.Settings.Deadzone < 12000 ? 12000 : Controller.Settings.Deadzone < 18000 ? 18000 : Controller.Settings.Deadzone < 24000 ? 24000 : 12000 }));
+        AddRow("deadzone", "Deadzone · " + (Controller.Settings.Deadzone * 100d / short.MaxValue).ToString("0", System.Globalization.CultureInfo.InvariantCulture) + "%", "Ignore movement near the stick center", () => Change(Controller.Settings with { Deadzone = Controller.Settings.Deadzone < 12000 ? 12000 : Controller.Settings.Deadzone < 18000 ? 18000 : Controller.Settings.Deadzone < 24000 ? 24000 : 12000 }));
         AddGuideToggle();
         AddGuideLimit();
         Section("Make it yours");
@@ -116,8 +116,8 @@ public partial class MainWindow
 
     private void AddFeedback()
     {
-        AddRow("sound-feedback", "Sounds · " + (Controller.Settings.SoundFeedbackEnabled ? "ligados" : "desligados"), "Navigation, confirmation and back · preview when enabled", () => Change(Controller.Settings with { SoundFeedbackEnabled = !Controller.Settings.SoundFeedbackEnabled }));
-        AddRow("haptic-feedback", "Vibration · " + (Controller.Settings.HapticFeedbackEnabled ? "on" : "off"), "Active controller only · short pulses", () => Change(Controller.Settings with { HapticFeedbackEnabled = !Controller.Settings.HapticFeedbackEnabled }));
+        AddRow("sound-feedback", "Sounds · " + (Controller.Settings.SoundFeedbackEnabled ? "On" : "Off"), "Navigation, confirmation and back · preview when enabled", () => Change(Controller.Settings with { SoundFeedbackEnabled = !Controller.Settings.SoundFeedbackEnabled }));
+        AddRow("haptic-feedback", "Vibration · " + (Controller.Settings.HapticFeedbackEnabled ? "On" : "Off"), "Active controller only · short pulses", () => Change(Controller.Settings with { HapticFeedbackEnabled = !Controller.Settings.HapticFeedbackEnabled }));
         AddRow("test-feedback", "Test feedback", FeedbackDescription(), TestFeedback, Controller.Settings.SoundFeedbackEnabled || Controller.Settings.HapticFeedbackEnabled);
     }
 
