@@ -92,9 +92,11 @@ jobs:
           dotnet format style ApolloOverlay.sln --diagnostics IDE0005 --severity info --verify-no-changes --no-restore
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Verify semantic release policy against legacy tags and real GitVersion
+      - name: Verify release policy and proof cleanup
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: ./scripts/test-release-version.ps1
+        run: |
+          ./scripts/test-release-version.ps1
+          ./scripts/test-proof-cleanup.ps1
 
       # These suites exercise managed state, mocked native boundaries and settings on Windows.
       # They do not establish compatibility with a physical controller or interactive desktop.

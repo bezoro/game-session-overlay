@@ -5,6 +5,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
+. (Join-Path $PSScriptRoot 'proof-cleanup.ps1')
 if (-not $IsWindows -or $env:GITHUB_ACTIONS -ne 'true' -or -not $env:RUNNER_TEMP) {
     throw 'This proof runs only on an isolated Windows GitHub Actions runner.'
 }
@@ -455,6 +456,19 @@ finally {
             $index++
         }
     }
+    $cleanupErrors = @()
+    foreach ($directory in @($installRoot, $dataRoot, $variantRoot)) {
+        try {
+            Remove-ProofDirectory -LiteralPath $directory
+        }
+        catch {
+            $cleanupErrors += $_.Exception.Message
+            if (!$failure) {
+                $failure = 'Temporary proof cleanup failed. See cleanupErrors.'
+            }
+            Write-Warning "Proof cleanup failed: $($_.Exception.Message)"
+        }
+    }
     @{ total = $cases.Count + $(if ($failure) {
                 1
             }
@@ -469,15 +483,11 @@ finally {
                 0
             })
         error = $failure
+        cleanupErrors = $cleanupErrors
         version = $release.Build.version
         cases = $cases
     } |
         ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $report -Encoding utf8NoBOM
-    foreach ($directory in @($installRoot, $dataRoot, $variantRoot)) {
-        if (Test-Path -LiteralPath $directory) {
-            Remove-Item -LiteralPath $directory -Recurse -Force -ErrorAction SilentlyContinue
-        }
-    }
 }
 if ($failure) {
     exit 1
