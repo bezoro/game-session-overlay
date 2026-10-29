@@ -47,7 +47,7 @@ internal static class IsolatedActivationTests
             using var windows = new Windows();
             var client = new IsolatedWindowActivation(trace: Trace);
             Require(Complete(client.RequestAsync(windows.TargetHandle, windows.ForegroundHandle, CancellationToken.None, timeoutMs: 3000)), "The real authenticated helper did not confirm activation");
-            Require(Native.GetForegroundWindow() == windows.TargetHandle && windows.Target.IsActive, "Helper success did not correspond to native and WPF activation");
+            windows.RequireTargetActivation();
         });
         test("expired activation helper is terminated and the next opening recovers", () =>
         {
@@ -66,7 +66,8 @@ internal static class IsolatedActivationTests
             RequireStopped(child);
             Require(Native.GetForegroundWindow() == windows.ForegroundHandle && !windows.Target.IsActive, "A timed-out helper changed foreground ownership");
             Require(Complete(client.RequestAsync(windows.TargetHandle, windows.ForegroundHandle, CancellationToken.None)), "A timed-out child permanently blocked the next opening");
-            Require(starts == 2 && Native.GetForegroundWindow() == windows.TargetHandle && windows.Target.IsActive, "Recovery did not use a fresh helper and real focus");
+            Require(starts == 2, "Recovery did not start a fresh helper");
+            windows.RequireTargetActivation();
         });
         test("activation cancellation kills its helper and preserves a fresh retry", () =>
         {
@@ -85,8 +86,27 @@ internal static class IsolatedActivationTests
             RequireStopped(child);
             Require(Native.GetForegroundWindow() == windows.ForegroundHandle, "A cancelled helper took focus");
             Require(Complete(client.RequestAsync(windows.TargetHandle, windows.ForegroundHandle, CancellationToken.None, timeoutMs: 3000)), "Cancellation left the activation client permanently busy");
-            Require(windows.Target.IsActive && Native.GetForegroundWindow() == windows.TargetHandle, "Retry after cancellation did not acquire real focus");
+            windows.RequireTargetActivation();
         });
+        foreach (var closeTarget in new[] { false, true })
+            test("host success without observed target ownership is rejected target-closed=" + closeTarget, () =>
+            {
+                using var windows = new Windows();
+                var observedSuccessfulExit = false;
+                var client = new IsolatedWindowActivation(_ =>
+                {
+                    if (closeTarget)
+                        windows.Target.Close();
+                    return PassiveHost();
+                }, (message, kind) =>
+                {
+                    Trace(message, kind);
+                    observedSuccessfulExit |= message.StartsWith("focus-host/exit/code=0/", StringComparison.Ordinal);
+                });
+                Require(!Complete(client.RequestAsync(windows.TargetHandle, windows.ForegroundHandle, CancellationToken.None, timeoutMs: 3000)), "An exit code fabricated native ownership of an unchanged or destroyed target");
+                Require(observedSuccessfulExit, "PRECONDITION: the passive host did not finish successfully");
+                Require(Native.GetForegroundWindow() == windows.ForegroundHandle, "A passive host changed the competing native foreground");
+            });
         test("activation deadline terminates its helper while the WPF dispatcher is blocked", () =>
         {
             using var windows = new Windows();
@@ -231,6 +251,22 @@ internal static class IsolatedActivationTests
     }
 
     private static void Trace(string message, ResultKind kind) => Console.WriteLine("ACTIVATION " + kind + " " + message);
+
+    private static ProcessStartInfo PassiveHost()
+    {
+        var info = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"))
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        info.ArgumentList.Add("-NoProfile");
+        info.ArgumentList.Add("-NonInteractive");
+        info.ArgumentList.Add("-Command");
+        // A brief startup pause lets the parent assign the job before exit.
+        // This process deliberately performs no window activation at all.
+        info.ArgumentList.Add("Start-Sleep -Milliseconds 150; exit 0");
+        return info;
+    }
 
     private static ProcessStartInfo ProbeStart(params string[] arguments)
     {
@@ -395,6 +431,10 @@ internal static class IsolatedActivationTests
         }
 
         public void Dispose() => Cleanup(requireStopped: true);
+
+        internal void RequireTargetActivation() => PumpUntil(
+            () => Native.GetForegroundWindow() == TargetHandle && Target.IsActive,
+            "Native foreground ownership did not complete its WPF activation");
 
         private void Cleanup(bool requireStopped)
         {

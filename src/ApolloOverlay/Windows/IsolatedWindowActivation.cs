@@ -70,7 +70,14 @@ internal sealed class IsolatedWindowActivation
             // Deadline cleanup must run even if the WPF dispatcher stops pumping.
             await child.WaitForExitAsync(deadline.Token).ConfigureAwait(false);
             trace?.Invoke($"focus-host/exit/code={child.ExitCode}/stage={ExitStage(child.ExitCode)}/foreground=0x{Native.GetForegroundWindow():X}", child.ExitCode == 0 ? ResultKind.Completed : ResultKind.Failed);
-            return !deadline.IsCancellationRequested && child.ExitCode == 0;
+            // The host can finish just before Windows delivers its posted
+            // activation. Its exit code is diagnostic, not input ownership.
+            var observed = Native.GetForegroundWindow();
+            var observedOwner = Native.GetWindowThreadProcessId(window, out var observedPid);
+            var confirmed = !deadline.IsCancellationRequested && observed == window
+                && observedOwner == owner && observedPid == peer.Pid;
+            trace?.Invoke($"focus-host/observed/foreground=0x{observed:X}/target=0x{window:X}/owner-thread={observedOwner}/owner-pid={observedPid}", confirmed ? ResultKind.Completed : ResultKind.Unknown);
+            return confirmed;
         }
         catch (OperationCanceledException)
         {
