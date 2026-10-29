@@ -62,7 +62,7 @@ public partial class MainWindow
     private void AddGuideToggle() => AddRow("guide", "Xbox / Guide button · " + (Controller.Settings.GuideXInputEnabled ? "on" : "off"), GuideDescription(), () => Change(Controller.Settings with { GuideXInputEnabled = !Controller.Settings.GuideXInputEnabled }), !diagnostic && !Controller.Platform.IsPreview);
     private void AddGuideLimit()
     {
-        var button = AddRow("guide-limit", GuideLimitTitle(), "← / → adjusts · 0.5–3.0 s · Save to keep", () =>
+        var button = AddRow("guide-limit", GuideLimitTitle(), "← / → adjusts · 0.5–3.0 s", () =>
         {
         });
         button.MinHeight = 112;

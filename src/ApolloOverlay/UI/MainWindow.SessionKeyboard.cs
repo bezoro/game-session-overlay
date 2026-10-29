@@ -157,7 +157,7 @@ public partial class MainWindow
         pane.Children.Add(keyScroll);
 
         var edits = new Grid();
-        foreach (var width in new[] { 1.5, 1, 1, 1, 1 })
+        foreach (var width in new[] { 1.3, 1, 1, 1, 1.3 })
             edits.ColumnDefinitions.Add(new()
             {
                 Width = new GridLength(width, GridUnitType.Star)

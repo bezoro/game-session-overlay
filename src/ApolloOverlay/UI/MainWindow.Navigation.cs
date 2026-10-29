@@ -134,7 +134,7 @@ public partial class MainWindow
             return;
         var target = FocusTarget(selectedEntry);
         target.Focus();
-        if (target.IsVisible && entries.Any(entry => entry.Id == navigation.Id && ReferenceEquals(FocusTarget(entry), target)))
+        if (entries.Any(entry => entry.Id == navigation.Id && ReferenceEquals(FocusTarget(entry), target)))
             RevealTarget(target);
     }
 

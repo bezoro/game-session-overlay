@@ -17,6 +17,7 @@ internal sealed record ControllerBadgeModel(
     double BatteryFraction,
     bool LowBattery,
     ControllerPowerState Power,
+    bool ChargeKnown,
     string Description
 )
 {
@@ -44,6 +45,6 @@ internal sealed record ControllerBadgeModel(
         var source = known is null ? "Model not associated with the active controller." : "Identity reported by Windows; when streaming, it may describe the virtual controller.";
         var chargeDescription = percent is { } capacity ? $"Battery {capacity} percent" + (known?.Charging == true ? ", charging" : "") : wired ? "USB-powered or virtual device; battery charge not reported" : category is not null ? "Battery " + text.ToLowerInvariant() : "Battery not reported by the device";
         var description = name + " · " + chargeDescription + ". " + source + " " + (connected > 0 ? status : "XInput navigation for this device is unconfirmed.");
-        return new(count > 0, name, known?.Family == ControllerFamily.Xbox ? "gamebar" : "controller", text, fraction, low, power, description);
+        return new(count > 0, name, known?.Family == ControllerFamily.Xbox ? "gamebar" : "controller", text, fraction, low, power, percent is not null || !wired && category is not null, description);
     }
 }

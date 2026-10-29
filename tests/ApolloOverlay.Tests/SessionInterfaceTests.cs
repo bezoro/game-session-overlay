@@ -41,6 +41,8 @@ internal static class SessionInterfaceTests
             foreach (var route in new[]
             {
                 "home",
+                "system",
+                "apps",
                 "mixer",
                 "devices",
                 "profiles",
@@ -310,6 +312,8 @@ internal static class SessionInterfaceTests
                 {
                     "home",
                     "system",
+                    "system-controller",
+                    "system-feedback",
                     "apps",
                     "mixer",
                     "devices",
@@ -456,6 +460,14 @@ internal static class SessionInterfaceTests
         {
             case "system":
                 w.Page(2);
+                break;
+            case "system-controller":
+                w.Page(2);
+                Pick(w, "guide-limit");
+                break;
+            case "system-feedback":
+                w.Page(2);
+                Pick(w, "sound-feedback");
                 break;
             case "apps":
                 w.Page(1);

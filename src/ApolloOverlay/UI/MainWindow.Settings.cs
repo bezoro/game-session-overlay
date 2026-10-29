@@ -31,7 +31,7 @@ public partial class MainWindow
         });
     }
 
-    private string GuideLimitTitle() => "Guide · opening hold limit " + (Controller.Settings.GuideOpenMaxHoldMs / 1000d).ToString("0.0", System.Globalization.CultureInfo.GetCultureInfo("en-US")) + " s";
+    private string GuideLimitTitle() => "Guide open limit · " + (Controller.Settings.GuideOpenMaxHoldMs / 1000d).ToString("0.0", System.Globalization.CultureInfo.GetCultureInfo("en-US")) + " s";
     private bool AdjustGuideLimit(NavDirection direction)
     {
         if (navigation.Id != "guide-limit" || direction is not (NavDirection.Left or NavDirection.Right))

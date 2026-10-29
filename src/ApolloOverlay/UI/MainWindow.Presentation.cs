@@ -330,7 +330,10 @@ public partial class MainWindow
     {
         var more = !Confirming && ContentScroll.ViewportHeight > 0 && ContentScroll.ScrollableHeight - ContentScroll.VerticalOffset > 1;
         ScrollContinuation.Visibility = more ? Visibility.Visible : Visibility.Hidden;
-        if (more && !SystemParameters.HighContrast)
+        var selected = entries.FirstOrDefault(entry => entry.Id == navigation.Id);
+        var target = selected is null ? null : FocusTarget(selected);
+        var clearanceFits = target is null || !ContentScroll.IsAncestorOf(target) || target.ActualHeight + ScrollFadeHeight + 4 <= ContentScroll.ViewportHeight;
+        if (more && clearanceFits && !SystemParameters.HighContrast)
         {
             scrollFade.GradientStops[1].Offset = 1 - Math.Min(.25, ScrollFadeHeight / ContentScroll.ViewportHeight);
             ContentScroll.OpacityMask = scrollFade;
@@ -341,10 +344,12 @@ public partial class MainWindow
 
     private void RevealTarget(FrameworkElement target)
     {
-        if (ContentScroll.IsAncestorOf(target) && target.ActualWidth > 0 && target.ActualHeight > 0)
+        if (ContentScroll.IsAncestorOf(target) && target.ActualWidth > 0 && target.ActualHeight > 0
+            && target.ActualHeight + ScrollFadeHeight + 4 <= ContentScroll.ViewportHeight)
             target.BringIntoView(new Rect(0, -2, target.ActualWidth, target.ActualHeight + ScrollFadeHeight + 4));
         else
             target.BringIntoView();
+        UpdateScrollContinuation();
     }
 
     private void ApplySessionCardDensity()

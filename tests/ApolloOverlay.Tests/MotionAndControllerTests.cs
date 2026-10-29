@@ -75,7 +75,8 @@ internal static class MotionAndControllerTests
             Complete(w.ControllerBadgeTask);
             Connect(w, 3);
             Complete(w.ControllerBadgeTask);
-            Require(label.Text == "PlayStation 5" && battery.Text == "—" && icon.Data.ToString() != xbox, "PlayStation fallback guessed a charge or reused the Xbox icon");
+            Require(label.Text == "PlayStation 5" && battery.Text == "Battery N/A" && icon.Data.ToString() != xbox, "PlayStation fallback guessed a charge or reused the Xbox icon");
+            Require(((FrameworkElement)w.FindName("ControllerBatteryMeter")).Visibility == Visibility.Collapsed, "Charging without a reported level rendered an empty gauge");
         });
         test("controller badge keeps a long model and charging icon inside a compact header", () =>
         {

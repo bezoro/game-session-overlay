@@ -418,13 +418,15 @@ internal static class PremiumInterfaceTests
                 });
                 w.RefreshRows();
                 Layout((FrameworkElement)w.Content, 572, 940);
+                var visited = new List<string>();
                 for (var n = 0; n < w.ActionIds.Count * 2 && w.SelectedAction != "save-pending"; n++)
                 {
+                    visited.Add(w.SelectedAction);
                     w.Move(NavDirection.Down);
                     ((FrameworkElement)w.Content).UpdateLayout();
                 }
 
-                Require(w.SelectedAction == "save-pending", "Sticky save unreachable");
+                Require(w.SelectedAction == "save-pending", "Sticky save unreachable: " + string.Join(" -> ", visited));
                 w.Move(NavDirection.Right);
                 Require(w.SelectedAction == "discard-pending", "Sticky discard unreachable");
                 w.ActivateEntry();
