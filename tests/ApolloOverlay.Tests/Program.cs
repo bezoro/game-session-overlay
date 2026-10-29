@@ -764,7 +764,7 @@ static class Program
             File.WriteAllText(path, "{");
             var recovered = UserSettings.Load(path, out var message);
             Equal("first", recovered.DisplayId);
-            True(message.Contains("recuperada"));
+            True(message.Contains("recovered"));
             UserSettings.Save(path, recovered);
             Equal("first", UserSettings.Parse(File.ReadAllText(path + ".previous")).DisplayId);
         });

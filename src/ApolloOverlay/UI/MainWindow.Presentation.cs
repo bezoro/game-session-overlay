@@ -35,6 +35,7 @@ public partial class MainWindow
 
     internal void BeginFadeFixture() => HideNow(false);
     private bool placing;
+    private bool importantStatus;
     private string automaticScaleDescription = "Automatically adjusted to the monitor and Windows scaling";
     private bool OpenAnimationAllowed => InteractionMotion.Allowed;
 
@@ -253,6 +254,7 @@ public partial class MainWindow
     private void UpdateHints()
     {
         UpdateContextualHints();
+        UpdateScrollContinuation();
         if (Confirming)
         {
             ModeLabel.Text = inputMethod == "controller" ? "Hold A · B cancel · right stick scroll" : inputMethod == "mouse" ? "Hold to confirm · Cancel stops" : "Hold Enter / Space · Esc cancel · PgUp/PgDn scroll";
@@ -276,32 +278,61 @@ public partial class MainWindow
         {
             "mouse" => "Click to select · drag to adjust",
             "controller" => "A select · B back" + (details ? " · X options" : "") + "\nLB/RB tabs · D-pad move" + (Controller.Settings.GuideXInputEnabled && guideBackend?.Active == true ? " · Guide hide" : ""),
-            _ => "Enter select · Esc back" + (details ? " · X options" : "") + "\nPgUp/PgDn tabs · Arrows / Tab move · tray: open"
+            _ => "Enter select · Esc back" + (details ? " · X options" : "") + "\nArrows / Tab move · PgUp/PgDn tabs · tray: open"
         };
         if (compactChrome)
             ModeLabel.Text = inputMethod switch
             {
                 "mouse" => "Click to select · tray: open",
                 "controller" => "A select · B back" + (details ? " · X options" : "") + "\nLB/RB tabs · D-pad move",
-                _ => "Enter select · Esc back\nTab / Arrows move · PgUp/PgDn tabs"
+                _ => "Enter select · Esc back\nArrows / Tab move · PgUp/PgDn tabs"
             };
     }
 
     private void PlaceCompactStatus()
     {
-        // In a short window, keep the controller warning and instructions pinned;
-        // auxiliary status can scroll with the page or confirmation text instead.
-        Panel destination = compactChrome ? (Confirming ? ConfirmationInfo : ContentStack) : FooterArea;
+        // Auxiliary status belongs with the footer, never between the tabs and game.
+        Panel destination = compactChrome && Confirming ? ConfirmationInfo : FooterArea;
         if (ReferenceEquals(StatusLabel.Parent, destination))
             return;
         if (StatusLabel.Parent is Panel previous)
             previous.Children.Remove(StatusLabel);
         if (ReferenceEquals(destination, FooterArea))
             destination.Children.Insert(2, StatusLabel);
-        else if (ReferenceEquals(destination, ContentStack))
-            destination.Children.Insert(Math.Min(1, destination.Children.Count), StatusLabel);
         else
             destination.Children.Add(StatusLabel);
+    }
+
+    private void UpdateStatusPresentation(bool important)
+    {
+        importantStatus = important;
+        StatusLabel.Visibility = compactChrome && !important ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void UpdateScrollContinuation() => ScrollContinuation.Visibility =
+        !Confirming && ContentScroll.ViewportHeight > 0 && ContentScroll.ScrollableHeight - ContentScroll.VerticalOffset > 1
+            ? Visibility.Visible
+            : Visibility.Hidden;
+
+    private void ApplySessionCardDensity()
+    {
+        var compact = compactChrome || narrow;
+        TargetLabel.FontSize = compact ? 23 : 28;
+        TargetLabel.MaxHeight = compact ? 32 : 40;
+        TargetLabel.Margin = new(0, 0, 0, compact ? 2 : 4);
+        SessionEvidence.FontSize = compact ? 12 : 14;
+        SessionHint.FontSize = compact ? 12 : 14;
+        SessionHint.Margin = new(0, compact ? 4 : 6, 0, 0);
+        SessionIconColumn.Width = new(compact ? 48 : 66);
+        SessionIconHost.Height = compact ? 40 : 54;
+        SessionIconHost.Margin = new(0, 0, compact ? 8 : 12, 0);
+        ContextGlyph.FontSize = compact ? 22 : 25;
+        ContextIcon.Width = ContextIcon.Height = compact ? 32 : 42;
+        SessionCardButton.Padding = compact ? new(10, 10, 10, 10) : new(14, 12, 14, 12);
+        ContextCard.Margin = new(0, 0, 0, compact ? 8 : 12);
+        // On the compact home screen the active Session tab supplies the page title.
+        // Give the game, rather than duplicate chrome, the main typographic emphasis.
+        PageTitle.Visibility = compactChrome && view.Current.Route == OverlayRoute.Hub ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void UpdateCompactChrome(double height)
@@ -316,43 +347,34 @@ public partial class MainWindow
         HeaderBrand.Visibility = compact || narrow || view.Depth > 0 ? Visibility.Collapsed : Visibility.Visible;
         ControllerStatusLabel.Visibility = Visibility.Collapsed;
         DirtyLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        HeaderArea.Margin = new(0, 0, 0, compact ? 8 : 12);
+        HeaderArea.Margin = new(0, 0, 0, compact ? 6 : 12);
+        HeaderIdentityRow.Margin = new(0, 0, 0, compact ? 3 : 7);
+        HeaderIdentityBadge.Padding = compact ? new(4, 2, 4, 2) : new(6, 3, 6, 3);
+        HeaderIdentity.FontSize = compact ? 10 : 12;
+        HeaderIdentityRow.HorizontalAlignment = compact ? HorizontalAlignment.Left : HorizontalAlignment.Stretch;
+        PageTitle.FontSize = compact ? 20 : 25;
+        ControllerInfoBar.Margin = new(0, compact ? 3 : 5, 0, 0);
         DirtyStrip.Margin = new(0, compact ? 8 : 12, 0, 0);
         DirtyStrip.Padding = new(12, compact ? 6 : 8, 12, compact ? 6 : 8);
         TabArea.Margin = new(0, 0, 0, compact ? 8 : 16);
         Sidebar.Padding = compact ? new(20, 14, 20, 14) : new(24, 22, 24, 22);
         FooterArea.Margin = new(0, compact ? 6 : 10, 0, 0);
         FooterDivider.Margin = new(0, 0, 0, compact ? 4 : 8);
+        SharedControlNotice.FontSize = compact ? 12 : 14;
+        StatusLabel.FontSize = compact ? 12 : 14;
+        StatusLabel.Margin = new(0, compact ? 2 : 4, 0, 0);
+        ModeLabel.FontSize = compact ? 12 : 14;
+        ModeLabel.LineHeight = compact ? 17 : 19;
+        ModeLabel.Margin = new(0, compact ? 3 : 5, 0, 0);
         if (!compact)
         {
             StatusLabel.TextWrapping = TextWrapping.NoWrap;
             StatusLabel.TextTrimming = TextTrimming.CharacterEllipsis;
         }
 
-        // Tabs and Save/Discard stay fixed. The header and status move into the
-        // existing scroller so selected cards have room without shrinking text.
-        if (compact && HeaderArea.Parent is Grid headerGrid)
-        {
-            headerGrid.Children.Remove(HeaderArea);
-            ContentStack.Children.Insert(0, HeaderArea);
-        }
-        else if (!compact && HeaderArea.Parent is StackPanel headerStack)
-        {
-            headerStack.Children.Remove(HeaderArea);
-            ((Grid)Sidebar.Child).Children.Add(HeaderArea);
-        }
-
-        if (compact && OperationPanel.Parent is Grid grid)
-        {
-            grid.Children.Remove(OperationPanel);
-            ContentStack.Children.Add(OperationPanel);
-        }
-        else if (!compact && OperationPanel.Parent is StackPanel stack)
-        {
-            stack.Children.Remove(OperationPanel);
-            ((Grid)Sidebar.Child).Children.Add(OperationPanel);
-        }
-
+        // Header, navigation, notices and Save/Discard keep their fixed grid rows.
+        ApplySessionCardDensity();
+        UpdateStatusPresentation(importantStatus);
         PlaceCompactStatus();
         revealPending = true;
         UpdateHints();
@@ -367,6 +389,7 @@ public partial class MainWindow
         ((FrameworkElement)Content).SizeChanged += (_, e) => UpdateCompactChrome(e.NewSize.Height);
         ContentScroll.ScrollChanged += (_, args) =>
         {
+            UpdateScrollContinuation();
             if (args.ViewportHeightChange != 0)
                 _ = UpdateSessionArtwork();
         };

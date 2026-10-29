@@ -123,7 +123,7 @@ public partial class MainWindow
             if (selected)
             {
                 if (showReason)
-                    FeedbackText(entry.Available ? entry.Reason : "Unavailable · " + entry.Reason);
+                    FeedbackText(entry.Available ? entry.Reason : "Unavailable · " + entry.Reason, important: !entry.Available);
                 SaveView();
                 if (restoreFocus && NavigationAllowed)
                 {
@@ -270,7 +270,7 @@ public partial class MainWindow
         }
         else if (!entry.Available)
         {
-            FeedbackText("Unavailable · " + entry.Reason);
+            FeedbackText("Unavailable · " + entry.Reason, important: true);
             RequestCue(FeedbackCue.Unavailable);
         }
     }

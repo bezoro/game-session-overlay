@@ -2479,7 +2479,7 @@ internal static unsafe class GuideAbiTests
             Require(subtitle.Text == backend.Status && subtitle.Text.StartsWith("No controller"), "G3-01 disconnected status did not reach actual Guide subtitle");
             statuses[0] = 0;
             window.PollGuideStatus(backend);
-            Require(subtitle.Text == backend.Status && subtitle.Text.Contains("ativo"), "G3-01 connected status stale");
+            Require(subtitle.Text == backend.Status && subtitle.Text.Contains("active"), "G3-01 connected status stale");
             Require(rows.Children.Contains(button) && window.SelectedAction == selected, "Status update rebuilt rows or changed selection");
             var unchanged = subtitle.Text;
             window.PollGuideStatus(backend);

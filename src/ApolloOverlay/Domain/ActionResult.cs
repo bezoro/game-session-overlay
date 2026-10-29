@@ -14,6 +14,10 @@ public enum ResultKind
 
 public sealed record ActionResult(ResultKind Kind, string Message)
 {
+    public string? Summary
+    {
+        get; init;
+    }
     public override string ToString() => $"{Kind switch { ResultKind.Simulated => "Simulated", ResultKind.Requested => "Requested", ResultKind.Completed => "Completed", ResultKind.Failed => "Failed", ResultKind.Unavailable => "Unavailable", ResultKind.Partial => "Partial", ResultKind.Unknown => "Unconfirmed", _ => "Cancelled" }} · {Message}";
 }
 

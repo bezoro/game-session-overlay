@@ -118,7 +118,7 @@ internal static class LocalUpdateHistoryTests
             f.History.SnapshotSettings("a");
             File.WriteAllText(f.Settings, "{\"newSchema\":99}");
             f.History.QueueSettingsRestore(a.Build);
-            Require(f.History.CompleteSettingsRestore(a.Build)!.Contains("restaurada"), "Rollback restore missing");
+            Require(f.History.CompleteSettingsRestore(a.Build)!.Contains("restored"), "Rollback restore missing");
             Require(File.ReadAllText(f.Settings) == "{\"compatible\":true}" && File.ReadAllText(f.Settings + ".before-rollback") == "{\"newSchema\":99}", "Compatible or newest settings were lost");
             Require(f.History.CompleteSettingsRestore(a.Build) is null, "Restore repeated on another startup");
         });

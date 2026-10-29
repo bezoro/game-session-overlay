@@ -1374,7 +1374,7 @@ internal static class SessionHubTests
                     Release(w);
                     Complete(w.OperationTask);
                     Check(audio.Writes == 2 && !audio.LastDesired && audio.LastTarget?.Same(p.A) == true && audio.LastGeneration == audio.Generation, "Restore did not target same validated session with desired=false");
-                    Check(mutedTitle.Contains("Unmute app audio") && Title().Contains("Mute app audio"), "Toggle labels do not expose mute and restore");
+                    Check(mutedTitle.Contains("Unmute app audio") && Title() == (partial ? "Mute available audio" : "Mute app audio"), "Toggle labels do not expose mute and restore");
                     audio.Mute = ApplicationMuteState.Muted;
                     audio.Emit();
                     Check(Title().Contains("Unmute app audio"), "External mute not reflected");

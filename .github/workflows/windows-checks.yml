@@ -151,6 +151,7 @@ jobs:
       # These render the app's own WPF tree with fixtures and synthetic palettes.
       # Images are review artifacts, not a physical TV or streaming compatibility test.
       - name: Capture WPF interface fixtures
+        id: screenshots
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 8
         run: |
@@ -166,6 +167,15 @@ jobs:
             if ($LASTEXITCODE -ne 0) { Write-Error "$mode failed with exit code $LASTEXITCODE" -ErrorAction Continue; $failed = $true }
           }
           if ($failed) { exit 1 }
+
+      - name: Upload interface screenshots for visual review
+        if: ${{ !cancelled() && steps.screenshots.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: ui-review-screenshots
+          path: artifacts/check-native-v1/session-interface-captures/
+          if-no-files-found: error
+          retention-days: 14
 
       # Several WPF fixtures require a real interactive foreground window. Failure on a
       # hosted runner without an interactive desktop is reported, not treated as a pass.

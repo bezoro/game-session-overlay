@@ -46,9 +46,9 @@ public partial class MainWindow
         Rows.Children.Add(control);
     }
 
-    private Button AddRow(string id, string title, string description, Action action, bool available = true, bool danger = false, int? row = null, int column = 0)
+    private Button AddRow(string id, string title, string description, Action action, bool available = true, bool danger = false, int? row = null, int column = 0, bool compactGrid = false)
     {
-        if (narrow)
+        if (narrow && !compactGrid)
             row = null;
         var index = row ?? Rows.RowDefinitions.Count;
         while (index >= Rows.RowDefinitions.Count)

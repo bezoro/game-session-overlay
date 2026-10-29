@@ -32,7 +32,7 @@ public sealed class OverlayController : IDisposable
         private set;
     }
 
-    public void SetOperation(string state, string message, string action = "", WindowRef? target = null, bool dispatched = false) => Operation = new(state, message, action, target, dispatched);
+    public void SetOperation(string state, string message, string action = "", WindowRef? target = null, bool dispatched = false, string? summary = null) => Operation = new(state, message, action, target, dispatched) { Summary = summary };
     public void DismissOperation() => Operation = null;
     public void Discard() => Settings = SavedSettings;
     public SessionTracker Session { get; } = new();
@@ -265,4 +265,10 @@ public sealed class OverlayController : IDisposable
     }
 }
 
-public sealed record OverlayOperation(string State, string Message, string Action, WindowRef? Target, bool Dispatched);
+public sealed record OverlayOperation(string State, string Message, string Action, WindowRef? Target, bool Dispatched)
+{
+    public string? Summary
+    {
+        get; init;
+    }
+}

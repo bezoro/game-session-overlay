@@ -192,7 +192,7 @@ public partial class MainWindow
 
     private void RecordResult(ActionResult result, string action, WindowRef? target = null)
     {
-        RetainOperation(result.ToString().Split(" · ")[0], result.Message, action, target, true);
+        RetainOperation(result.ToString().Split(" · ")[0], result.Message, action, target, true, result.Summary);
         FeedbackText(result.ToString());
         if (result.Kind == ResultKind.Completed)
             RequestCue(FeedbackCue.Completion);

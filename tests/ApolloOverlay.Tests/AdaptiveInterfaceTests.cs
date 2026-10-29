@@ -8,6 +8,33 @@ internal static class AdaptiveInterfaceTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        test("compact uncertain result remains pinned with its concise recovery and full details", () =>
+        {
+            var w = ReviewFixTests.Window();
+            try
+            {
+                w.Width = 360;
+                w.Height = 600;
+                w.ShowDiagnostic();
+                w.Controller.SetOperation("Unconfirmed", "The full window identity observation and recovery instructions remain available for reading.", summary: "Window changed. Select it again.");
+                w.RefreshRows();
+                Arrange(w, 360, 600);
+                var panel = (Border)w.FindName("OperationPanel");
+                var scroll = (ScrollViewer)w.FindName("ContentScroll");
+                var footer = (FrameworkElement)w.FindName("FooterArea");
+                var root = (FrameworkElement)w.Content;
+                var bounds = panel.TransformToAncestor(root).TransformBounds(new Rect(new Size(panel.ActualWidth, panel.ActualHeight)));
+                Require(panel.Visibility == Visibility.Visible && !scroll.IsAncestorOf(panel), "Compact result can scroll out of view");
+                Require(bounds.Bottom <= footer.TranslatePoint(new Point(), root).Y && bounds.Top >= 0, "Result overlaps footer or leaves the viewport");
+                Require(((TextBlock)w.FindName("OperationLabel")).Text == "Window changed. Select it again.", "Recovery summary is absent or replaced by the full paragraph");
+                Click(w, "operation-details");
+                Require(PremiumInterfaceTests.Descendants<TextBox>((DependencyObject)w.FindName("Rows")).Single().Text == w.Controller.Operation!.Message, "Concise notice lost the complete result");
+            }
+            finally
+            {
+                w.Close();
+            }
+        });
         test("routine acknowledgements never become navigation stops or move content", () =>
         {
             var w = ReviewFixTests.Window();
@@ -164,11 +191,11 @@ internal static class AdaptiveInterfaceTests
         window.ReviewTick([new(true, 0), default, default, default]);
     }
 
-    private static void Arrange(MainWindow window)
+    private static void Arrange(MainWindow window, int width = 572, int height = 940)
     {
         var root = (FrameworkElement)window.Content;
-        root.Measure(new Size(572, 940));
-        root.Arrange(new Rect(0, 0, 572, 940));
+        root.Measure(new Size(width, height));
+        root.Arrange(new Rect(0, 0, width, height));
         root.UpdateLayout();
     }
 

@@ -222,7 +222,7 @@ public partial class MainWindow
             {
                 RecordResult(result, focusOnly ? "focus" : "steam-overlay", target);
                 if (Controller.Operation is { } operation)
-                    Controller.SetOperation(operation.State, operation.Message, operation.Action, operation.Target, reply.Dispatched == true);
+                    Controller.SetOperation(operation.State, operation.Message, operation.Action, operation.Target, reply.Dispatched == true, operation.Summary);
                 UpdatePersistentState();
             }
 
@@ -372,6 +372,10 @@ public partial class MainWindow
             return AutomationReply.Error("Completed", "Route updated.");
         }
 
+        // Passive acknowledgements have no buttons, but the retained reader and
+        // dismissal remain interactive-only rather than becoming unknown commands.
+        if (entry is null && Controller.Operation is not null && request.ActionId is "operation-details" or "dismiss-operation")
+            return AutomationReply.Error("RequiresInteractive", "Open the panel to read or dismiss the retained result.");
         if (entry is null)
             return AutomationReply.Error("Unavailable", "ID is not registered on this route.");
         if (!entry.Available)

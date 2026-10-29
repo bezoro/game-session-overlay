@@ -156,5 +156,11 @@
     "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Pause/SVG/ic_fluent_pause_24_regular.svg",
     "commit": "a347af95478f989038cccbf085978865264c048a",
     "sha256": "c500f2b5d0e71a9fc29359887b9df17448111956f7bbe91ea52ad36b7a5a066f"
+  },
+  {
+    "name": "refresh",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Arrow%20Clockwise/SVG/ic_fluent_arrow_clockwise_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "488566eef8203823292a19660c47d4b9c86ca64e6910848342e6b5fa3c5a7558"
   }
 ]

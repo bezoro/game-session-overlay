@@ -88,7 +88,7 @@ public partial class MainWindow
             Section("Quick access");
             var first = Rows.RowDefinitions.Count;
             for (var i = 0; i < favorites.Length; i++)
-                BuildFavorite(favorites[i], narrow ? null : first + i / 2, i % 2);
+                BuildFavorite(favorites[i], first + i / 2, i % 2);
         }
 
         AddRow("apps", "Open apps", windowSummary, () => Page(1));
@@ -115,13 +115,13 @@ public partial class MainWindow
         switch (id)
         {
             case "playnite":
-                AddRow(id, "Playnite", Controller.Settings.PlaynitePath is null ? "Configure in System" : "Open library", () => RunEffect((token, keep) => Controller.Launch(true, token, keep), focusTarget: Controller.LaunchTarget(true)), Controller.Settings.PlaynitePath is not null || Controller.Apps.Any(a => a.ProcessName.Equals("Playnite.FullscreenApp", StringComparison.OrdinalIgnoreCase)), row: row, column: column);
+                AddRow(id, "Playnite", Controller.Settings.PlaynitePath is null ? "Configure in System" : "Open library", () => RunEffect((token, keep) => Controller.Launch(true, token, keep), focusTarget: Controller.LaunchTarget(true)), Controller.Settings.PlaynitePath is not null || Controller.Apps.Any(a => a.ProcessName.Equals("Playnite.FullscreenApp", StringComparison.OrdinalIgnoreCase)), row: row, column: column, compactGrid: true);
                 break;
             case "steam":
-                AddRow(id, "Steam Big Picture", Controller.SteamAvailable ? "Open library" : "Steam not found", () => RunEffect((token, keep) => Controller.Launch(false, token, keep), focusTarget: Controller.LaunchTarget(false)), Controller.SteamAvailable, row: row, column: column);
+                AddRow(id, narrow ? "Big Picture" : "Steam Big Picture", Controller.SteamAvailable ? "Open library" : "Steam not found", () => RunEffect((token, keep) => Controller.Launch(false, token, keep), focusTarget: Controller.LaunchTarget(false)), Controller.SteamAvailable, row: row, column: column, compactGrid: true);
                 break;
             case "gamebar":
-                AddRow(id, "Game Bar", target is null ? "Choose a window" : "Xbox · session window", () => Shortcut("Win+G"), target is not null, row: row, column: column);
+                AddRow(id, "Game Bar", target is null ? "Choose a window" : "Xbox · session window", () => Shortcut("Win+G"), target is not null, row: row, column: column, compactGrid: true);
                 break;
             case "steam-overlay":
                 AddRow(id, menu ? "Steam Big Picture menu" : "Steam Overlay", menu ? "Big Picture" : steamGame ? Controller.HasSteamLaunchObservation(steamContext) ? "Launched by Steam · " + Controller.Settings.SteamShortcut : "Request " + Controller.Settings.SteamShortcut : "Unavailable in this window", () =>
@@ -132,13 +132,13 @@ public partial class MainWindow
                         RunEffect((token, keep) => Controller.Platform.SteamMenu(steamContext, token, keep), () => Controller.Platform.CanSteamMenu(steamContext), steamContext);
                     else
                         QueueSteam(steamContext, () => Controller.ReturnTarget?.Same(steamContext) == true && Controller.SteamOverlayEligible(steamContext));
-                }, menu || steamGame, row: row, column: column);
+                }, menu || steamGame, row: row, column: column, compactGrid: true);
                 break;
             case "taskview":
-                AddRow(id, "Task View", "Open windows", () => RunEffect(Controller.Platform.TaskView), row: row, column: column);
+                AddRow(id, "Task View", "Open windows", () => RunEffect(Controller.Platform.TaskView), row: row, column: column, compactGrid: true);
                 break;
             case "audio":
-                AddRow(id, "Windows audio", audio.Current.Available ? audio.Current.Muted ? "Output muted" : audio.Current.Volume.ToString("P0") : "Output unavailable", () => Subpage("audio", "volume"), row: row, column: column);
+                AddRow(id, "Windows audio", audio.Current.Available ? audio.Current.Muted ? "Output muted" : audio.Current.Volume.ToString("P0") : "Output unavailable", () => Subpage("audio", "volume"), row: row, column: column, compactGrid: true);
                 break;
         }
     }

@@ -385,6 +385,12 @@ try {
 
     $hashA = Package-DllHash $release.PackagePath
     $expectedStartup = '"' + (Join-Path $installRoot 'Game Session Overlay.exe') + '" --startup'
+    @{ command = Read-Value $runPath 'Bezoro.GameSessionOverlay'
+        configured = Read-Value $settingsKey 'StartupConfigured'
+        preference = Read-Value $settingsKey 'StartupEnabled'
+        shortcutExists = Test-Path -LiteralPath $startMenuShortcut
+        expectedCommand = $expectedStartup
+    } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $evidence 'installed-integration.json') -Encoding utf8NoBOM
     Require ((Read-Value $runPath 'Bezoro.GameSessionOverlay') -eq $expectedStartup) 'Silent install did not register the stable hidden-startup command.'
     Require ((Read-Value $settingsKey 'StartupConfigured') -eq 1) 'Silent install did not complete startup registration.'
     Require (Test-Path -LiteralPath $startMenuShortcut) 'Silent install did not create a searchable Start-menu shortcut.'
@@ -557,6 +563,10 @@ finally {
         }
     }
     $cleanupErrors = @()
+    $applicationLog = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) 'velopack/velopack_GameSessionOverlay.log'
+    if (Test-Path -LiteralPath $applicationLog) {
+        Get-Content -LiteralPath $applicationLog -Tail 500 | Set-Content -LiteralPath (Join-Path $evidence 'application-velopack.log') -Encoding utf8NoBOM
+    }
     try {
         Restore-UserIntegration
     }

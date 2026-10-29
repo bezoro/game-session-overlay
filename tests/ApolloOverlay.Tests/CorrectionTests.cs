@@ -64,7 +64,7 @@ internal static class CorrectionTests
                 File.WriteAllText(path, "{\"" + name + "\":null}");
                 File.WriteAllText(path + ".previous", "{\"Deadzone\":23000}");
                 var recovered = UserSettings.Load(path, out var message);
-                Require(recovered.Deadzone == 23000 && message.Contains("recuperada"), "Previous-good configuration must recover");
+                Require(recovered.Deadzone == 23000 && message.Contains("recovered"), "Previous-good configuration must recover");
                 File.WriteAllText(path + ".previous", "{");
                 var fallback = UserSettings.Load(path, out message);
                 Require(fallback == new UserSettings(), "Invalid previous must recover defaults");

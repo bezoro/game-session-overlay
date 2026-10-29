@@ -30,7 +30,8 @@ public partial class MainWindow
     {
         var key = id.StartsWith("output:", StringComparison.Ordinal) ? "speaker" : id.StartsWith("capture:", StringComparison.Ordinal) ? "gallery" : id.StartsWith("mix:", StringComparison.Ordinal) ? "speaker" : id switch
         {
-            "session-volume" or "windows-volume" or "session-mixer" or "mixer-volume" or "mixer-refresh" => "speaker",
+            "mixer-refresh" => "refresh",
+            "session-volume" or "windows-volume" or "session-mixer" or "mixer-volume" => "speaker",
             "microphone" => "microphone",
             "session-profiles" or "profile-new" => "profile",
             "session-media" => "play",

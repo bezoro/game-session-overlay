@@ -22,12 +22,15 @@ public partial class MainWindow
         DismissOperationButton.Visibility = actions;
         OperationDetailsButton.IsEnabled = !busy && !TransitionPending;
         DismissOperationButton.IsEnabled = !busy && !TransitionPending;
+        OperationLabel.TextWrapping = operationNotice.AllowsActions ? TextWrapping.Wrap : TextWrapping.NoWrap;
         if (!changed)
             return;
 
         UpdateOperationAppearance(operation?.State);
         var text = operation is null ? "" : operation.State + " · " + operation.Message;
-        OperationLabel.Text = text;
+        OperationLabel.Text = operation?.Summary ?? (operation?.State is "Failed" or "Unavailable" or "Partial" or "Unconfirmed"
+            ? operation.State + " · Check details."
+            : text);
         OperationLabel.ToolTip = text;
         AutomationProperties.SetName(OperationPanel, text);
         UIElementAutomationPeer.FromElement(OperationLabel)?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
@@ -49,9 +52,9 @@ public partial class MainWindow
         AutomationProperties.SetItemStatus(OperationPanel, state ?? "");
     }
 
-    private void RetainOperation(string state, string message, string action = "", WindowRef? target = null, bool dispatched = false)
+    private void RetainOperation(string state, string message, string action = "", WindowRef? target = null, bool dispatched = false, string? summary = null)
     {
-        Controller.SetOperation(state, message, action, target, dispatched);
+        Controller.SetOperation(state, message, action, target, dispatched, summary);
         UpdatePersistentState();
     }
 

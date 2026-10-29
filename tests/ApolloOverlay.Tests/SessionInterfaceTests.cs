@@ -13,6 +13,23 @@ internal static class SessionInterfaceTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        foreach (var height in new[] { 480, 600 })
+            test("compact keyboard keeps target buffer and explicit insertion visible " + height, () =>
+            {
+                using var host = new Host();
+                var w = host.Window;
+                host.Open(360, height);
+                Navigate(w, "keyboard");
+                w.UpdateLayout();
+                var viewport = (ScrollViewer)w.FindName("ContentScroll");
+                foreach (var id in new[] { "keyboard-target", "keyboard-editor", "keyboard-insert", "back" })
+                {
+                    var button = ReviewFixTests.Button(w, id);
+                    var bounds = button.TransformToAncestor(viewport).TransformBounds(new Rect(new Size(button.ActualWidth, button.ActualHeight)));
+                    Require(bounds.Top >= -1 && bounds.Bottom <= viewport.ViewportHeight + 1, "Pinned keyboard control is outside the viewport: " + id + " " + bounds);
+                }
+                Require(((PremiumInterfaceTests.FixturePlatform)w.Controller.Platform).Calls == 0, "Rendering the keyboard sent an external command");
+            });
         foreach (var size in new[]
         {
             (572, 940),
@@ -299,10 +316,7 @@ internal static class SessionInterfaceTests
                     Navigate(w, route);
                     w.RefreshOperationNotice(Environment.TickCount64 + 200);
                     w.UpdateLayout();
-                    var root = (FrameworkElement)w.Content;
-                    root.Measure(new Size(width, height));
-                    root.Arrange(new Rect(0, 0, width, height));
-                    root.UpdateLayout();
+                    var root = PrepareCapture(w, width, height);
                     var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
                     bitmap.Render(root);
                     var png = new PngBitmapEncoder();
@@ -332,14 +346,11 @@ internal static class SessionInterfaceTests
                     }
                     else if (state is "success" or "warning")
                     {
-                        window.Controller.SetOperation(state == "success" ? "Completed" : "Unconfirmed", state == "success" ? "Settings saved." : "The window changed. Select it again before trying another command.");
+                        window.Controller.SetOperation(state == "success" ? "Completed" : "Unconfirmed", state == "success" ? "Settings saved." : "The window changed. Select it again before trying another command.", summary: state == "warning" ? "Window changed. Select it again." : null);
                         window.RefreshRows();
                     }
                     window.RefreshOperationNotice(Environment.TickCount64 + 200);
-                    var root = (FrameworkElement)window.Content;
-                    root.Measure(new Size(width, height));
-                    root.Arrange(new Rect(0, 0, width, height));
-                    root.UpdateLayout();
+                    var root = PrepareCapture(window, width, height);
                     var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
                     bitmap.Render(root);
                     var png = new PngBitmapEncoder();
@@ -347,6 +358,26 @@ internal static class SessionInterfaceTests
                     using var file = File.Create(Path.Combine(output, $"{(light ? "light" : "dark")}-{width}-notice-{state}.png"));
                     png.Save(file);
                 }
+    }
+
+    private static FrameworkElement PrepareCapture(MainWindow window, int width, int height)
+    {
+        var root = (FrameworkElement)window.Content;
+        // Render the actual WPF tree at the requested size without the runner's
+        // native maximum tracking height clipping an off-screen test window.
+        window.Content = null;
+        root.Resources.MergedDictionaries.Add(window.Resources);
+        root.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, ThemeSupport.Text);
+        root.SetValue(System.Windows.Documents.TextElement.FontFamilyProperty, window.FontFamily);
+        root.SetValue(System.Windows.Documents.TextElement.FontSizeProperty, window.FontSize);
+        root.Language = window.Language;
+        root.UseLayoutRounding = window.UseLayoutRounding;
+        root.SnapsToDevicePixels = window.SnapsToDevicePixels;
+        TextOptions.SetTextFormattingMode(root, TextOptions.GetTextFormattingMode(window));
+        root.Measure(new Size(width, height));
+        root.Arrange(new Rect(0, 0, width, height));
+        root.UpdateLayout();
+        return root;
     }
 
     private static void Navigate(MainWindow w, string page)

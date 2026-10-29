@@ -171,8 +171,10 @@ public static class Program
         if (!VelopackInstallation.IsInstalled)
             return;
         var executable = VelopackInstallation.StartupExecutable;
-        StartupRegistration.TryEnsure(executable);
-        StartMenuRegistration.TryEnsure(executable);
+        var startup = StartupRegistration.TryEnsure(executable);
+        var shortcut = StartMenuRegistration.TryEnsure(executable);
+        if (!startup || !shortcut)
+            throw new InvalidOperationException($"Windows integration could not be registered. Startup: {startup}; Start menu: {shortcut}.");
     }
 
     private static void RemoveInstalledIntegration()

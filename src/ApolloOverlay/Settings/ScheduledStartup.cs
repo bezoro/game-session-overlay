@@ -1,3 +1,4 @@
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 
@@ -8,6 +9,9 @@ internal sealed record ScheduledStartupStatus(bool Exists, bool Owned, bool Enab
 /// <summary>Reads or updates only this user's explicitly configured startup task.</summary>
 internal static class ScheduledStartup
 {
+    internal static bool IsMissingTask(Exception error) => error.HResult == unchecked((int)0x80070002)
+        && error is COMException or FileNotFoundException;
+
     private static T WithTask<T>(Func<dynamic, dynamic, dynamic, dynamic, T> found, Func<T> missing)
     {
         var objects = new List<object>();
@@ -29,7 +33,7 @@ internal static class ScheduledStartup
             {
                 task = Keep(folder.GetTask("Bezoro Game Session Overlay - " + sid));
             }
-            catch (COMException error) when (error.HResult == unchecked((int)0x80070002))
+            catch (Exception error) when (IsMissingTask(error))
             {
                 return missing();
             }

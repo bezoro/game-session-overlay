@@ -509,7 +509,7 @@ internal static class ReviewFixTests
                 var limitPeer = new ButtonAutomationPeer(limit);
                 var texts = (StackPanel)((Grid)limit.Content).Children[1];
                 texts.Children.OfType<Slider>().Single().Value = 1500;
-                Require(limitPeer.GetName() == ((TextBlock)texts.Children[0]).Text && limitPeer.GetName().Contains("1,5"), "Guide limit name stale");
+                Require(limitPeer.GetName() == ((TextBlock)texts.Children[0]).Text && limitPeer.GetName().Contains("1.5"), "Guide limit name stale");
             }
             finally
             {

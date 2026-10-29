@@ -32,7 +32,7 @@ public partial class MainWindow
         if (entry.Button.Content is ActionButtonContent content)
         {
             content.Description.Text = description;
-            content.Description.Visibility = description.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+            content.Description.Visibility = description.Length > 0 && !CompactFavorite(id) ? Visibility.Visible : Visibility.Collapsed;
         }
 
         AutomationProperties.SetHelpText(entry.Button, description);
@@ -48,12 +48,14 @@ public partial class MainWindow
         if (button.Resources["DescriptionTarget"] is not Border description)
             return;
         var help = AutomationProperties.GetHelpText(button);
+        button.ToolTip = AutomationProperties.GetName(button) + "\n" + help;
         AutomationProperties.SetName(description, AutomationProperties.GetName(button) + ". " + help);
         AutomationProperties.SetHelpText(description, help);
     }
 
-    private void FeedbackText(string text)
+    private void FeedbackText(string text, bool important = false)
     {
+        UpdateStatusPresentation(important);
         StatusLabel.TextWrapping = TextWrapping.NoWrap;
         StatusLabel.TextTrimming = TextTrimming.CharacterEllipsis;
         StatusLabel.Text = text;
@@ -61,7 +63,7 @@ public partial class MainWindow
 
     private void FeedbackFocusUnavailable(string text)
     {
-        FeedbackText(text);
+        FeedbackText(text, important: true);
         if (!compactChrome || exiting || !IsVisible || Dispatcher.HasShutdownStarted)
             return;
         StatusLabel.TextWrapping = TextWrapping.Wrap;
@@ -148,7 +150,7 @@ public partial class MainWindow
         var valid = target is not null && Controller.Platform.Valid(target);
         _ = UpdateSessionArtwork();
         SessionKicker.Visibility = Visibility.Collapsed;
-        SessionCardButton.Padding = new Thickness(14, narrow ? 10 : 12, 14, narrow ? 10 : 12);
+        ApplySessionCardDensity();
         TargetLabel.Text = target?.Title ?? "Choose a window";
         TargetLabel.ToolTip = target?.Title;
         AutomationProperties.SetName(ContextCard, target?.Title ?? "No window selected");
@@ -160,7 +162,7 @@ public partial class MainWindow
         ContextGlyph.Visibility = ContextIcon.Source is null ? Visibility.Visible : Visibility.Collapsed;
         ContextStatus.Visibility = valid ? Visibility.Collapsed : Visibility.Visible;
         ContextStatusDot.Visibility = Visibility.Collapsed;
-        SessionEvidence.Visibility = target is not null && target.Title.Equals(target.ProcessName, StringComparison.OrdinalIgnoreCase) ? Visibility.Collapsed : Visibility.Visible;
+        SessionEvidence.Visibility = target is not null && string.Concat(target.Title.Where(char.IsLetterOrDigit)).Equals(string.Concat(target.ProcessName.Where(char.IsLetterOrDigit)), StringComparison.OrdinalIgnoreCase) ? Visibility.Collapsed : Visibility.Visible;
         SessionAudioLabel.Text = target is null ? "Select a window to view its audio" : !valid ? "Window unavailable" : AudioFor(target) ? AudioBadge() : "Status unconfirmed";
         ControllerStatusLabel.Text = controllerStatus.Replace(" · waiting for input", "");
         BackButton.Visibility = view.Depth > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -226,6 +228,7 @@ public partial class MainWindow
     }
 
     private string GuideDescription() => Controller.Platform.IsPreview ? "Preview · Guide connection is not queried" : !Controller.Settings.GuideXInputEnabled ? "Disabled · double-click the tray icon to open" : guideBackend?.Active == true ? guideBackend.Status : guideConnection?.Status ?? "Controller or Guide input unavailable";
+    private bool CompactFavorite(string id) => narrow && view.Current.Route == OverlayRoute.Hub && SessionHubSettings.Catalog.Contains(id);
     private Button MakeButton(string id, string title, string description, Action action, bool available, bool danger)
     {
         var glyph = ActionIcon(id.StartsWith("favorite:", StringComparison.Ordinal) ? id[9..] : id);
@@ -253,6 +256,18 @@ public partial class MainWindow
         badge.SetResourceReference(BackgroundProperty, ThemeSupport.Success);
         Grid.SetColumn(badge, 0);
         grid.Children.Add(badge);
+        var compactFavorite = CompactFavorite(id);
+        if (compactFavorite)
+        {
+            grid.Title.FontSize = 14;
+            grid.Title.TextWrapping = TextWrapping.NoWrap;
+            grid.Title.TextTrimming = TextTrimming.CharacterEllipsis;
+            grid.Description.Visibility = Visibility.Collapsed;
+            grid.ColumnDefinitions[0].Width = new GridLength(26);
+            grid.Icon.Width = grid.Icon.Height = 20;
+            badge.Width = badge.Height = 22;
+            ((TextBlock)badge.Child).FontSize = 14;
+        }
         if (id == "apps")
         {
             var count = new Border
@@ -278,9 +293,9 @@ public partial class MainWindow
         {
             Content = grid,
             Tag = id,
-            MinHeight = id == "return" ? 76 : 56,
+            MinHeight = compactFavorite ? 52 : id == "return" ? 76 : 56,
             IsEnabled = available,
-            Padding = new(12, 8, 12, 8)
+            Padding = compactFavorite ? new(6, 6, 6, 6) : new(12, 8, 12, 8)
         };
         if (page == 0 && subpage == "" && id == "apps")
         {

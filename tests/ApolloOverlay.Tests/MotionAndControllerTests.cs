@@ -103,7 +103,7 @@ internal static class MotionAndControllerTests
             host.Source.Items = [new("one", "Xbox One", ControllerFamily.Xbox, true, 90, false), new("two", "PlayStation 4", ControllerFamily.PlayStation4, true, 40, false)];
             Connect(w, 0);
             Complete(w.ControllerBadgeTask);
-            Require(((TextBlock)w.FindName("ControllerModelLabel")).Text == "2 controles" && !((TextBlock)w.FindName("ControllerBatteryLabel")).Text.Contains('%'), "Ambiguous devices were assigned to an XInput slot");
+            Require(((TextBlock)w.FindName("ControllerModelLabel")).Text == "2 controllers" && !((TextBlock)w.FindName("ControllerBatteryLabel")).Text.Contains('%'), "Ambiguous devices were assigned to an XInput slot");
             var reads = host.Source.Reads;
             w.Hide();
             Connect(w, 10000);

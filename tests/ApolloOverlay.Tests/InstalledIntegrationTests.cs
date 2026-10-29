@@ -7,6 +7,14 @@ internal static class InstalledIntegrationTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        test("Task Scheduler missing-task detection handles managed HRESULT mapping without hiding permission errors", () =>
+        {
+            Require(ScheduledStartup.IsMissingTask(new FileNotFoundException())
+                && ScheduledStartup.IsMissingTask(new COMException("Missing task", unchecked((int)0x80070002))), "A missing task prevented first startup registration");
+            Require(!ScheduledStartup.IsMissingTask(new UnauthorizedAccessException())
+                && !ScheduledStartup.IsMissingTask(new COMException("Access denied", unchecked((int)0x80070005)))
+                && !ScheduledStartup.IsMissingTask(new IOException("Other failure")), "A task-read failure was silently treated as absence");
+        });
         test("Windows startup approval distinguishes enabled and explicitly disabled registrations", () =>
         {
             foreach (var flag in new byte[] { 2, 3, 6, 7 })
