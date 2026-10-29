@@ -11,7 +11,7 @@ namespace ApolloOverlay;
 /// <summary>Explicit input tokens become vectors or legible keycaps, with complete accessible names.</summary>
 internal static partial class InputPrompt
 {
-    private sealed record Glyph(string Name, string Tone, string? Keycap = null);
+    private sealed record Glyph(string Name, string Tone, string? Keycap = null, string[]? Group = null);
     private sealed class KeycapLabel : TextBlock
     {
         protected override AutomationPeer? OnCreateAutomationPeer() => null;
@@ -35,8 +35,11 @@ internal static partial class InputPrompt
         ["Esc"] = new("Esc", ThemeSupport.Critical, "Esc"),
         ["Space"] = new("Space", ThemeSupport.IconNavigation, "Space"),
         ["Tab"] = new("Tab", ThemeSupport.IconNavigation, "Tab"),
-        ["Arrows"] = new("Arrows", ThemeSupport.IconNavigation),
-        ["ArrowsHorizontal"] = new("Left / right", ThemeSupport.IconNavigation),
+        ["Arrows"] = new("Arrows", ThemeSupport.IconNavigation, Group: ["Up", "Down", "Left", "Right"]),
+        ["Up"] = new("Up arrow", ThemeSupport.IconNavigation, "↑"),
+        ["Down"] = new("Down arrow", ThemeSupport.IconNavigation, "↓"),
+        ["Left"] = new("Left arrow", ThemeSupport.IconNavigation, "←"),
+        ["Right"] = new("Right arrow", ThemeSupport.IconNavigation, "→"),
         ["PgUp"] = new("PgUp", ThemeSupport.IconTools, "PgUp"),
         ["PgDn"] = new("PgDn", ThemeSupport.IconTools, "PgDn"),
         ["KeyX"] = new("X", ThemeSupport.IconNavigation, "X"),
@@ -84,6 +87,17 @@ internal static partial class InputPrompt
     internal static FrameworkElement CreateGlyph(FrameworkElement resources, string key, double height)
     {
         var definition = Definition(key);
+        if (definition.Group is { } keys)
+        {
+            var group = new StackPanel { Orientation = Orientation.Horizontal, IsHitTestVisible = false, Tag = key };
+            foreach (var member in keys)
+            {
+                var child = CreateGlyph(resources, member, height);
+                child.Margin = new(1, 0, 1, 0);
+                group.Children.Add(child);
+            }
+            return group;
+        }
         if (definition.Keycap is { } caption)
         {
             var label = new KeycapLabel

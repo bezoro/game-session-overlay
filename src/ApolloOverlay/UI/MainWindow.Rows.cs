@@ -35,7 +35,7 @@ public partial class MainWindow
                 RenderHint(content.Description, inputPrompt);
             else
             {
-                content.Description.Text = description;
+                content.Description.Text = ActionDescription(id, description, entry.Available);
                 AutomationProperties.SetName(content.Description, description);
             }
             content.Description.Visibility = description.Length > 0 && (!CompactAction(id) || !entry.Available) ? Visibility.Visible : Visibility.Collapsed;
@@ -232,10 +232,17 @@ public partial class MainWindow
 
     private string GuideDescription() => Controller.Platform.IsPreview ? "Preview · Guide connection is not queried" : !Controller.Settings.GuideXInputEnabled ? "Disabled · double-click the tray icon to open" : guideBackend?.Active == true ? guideBackend.Status : guideConnection?.Status ?? "Controller or Guide input unavailable";
     private bool CompactAction(string id) => narrow && (view.Current.Route == OverlayRoute.Hub && SessionHubSettings.Catalog.Contains(id) || view.Current.Route == OverlayRoute.Media && id is "media-previous" or "media-next");
+    private string ActionDescription(string id, string description, bool available) => CompactAction(id) && !available ? id switch
+    {
+        "playnite" => "Set up in System",
+        "steam-overlay" => "Unavailable here",
+        _ => description
+    } : description;
     private Button MakeButton(string id, string title, string description, Action action, bool available, bool danger)
     {
         var glyph = ActionIcon(id.StartsWith("favorite:", StringComparison.Ordinal) ? id[9..] : id);
-        var grid = new ActionButtonContent(glyph, title, description, showIcon: true);
+        var grid = new ActionButtonContent(glyph, title, ActionDescription(id, description, available), showIcon: true);
+        AutomationProperties.SetName(grid.Description, description);
         var badge = new Border
         {
             CornerRadius = new(18),
@@ -255,7 +262,9 @@ public partial class MainWindow
             grid.Title.TextTrimming = TextTrimming.CharacterEllipsis;
             grid.Description.FontSize = 12;
             grid.Description.Margin = new(0, 2, 0, 0);
-            grid.Description.Visibility = available ? Visibility.Collapsed : Visibility.Visible;
+            grid.Description.TextWrapping = TextWrapping.NoWrap;
+            grid.Description.TextTrimming = TextTrimming.CharacterEllipsis;
+            grid.Description.Visibility = available || description.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
             grid.ColumnDefinitions[0].Width = new GridLength(26);
             grid.Icon.Width = grid.Icon.Height = 20;
             badge.Width = badge.Height = 22;
@@ -285,9 +294,9 @@ public partial class MainWindow
         {
             Content = grid,
             Tag = id,
-            MinHeight = compactAction ? 52 : id == "return" ? 76 : 56,
+            MinHeight = compactAction ? 48 : id == "return" ? 76 : 56,
             IsEnabled = available,
-            Padding = compactAction ? new(6, 6, 6, 6) : new(12, 8, 12, 8)
+            Padding = compactAction ? new(6, 4, 6, 4) : new(12, 8, 12, 8)
         };
         if (page == 0 && subpage == "" && id == "apps")
         {

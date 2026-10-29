@@ -408,26 +408,6 @@
     "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
   },
   {
-    "name": "input-arrows",
-    "url": "https://kenney.nl/assets/input-prompts",
-    "version": "1.5A",
-    "archivePath": "Keyboard & Mouse/Vector/keyboard_arrows.svg",
-    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
-    "sha256": "c68d09cde6fc1f3ae5f06314a0564c41ff85b9ed51b4acdacb7eb99564dbd1a2",
-    "license": "CC0-1.0",
-    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
-  },
-  {
-    "name": "input-arrowshorizontal",
-    "url": "https://kenney.nl/assets/input-prompts",
-    "version": "1.5A",
-    "archivePath": "Keyboard & Mouse/Vector/keyboard_arrows_horizontal_outline.svg",
-    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
-    "sha256": "2c1cd7fe3f4a751a47948386993cf70703b87173871619245328f441f5fbf7fd",
-    "license": "CC0-1.0",
-    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
-  },
-  {
     "name": "input-mouseleft",
     "url": "https://kenney.nl/assets/input-prompts",
     "version": "1.5A",

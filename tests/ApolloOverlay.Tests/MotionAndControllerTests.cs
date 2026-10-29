@@ -20,7 +20,14 @@ internal static class MotionAndControllerTests
                 button.ApplyTemplate();
                 var strokes = Strokes(button);
                 if (!button.IsEnabled && button.Resources["DescriptionTarget"] is Border reason && HasStroke(reason))
+                {
                     strokes++;
+                    var buttonBounds = button.TransformToAncestor(host.Window).TransformBounds(new Rect(button.RenderSize));
+                    var reasonBounds = reason.TransformToAncestor(host.Window).TransformBounds(new Rect(reason.RenderSize));
+                    Require(Math.Abs(buttonBounds.Left - reasonBounds.Left) < 1 && Math.Abs(buttonBounds.Top - reasonBounds.Top) < 1
+                        && Math.Abs(buttonBounds.Right - reasonBounds.Right) < 1 && Math.Abs(buttonBounds.Bottom - reasonBounds.Bottom) < 1,
+                        "Unavailable selection outline is detached from the button surface");
+                }
                 Require(strokes == 1, "Selection renders " + strokes + " overlapping outlines for " + id);
             }
         });

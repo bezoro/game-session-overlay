@@ -114,7 +114,9 @@ public partial class MainWindow
             if (entry.Button.Resources["DescriptionTarget"] is Border host)
             {
                 host.BorderThickness = new(2);
-                host.CornerRadius = new(12);
+                host.CornerRadius = new(primary ? 12 : 10);
+                if (!primary)
+                    host.Background = selected && !entry.Available ? (Brush)FindResource(ThemeSupport.FocusBackground) : Brushes.Transparent;
                 if (selected && !entry.Available)
                     host.SetResourceReference(Border.BorderBrushProperty, ThemeSupport.Focus);
                 else

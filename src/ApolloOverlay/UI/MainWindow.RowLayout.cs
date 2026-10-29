@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Data;
 
 namespace ApolloOverlay;
 
@@ -11,9 +12,9 @@ public partial class MainWindow
         var text = new TextBlock
         {
             Text = title,
-            FontSize = 14,
+            FontSize = compactChrome ? 12 : 14,
             FontWeight = FontWeights.SemiBold,
-            Margin = new(2, 18, 0, 8)
+            Margin = new(2, compactChrome ? 10 : 18, 0, compactChrome ? 6 : 8)
         };
         text.SetResourceReference(TextBlock.ForegroundProperty, ThemeSupport.SecondaryText);
         AddVisual(text);
@@ -66,12 +67,12 @@ public partial class MainWindow
         {
             Focusable = true,
             FocusVisualStyle = null,
-            Tag = "description:" + id,
-            Margin = new(-2)
+            Tag = "description:" + id
         };
         AutomationProperties.SetName(reason, title + ". " + description);
         AutomationProperties.SetHelpText(reason, description);
         button.Resources["DescriptionTarget"] = reason;
+        reason.SetBinding(MarginProperty, new Binding(nameof(Margin)) { Source = button });
         Grid.SetRow(reason, index);
         Grid.SetColumn(reason, row is null ? 0 : column);
         Grid.SetColumnSpan(reason, row is null ? 2 : 1);
