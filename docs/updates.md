@@ -13,11 +13,21 @@ Os canais são:
 | Canal | Origem | Publicação |
 | --- | --- | --- |
 | Estável | Push em `main` | Release normal |
-| Testes | Execução manual de Windows checks na `main`, com `channel: testing` | Prerelease |
+| Testes | Execução autorizada de Windows checks em uma branch do repositório, com `channel: testing` | Prerelease |
 
 Somente compilações aprovadas nas verificações do Windows são publicadas. Pull requests executam as verificações com permissões de leitura e não publicam versões. O repositório é identificado também pelo ID `1430327913`, que continua válido após uma mudança de nome.
 
-A opção manual `validate` executa as verificações sem publicar. O canal de testes usa a `main` já integrada; executar o workflow em outra branch nunca publica uma versão.
+A opção `validate` executa as verificações sem publicar. Com `testing`, o workflow publica o commit da branch selecionada depois de todos os checks passarem, mesmo antes do merge da PR. Eventos de pull request continuam sem permissão de publicação; branches de forks não são publicadas por esse fluxo. Uma execução de testes não publica no canal estável.
+
+Para quem usa a overlay, basta escolher **Testes** em **Sistema → Versão e atualizações**, procurar atualizações e selecionar **Instalar e reiniciar**. Não é necessário baixar o instalador de uma PR. O catálogo identifica a versão e o commit; as versões preservadas continuam disponíveis para retorno.
+
+Um mantenedor ou agente com acesso de escrita pode publicar uma prévia pela interface do GitHub Actions, selecionando a branch e `channel: testing`, ou pela CLI. O campo opcional `notes` fornece as notas exibidas no atualizador:
+
+```sh
+gh workflow run windows-checks.yml --repo bezoro/game-session-overlay --ref feat/session-command-center -f channel=testing
+```
+
+O despacho exige uma branch do próprio repositório. A publicação confere o commit, o canal autorizado, a identidade compilada e os hashes do pacote validado. O canal de testes é compartilhado entre as prévias publicadas; a publicação só fica disponível na overlay depois que o job **Publish validated update** termina com sucesso.
 
 ## Identificar a versão
 

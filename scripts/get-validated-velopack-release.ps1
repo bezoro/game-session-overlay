@@ -2,7 +2,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$ArtifactDirectory,
     [string]$ExpectedCommit,
-    [string]$ExpectedVersion
+    [string]$ExpectedVersion,
+    [ValidateSet('stable', 'testing')][string]$ExpectedChannel
 )
 $ErrorActionPreference = 'Stop'
 $root = (Get-Item -LiteralPath $ArtifactDirectory).FullName
@@ -18,6 +19,9 @@ if ($ExpectedCommit -and $identity.commit -cne $ExpectedCommit) {
 }
 if ($ExpectedVersion -and $identity.version -cne $ExpectedVersion) {
     throw 'Package version differs from the requested version.'
+}
+if ($ExpectedChannel -and $identity.channel -cne $ExpectedChannel) {
+    throw 'Package channel differs from the authorized publication channel.'
 }
 $packageVersion = $identity.version.Split('+')[0]
 $feedPath = Join-Path $root "releases.$($identity.channel).json"

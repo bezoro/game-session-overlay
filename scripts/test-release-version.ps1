@@ -39,7 +39,14 @@ try {
     Commit 'feat(session): add a session feature'
     $preview = Identity 'testing'
     Require ($preview.Version -match '^0\.48\.0-preview\.100\.1\+[a-f0-9]{7}$') 'Feature preview did not advance the minor version.'
+    Invoke-Git @('tag', ('v' + $preview.Version))
+    Commit 'fix(session): refine the preview before merging'
+    $publishedPreview = Identity 'testing' 2
+    Require ($publishedPreview.CoreVersion -eq '0.48.0' -and $publishedPreview.Version -match '-preview\.100\.2\+') 'Publishing an unmerged preview changed its target stable version.'
+    Invoke-Git @('tag', ('v' + $publishedPreview.Version))
     Invoke-Git @('switch', 'main')
+    $unmerged = Identity
+    Require ($unmerged.CoreVersion -eq '0.47.1' -and !$unmerged.ReleaseRequired) 'An unmerged testing release advanced the stable branch.'
     Invoke-Git @('merge', '--no-ff', 'feat/example', '-m', "Merge pull request #1`n`nfeat(session): add a session feature")
     $feature = Identity
     Require ($feature.CoreVersion -eq '0.48.0' -and $feature.ReleaseRequired) 'Feature merge did not produce a new minor release.'

@@ -64,6 +64,18 @@ try {
     Case 'expected application version binds the package' {
         MustFail { & $validator -ArtifactDirectory $ReleasePath -ExpectedVersion '99.99.99-invalid' }
     }
+    Case 'authorized publication channel accepts its validated package' {
+        & $validator -ArtifactDirectory $ReleasePath -ExpectedChannel $original.Build.channel | Out-Null
+    }
+    Case 'a package cannot be published to another channel' {
+        $other = if ($original.Build.channel -eq 'testing') {
+            'stable'
+        }
+        else {
+            'testing'
+        }
+        MustFail { & $validator -ArtifactDirectory $ReleasePath -ExpectedChannel $other }
+    }
     Copy-Item -LiteralPath $ReleasePath -Destination $temporary -Recurse
     $feedPath = Join-Path $temporary "releases.$($original.Build.channel).json"
     $inventoryPath = Join-Path $temporary "assets.$($original.Build.channel).json"

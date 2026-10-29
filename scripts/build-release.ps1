@@ -129,5 +129,5 @@ if ($LASTEXITCODE -ne 0) {
     throw "Official Velopack packaging failed with exit code $LASTEXITCODE"
 }
 Copy-Item -LiteralPath (Join-Path $publishRoot 'build-info.json') -Destination (Join-Path $OutputDirectory 'build-info.json')
-$verified = & (Join-Path $PSScriptRoot 'get-validated-velopack-release.ps1') -ArtifactDirectory $OutputDirectory -ExpectedVersion $version -ExpectedCommit $commit
+$verified = & (Join-Path $PSScriptRoot 'get-validated-velopack-release.ps1') -ArtifactDirectory $OutputDirectory -ExpectedVersion $version -ExpectedCommit $commit -ExpectedChannel $channel
 Write-Output "Official Velopack package verified: $([IO.Path]::GetFileName($verified.SetupPath)); version=$version; build=$buildId; channel=$channel"

@@ -8,10 +8,14 @@ on:
   workflow_dispatch:
     inputs:
       channel:
-        description: Publicar o código da main no canal de testes após validação
+        description: Validar a branch selecionada ou publicá-la no canal de testes
         type: choice
         options: [validate, testing]
         default: validate
+      notes:
+        description: Notas da prévia exibidas no atualizador (opcional)
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -194,7 +198,7 @@ jobs:
       - name: Build official Velopack installer and packages
         id: package
         env:
-          RELEASE_NOTES: ${{ github.event.head_commit.message || github.event.pull_request.title }}
+          RELEASE_NOTES: ${{ github.event.head_commit.message || github.event.pull_request.title || inputs.notes }}
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 8
         run: |
@@ -234,7 +238,10 @@ jobs:
   publish-update:
     name: Publish validated update
     needs: windows
-    if: ${{ needs.windows.result == 'success' && needs.windows.outputs.release_required == 'true' && github.repository_id == '1430327913' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.channel == 'testing')) }}
+    # Only repository pushes to main publish stable. An authorized dispatch may
+    # publish any local branch to testing, including an unmerged feature branch.
+    # Pull-request events (including same-repository PRs) never gain write access.
+    if: ${{ needs.windows.result == 'success' && needs.windows.outputs.release_required == 'true' && github.repository_id == '1430327913' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.channel == 'testing' && startsWith(github.ref, 'refs/heads/'))) }}
     runs-on: windows-latest
     timeout-minutes: 10
     permissions:
@@ -284,9 +291,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_REPOSITORY: ${{ github.repository }}
           RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_CHANNEL: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'stable' || 'testing' }}
           RELEASE_NOTES: ${{ github.event.head_commit.message }}
         run: |
-          ./scripts/publish-release.ps1 -ArtifactDirectory artifacts/release -Repository $env:RELEASE_REPOSITORY -Commit $env:RELEASE_COMMIT
+          ./scripts/publish-release.ps1 -ArtifactDirectory artifacts/release -Repository $env:RELEASE_REPOSITORY -Commit $env:RELEASE_COMMIT -ExpectedChannel $env:RELEASE_CHANNEL
 
       - name: Report update publication result
         if: ${{ always() }}
