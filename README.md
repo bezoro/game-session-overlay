@@ -1,43 +1,45 @@
 # Game Session Overlay
 
-Uma overlay para controlar sua sessão de jogo pelo controle, mouse ou teclado, no PC ou em uma TV com streaming. Aplicativo nativo WPF/.NET 10 para Windows 11 x64; funciona com ou sem Apollo.
+Control a game session with a controller, mouse or keyboard, on your PC or a TV through streaming. This native WPF/.NET 10 application targets Windows 11 x64 and works with or without Apollo.
 
-## Instalar e abrir
+## Install and open
 
-Baixe o Setup do canal desejado em [Releases](https://github.com/bezoro/game-session-overlay/releases). A instalação inclui o runtime, os atalhos e o desinstalador. A overlay inicia oculta no logon; abrir ou fechar o painel usa uma transição breve.
+Download Setup for your preferred channel from [Releases](https://github.com/bezoro/game-session-overlay/releases). The installer includes the runtime, shortcuts and uninstaller. The overlay starts hidden at sign-in; opening and closing the panel use a short transition.
 
-Abra pelo botão **Guide/Xbox**, dê **duplo clique no ícone da bandeja** ou escolha **Abrir overlay** no menu da bandeja. Guide usa uma API legada do XInput e continua experimental; a bandeja oferece uma alternativa independente do controle.
+Press the **Guide/Xbox button**, **double-click the tray icon** or choose **Open overlay** in the tray menu. Guide uses a legacy XInput API and remains experimental. The tray provides an alternative that works without a controller.
 
-O aplicativo não exige administrador para o uso normal. O [guia de uso](<Guia de uso.md>) explica inicialização elevada opcional, escolha de monitor e configuração para a TV.
+Normal use does not require administrator privileges. The [user guide](<Guia de uso.md>) explains optional elevated startup, monitor selection and TV setup.
 
-## Durante o jogo
+## During a game
 
-- Retome a janela da sessão, alterne aplicativos e abra Playnite ou Steam Big Picture.
-- Ajuste volume por aplicativo, mixer, microfone e saída de áudio do Windows.
-- Aplique perfis TV/Computador ou crie perfis com monitor, escala, posição e áudio.
-- Controle mídia compatível, escreva com o teclado virtual e salve capturas locais.
-- Veja modelo e bateria do controle quando informados pelo Windows. Metadados ambíguos e cargas desconhecidas permanecem explícitos.
-- Navegue com foco visível, resposta ao pressionar, contorno com respiração e reflexo sutil. Sons e vibração são configuráveis.
+- Resume the session window, switch apps and open Playnite or Steam Big Picture.
+- Adjust app volume, the mixer, default-microphone mute and Windows audio output.
+- Apply TV/Desktop profiles or create profiles for your monitor, scale, panel side and audio.
+- Control supported media, type with the virtual keyboard and save local screenshots.
+- See controller model and battery information when Windows provides it. Ambiguous metadata and unknown charge remain explicit.
+- Use a clear focus outline, short press feedback and a subtle selection sheen. Interface sounds and vibration are separate options.
 
-| Entrada | Navegar | Selecionar | Voltar | Abas |
+The default dark theme combines warm charcoal, a restrained amber accent and warm off-white text. Appearance provides presets and editing for all semantic colors, with separate dark/light palettes and readability checks. Windows high contrast keeps its system colors. See the [reference mapping and validation limits](docs/ui-reference-validation.md).
+
+| Input | Navigate | Select | Back | Tabs |
 | --- | --- | --- | --- | --- |
-| Controle XInput | Direcional / analógico | A | B | LB / RB |
-| Teclado | Setas / Tab | Enter / Espaço | Esc | PageUp / PageDown |
-| Mouse | Ponteiro e rolagem | Clique | Botão Voltar | Clique |
+| XInput controller | D-pad / stick | A | B | LB / RB |
+| Keyboard | Arrows / Tab | Enter / Space | Esc | PageUp / PageDown |
+| Mouse | Pointer and scrolling | Click | Back button | Click |
 
-X abre as opções da janela pelo controle ou teclado. O fechamento de uma janela exige uma nova pressão mantida por 1,5 segundo; não há encerramento forçado.
+X opens window options through the controller or keyboard. Closing a window requires a fresh 1.5-second hold; the app does not force termination.
 
-**Foco não bloqueia globalmente o controle em outros aplicativos.** Jogos que leem XInput em segundo plano podem continuar recebendo entrada. Em streaming, o dispositivo visível pode ser virtual e não informar a bateria do controle da TV. Consulte [compatibilidade](docs/controller-isolation.md) e o [roteiro de teste real](docs/pilot-checklist.md).
+**Focus does not block controller input globally.** Games that read XInput in the background may still receive input. A streaming device may be virtual and may not report the TV controller's battery. See [compatibility](docs/controller-isolation.md) and the [real-use test checklist](docs/pilot-checklist.md).
 
-## Atualizações e automação
+## Updates and automation
 
-A versão fica no cabeçalho. Em **Sistema → Versão e atualizações**, escolha canal, consulte mudanças, instale e reinicie ou volte a uma versão preservada. Instalador e atualizações usam Velopack; não exigem login no GitHub.
+The installed version appears in the header. In **System → Version and updates**, choose a channel, read changes, install and restart, or restore a retained version. The installer and updates use Velopack and do not require GitHub sign-in.
 
-A instalação inclui `gso.cmd`, uma CLI JSON para terminais e agentes. Consulte [comandos, atualização e retorno](docs/cli.md), [funcionamento do atualizador](docs/updates.md) e [comportamento detalhado](docs/runtime-behavior.md).
+The installation includes `gso.cmd`, a JSON CLI for terminals and agents. See [commands, updates and rollback](docs/cli.md), [updater behavior](docs/updates.md) and [runtime behavior](docs/runtime-behavior.md).
 
-## Contribuir
+## Contribute
 
-Comece por [CONTRIBUTING.md](CONTRIBUTING.md) e pelo [mapa da arquitetura](docs/architecture.md). O SDK está fixado em [global.json](global.json).
+Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [architecture map](docs/architecture.md). [global.json](global.json) pins the SDK.
 
 ```powershell
 dotnet build ApolloOverlay.sln -c Release
@@ -45,6 +47,6 @@ dotnet build ApolloOverlay.sln -c Release
 dotnet run --project src/ApolloOverlay -- --preview
 ```
 
-A solução inclui aplicativo, CLI, testes e ferramentas de diagnóstico. O CI compila com nullable e warnings como erros, verifica formatação, executa testes, gera capturas WPF e valida pacote, instalação, atualização e retorno com Velopack. Fixtures não substituem testes com controle, jogo e TV reais.
+The solution includes the app, CLI, tests and diagnostic tools. CI builds with nullable checks and warnings as errors, verifies formatting, runs tests, renders WPF captures and checks Velopack packaging, installation, upgrades and rollback. Fixtures do not replace tests with a physical controller, game and TV.
 
-Fontes, licenças e proveniência dos vetores: [ícones](docs/third-party-icons.md). Dependências de atualização: [Velopack](docs/third-party-updates.md).
+Sources, licenses and vector provenance are documented in [icons](docs/third-party-icons.md). Update dependencies are documented in [Velopack](docs/third-party-updates.md).

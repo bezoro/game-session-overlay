@@ -57,7 +57,7 @@ internal sealed class ProofWindows : IDisposable
     private readonly Button[] buttons = new Button[4];
     private readonly TextBlock heading = new()
     {
-        Text = "Controle da janela de teste",
+        Text = "Test window controls",
         FontSize = 26,
         FontWeight = FontWeights.SemiBold,
         Foreground = Brushes.White,
@@ -71,7 +71,7 @@ internal sealed class ProofWindows : IDisposable
     private readonly HwndSource source;
     private readonly TextBlock context = new()
     {
-        Text = "Aplicativo próprio · nenhuma sessão de jogo",
+        Text = "Owned test app · no game session",
         FontSize = 16,
         Foreground = Brushes.LightGray,
         TextWrapping = TextWrapping.Wrap
@@ -85,7 +85,7 @@ internal sealed class ProofWindows : IDisposable
         var area = SystemParameters.WorkArea;
         Underlay = new Window
         {
-            Title = "Prova nativa — superfície própria",
+            Title = "Native proof — owned test surface",
             WindowStyle = WindowStyle.None,
             ResizeMode = ResizeMode.NoResize,
             Width = Math.Min(1040, area.Width - 80),
@@ -96,13 +96,13 @@ internal sealed class ProofWindows : IDisposable
         };
         SetPattern(false);
         var underGrid = new Grid();
-        underGrid.Children.Add(new TextBlock { Text = "SUPERFÍCIE DE TESTE PRÓPRIA", FontSize = 23, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, Margin = new(20) });
+        underGrid.Children.Add(new TextBlock { Text = "OWNED TEST SURFACE", FontSize = 23, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, Margin = new(20) });
         Underlay.Content = underGrid;
         Underlay.KeyDown += OnKey;
         Underlay.Closed += (_, _) => Exit?.Invoke();
         Overlay = new Window
         {
-            Title = "Prova nativa — overlay",
+            Title = "Native proof — overlay",
             WindowStyle = WindowStyle.None,
             ResizeMode = ResizeMode.NoResize,
             AllowsTransparency = true,
@@ -167,10 +167,10 @@ internal sealed class ProofWindows : IDisposable
         actions.RowDefinitions.Add(new());
         var labels = new[]
         {
-            "Retornar",
-            "Marcar quadro",
-            "Outra aba",
-            "Sair da prova"
+            "Return",
+            "Mark frame",
+            "Switch tab",
+            "Exit proof"
         };
         for (var i = 0; i < 4; i++)
         {
@@ -203,7 +203,7 @@ internal sealed class ProofWindows : IDisposable
         grid.Children.Add(actions);
         var legend = new TextBlock
         {
-            Text = "A selecionar  ·  B retornar\nLB/RB abas  ·  setas / Tab navegar\nCtrl+Alt+Espaço ou LB+RB+Start\nProva própria · Guide não inscrito",
+            Text = "A select  ·  B return\nLB/RB tabs  ·  arrows / Tab navigate\nCtrl+Alt+Space or LB+RB+Start\nOwned test app · Guide not registered",
             TextWrapping = TextWrapping.Wrap,
             FontSize = 15,
             Foreground = Brushes.LightGray,
@@ -404,7 +404,7 @@ internal sealed class ProofWindows : IDisposable
     private void SetPage()
     {
         Page = 1 - Page;
-        heading.Text = Page == 0 ? "Controle da janela de teste" : "Diagnóstico da prova";
+        heading.Text = Page == 0 ? "Test window controls" : "Proof diagnostics";
     }
 
     private void PaintSelection()

@@ -1,61 +1,61 @@
-# Arquitetura
+# Architecture
 
-O processo mantém uma janela WPF oculta e um ícone de bandeja. `Program` inicializa Velopack, a instância única e a automação; `MainWindow.xaml.cs` compõe os serviços e conecta eventos por etapas nomeadas. A entrada por Guide e a bandeja usam o mesmo fluxo de abertura.
+The process maintains a hidden WPF window and a tray icon. `Program` initializes Velopack, the single instance and automation. `MainWindow.xaml.cs` composes services and wires events through named stages. Guide and tray input use the same opening flow.
 
-## Mapa do código
+## Code map
 
-| Diretório em `src/ApolloOverlay` | Responsabilidade |
+| Directory in `src/ApolloOverlay` | Responsibility |
 | --- | --- |
-| `Domain` | Identidade de janelas, monitores e resultados de ações. |
-| `Input` | XInput/Guide, interpretação, propriedade da entrada, soltura, metadados e apresentação factual da bateria. |
-| `Windows` | APIs Win32, observação de janelas, foco, extração de ícones e captura de pixels. |
-| `Audio` | Snapshots e comandos de áudio; contratos, backend Core Audio e declarações COM ficam separados. |
-| `Session` | Referência da sessão, recentes, perfis, mídia, capturas e inserção deliberada de texto. |
-| `Feedback` | Sons, vibração, prioridade e ciclo de vida dos sinais. |
-| `Settings` | Leitura, validação, migração de ajustes e inicialização no Windows. |
-| `Updates` | Identidade do build, fonte Velopack, canais e histórico de retorno. |
-| `Automation` | Protocolo, transporte por pipe, permissões e registro de solicitações. A CLI compartilha apenas protocolo e segurança do transporte. |
-| `Integrations` | Evidências e permissões específicas de integrações externas. |
-| `UI` | Navegação, componentes, páginas e coordenação WPF. Os arquivos parciais da janela agrupam responsabilidades da mesma instância, sem fingir isolamento entre elas. |
-| `Diagnostics` | Logs locais, prévias e provas limitadas a janelas próprias. |
+| `Domain` | Window and monitor identity, action results. |
+| `Input` | XInput/Guide, interpretation, input ownership, release, metadata and factual battery presentation. |
+| `Windows` | Win32 APIs, window observation, focus, icon extraction and pixel capture. |
+| `Audio` | Audio snapshots and commands, with contracts, the Core Audio backend and COM declarations kept separate. |
+| `Session` | Session reference, recent windows, profiles, media, captures and deliberate text insertion. |
+| `Feedback` | Sound, vibration, cue priority and lifecycle. |
+| `Settings` | Settings loading, validation, migration and Windows startup. |
+| `Updates` | Build identity, the Velopack source, channels and rollback history. |
+| `Automation` | Protocol, pipe transport, permissions and request records. The CLI shares only the protocol and transport security. |
+| `Integrations` | Evidence and permissions specific to external integrations. |
+| `UI` | WPF navigation, components, pages and coordination. Window partials group responsibilities of the same instance; they are not isolated services. |
+| `Diagnostics` | Local logs, previews and proofs limited to owned windows. |
 
-Os namespaces públicos permanecem estáveis para preservar consumidores e fixtures. Os diretórios organizam responsabilidades; não representam serviços distribuídos nem impõem um contêiner de injeção.
+Public namespaces remain stable to preserve consumers and fixtures. Directories organize responsibilities; they do not represent distributed services or require a dependency-injection container.
 
 ```mermaid
 flowchart LR
-    Input[Controle / teclado / mouse / bandeja] --> UI[Coordenação WPF]
-    CLI[CLI] --> Pipe[Contrato e pipe local]
+    Input[Controller / keyboard / mouse / tray] --> UI[WPF coordination]
+    CLI[CLI] --> Pipe[Contract and local pipe]
     Pipe --> UI
-    UI --> Policy[Regras e estado da sessão]
-    UI --> Services[Áudio / mídia / perfis / atualizações]
-    Policy --> Native[Adaptadores Windows]
+    UI --> Policy[Session rules and state]
+    UI --> Services[Audio / media / profiles / updates]
+    Policy --> Native[Windows adapters]
     Services --> Native
-    Native --> Snapshot[Snapshots e resultados observados]
+    Native --> Snapshot[Snapshots and observed results]
     Snapshot --> UI
 ```
 
-## Estado e ações
+## State and actions
 
-`OverlayController` mantém ajustes, sessão, janelas recentes e resultados. `OverlayViewState` mantém rota, seleção e posição de rolagem. `InputCoordinator` interpreta os quatro slots XInput; `ReleaseGate` e `HeldInputTracker` tratam soltura e amostras incertas sem conhecer WPF. `ControllerBadgeModel` decide o que pode ser mostrado sem acessar hardware ou controles visuais.
+`OverlayController` owns settings, the session, recent windows and results. `OverlayViewState` owns the route, selection and scroll position. `InputCoordinator` interprets the four XInput slots. `ReleaseGate` and `HeldInputTracker` handle release and uncertain samples without knowing WPF. `ControllerBadgeModel` determines what can be displayed without accessing hardware or visual controls.
 
-Uma ação da interface verifica foco e disponibilidade, aguarda soltura contínua, valida o alvo novamente e só então chama o serviço. `ActionResult` distingue solicitação, conclusão observada, resultado parcial e estado desconhecido. Cancelar após um envio interrompe as etapas restantes; não desfaz um comando já aceito pelo Windows.
+A UI action checks focus and availability, waits for continuous input release, validates the target again and then calls the service. `ActionResult` distinguishes a request, observed completion, partial results and unknown outcomes. Cancellation after dispatch stops remaining steps; it does not undo a command Windows already accepted.
 
-Uma identidade de janela contém HWND, PID, início do processo e geração observada. Títulos não estabelecem identidade. Leituras assíncronas carregam uma geração; a interface descarta conclusões de uma sessão, rota ou ciclo de foco anterior. Atualizações de valores preservam controles em edição; alterações na estrutura da página podem reconstruir suas linhas.
+Window identity includes HWND, PID, process start time and observed generation. Titles do not establish identity. Asynchronous reads carry a generation; the interface rejects completion from an earlier session, route or focus cycle. Value updates preserve controls being edited. Changes to page structure may rebuild its rows.
 
-## Concorrência e recursos
+## Concurrency and resources
 
-- A janela, seleção e árvore visual pertencem ao dispatcher. Eventos de workers são transferidos para ele antes de alterar a interface.
-- Áudio e mídia têm proprietários limitados. Um timeout não libera a exclusão enquanto uma chamada nativa ainda pode concluir. Não há repetição automática de uma mutação incerta.
-- `WindowIconCache` limita capacidade e concorrência. `WindowIconReader` copia o HICON emprestado, cria uma imagem congelada e libera somente sua cópia. A conclusão atualiza a imagem sem substituir a linha ou seu foco.
-- A recuperação de foreground usa uma thread auxiliar limitada, sem anexar a fila WPF à fila de outro processo. O resultado nativo não substitui a observação de foreground e atividade.
-- Ocultar ou encerrar suspende mídia, leituras, feedback e animações. O encerramento drena operações que ainda podem possuir teclas ou recursos; conclusões antigas não reabrem o painel.
+- The dispatcher owns the window, selection and visual tree. Worker events move to it before changing the interface.
+- Audio and media have bounded owners. A timeout does not release exclusion while a native call can still complete. Uncertain mutations are not retried automatically.
+- `WindowIconCache` bounds capacity and concurrency. `WindowIconReader` copies the borrowed HICON, creates a frozen image and releases only its copy. Completion updates the image without replacing the row or its focus.
+- Foreground recovery runs in an authenticated disposable child with a bounded deadline and a kill-on-close job. It does not attach the WPF queue to another process. Native return values do not replace observation of the exact foreground window and WPF activation.
+- Hiding or shutting down suspends media, reads, feedback and animations. Shutdown drains operations that may still own keys or resources. Old completions cannot reopen the panel.
 
-Os `catch` amplos restantes ficam em fronteiras que precisam preservar limpeza ou impedir que um callback externo derrube o proprietário. No fluxo comum, exceções esperadas são filtradas e convertidas em resultado ou indisponibilidade. Falhas de consulta não devem produzir valores inventados.
+Broad `catch` blocks remain at boundaries that must preserve cleanup or stop an external callback from crashing its owner. Ordinary flows filter expected exceptions and convert them to results or unavailable states. A failed query must not produce invented values.
 
-## Interface e compatibilidade
+## Interface and compatibility
 
-`ActionButtonContent` expõe título, descrição, ícone e área de edição sem depender da ordem dos filhos. `VectorIcon` preserva o quadro original de cada SVG: uma engrenagem não é redimensionada pelo limite irregular de seu path. Cores usam recursos do tema e vetores não recebem stroke adicional sobre um desenho já preenchido.
+`ActionButtonContent` exposes its title, description, icon and editing area without relying on child order. `VectorIcon` preserves each SVG's original frame; a gear is not scaled to its irregular path bounds. Colors use theme resources, and filled vectors receive no extra stroke.
 
-Os campos antigos de ajustes continuam sendo lidos para compatibilidade de dados; atalhos antigos não são reativados por isso. Nomes de assembly e executável permanecem por compatibilidade com instalação, inicialização e CLI. As ferramentas de prova não mantêm cópias independentes de código do aplicativo: os poucos contratos nativos necessários são vinculados explicitamente e compilados na solução.
+Legacy settings fields remain readable for data compatibility; this does not reactivate legacy shortcuts. Assembly and executable names remain stable for installation, startup and CLI compatibility. Proof tools do not maintain separate copies of application code. Their few required native contracts are linked explicitly and built with the solution.
 
-Foco não isola XInput de outros processos. O controle visto no streaming pode ser virtual e não expor bateria. Essas limitações permanecem visíveis no produto e em [isolamento do controle](controller-isolation.md); não são tratadas como sucesso por fixtures.
+Focus does not isolate XInput from other processes. A streaming controller may be virtual and expose no battery information. These limits stay visible in the product and in [controller isolation](controller-isolation.md). Fixtures do not treat them as confirmed success.

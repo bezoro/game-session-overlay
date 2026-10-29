@@ -1,6 +1,6 @@
-# Prova nativa — Stage A
+# Native proof, Stage A
 
-Projeto isolado WPF/.NET 10. Não altera o overlay do produto. A janela quadriculada e o painel pertencem ao mesmo processo; não representam um jogo. Nenhuma ação é enviada a outro aplicativo.
+This isolated WPF/.NET 10 project does not change the product overlay. Its checkerboard window and panel belong to the same process and do not represent a game. It sends no action to another application.
 
 ```powershell
 dotnet build tools/NativeProof/Bezoro.NativeProof.csproj -c Release
@@ -8,8 +8,8 @@ dotnet build tools/NativeProof/Bezoro.NativeProof.csproj -c Release
 & tools/NativeProof/bin/Release/net10.0-windows/Bezoro.NativeProof.exe --guide-capability --output artifacts/native-proof/guide-01
 ```
 
-Após revisão, a execução manual aceita `--interactive --hotkey Ctrl+Alt+Space --chord LB+RB+Start --hold-ms 650 --output <diretório>`. Atalho e combinação só abrem o painel sobre a janela própria. A/B selecionam/retornam; direcional e analógico esquerdo navegam; LB/RB trocam a aba. Teclado: setas, Tab, Enter, PageUp/PageDown e Esc. Esc na superfície de teste sai. O atalho é temporário e a combinação exige soltura inicial e retenção, por controle. Guia não é inscrito.
+After review, manual execution accepts `--interactive --hotkey Ctrl+Alt+Space --chord LB+RB+Start --hold-ms 650 --output <directory>`. The hotkey and chord open the panel only over its owned window. A/B select and go back; the D-pad and left stick navigate; LB/RB switch tabs. Keyboard input supports arrows, Tab, Enter, PageUp/PageDown and Esc. Esc exits on the test window. The hotkey is temporary. The chord requires initial release and a hold for each controller. Guide is not registered.
 
-O autoteste dura aproximadamente 30–50 s. Guarda de captura verifica HWND/PID/início, cobertura, ordem e primeiro plano antes e depois da leitura; se outra janela interferir, aborta sem salvar a captura. Essa verificação não elimina uma corrida entre verificações. Capturas e métricas são fases separadas. CPU é normalizada pelo número de processadores lógicos; latência parte de uma alteração de software, não do botão físico. RenderTier/DWM não provam aceleração; contadores de GPU podem estar indisponíveis. O processo auxiliar de contadores é próprio, sem elevação. Não execute testes de jogos ou Guide a partir desta prova.
+The self-test takes about 30–50 seconds. Capture guards check HWND/PID/start time, coverage, order and foreground before and after reading pixels. Interference by another window aborts capture without saving it. These checks do not eliminate a race between observations. Captures and measurements run as separate phases. CPU is normalized by logical processor count; latency starts at a software change, not a physical button press. RenderTier/DWM do not prove acceleration, and GPU counters may be unavailable. The counter helper belongs to this tool and runs without elevation. Do not use this proof to test games or Guide.
 
-O projeto integra a solução e compila no CI. `--input-tests --output artifacts/native-proof/input` executa apenas as fixtures de navegação, sem iniciar o cenário de janelas. As combinações configuráveis pertencem a esta ferramenta histórica de prova; não descrevem a ativação atual do produto.
+The project is part of the solution and builds in CI. `--input-tests --output artifacts/native-proof/input` runs navigation fixtures only, without starting the window scenario. Configurable chords belong to this historical proof tool and do not describe the product's current activation policy.

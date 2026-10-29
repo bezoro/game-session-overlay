@@ -1,12 +1,12 @@
-# CLI da overlay
+# Overlay CLI
 
-`gso.cmd` e `ApolloOverlay.Cli.exe` vêm no aplicativo instalado e conversam com a instância em execução, mesmo com a overlay oculta. Não iniciam nem elevam a GUI, não repetem pedidos e não aceitam teclas, caminhos de executáveis ou scripts arbitrários.
+`gso.cmd` and `ApolloOverlay.Cli.exe` ship with the installed app and communicate with the running instance, including while it is hidden. They do not start or elevate the GUI, retry requests, or accept arbitrary keys, executable paths or scripts.
 
-## Atualizar pelo terminal ou por um agente
+## Update from a terminal or agent
 
-Instale uma vez pelo Setup atual para receber a CLI e a API de atualização. Uma instalação antiga sem esses componentes precisa desse primeiro passo. Depois, os comandos usam o mesmo atualizador Velopack da interface. A consulta e o download das publicações públicas não exigem login ou token do GitHub.
+Install the current Setup once to obtain the CLI and update API. An older installation without those components needs this initial step. Subsequent commands use the same Velopack updater as the interface. Public release lookup and download require no GitHub login or token.
 
-No PowerShell, encontre a CLI da instalação atual:
+In PowerShell, locate the current installation's CLI:
 
 ```powershell
 $install = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\GameSessionOverlay').InstallLocation
@@ -16,30 +16,30 @@ $gso = Join-Path $install 'current\gso.cmd'
 & $gso update --channel testing
 ```
 
-Execute no mesmo usuário, sessão e nível de elevação da overlay. Se ela estiver elevada, o terminal ou agente também precisa estar elevado. A janela pode permanecer oculta; os comandos de atualização não dependem de foco nem de navegação na interface. O instalador não adiciona `gso` ao PATH: use o caminho encontrado acima ou execute `gso.cmd` da pasta `current`.
+Run as the same user, session and elevation level as the overlay. If the overlay is elevated, the terminal or agent must be elevated too. Update commands do not require focus or interface navigation; the window can remain hidden. Setup does not add `gso` to PATH: use the resolved path above or run `gso.cmd` from `current`.
 
-| Comando | Resultado |
-|---|---|
-| `gso version` | Identidade da instância que está executando agora. |
-| `gso update status` | Versão atual, instalação, operação, progresso, catálogo e histórico. |
-| `gso update check --channel testing` | Consulta as publicações do canal, sem instalar. Aceita também `stable`. |
-| `gso update` | Consulta o canal selecionado, baixa a versão escolhida e solicita aplicação com reinício. |
-| `gso update install --build BUILD_ID --channel testing` | Seleciona uma publicação exata do catálogo, inclusive uma anterior. Sem `--build`, escolhe a publicação mais recente do canal. |
-| `gso history` | Lista as versões preservadas localmente para retorno. |
-| `gso rollback BUILD_ID` | Prepara a versão preservada indicada e solicita aplicação com reinício. |
-| `gso update cancel JOB_ID` | Solicita cancelamento da preparação correspondente. Não desfaz uma aplicação já solicitada. |
+| Command | Result |
+| --- | --- |
+| `gso version` | Identity of the instance running now. |
+| `gso update status` | Current version, installation, operation, progress, catalog and history. |
+| `gso update check --channel testing` | Query channel releases without installing; also accepts `stable`. |
+| `gso update` | Query the selected channel, download the chosen version and request application with restart. |
+| `gso update install --build BUILD_ID --channel testing` | Select an exact catalog release, including an earlier one. Without `--build`, choose the channel's newest release. |
+| `gso history` | List locally preserved versions available for restoration. |
+| `gso rollback BUILD_ID` | Prepare the specified preserved version and request application with restart. |
+| `gso update cancel JOB_ID` | Request cancellation of the matching preparation. Does not undo an already-requested application. |
 
-Cada resposta é um objeto JSON. `Update.Version`, `BuildId`, `Commit` e `Channel` descrevem o binário da instância consultada; `Pid`, `Started`, `Session` e `Instance` identificam essa execução. `Update.TargetBuildId` e `TargetVersion` descrevem o destino preparado. `JobId`, `Phase`, `Progress`, `Terminal`, `Available` e `History` permitem acompanhar o trabalho. Salve ou descarte ajustes pendentes antes de trocar de versão.
+Each response is a JSON object. `Update.Version`, `BuildId`, `Commit` and `Channel` describe the queried instance's binary; `Pid`, `Started`, `Session` and `Instance` identify that execution. `Update.TargetBuildId` and `TargetVersion` describe the prepared destination. `JobId`, `Phase`, `Progress`, `Terminal`, `Available` and `History` allow progress tracking. Save or discard pending settings before changing versions.
 
-Ao iniciar uma preparação, `Terminal: true` no nível externo encerra apenas a solicitação de início. O job continua com `Update.Terminal: false` e é acompanhado por `update status`. Seu progresso e resultado ficam no recibo próprio, sem ocupar permanentemente o histórico de solicitações da CLI.
+When preparation starts, outer `Terminal: true` terminates only the start request. The job continues with `Update.Terminal: false` and is tracked through `update status`. Its progress and outcome have a separate receipt rather than permanently occupying CLI request history.
 
-Uma resposta `Outcome: Requested` à atualização ou ao rollback confirma o pedido ao Velopack e a saída da instância anterior. **Ela ainda não confirma que a nova versão iniciou.** O processo da CLI termina para permitir a substituição dos binários. Consulte a instalação novamente com uma nova execução de `gso version`; apenas uma resposta fresca `Completed`, com o `Update.BuildId` esperado e uma nova identidade de processo, confirma o destino em execução. A consulta pode retornar `Unavailable` durante o reinício. Não há um `--wait` que atravesse a substituição dos executáveis.
+An update or rollback response with `Outcome: Requested` confirms the request to Velopack and exit of the old instance. **It does not yet confirm that the new version started.** The CLI process exits to permit binary replacement. Query the installation again with a fresh `gso version`; only a fresh `Completed` response with the expected `Update.BuildId` and a new process identity confirms the running destination. The query may return `Unavailable` during restart. No `--wait` spans executable replacement.
 
-Um agente pode usar este fluxo, sem reenviar a mutação:
+An agent can use this flow without resending the mutation:
 
 ```powershell
 $before = (& $gso version | ConvertFrom-Json)
-if ($LASTEXITCODE -ne 0 -or $before.Outcome -ne 'Completed') { throw 'Instância atual indisponível.' }
+if ($LASTEXITCODE -ne 0 -or $before.Outcome -ne 'Completed') { throw 'Current instance unavailable.' }
 $requested = (& $gso update --channel testing | ConvertFrom-Json)
 if ($LASTEXITCODE -ne 0) { throw $requested.Reason }
 if ($requested.Outcome -eq 'Requested') {
@@ -56,16 +56,16 @@ if ($requested.Outcome -eq 'Requested') {
             break
         }
     } while ($limit.Elapsed.TotalSeconds -lt 60)
-    if (-not $confirmed) { throw 'Destino ainda não confirmado. Consulte version/status; não repita a instalação automaticamente.' }
+    if (-not $confirmed) { throw 'Destination not yet confirmed. Query version/status; do not automatically repeat installation.' }
     $after
 } else {
     $requested
 }
 ```
 
-`--timeout 5..600` limita o tempo de preparação da CLI, em segundos; o padrão é 180. `--dry-run` valida um pedido de mudança sem executá-lo. Para acompanhamento ou cancelamento de uma preparação em andamento, use outro terminal com `update status` ou `update cancel JOB_ID`. Um resultado `Unknown` exige observar `version` e `update status` antes de decidir o próximo passo. O wrapper preserva o código de saída da CLI; código zero também pode acompanhar `Requested` e não substitui a confirmação da versão.
+`--timeout 5..600` limits CLI preparation in seconds; the default is 180. `--dry-run` validates a change request without executing it. Track or cancel an active preparation from another terminal with `update status` or `update cancel JOB_ID`. An `Unknown` result requires observing `version` and `update status` before deciding what to do next. The wrapper preserves the CLI exit code; zero can also accompany `Requested` and does not replace version confirmation.
 
-## Ações da sessão
+## Session actions
 
 ```powershell
 ApolloOverlay.Cli.exe status
@@ -80,35 +80,35 @@ ApolloOverlay.Cli.exe trace
 ApolloOverlay.Cli.exe shutdown
 ```
 
-`targets` atualiza as observações quando não há operação ativa e fornece identidades opacas ligadas a HWND/PID/criação/geração; `TargetsAtUtc` registra a última atualização, separada de `AtUtc`. `actions` lista os controles reais da rota, disponibilidade, motivo, capacidade e intenções. `--intent left|right` existe somente nos ajustes anunciados. Rotas finitas: `route:home`, `apps`, `system`, `audio`, `integrations`, `options`, `details`, `customize`, `setup`, `result`; options/details requerem `--target ID`. Um target explícito antigo é rejeitado, nunca substituído silenciosamente por outro.
+`targets` refreshes observations when no operation is active and returns opaque identities bound to HWND/PID/creation/generation. `TargetsAtUtc` records the last refresh separately from `AtUtc`. `actions` lists actual route controls, availability, reason, capability and intents. `--intent left|right` exists only for advertised adjustments. Finite routes are `route:home`, `apps`, `system`, `audio`, `integrations`, `options`, `details`, `customize`, `setup` and `result`; options/details require `--target ID`. A stale explicit target is rejected, never silently replaced.
 
-| Capacidade | Comportamento |
-|---|---|
-| `Execute` | Handler síncrono seguro ou dono cancelável de foco/Steam. |
-| `RequiresGesture` | Fechamento com pressão longa; exige a interação normal, sem bypass. |
-| `RequiresInteractive` | File picker, inicialização/atalhos legados, controles `operation-details` e `dismiss-operation`, e operações assíncronas ainda sem guard de cliente. A CLI não invoca esses handlers. |
-| `Unavailable`, `Denied`, `Unsupported` | Nada enviado. O motivo acompanha a resposta. `diagnostic-dwell` é Unsupported neste estágio. |
+| Capability | Behavior |
+| --- | --- |
+| `Execute` | Safe synchronous handler or cancellable focus/Steam owner. |
+| `RequiresGesture` | Hold-to-close requires normal interaction; no bypass. |
+| `RequiresInteractive` | File picker, legacy startup/shortcuts, `operation-details` and `dismiss-operation`, and asynchronous operations without a client guard. The CLI does not invoke these handlers. |
+| `Unavailable`, `Denied`, `Unsupported` | Nothing dispatched. The response includes the reason. `diagnostic-dwell` is Unsupported at this stage. |
 
-O atalho Steam solicita foco uma vez e confirma a identidade e 500 ms de primeiro plano. Para a configuração `Shift+Tab`, envia quatro eventos separados: Shift-down, pelo menos 20 ms, Tab-down, pelo menos 60 ms, Tab-up, pelo menos 20 ms e Shift-up. `Ctrl+Tab` conserva o lote anterior. As esperas revalidam entrada, conexão, alvo, foco, prazo e cancelamento em fatias de até 10 ms. A origem UI mantém o handoff de liberação; a CLI qualifica entrada neutra independentemente.
+The Steam shortcut requests focus once and verifies identity plus 500 ms of foreground ownership. For `Shift+Tab`, it sends four separate events: Shift-down, at least 20 ms, Tab-down, at least 60 ms, Tab-up, at least 20 ms, then Shift-up. `Ctrl+Tab` retains its previous batch. Waits revalidate input, connection, target, focus, deadline and cancellation in slices up to 10 ms. UI requests retain release handoff; the CLI independently qualifies neutral input.
 
-Cancelar, reabrir, perder contexto ou exceder o prazo proíbe novos downs imediatamente. O dono mantém exclusão até terminar a limpeza limitada das teclas possivelmente enviadas. `cancel` confirma somente a solicitação de interrupção (`Terminal=false`); consulte `result` até o término. O fechamento normal aguarda essa drenagem sem bloquear a janela. Não existe garantia de limpeza após crash ou encerramento forçado.
+Cancellation, reopening, context loss or deadline expiry immediately prohibits further down events. The owner retains exclusion until bounded cleanup of possibly sent keys finishes. `cancel` confirms only the interruption request (`Terminal=false`); query `result` until terminal. Normal shutdown awaits this drain without blocking the window. Cleanup after a crash or force termination is not guaranteed.
 
-`Requested` exige quatro eventos aceitos e liberação observada, sem confirmar que Steam apareceu. `Partial` indica envio incompleto conhecido com teclas liberadas; `Unknown` indica contagem ou liberação incerta. O campo opcional `Sequence` em result/trace registra configuração, intervalos mínimos, foco qualificado, até quatro eventos normais e dois ups de limpeza, offsets monotônicos, chamadas iniciadas, contagens e máscara final. Cleanup tem contagem separada. Repouso físico é necessário: a leitura não distingue perfeitamente Shift/Tab físicos das mesmas teclas injetadas. Não repita um toggle incerto; examine `result`, `trace` e evidência visual antes de estabelecer novamente o estado inicial.
+`Requested` requires four accepted events and observed release; it does not confirm Steam visibility. `Partial` means a known incomplete send with keys released; `Unknown` means uncertain count or release. Optional `Sequence` in result/trace records configuration, minimum intervals, qualified focus, up to four normal events and two cleanup ups, monotonic offsets, started calls, counts and final mask. Cleanup counts are separate. Physical neutral input is required: reads cannot perfectly distinguish physical Shift/Tab from the same injected keys. Do not repeat an uncertain toggle. Inspect `result`, `trace` and visual evidence before re-establishing the initial state.
 
-Cada mutação recebe ticket do servidor, válido na conexão por até dez segundos. IDs antigos, expirados, desconectados, alterados ou expulsos do ledger não executam novamente. Intenções persistidas sem resultado terminal recuperam como `Unknown` após reinício; não há redispatch. `--dry-run` valida sem handler mutante/intenção durável. Resultados de prévia são `Simulated`.
+Every mutation receives a server ticket, valid on that connection for up to ten seconds. Old, expired, disconnected, changed or evicted ledger identities do not execute again. Persisted intents lacking terminal outcomes recover as `Unknown` after restart, without redispatch. `--dry-run` validates without a mutating handler or durable intent. Preview outcomes are `Simulated`.
 
-A pipe normal exige mesmo usuário **e elevação**, logon e sessão. Sem acesso à instância High, consultas podem retornar arquivos de observação, marcados `Snapshot` e com `AtUtc`; isso não autoriza mutações e pode estar antigo.
+The normal pipe requires the same user **and elevation**, logon and session. Without access to the High instance, queries may return observation files marked `Snapshot` with `AtUtc`; these can be stale and authorize no mutations.
 
-## Ponte restrita, opcional por execução
+## Restricted bridge, opt-in per run
 
-Desligada por padrão e no autostart. Somente após revisão dos binários e autorização explícita, uma execução elevada pode receber:
+The bridge is off by default and during autostart. Only after binary review and explicit authorization may an elevated run receive:
 
 ```text
 ApolloOverlay.exe --automation-bridge PID:START_TICKS:HWND [--allow-self-shutdown]
 ```
 
-O alvo é resolvido à identidade completa atual. A ponte permite exclusivamente foco, atalho Steam configurado daquele alvo e, se concedido, encerramento da própria instância. Ela nega launch, paths, settings, áudio, outros alvos e presets. O cliente usa `--bridge`; não existe autoelevação. Um jogo reiniciado exige uma nova concessão. A verificação efetiva Medium→High e o comportamento real no jogo são gates de entrega autorizada, distintos dos testes em fixtures Medium.
+The target resolves to its current complete identity. The bridge permits only focus, that target's configured Steam shortcut and, if granted, shutdown of its own instance. It denies launch, paths, settings, audio, other targets and presets. The client uses `--bridge`; there is no automatic elevation. A restarted game requires a new grant. Actual Medium→High verification and real game behavior are authorized-delivery gates, separate from Medium fixtures.
 
-`shutdown` responde `ShutdownRequested`, chama o fechamento normal e só retorna `Completed` após observar a saída do PID/criação exatos. Não há force-kill. Cancelamento anterior ao commit impede Close e grava resultado terminal `Cancelled`; após tentativa de commit, o ledger registra `Unknown` e a saída exata continua sendo observada pelo cliente. Depois do commit, cancelar não pode desfazer o encerramento.
+`shutdown` responds `ShutdownRequested`, invokes normal closing and returns `Completed` only after observing exit of the exact PID/creation identity. No force-kill is used. Cancellation before commit prevents Close and records terminal `Cancelled`; after an attempted commit, the ledger records `Unknown` and the client continues observing exact exit. Cancellation cannot undo shutdown after commit.
 
-Cobertura não é universal: controladores físicos, áudio real, diálogos/gestos, IPC entre integridades e visibilidade Steam precisam das respectivas observações. A suíte de fixtures não afirma que todas essas funções foram exercitadas.
+Coverage is not universal: physical controllers, actual audio, dialogs/gestures, cross-integrity IPC and Steam visibility require their own observations. Fixture suites do not claim to have exercised all of them.

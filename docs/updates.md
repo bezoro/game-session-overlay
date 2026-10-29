@@ -1,81 +1,81 @@
-# Versões e atualizações
+# Versions and updates
 
-A instalação e a troca de executáveis usam [Velopack 1.2.161](https://github.com/velopack/velopack/releases/tag/1.2.161). O aplicativo WPF continua responsável pela navegação, pelo progresso e pelo histórico apresentados na overlay. O pacote .NET `Velopack` e a ferramenta oficial `vpk` estão fixados na mesma versão.
+Installation and executable replacement use [Velopack 1.2.161](https://github.com/velopack/velopack/releases/tag/1.2.161). The WPF app owns navigation, progress and the history presented in the overlay. The .NET `Velopack` package and official `vpk` tool are pinned to the same version.
 
-## Instalar e atualizar
+## Install and update
 
-Baixe o arquivo `GameSessionOverlay-testing-Setup.exe` ou `GameSessionOverlay-stable-Setup.exe` nas [releases do projeto](https://github.com/bezoro/game-session-overlay/releases) e execute-o. O Setup instala a aplicação e cria sua entrada no menu Iniciar e a opção de desinstalação do Windows. A instalação padrão é por usuário.
+Download `GameSessionOverlay-testing-Setup.exe` or `GameSessionOverlay-stable-Setup.exe` from [project releases](https://github.com/bezoro/game-session-overlay/releases) and run it. Setup creates the Start-menu entry and Windows uninstall option. The default installation is per user.
 
-Abra **Sistema → Atualizações** para conferir a versão, procurar atualizações ou escolher uma versão anterior. A nova versão é baixada antes de solicitar o fechamento da overlay. O mecanismo oficial do Velopack aplica o pacote depois que o processo termina e reinicia o aplicativo.
+Open **System → Version and updates** to inspect the installed build, check for updates or choose an earlier version. The new package downloads before the overlay is asked to close. Official Velopack machinery applies it after the process exits and restarts the app.
 
-Os canais são:
-
-| Canal | Origem | Publicação |
+| Channel | Source | Publication |
 | --- | --- | --- |
-| Estável | Push em `main` | Release normal |
-| Testes | Execução autorizada de Windows checks em uma branch do repositório, com `channel: testing` | Prerelease |
+| Stable | Push to `main` | Normal release |
+| Testing | Authorized Windows checks dispatch on a repository branch with `channel: testing` | Prerelease |
 
-Somente compilações aprovadas nas verificações do Windows são publicadas. Pull requests executam as verificações com permissões de leitura e não publicam versões. O repositório é identificado também pelo ID `1430327913`, que continua válido após uma mudança de nome.
+Only builds passing Windows validation are published. Pull requests run with read permissions and do not publish releases. The repository is also identified by ID `1430327913`, which remains valid after renaming.
 
-A opção `validate` executa as verificações sem publicar. Com `testing`, o workflow publica o commit da branch selecionada depois de todos os checks passarem, mesmo antes do merge da PR. Eventos de pull request continuam sem permissão de publicação; branches de forks não são publicadas por esse fluxo. Uma execução de testes não publica no canal estável.
+`validate` runs checks without publication. `testing` publishes the selected branch commit after all checks pass, including before PR merge. Pull-request events retain no publication permission; fork branches are not published by this path. A Testing dispatch does not publish to Stable.
 
-Para quem usa a overlay, basta escolher **Testes** em **Sistema → Versão e atualizações**, procurar atualizações e selecionar **Instalar e reiniciar**. Não é necessário baixar o instalador de uma PR. O catálogo identifica a versão e o commit; as versões preservadas continuam disponíveis para retorno.
+For users, choose **Testing** in **System → Version and updates**, check for updates and choose **Install and restart** after download verification. No PR installer download is needed. The catalog identifies version and commit; preserved versions remain available for restoration.
 
-Um mantenedor ou agente com acesso de escrita pode publicar uma prévia pela interface do GitHub Actions, selecionando a branch e `channel: testing`, ou pela CLI. O campo opcional `notes` fornece as notas exibidas no atualizador:
+A maintainer or agent with write access can publish an authorized preview from GitHub Actions by selecting the branch and `channel: testing`, or through the CLI. The optional `notes` input supplies updater release notes:
 
 ```sh
 gh workflow run windows-checks.yml --repo bezoro/game-session-overlay --ref feat/session-command-center -f channel=testing
 ```
 
-O despacho exige uma branch do próprio repositório. A publicação confere o commit, o canal autorizado, a identidade compilada e os hashes do pacote validado. O canal de testes é compartilhado entre as prévias publicadas; a publicação só fica disponível na overlay depois que o job **Publish validated update** termina com sucesso.
+Dispatch requires a branch in the repository. Publication verifies the commit, authorized channel, compiled identity and hashes of the validated package. Testing is shared by published previews. A build becomes available in the overlay only after **Publish validated update** succeeds.
 
-## Identificar a versão
+## Identify the version
 
-A versão exibida vem dos metadados compilados do executável. GitVersion 6.8.2 calcula `MAJOR.MINOR.PATCH` pelos commits e tags; o CI acrescenta o rótulo de prévia e o commit. Exemplos:
+The displayed version comes from compiled executable metadata. GitVersion 6.8.2 calculates `MAJOR.MINOR.PATCH` from commits and tags; CI adds the preview label and commit. Examples:
 
-- `0.48.0-preview.55.1+abc1234`: prévia de 0.48.0, execução 55, tentativa 1.
-- `0.48.0+abc1234`: versão estável; o número da execução não altera seu significado.
-- `0.2.0-dev+local`: build local sem identidade de publicação.
+- `0.48.0-preview.55.1+abc1234`: preview of 0.48.0, run 55, attempt 1.
+- `0.48.0+abc1234`: stable release; run number does not change its meaning.
+- `0.2.0-dev+local`: local build without publication identity.
 
-O identificador `ci-55-a1-abc1234` rastreia a execução separadamente da versão. O formato NuGet do Velopack usa a parte anterior ao `+`; o commit continua no executável e nos metadados. Tags antigas, inclusive `0.47.1`, permanecem válidas e estabelecem a ordem da migração.
+`ci-55-a1-abc1234` tracks the run separately from the version. Velopack's NuGet version uses the portion before `+`; the commit remains in the executable and metadata. Historical tags, including `0.47.1`, remain valid and establish migration ordering.
 
-`feat` avança MINOR; `fix`, `perf`, `refactor`, `build` e `revert` avançam PATCH. `!` ou `BREAKING CHANGE:` avançam MAJOR. `docs`, `style`, `test`, `ci` e `chore` não criam uma release estável por si só. A [convenção para contribuidores](../CONTRIBUTING.md#commits-e-versões) explica os títulos e exemplos.
+`feat` increments MINOR; `fix`, `perf`, `refactor`, `build` and `revert` increment PATCH. `!` or `BREAKING CHANGE:` increments MAJOR. `docs`, `style`, `test`, `ci` and `chore` alone do not create a stable release. The [contributor convention](../CONTRIBUTING.md#commits-and-versions) explains titles and examples.
 
-Uma tag reserva a versão; o CI não reconstrói uma release estável existente com outros bytes. Para repetir uma publicação que falhou, reexecute somente o job **Publish validated update**, reutilizando o artefato original aprovado. Prévias recebem outro identificador NuGet em cada tentativa. Uma prévia solicitada a partir de uma versão estável já reservada usa o próximo PATCH, para continuar sendo mais nova para o atualizador.
+A tag reserves the version; CI does not rebuild an existing stable release with different bytes. To retry a failed publication, rerun only **Publish validated update**, reusing the original approved artifact. Previews receive a new NuGet identity on each attempt. A preview requested from an already-reserved stable version uses the next PATCH so the updater still considers it newer.
 
-## Voltar a uma versão anterior
+## Restore an earlier version
 
-O histórico mantém cópias verificadas dos pacotes já utilizados, separadas do cache temporário do Velopack. Isso permite voltar a uma cópia preservada mesmo sem baixar novamente seu pacote. Versões antigas publicadas no GitHub também podem ser selecionadas quando houver conexão.
+History retains verified copies of packages already used, separate from Velopack's temporary cache. A preserved package can be restored without downloading it again. Older GitHub releases can also be selected while online.
 
-O aplicativo guarda seus ajustes fora das pastas dos executáveis. A política de reversão usa os backups associados à versão escolhida e preserva uma cópia dos ajustes mais recentes. A instalação e a aplicação do pacote continuam sendo feitas pelo Velopack, inclusive na reversão.
+Settings live outside executable directories. Restoration uses backups associated with the chosen version and preserves a copy of the latest settings. Velopack still installs and applies the package, including during rollback. A version can restore only settings it understands; additive fields introduced by newer builds may not survive an older build saving its configuration.
 
-Uma falha de download ou de integridade impede a aplicação daquele pacote. A aplicação não declara que uma atualização funcionou apenas porque foi baixada. Não há promessa de reversão automática baseada no comportamento do jogo ou do controle; a opção de voltar fica disponível na interface.
+Download or integrity failure prevents application of that package. A completed download does not establish that the update ran successfully. There is no automatic rollback promise based on game or controller health; restoration remains an explicit interface action.
 
-## Empacotamento e publicação
+## Packaging and publication
 
-`dotnet tool restore` instala a versão do `vpk` registrada em `.config/dotnet-tools.json`. O workflow publica a aplicação como `win-x64` com o runtime .NET incluído e chama o empacotador oficial:
+`dotnet tool restore` installs the `vpk` version recorded in `.config/dotnet-tools.json`. The workflow publishes `win-x64` with the .NET runtime included and invokes the official packager:
 
 ```powershell
 dotnet tool run vpk -- pack --packId GameSessionOverlay --packVersion VERSION --packDir PUBLISH --mainExe ApolloOverlay.exe --packTitle "Game Session Overlay" --channel testing --runtime win-x64 --outputDir RELEASES --noPortable --delta None --skip-updates
 ```
 
-Os arquivos de atualização são os formatos do próprio Velopack:
+Update files use Velopack's own formats:
 
 - `GameSessionOverlay-<version>-<channel>-full.nupkg`.
 - `GameSessionOverlay-<channel>-Setup.exe`.
-- `releases.<channel>.json`, com o índice e os hashes dos pacotes.
-- `assets.<channel>.json`, usado pela CLI oficial para publicar os arquivos daquela compilação.
+- `releases.<channel>.json`, the package index and hashes.
+- `assets.<channel>.json`, the official CLI publication inventory for that build.
 
-O arquivo `build-info.json` registra a identificação compilada dentro do aplicativo. Ele serve para conferir a procedência da versão; não substitui o índice de atualização do Velopack. As notas da versão também contêm as linhas `Version:`, `Build:`, `Commit:` e `Channel:` para a apresentação dessa identificação na overlay.
+`build-info.json` records compiled identity inside the app. It verifies build provenance and does not replace Velopack's update index. Release notes also include `Version:`, `Build:`, `Commit:` and `Channel:` lines for identity presentation in the overlay.
 
-A publicação usa `vpk upload github`, com uma credencial temporária do job fornecida pela variável `VPK_TOKEN`. O token não entra nos argumentos da linha de comando, no aplicativo ou nos pacotes. A CLI cria a release em rascunho, envia os arquivos e só então a publica. Releases anteriores não são removidas automaticamente.
+Publication uses `vpk upload github` with a temporary job credential in `VPK_TOKEN`. The token is not placed in command-line arguments, the app or packages. The CLI creates a draft release, uploads files and then publishes it. Earlier releases are not automatically removed.
 
-O status `overlay/update-release` no commit aponta para a execução que publicou a versão e informa se a entrega terminou. A identidade estável do repositório é conferida antes da publicação. O projeto é público, portanto a consulta e o download no aplicativo não exigem um token pessoal do GitHub.
+The commit status `overlay/update-release` links the run that published the version and reports delivery completion. Stable repository identity is verified before publication. The public repository requires no personal GitHub token for lookup or download in the app.
 
-## Verificações
+## Verification
 
-Além das suítes WPF e da CLI, o pipeline confere os arquivos produzidos pelo Velopack: versão e ID do aplicativo, canal, hashes, inventário de publicação, especificação NuGet e metadados compilados do executável embalado.
+Alongside WPF and CLI suites, the pipeline verifies Velopack outputs: version/application ID, channel, hashes, publication inventory, NuGet specification and compiled metadata in the packaged executable.
 
-Uma prova adicional, restrita ao runner Windows, executa o Setup oficial em uma pasta isolada e inicia a WPF instalada A. Ela compila uma WPF B real com identificação e binário distintos, aplica B com o `Update.exe` oficial aguardando o PID exato de A e inicia B pelo inicializador do Velopack. O retorno usa a CLI instalada: `gso rollback BUILD_ID` prepara A pelo histórico local e passa pelo fluxo de aplicação da própria overlay, incluindo `ScheduleApplyAsync` e o reinício pelo SDK. Em A, B e A restaurada, uma nova consulta da CLI confere a identidade da WPF em execução. O teste também verifica a versão instalada, o hash da DLL, os pacotes preservados no histórico e os ajustes; depois usa o desinstalador oficial e confere os arquivos e a inicialização do usuário. Essa prova não automatiza o botão da interface nem comprova recuperação automática após falha de saúde. Os pacotes B ficam apenas em pastas temporárias e nunca são publicados. Os registros da prova ficam nos artefatos do CI. O funcionamento físico do Guide, do controle, da TV e do Apollo continua exigindo teste no equipamento real.
+An additional Windows-runner proof executes official Setup in an isolated folder and starts installed WPF A. It compiles an actual WPF B with a different identity and binary, applies B through official `Update.exe` while waiting for A's exact PID, and starts B through Velopack's launcher. Restoration uses the installed CLI: `gso rollback BUILD_ID` prepares A from local history and follows the overlay's own apply flow, including `ScheduleApplyAsync` and SDK restart. Fresh CLI queries verify the running WPF identity in A, B and restored A.
 
-A licença do atualizador está em [dependências de atualização](third-party-updates.md).
+The proof also checks installed version, DLL hash, preserved history packages and settings, then runs the official uninstaller and verifies files and user startup. It does not automate the interface button or establish automatic health-failure recovery. B packages remain in temporary folders and are never published. Proof logs are CI artifacts. Physical Guide, controller, TV and Apollo behavior still require testing on the actual equipment.
+
+The updater license is recorded in [update dependencies](third-party-updates.md).

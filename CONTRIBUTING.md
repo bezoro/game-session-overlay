@@ -1,8 +1,8 @@
-# Desenvolvimento
+# Development
 
-O aplicativo é WPF/.NET 10 para Windows 11 x64. Instale o SDK indicado em [global.json](global.json) e PowerShell 7. O instalador publicado inclui o runtime; o SDK é necessário apenas para desenvolver.
+The application uses WPF/.NET 10 for Windows 11 x64. Install the SDK specified in [global.json](global.json) and PowerShell 7. The published installer includes the runtime; only development requires the SDK.
 
-Comece por [arquitetura](docs/architecture.md), que mapeia os módulos, a propriedade dos recursos nativos e o fluxo de uma ação. [README](README.md) descreve o comportamento do produto; [docs/cli.md](docs/cli.md), a automação.
+Start with [architecture](docs/architecture.md), which maps modules, native-resource ownership and the action flow. [README](README.md) describes the product; [docs/cli.md](docs/cli.md) covers automation.
 
 ```powershell
 dotnet build ApolloOverlay.sln -c Release
@@ -11,55 +11,55 @@ dotnet tests/ApolloOverlay.Tests/bin/Release/net10.0-windows10.0.19041.0/ApolloO
 dotnet tests/ApolloOverlay.Cli.Tests/bin/Release/net10.0-windows/ApolloOverlay.Cli.Tests.dll
 ```
 
-A solução compila também GuideProbe e NativeProof, ferramentas de diagnóstico separadas do produto. Seus testes sintéticos estão no CI; modos que consultam hardware ou operam janelas são executados explicitamente, conforme os respectivos READMEs.
+The solution also builds GuideProbe and NativeProof, diagnostic tools separate from the product. CI runs their synthetic tests. Run hardware queries and window-operation modes explicitly, following their READMEs.
 
-Para explorar a interface sem acionar outros aplicativos:
+To explore the interface without activating other applications:
 
 ```powershell
 dotnet run --project src/ApolloOverlay -- --preview
 ```
 
-Para testar ações reais, use o instalador e o [roteiro de teste](docs/pilot-checklist.md). Fixtures e capturas WPF não comprovam compatibilidade com um controle físico, uma TV ou um jogo específico.
+Use the installer and [test checklist](docs/pilot-checklist.md) to exercise real actions. Fixtures and WPF captures do not establish compatibility with a physical controller, TV or particular game.
 
-## Alterações
+## Changes
 
-- Coloque regras e acesso ao sistema nos módulos correspondentes. A interface coordena serviços e apresenta snapshots; serviços não procuram controles WPF nem dependem de `MainWindow`.
-- Use os contratos existentes para limites que exigem substituição em testes: áudio, plataformas, controle, mídia e atualizações. Não crie interfaces para cálculos locais sem necessidade de substituição.
-- Preserve cancelamento, identidade do alvo e verificações imediatamente antes de efeitos externos. Uma solicitação enviada não significa uma ação concluída; o resultado deve refletir o que foi observado.
-- Mantenha consultas e callbacks fora do dispatcher quando puderem bloquear. Publique snapshots imutáveis, rejeite gerações antigas e documente quem libera cada recurso nativo.
-- Teste o comportamento afetado, incluindo foco, cancelamento ou conclusão tardia quando relevantes. Evite testes que apenas reproduzem os passos internos da implementação.
-- Use `ActionButtonContent` e `VectorIcon` nas ações. Não acesse partes de uma linha por índices de `Children`; preserve o quadro original dos SVGs e registre origem, licença e hash de novos vetores.
+- Put domain rules and system access in their respective modules. The interface coordinates services and displays snapshots; services must not search for WPF controls or depend on `MainWindow`.
+- Use the existing contracts where tests need substitutes for audio, platforms, controllers, media and updates. Do not add interfaces for local calculations that need no substitution.
+- Preserve cancellation, target identity and checks immediately before external effects. Sending a request does not mean the action completed; report what was observed.
+- Keep potentially blocking queries and callbacks off the dispatcher. Publish immutable snapshots, reject old generations and document who releases each native resource.
+- Test affected behavior, including focus, cancellation and late completion where relevant. Avoid tests that merely repeat implementation steps.
+- Use `ActionButtonContent` and `VectorIcon` for actions. Do not access row parts through `Children` indices. Preserve original SVG frames and record the source, license and hash of new vectors.
 
-Execute `./scripts/format.ps1` antes de enviar. O CI verifica a formatação de C# e XML, compila com nullable e warnings como erros, testa comportamento, gera capturas e valida o pacote/instalação Velopack. Alterações de layout devem incluir inspeção das capturas claro/escuro e compactas disponíveis nos artefatos.
+Run `./scripts/format.ps1` before submitting. CI verifies C# and XML formatting, builds with nullable checks and warnings as errors, tests behavior, renders captures and checks Velopack packaging and installation. Inspect light/dark and compact captures for layout changes.
 
-Na PR, descreva o comportamento antes/depois, a validação executada e as limitações ainda não testadas. Mudanças extensas de formatação devem ficar em um commit separado das mudanças de comportamento.
+In the PR, describe the resulting behavior, validation performed and untested limits. Keep extensive formatting changes in a separate commit from behavior changes.
 
-## Commits e versões
+## Commits and versions
 
-Use [Conventional Commits](https://www.conventionalcommits.org/) nos novos commits e no título da PR. O CI valida o título, que também aparece no commit de merge:
+Use [Conventional Commits](https://www.conventionalcommits.org/) for new commits and PR titles. CI validates the title, which also becomes the merge commit title:
 
 ```text
-feat(audio): adiciona seleção de saída
-fix(input): preserva a navegação depois de salvar
-refactor(session): separa a política de retomada
-build(deps): atualiza uma dependência de execução
-feat(api)!: altera o contrato de automação
+feat(audio): add output selection
+fix(input): preserve navigation after saving
+refactor(session): separate resume policy
+build(deps): update a runtime dependency
+feat(api)!: change the automation contract
 ```
 
-| Tipo | Versão estável |
+| Type | Stable version |
 | --- | --- |
 | `feat` | MINOR |
 | `fix`, `perf`, `refactor`, `build`, `revert` | PATCH |
-| `!` ou rodapé `BREAKING CHANGE:` | MAJOR |
-| `docs`, `style`, `test`, `ci`, `chore` | Sem incremento próprio |
+| `!` or a `BREAKING CHANGE:` footer | MAJOR |
+| `docs`, `style`, `test`, `ci`, `chore` | No independent increment |
 
-Use `build(deps)` para dependências que alteram o aplicativo instalado; reserve `chore` para manutenção que não precisa ser entregue como atualização. Os números seguem [Semantic Versioning](https://semver.org/), calculados pelo GitVersion fixado no manifesto de ferramentas. Prévias usam `-preview.EXECUÇÃO.TENTATIVA`; metadados `+COMMIT` e o build ID servem à rastreabilidade, não à ordenação. Os commits e tags publicados antes desta adoção são preservados.
+Use `build(deps)` for dependencies that change the installed application. Reserve `chore` for maintenance that does not need an application update. Versions follow [Semantic Versioning](https://semver.org/) and use the GitVersion pinned in the tool manifest. Previews use `-preview.RUN.ATTEMPT`; `+COMMIT` metadata and the build ID identify the source and do not determine ordering. Commits and tags published before this policy remain intact.
 
-Para verificar a política usando repositórios temporários e o GitVersion real:
+To check the policy against temporary repositories using the actual GitVersion tool:
 
 ```powershell
 dotnet tool restore
 ./scripts/test-release-version.ps1
 ```
 
-As tags de release são produzidas pela publicação validada. Não crie uma nova tag para contornar uma publicação interrompida: reexecute seu job de publicação com o artefato original. Detalhes em [atualizações](docs/updates.md).
+Validated publication creates release tags. Do not create a new tag to work around interrupted publication. Rerun its publication job with the original artifact. See [updates](docs/updates.md).
