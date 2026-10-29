@@ -25,6 +25,8 @@ jobs:
     name: Build, tests and package
     runs-on: windows-latest
     timeout-minutes: 30
+    outputs:
+      release_required: ${{ steps.identity.outputs.release_required }}
     defaults:
       run:
         shell: pwsh
@@ -36,6 +38,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          fetch-depth: 0
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -44,10 +47,15 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Stamp immutable build identity
+      - name: Restore pinned build tools
+        run: dotnet tool restore
+
+      - name: Stamp semantic build identity
+        id: identity
         env:
           SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
-          SOURCE_BRANCH: ${{ github.ref_name }}
+          SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
+          MAIN_BRANCH_BUILD: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
           BUILD_NUMBER: ${{ github.run_number }}
           BUILD_ATTEMPT: ${{ github.run_attempt }}
           REQUESTED_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || '' }}
@@ -55,13 +63,20 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if ($env:SOURCE_COMMIT -notmatch '^[a-f0-9]{40}$' -or $env:BUILD_NUMBER -notmatch '^[0-9]+$' -or $env:BUILD_ATTEMPT -notmatch '^[0-9]+$') { throw 'Invalid build identity inputs.' }
           if ((git rev-parse HEAD) -cne $env:SOURCE_COMMIT) { throw 'Checkout differs from the identified source commit.' }
-          $short = $env:SOURCE_COMMIT.Substring(0, 7)
-          $channel = if ($env:SOURCE_BRANCH -eq 'main' -and $env:REQUESTED_CHANNEL -ne 'testing') { 'stable' } else { 'testing' }
-          $version = if ($channel -eq 'stable') { "0.$($env:BUILD_NUMBER).$($env:BUILD_ATTEMPT)+$short" } else { "0.2.0-preview.$($env:BUILD_NUMBER).$($env:BUILD_ATTEMPT)+$short" }
-          "OVERLAY_VERSION=$version" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
-          "OVERLAY_BUILD_ID=ci-$($env:BUILD_NUMBER)-a$($env:BUILD_ATTEMPT)-$short" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
-          "OVERLAY_COMMIT=$($env:SOURCE_COMMIT)" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+          git check-ref-format --branch $env:SOURCE_BRANCH
+          if ($LASTEXITCODE -ne 0) { throw 'Invalid source branch.' }
+          git checkout -B $env:SOURCE_BRANCH $env:SOURCE_COMMIT
+          if ($LASTEXITCODE -ne 0) { throw 'Could not establish the source branch for GitVersion.' }
+          $channel = if ($env:MAIN_BRANCH_BUILD -eq 'true' -and $env:REQUESTED_CHANNEL -ne 'testing') { 'stable' } else { 'testing' }
+          $identity = ./scripts/get-build-version.ps1 -Channel $channel -BuildNumber ([int]$env:BUILD_NUMBER) -Attempt ([int]$env:BUILD_ATTEMPT)
+          if ($identity.Commit -cne $env:SOURCE_COMMIT) { throw 'Semantic identity differs from the source commit.' }
+          "OVERLAY_VERSION=$($identity.Version)" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+          "OVERLAY_FILE_VERSION=$($identity.FileVersion)" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+          "OVERLAY_BUILD_ID=$($identity.BuildId)" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+          "OVERLAY_COMMIT=$($identity.Commit)" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
           "OVERLAY_CHANNEL=$channel" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+          "release_required=$($identity.ReleaseRequired.ToString().ToLowerInvariant())" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+          Write-Host "Version: $($identity.Version); channel: $channel; release required: $($identity.ReleaseRequired)"
 
       - name: Build solution
         id: build
@@ -76,6 +91,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           dotnet format style ApolloOverlay.sln --diagnostics IDE0005 --severity info --verify-no-changes --no-restore
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify semantic release policy against legacy tags and real GitVersion
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: ./scripts/test-release-version.ps1
 
       # These suites exercise managed state, mocked native boundaries and settings on Windows.
       # They do not establish compatibility with a physical controller or interactive desktop.
@@ -213,7 +232,7 @@ jobs:
   publish-update:
     name: Publish validated update
     needs: windows
-    if: ${{ needs.windows.result == 'success' && github.repository_id == '1430327913' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.channel == 'testing')) }}
+    if: ${{ needs.windows.result == 'success' && needs.windows.outputs.release_required == 'true' && github.repository_id == '1430327913' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.channel == 'testing')) }}
     runs-on: windows-latest
     timeout-minutes: 10
     permissions:

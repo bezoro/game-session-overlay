@@ -17,7 +17,7 @@ if ((Test-Path -LiteralPath $installRoot) -or (Test-Path -LiteralPath $dataRoot)
     throw 'Proof directories must be fresh.'
 }
 $originalEnvironment = @{}
-foreach ($name in @('OVERLAY_VERSION', 'OVERLAY_BUILD_ID', 'OVERLAY_COMMIT', 'OVERLAY_CHANNEL', 'RELEASE_NOTES')) {
+foreach ($name in @('OVERLAY_VERSION', 'OVERLAY_FILE_VERSION', 'OVERLAY_BUILD_ID', 'OVERLAY_COMMIT', 'OVERLAY_CHANNEL', 'RELEASE_NOTES')) {
     $originalEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
 }
 $report = [IO.Path]::GetFullPath($OutputPath)
@@ -326,6 +326,7 @@ try {
     $dotnet = (Get-Command dotnet -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
     try {
         $env:OVERLAY_VERSION = $versionB
+        $env:OVERLAY_FILE_VERSION = "$($majorA + 1).0.0.0"
         $env:OVERLAY_BUILD_ID = $buildB
         $env:OVERLAY_COMMIT = $release.Build.commit
         $env:OVERLAY_CHANNEL = $release.Build.channel
