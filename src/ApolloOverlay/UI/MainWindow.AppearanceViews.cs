@@ -124,6 +124,7 @@ public partial class MainWindow
         button.Margin = new(column == 0 ? 0 : 4, 0, column == 0 ? 4 : 0, 0);
         if (button.Content is ActionButtonContent body)
         {
+            body.AllowsDescription = false;
             body.Title.SetResourceReference(TextBlock.FontSizeProperty, "SessionType.CompactBody");
             body.Title.TextWrapping = TextWrapping.NoWrap;
             body.Description.Visibility = Visibility.Collapsed;

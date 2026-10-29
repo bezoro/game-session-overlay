@@ -25,6 +25,63 @@ internal static class SessionInterfaceTests
         DateTimeOffset.Parse("2026-10-28T12:00:00Z"), "Interface fixture release. No update is installed.\n• Clearer session navigation\n• Local capture previews\n• Custom appearance", 201, "fixture-only.nupkg", 8_388_608, new string('a', 64));
     internal static void Run(Action<string, Action> test)
     {
+        test("activation glyph belongs only to the selected Resume action", () =>
+        {
+            using var host = new Host();
+            var window = host.Window;
+            host.Open();
+            AdaptiveInterfaceTests.UseController(window);
+            Pick(window, "session-card");
+            var hint = (TextBlock)window.FindName("SessionHint");
+            Require(InputPrompt.Read(hint).StartsWith("A ", StringComparison.Ordinal), "Selected Resume has no controller prompt");
+            Pick(window, "audio");
+            Require(InputPrompt.Read(hint) == "Resume", "Unselected Resume still advertises the selected action's input");
+        });
+        test("high contrast slider uses the actual system-mapped solid thumb", () =>
+        {
+            var app = Application.Current ?? new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            ThemeSupport.ForceHighContrastForValidation(app);
+            try
+            {
+                using var host = new Host();
+                host.Open();
+                var slider = CaptureVisuals<Slider>((DependencyObject)host.Window.FindName("Rows")).First();
+                slider.ApplyTemplate();
+                var thumb = (System.Windows.Controls.Primitives.Thumb)slider.Template.FindName("VolumeThumb", slider);
+                thumb.ApplyTemplate();
+                var surface = (Border)thumb.Template.FindName("ThumbSurface", thumb);
+                Require(surface.Background is SolidColorBrush brush
+                    && brush.Color == ((SolidColorBrush)host.Window.FindResource(ThemeSupport.SliderThumb)).Color,
+                    "The slider inherited a theme gradient instead of its system-mapped palette");
+            }
+            finally { ThemeSupport.ForceForValidation(app, false); }
+        });
+        foreach (var compact in new[] { false, true })
+            test("scroll gutter and reorder commands fit their actual bounds compact=" + compact, () =>
+            {
+                using var host = new Host();
+                var window = host.Window;
+                host.Open(compact ? 360 : 572, compact ? 480 : 940);
+                Navigate(window, "customize", host);
+                window.UpdateLayout();
+                var scroll = (ScrollViewer)window.FindName("ContentScroll");
+                scroll.ApplyTemplate();
+                var bar = (FrameworkElement)scroll.Template.FindName("PART_VerticalScrollBar", scroll);
+                Require(bar.ActualWidth is >= 7.9 and <= 8.1, "A theme minimum expanded the reserved scrollbar lane");
+                var buttons = CaptureVisuals<Button>((DependencyObject)window.FindName("Rows"))
+                    .Where(button => button.Tag is string id && (id.StartsWith("earlier:", StringComparison.Ordinal) || id.StartsWith("later:", StringComparison.Ordinal))).ToArray();
+                Require(buttons.Length == 12, "The customization fixture has no complete reorder controls");
+                foreach (var button in buttons)
+                {
+                    Pick(window, (string)button.Tag);
+                    var holder = (Border)button.Resources["DescriptionTarget"];
+                    var bounds = button.TransformToAncestor(holder).TransformBounds(new Rect(button.RenderSize));
+                    Require(bounds.Left >= holder.BorderThickness.Left - .1 && bounds.Top >= holder.BorderThickness.Top - .1
+                        && bounds.Right <= holder.ActualWidth - holder.BorderThickness.Right + .1
+                        && bounds.Bottom <= holder.ActualHeight - holder.BorderThickness.Bottom + .1,
+                        "A reorder command is clipped by its focus holder: " + button.Tag);
+                }
+            });
         foreach (var compact in new[] { false, true })
             test("result reader keeps recovery actions pinned with one scroll context compact=" + compact, () =>
             {
@@ -316,7 +373,9 @@ internal static class SessionInterfaceTests
         {
             "system-controller", "system-feedback", "setup-display", "setup-finish", "gallery-empty", "capture-missing",
             "updates-available", "update-ready", "update-downloading", "update-error", "update-rollback",
-            "no-session", "apps-empty", "audio-empty", "long-device", "media-empty", "long-title"
+            "no-session", "apps-empty", "audio-empty", "long-device", "media-empty", "long-title",
+            "system-save", "system-discard", "appearance-save", "appearance-discard", "color-keep", "color-cancel",
+            "update-download-action", "update-install-action", "color-hex-keyboard", "color-unsafe", "gallery-loading"
         }).ToArray();
         foreach (var light in new[] { false, true })
             foreach (var width in new[] { 572, 360 })
@@ -329,6 +388,12 @@ internal static class SessionInterfaceTests
                     var height = width == 572 ? 940 : 480;
                     host.Open(width, height, forCapture: true);
                     Navigate(window, route, host);
+                    if (route == "gallery")
+                    {
+                        var previews = CaptureVisuals<CapturePreview>((DependencyObject)window.FindName("Rows")).ToArray();
+                        Require(previews.Length == 6 && previews.All(preview => preview.Source is { IsFrozen: true }),
+                            "The populated gallery capture has not published every actual thumbnail");
+                    }
                     window.RefreshOperationNotice(Environment.TickCount64 + 200);
                     window.UpdateLayout();
                     var bitmap = RenderCapture(window, width, height, "keyboard");
@@ -349,7 +414,7 @@ internal static class SessionInterfaceTests
                         actualForegroundConfirmed = true
                     });
                 }
-        CaptureAcknowledgements(output, app);
+        manifest.AddRange(CaptureAcknowledgements(output, app));
         manifest.AddRange(CaptureHighContrast(output, app));
         File.WriteAllText(Path.Combine(output, "capture-manifest.json"), JsonSerializer.Serialize(new
         {
@@ -408,7 +473,7 @@ internal static class SessionInterfaceTests
         };
         return new Host(backend: backend,
             gameTitle: route == "long-title" ? "A deliberately long game title — Complete Definitive Edition with additional session context" : "Elden Ring",
-            populateCaptures: route is "gallery" or "capture-detail" or "capture-missing",
+            populateCaptures: route is "gallery" or "gallery-loading" or "capture-detail" or "capture-missing",
             emptyApps: route == "apps-empty", emptyMedia: route == "media-empty");
     }
 
@@ -495,8 +560,9 @@ internal static class SessionInterfaceTests
         }, new JsonSerializerOptions { WriteIndented = true }));
     }
 
-    private static void CaptureAcknowledgements(string output, Application app)
+    private static IEnumerable<object> CaptureAcknowledgements(string output, Application app)
     {
+        var results = new List<object>();
         foreach (var light in new[] { false, true })
             foreach (var width in new[] { 572, 360 })
                 foreach (var state in new[] { "controller", "mouse", "success", "warning", "unknown-controller", "wired-controller", "controller-lost", "unavailable-action", "selected-audio", "focused-action" })
@@ -505,7 +571,7 @@ internal static class SessionInterfaceTests
                     ThemeSupport.ForceForValidation(app, light);
                     using var host = new Host(gameTitle: "Elden Ring", identities: state switch
                     {
-                        "unknown-controller" => [],
+                        "unknown-controller" or "controller-lost" => [],
                         "wired-controller" => [new("virtual-xbox", "Xbox 360", ControllerFamily.Xbox, false, null, false)],
                         _ => null
                     });
@@ -515,8 +581,10 @@ internal static class SessionInterfaceTests
                     AdaptiveInterfaceTests.UseController(window);
                     if (state == "controller-lost")
                     {
-                        window.UpdateControllerTelemetry([default, default, default, default], null, 1);
+                        window.UpdateControllerTelemetry([default, default, default, default], null, Environment.TickCount64);
                         Complete(window.ControllerBadgeTask);
+                        Require(((FrameworkElement)window.FindName("ControllerInfoBar")).Visibility == Visibility.Collapsed,
+                            "Disconnected evidence retained a connected identity or charge");
                     }
                     if (state == "unavailable-action")
                         Pick(window, "steam-overlay");
@@ -538,9 +606,25 @@ internal static class SessionInterfaceTests
                     var bitmap = RenderCapture(window, width, height, state == "mouse" ? "mouse" : "controller");
                     var png = new PngBitmapEncoder();
                     png.Frames.Add(BitmapFrame.Create(bitmap));
-                    using var file = File.Create(Path.Combine(output, $"{(light ? "light" : "dark")}-{width}-notice-{state}.png"));
+                    var name = $"{(light ? "light" : "dark")}-{width}-notice-{state}.png";
+                    using var file = File.Create(Path.Combine(output, name));
                     png.Save(file);
+                    results.Add(new
+                    {
+                        file = name,
+                        route = "notice-" + state,
+                        theme = light ? "light" : "dark",
+                        requestedWidth = width,
+                        requestedHeight = height,
+                        actualWidth = window.ActualWidth,
+                        actualHeight = window.ActualHeight,
+                        selected = window.SelectedAction,
+                        fixture = true,
+                        attachedNativeWpfTree = true,
+                        actualForegroundConfirmed = true
+                    });
                 }
+        return results;
     }
 
     private static RenderTargetBitmap RenderCapture(MainWindow window, int requestedWidth, int requestedHeight, string expectedInput)
@@ -631,6 +715,12 @@ internal static class SessionInterfaceTests
             case "system":
                 w.Page(2);
                 break;
+            case "system-save":
+            case "system-discard":
+                w.Page(2);
+                Choose(w, "sound-feedback");
+                Pick(w, page == "system-save" ? "save-pending" : "discard-pending");
+                break;
             case "system-controller":
                 w.Page(2);
                 Pick(w, "guide-limit");
@@ -697,6 +787,8 @@ internal static class SessionInterfaceTests
             case "update-review":
             case "update-ready":
             case "update-downloading":
+            case "update-download-action":
+            case "update-install-action":
                 w.Page(2);
                 Choose(w, "updates");
                 Choose(w, "check-updates");
@@ -706,10 +798,12 @@ internal static class SessionInterfaceTests
                 else
                 {
                     Choose(w, "release:" + NextUpdate.BuildId);
-                    if (page == "update-ready")
+                    if (page is "update-ready" or "update-install-action")
                     {
                         Choose(w, "prepare-update");
                         Complete(w.UpdateTask);
+                        if (page == "update-install-action")
+                            Pick(w, "apply-update");
                     }
                     else if (page == "update-downloading")
                     {
@@ -720,6 +814,8 @@ internal static class SessionInterfaceTests
                         WaitUntil(() => !w.UpdateTask.IsCompleted, "Download fixture did not enter its pending state");
                         Complete(Task.Delay(30));
                     }
+                    else if (page == "update-download-action")
+                        Pick(w, "prepare-update");
                 }
                 break;
             case "update-error":
@@ -760,12 +856,23 @@ internal static class SessionInterfaceTests
                 Choose(w, "session-keyboard");
                 break;
             case "gallery":
+            case "gallery-loading":
             case "gallery-empty":
             case "capture-detail":
             case "capture-missing":
+                if (page == "gallery-loading")
+                {
+                    // Isolate the gallery's delayed work from session artwork,
+                    // which deliberately shares the production decoder budget.
+                    w.Controller.ClearSelection();
+                    w.RefreshRows();
+                    var pending = new TaskCompletionSource<BitmapSource>();
+                    w.CaptureImageReaderFixture = (_, _, cancellation) => pending.Task.WaitAsync(cancellation);
+                }
                 Choose(w, "session-gallery");
                 Complete(w.FeatureTask);
-                Complete(w.CapturePresentationTask);
+                if (page != "gallery-loading")
+                    Complete(w.CapturePresentationTask);
                 if (page is "capture-detail" or "capture-missing")
                 {
                     if (page == "capture-missing" && host is not null)
@@ -778,9 +885,33 @@ internal static class SessionInterfaceTests
             case "appearance":
                 w.OpenAppearance();
                 break;
+            case "appearance-save":
+            case "appearance-discard":
+                w.OpenAppearance();
+                Choose(w, "appearance-preset:Graphite");
+                Pick(w, page);
+                break;
             case "color-editor":
+            case "color-keep":
+            case "color-cancel":
+            case "color-hex-keyboard":
+            case "color-unsafe":
                 w.OpenAppearance();
                 Choose(w, "appearance-color:" + PaletteRole.Focus);
+                if (page is "color-keep" or "color-cancel")
+                    Pick(w, page == "color-keep" ? "color-apply" : "color-cancel");
+                else if (page is "color-hex-keyboard" or "color-unsafe")
+                {
+                    Choose(w, "color-hex");
+                    if (page == "color-unsafe")
+                    {
+                        Choose(w, "keyboard-editor");
+                        Require(Keyboard.FocusedElement is TextBox, "The local hexadecimal editor did not receive focus");
+                        ((TextBox)Keyboard.FocusedElement).Text = "1B1918";
+                        TapKey((UIElement)Keyboard.FocusedElement, Key.Tab);
+                        Choose(w, "keyboard-insert");
+                    }
+                }
                 break;
             case "no-session":
                 w.Controller.ClearSelection();

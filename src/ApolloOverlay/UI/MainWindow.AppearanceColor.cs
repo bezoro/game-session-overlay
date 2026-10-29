@@ -18,9 +18,7 @@ public partial class MainWindow
             AddRow("back", "Back", "Return to Appearance", Back);
             return;
         }
-        var definition = AppearanceCatalog.Roles.First(item => item.Role == role);
         var pane = AppearancePane(out var content, out var commands);
-        AppearanceSection(content, definition.Name);
         var preview = new Grid { Margin = new(0, 8, 0, 8) };
         preview.ColumnDefinitions.Add(new()
         {

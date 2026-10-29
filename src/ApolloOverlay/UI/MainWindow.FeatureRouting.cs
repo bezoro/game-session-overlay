@@ -101,7 +101,7 @@ public partial class MainWindow
         OverlayRoute.Captures => "Your captures",
         OverlayRoute.CaptureDetail => "Session capture",
         OverlayRoute.Appearance => "Appearance",
-        OverlayRoute.ColorEdit => "Edit color",
+        OverlayRoute.ColorEdit => appearanceColorRole is { } role ? AppearanceCatalog.Roles.First(item => item.Role == role).Name : "Edit color",
         _ => null
     };
 }

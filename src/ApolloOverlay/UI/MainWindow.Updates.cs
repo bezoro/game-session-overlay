@@ -127,6 +127,10 @@ public partial class MainWindow
             preparedUpdate = null;
         }
 
+        updateStatus = preparedUpdate is null
+            ? "Ready to download. The installed version has not changed."
+            : "Download verified. The installed version has not changed.";
+        SetUpdateStatus(updateStatus);
         OpenView(new(OverlayRoute.UpdateReview, SelectedId: preparedUpdate is null ? "prepare-update" : "apply-update"));
     }
 

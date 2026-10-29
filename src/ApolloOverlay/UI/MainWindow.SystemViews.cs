@@ -83,6 +83,7 @@ public partial class MainWindow
             LargeChange = 100,
             IsSnapToTickEnabled = true,
             Focusable = true,
+            Style = (Style)FindResource("SessionVolumeSlider"),
             Value = Controller.Settings.GuideOpenMaxHoldMs,
             Margin = new(0, 9, 0, 0)
         };
@@ -168,7 +169,7 @@ public partial class MainWindow
             var name = FavoriteName(id);
             var shown = visible.Contains(id);
             var button = AddRow("favorite:" + id, name, shown ? "Visible · select to hide" : "Hidden · select to show", () => Change(SessionHubSettings.Toggle(Controller.Settings, id)));
-            button.Margin = new(0, 4, 104, 4);
+            button.Margin = new(0, 4, 112, 4);
             var row = Grid.GetRow(button);
             AddReorder(id, name, row, -1, shown && Array.IndexOf(visible, id) > 0);
             AddReorder(id, name, row, 1, shown && Array.IndexOf(visible, id) < visible.Length - 1);
@@ -182,15 +183,24 @@ public partial class MainWindow
     {
         var entryId = (delta < 0 ? "earlier:" : "later:") + id;
         var label = "Move " + name + (delta < 0 ? " earlier" : " later");
+        var icon = ActionIconCatalog.Create(this, "back", 18);
+        icon.HorizontalAlignment = HorizontalAlignment.Center;
+        icon.RenderTransformOrigin = new(.5, .5);
+        icon.RenderTransform = new System.Windows.Media.RotateTransform(delta < 0 ? 90 : -90);
         var button = new Button
         {
-            Content = delta < 0 ? "↑" : "↓",
-            FontSize = 21,
+            Content = icon,
             Width = 44,
             Height = 44,
+            MinWidth = 44,
             MinHeight = 44,
+            MaxWidth = 44,
+            MaxHeight = 44,
             Padding = new(4),
             Margin = new(0),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
             IsEnabled = available,
             Tag = entryId
         };
@@ -199,14 +209,15 @@ public partial class MainWindow
         var holder = new Border
         {
             Child = button,
-            Width = 44,
-            Height = 44,
+            // The focus proxy owns a two-DIP frame around the actual 44-DIP button.
+            Width = 48,
+            Height = 48,
             Focusable = true,
             FocusVisualStyle = null,
             Tag = "description:" + entryId,
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new(0, 0, delta < 0 ? 54 : 4, 0)
+            Margin = new(0, 0, delta < 0 ? 56 : 0, 0)
         };
         AutomationProperties.SetName(holder, label + ". No position available in this direction");
         button.Resources["DescriptionTarget"] = holder;

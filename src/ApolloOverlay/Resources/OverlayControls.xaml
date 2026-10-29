@@ -11,8 +11,20 @@
     x:Key="OverlayScrollBar"
     TargetType="ScrollBar">
     <Setter
+      Property="OverridesDefaultStyle"
+      Value="True" />
+    <Setter
       Property="Width"
       Value="8" />
+    <Setter
+      Property="MinWidth"
+      Value="8" />
+    <Setter
+      Property="Height"
+      Value="Auto" />
+    <Setter
+      Property="MinHeight"
+      Value="0" />
     <Setter
       Property="Background"
       Value="Transparent" />
@@ -37,6 +49,9 @@
               <Track.DecreaseRepeatButton>
                 <RepeatButton
                   x:Name="DecreasePage"
+                  OverridesDefaultStyle="True"
+                  MinWidth="0"
+                  MinHeight="0"
                   Command="{x:Static ScrollBar.PageUpCommand}"
                   Template="{StaticResource ScrollPageButton}"
                   Focusable="False" />
@@ -44,6 +59,7 @@
               <Track.Thumb>
                 <Thumb
                   x:Name="ScrollThumb"
+                  OverridesDefaultStyle="True"
                   MinHeight="24"
                   MinWidth="6"
                   Margin="1"
@@ -61,6 +77,9 @@
               <Track.IncreaseRepeatButton>
                 <RepeatButton
                   x:Name="IncreasePage"
+                  OverridesDefaultStyle="True"
+                  MinWidth="0"
+                  MinHeight="0"
                   Command="{x:Static ScrollBar.PageDownCommand}"
                   Template="{StaticResource ScrollPageButton}"
                   Focusable="False" />
@@ -105,6 +124,12 @@
           Value="Auto" />
         <Setter
           Property="Height"
+          Value="8" />
+        <Setter
+          Property="MinWidth"
+          Value="0" />
+        <Setter
+          Property="MinHeight"
           Value="8" />
       </Trigger>
     </Style.Triggers>

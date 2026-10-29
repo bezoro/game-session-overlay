@@ -12,6 +12,24 @@ internal static class CapturePresentationTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        test("immediate thumbnail decodes publish before their button content is templated", () =>
+        {
+            using var host = new Host(6);
+            var reads = 0;
+            host.Window.CaptureImageReaderFixture = (_, _, _) =>
+            {
+                reads++;
+                return Task.FromResult(TestImage());
+            };
+            host.OpenGallery();
+            Complete(host.Window.CapturePresentationTask);
+            var actions = CaptureActions(host.Window);
+            Require(reads == 6 && actions.Length == 6, "The gallery did not read the complete current page");
+            Require(actions.All(id => Preview(host.Window, id).Source is { IsFrozen: true }),
+                "A valid immediate result was discarded before the content presenter attached its preview");
+            Require(host.Platform.Calls == 0, "Rendering thumbnails dispatched an external command");
+        });
+
         test("capture gallery pages real local thumbnails without creating a control for every saved image", () =>
         {
             using var host = new Host(13);
@@ -107,6 +125,28 @@ internal static class CapturePresentationTests
             Require(preview.Unavailable && preview.Source is null && ReviewFixTests.Button(host.Window, "capture-folder").IsEnabled,
                 "A missing image left a blank detail or removed its folder recovery");
             Require(host.Window.Feedback.Contains("removed") && host.Platform.Calls == 0, "Missing-image recovery dispatched an action or lost its explanation");
+        });
+
+        test("compact missing capture keeps its reason with the focused recovery action", () =>
+        {
+            using var host = new Host(1);
+            host.OpenGallery(360, 480);
+            Complete(host.Window.CapturePresentationTask);
+            var action = CaptureActions(host.Window).Single();
+            File.Delete(Path.Combine(host.Captures.DirectoryPath, action["capture:".Length..] + ".png"));
+            Choose(host.Window, action);
+            Complete(host.Window.CapturePresentationTask);
+            Select(host.Window, "capture-folder");
+            host.Window.UpdateLayout();
+            var button = ReviewFixTests.Button(host.Window, "capture-folder");
+            var description = ((ActionButtonContent)button.Content).Description;
+            var viewport = (ScrollViewer)host.Window.FindName("ContentScroll");
+            var bounds = description.TransformToAncestor(viewport).TransformBounds(new Rect(description.RenderSize));
+            Require(description.Text.Contains("File unavailable", StringComparison.Ordinal)
+                && description.Visibility == Visibility.Visible && bounds.Top >= -1 && bounds.Bottom <= viewport.ViewportHeight + 1,
+                "The focused compact recovery action hides the missing-file reason");
+            Require(button.IsKeyboardFocusWithin && host.Platform.Calls == 0,
+                "The unavailable capture lost focus or dispatched a command while presenting recovery");
         });
 
         test("compact capture cards retain the full accessible title and visible controller focus", () =>

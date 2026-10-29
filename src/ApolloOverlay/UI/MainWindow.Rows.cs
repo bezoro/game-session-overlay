@@ -38,7 +38,7 @@ public partial class MainWindow
                 content.Description.Text = ActionDescription(id, description, entry.Available);
                 AutomationProperties.SetName(content.Description, description);
             }
-            content.Description.Visibility = description.Length > 0 && (id == "audio" || !(CompactAction(id) || QuickAccessAction(id)) || !entry.Available) ? Visibility.Visible : Visibility.Collapsed;
+            content.Description.Visibility = content.AllowsDescription && description.Length > 0 && (id == "audio" || !(CompactAction(id) || QuickAccessAction(id)) || !entry.Available) ? Visibility.Visible : Visibility.Collapsed;
         }
 
         AutomationProperties.SetHelpText(entry.Button, description);
@@ -131,7 +131,7 @@ public partial class MainWindow
         automationRevision++;
         NoteAutomationTargets();
         HeaderIdentity.Text = "v" + AppBuild.Current.Version.Split('+')[0];
-        HeaderBrand.Visibility = Visibility.Visible;
+        HeaderBrand.Visibility = (narrow || compactChrome) && view.Current.Route != OverlayRoute.Hub ? Visibility.Collapsed : Visibility.Visible;
         HeaderBrand.FontSize = ResourceNumber(compactChrome || narrow ? "SessionType.Caption" : "SessionType.CompactBody", compactChrome || narrow ? 13 : 14);
         HeaderIdentity.ToolTip = AppBuild.Current.Display + " · " + AppBuild.Current.BuildId + " · " + AppBuild.Current.Commit;
         if (Confirming)

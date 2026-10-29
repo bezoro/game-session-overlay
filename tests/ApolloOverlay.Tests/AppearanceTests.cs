@@ -11,6 +11,20 @@ internal static class AppearanceTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        test("dynamic color hints keep commands concise and the edited role identifiable", () =>
+        {
+            using var host = DarkHost();
+            var window = host.Window;
+            host.Open(360, 480);
+            window.OpenAppearance();
+            window.OpenAppearanceColor(PaletteRole.Focus);
+            window.UpdateLayout();
+            var keep = ReviewFixTests.Button(window, "color-apply");
+            Require(((ActionButtonContent)keep.Content).Description.Visibility == Visibility.Collapsed && keep.ActualHeight < 60,
+                "A dynamic hint expanded the pinned color command");
+            Require(((TextBlock)window.FindName("PageTitle")).Text == AppearanceCatalog.Roles.First(role => role.Role == PaletteRole.Focus).Name,
+                "Scrolling the RGB controls hides the identity of the edited color");
+        });
         test("critical text requires body contrast on every action surface", () =>
         {
             var palette = AppearanceCatalog.Resolve(new(), false) with

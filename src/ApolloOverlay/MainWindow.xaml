@@ -183,7 +183,7 @@
                   x:Name="SurfaceBorder"
                   Background="{TemplateBinding Background}"
                   BorderBrush="{TemplateBinding BorderBrush}"
-                  BorderThickness="{TemplateBinding BorderThickness}"
+                  BorderThickness="1"
                   CornerRadius="{DynamicResource SessionRadius.Control}"
                   Padding="{TemplateBinding Padding}">
                   <ContentPresenter
@@ -204,7 +204,7 @@
                   x:Name="SelectionSheen"
                   Height="1"
                   VerticalAlignment="Top"
-                  Margin="8,4,8,0"
+                  Margin="8,0,8,0"
                   CornerRadius="{DynamicResource SessionRadius.Control}"
                   IsHitTestVisible="False"
                   Opacity="0">
@@ -237,7 +237,7 @@
                 <Border
                   x:Name="Interaction"
                   Height="2"
-                  Margin="8,4,8,0"
+                  Margin="8,0,8,0"
                   VerticalAlignment="Top"
                   CornerRadius="1"
                   IsHitTestVisible="False"
@@ -246,7 +246,7 @@
                 <Border
                   x:Name="ActivationFeedback"
                   Height="2"
-                  Margin="8,4,8,0"
+                  Margin="8,0,8,0"
                   VerticalAlignment="Top"
                   CornerRadius="1"
                   IsHitTestVisible="False"
@@ -424,6 +424,15 @@
         x:Key="VolumeTrackButton"
         TargetType="RepeatButton">
         <Setter
+          Property="OverridesDefaultStyle"
+          Value="True" />
+        <Setter
+          Property="MinWidth"
+          Value="0" />
+        <Setter
+          Property="MinHeight"
+          Value="0" />
+        <Setter
           Property="Focusable"
           Value="False" />
         <Setter
@@ -440,8 +449,56 @@
         </Setter>
       </Style>
       <Style
+        x:Key="SessionSliderThumb"
+        TargetType="Thumb">
+        <Setter
+          Property="OverridesDefaultStyle"
+          Value="True" />
+        <Setter
+          Property="Focusable"
+          Value="False" />
+        <Setter
+          Property="Width"
+          Value="22" />
+        <Setter
+          Property="Height"
+          Value="22" />
+        <Setter
+          Property="MinWidth"
+          Value="22" />
+        <Setter
+          Property="MinHeight"
+          Value="22" />
+        <Setter
+          Property="MaxWidth"
+          Value="22" />
+        <Setter
+          Property="MaxHeight"
+          Value="22" />
+        <Setter
+          Property="Template">
+          <Setter.Value>
+            <ControlTemplate
+              TargetType="Thumb">
+              <Border
+                x:Name="ThumbSurface"
+                Background="{DynamicResource SessionSliderThumbBrush}"
+                BorderBrush="{DynamicResource SessionSliderThumbStrokeBrush}"
+                BorderThickness="1"
+                CornerRadius="11" />
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+      <Style
         x:Key="SessionVolumeSlider"
         TargetType="Slider">
+        <Setter
+          Property="OverridesDefaultStyle"
+          Value="True" />
+        <Setter
+          Property="MinWidth"
+          Value="0" />
         <Setter
           Property="Foreground"
           Value="{DynamicResource SessionSliderActiveBrush}" />
@@ -470,6 +527,7 @@
                   Visibility="Collapsed" />
                 <Track
                   x:Name="PART_Track"
+                  Orientation="{TemplateBinding Orientation}"
                   Minimum="{TemplateBinding Minimum}"
                   Maximum="{TemplateBinding Maximum}"
                   Value="{Binding Value, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
@@ -488,19 +546,8 @@
                   </Track.IncreaseRepeatButton>
                   <Track.Thumb>
                     <Thumb
-                      Width="22"
-                      Height="22">
-                      <Thumb.Template>
-                        <ControlTemplate
-                          TargetType="Thumb">
-                          <Border
-                            Background="{DynamicResource SessionSliderThumbBrush}"
-                            BorderBrush="{DynamicResource SessionSliderThumbStrokeBrush}"
-                            BorderThickness="1"
-                            CornerRadius="11" />
-                        </ControlTemplate>
-                      </Thumb.Template>
-                    </Thumb>
+                      x:Name="VolumeThumb"
+                      Style="{StaticResource SessionSliderThumb}" />
                   </Track.Thumb>
                 </Track>
               </Grid>

@@ -273,18 +273,8 @@ public partial class MainWindow
             return;
         }
 
+        UpdateSessionActionHint();
         var sessionTarget = Controller.Session.Anchor;
-        RenderHint(SessionHint, (sessionTarget is null || !Controller.Platform.Valid(sessionTarget)) ? inputMethod switch
-        {
-            "controller" => "{A} Choose window",
-            "mouse" => "{MouseLeft} Choose window",
-            _ => "{Enter} Choose window"
-        } : inputMethod switch
-        {
-            "controller" => "{A} Resume",
-            "mouse" => "{MouseLeft} Resume",
-            _ => "{Enter} Resume"
-        });
         var details = page == 1 || subpage == "details" || view.Current.Route == OverlayRoute.Hub && sessionTarget is not null && Controller.Platform.Valid(sessionTarget);
         var prompt = inputMethod switch
         {
@@ -293,6 +283,19 @@ public partial class MainWindow
             _ => "{Enter} select · {Esc} back" + (details ? " · {KeyX} options" : "") + "\n{Arrows} / {Tab} move · {PgUp}/{PgDn} tabs"
         };
         RenderHint(ModeLabel, prompt);
+    }
+
+    private void UpdateSessionActionHint()
+    {
+        var target = Controller.Session.Anchor;
+        var label = target is null || !Controller.Platform.Valid(target) ? "Choose window" : "Resume";
+        var glyph = navigation.Id != "session-card" ? "" : inputMethod switch
+        {
+            "controller" => "{A} ",
+            "mouse" => "{MouseLeft} ",
+            _ => "{Enter} "
+        };
+        RenderHint(SessionHint, glyph + label);
     }
 
     private void PlaceCompactStatus()
@@ -384,7 +387,7 @@ public partial class MainWindow
         if (pointerDown)
             CancelHold();
         HeaderIdentity.Visibility = Visibility.Visible;
-        HeaderBrand.Visibility = Visibility.Visible;
+        HeaderBrand.Visibility = (compact || narrow) && view.Current.Route != OverlayRoute.Hub ? Visibility.Collapsed : Visibility.Visible;
         HeaderBrand.FontSize = ResourceNumber(compact || narrow ? "SessionType.Caption" : "SessionType.CompactBody", compact || narrow ? 13 : 14);
         ControllerStatusLabel.Visibility = Visibility.Collapsed;
         DirtyLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;

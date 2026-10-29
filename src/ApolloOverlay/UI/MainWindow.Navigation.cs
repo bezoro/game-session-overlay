@@ -82,6 +82,7 @@ public partial class MainWindow
     }, detail, first));
     private void SetSelection(bool restoreFocus = true)
     {
+        UpdateSessionActionHint();
         if (navigation.Id != "exit" && !IsFooterAction(navigation.Id) && entries.Any(entry => entry.Id == navigation.Id))
             lastContentSelection = navigation.Id;
         foreach (var entry in entries)
@@ -89,7 +90,7 @@ public partial class MainWindow
             var selected = entry.Id == navigation.Id;
             InteractionMotion.SetIsSelected(entry.Button, selected && entry.Available && IsVisible && focusConfirmed && IsActive && OwnForeground && InteractionMotion.Allowed);
             var primary = entry.Id == "session-card";
-            entry.Button.BorderThickness = new(selected ? 2 : 1);
+            entry.Button.BorderThickness = new(2);
             entry.Button.SetResourceReference(BorderBrushProperty, selected ? ThemeSupport.Focus : ThemeSupport.Stroke);
             if (selected && !entry.Available && entry.Button.Resources["DescriptionTarget"] is Border)
                 entry.Button.BorderBrush = Brushes.Transparent;

@@ -130,7 +130,7 @@ public partial class MainWindow
         }
 
         var items = captureItems.Skip(capturePage * CapturesPerPage).Take(CapturesPerPage).ToArray();
-        var frames = new List<(ScreenCaptureItem Item, CapturePreview Preview)>();
+        var frames = new List<(ScreenCaptureItem Item, CaptureThumbnail Thumbnail, Button Owner)>();
         var first = Rows.RowDefinitions.Count;
         for (var index = 0; index < items.Length; index++)
         {
@@ -146,7 +146,7 @@ public partial class MainWindow
             button.Content = thumbnail;
             button.Padding = new(ResourceNumber("SessionSpace.8", 8));
             button.VerticalContentAlignment = VerticalAlignment.Top;
-            frames.Add((capture, thumbnail.Preview));
+            frames.Add((capture, thumbnail, button));
         }
 
         if (LastCapturePage > 0)
@@ -157,7 +157,7 @@ public partial class MainWindow
             CompactCaptureCommand(AddRow("capture-next", "Next", "More screenshots", () => ChangeCapturePage(1), capturePage < LastCapturePage, row: pagination, column: 1, compactGrid: true));
         }
         AddRow("back", "Back", "Session panel", Back);
-        var request = BeginCapturePresentation(frames[0].Preview);
+        var request = BeginCapturePresentation(frames[0].Thumbnail.Preview);
         var dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
         var scale = ((FrameworkElement)Content).LayoutTransform.Value.M11;
         var width = Math.Clamp((int)Math.Ceiling(Math.Max(160, ContentScroll.ActualWidth / 2 - 24) * dpi * scale), 160, 768);
@@ -275,7 +275,7 @@ public partial class MainWindow
     private Task<BitmapSource> ReadCaptureSource(ScreenCaptureItem capture, int width, CancellationToken cancellation) =>
         CaptureImageLoader.ReadAsync(CaptureImageReaderFixture ?? screenCaptures.ReadImageAsync, capture, width, cancellation);
 
-    private async Task ReadCaptureThumbnails(IReadOnlyList<(ScreenCaptureItem Item, CapturePreview Preview)> frames, int width, CancellationTokenSource request)
+    private async Task ReadCaptureThumbnails(IReadOnlyList<(ScreenCaptureItem Item, CaptureThumbnail Thumbnail, Button Owner)> frames, int width, CancellationTokenSource request)
     {
         try
         {
@@ -284,16 +284,22 @@ public partial class MainWindow
                 try
                 {
                     var source = await ReadCaptureSource(frame.Item, width, request.Token);
-                    if (CurrentCapturePresentation(request, frame.Preview, OverlayRoute.Captures))
-                        frame.Preview.ShowImage(source);
+                    // A fast decode can finish before the button's content
+                    // presenter creates its visual children. The row owner is
+                    // already attached, and its exact content identifies this
+                    // thumbnail without discarding a valid pre-layout result.
+                    if (CurrentCapturePresentation(request, frame.Owner, OverlayRoute.Captures)
+                        && ReferenceEquals(frame.Owner.Content, frame.Thumbnail))
+                        frame.Thumbnail.Preview.ShowImage(source);
                 }
                 catch (OperationCanceledException) when (request.IsCancellationRequested)
                 {
                 }
                 catch (Exception error) when (CaptureImageError(error))
                 {
-                    if (CurrentCapturePresentation(request, frame.Preview, OverlayRoute.Captures))
-                        frame.Preview.ShowUnavailable();
+                    if (CurrentCapturePresentation(request, frame.Owner, OverlayRoute.Captures)
+                        && ReferenceEquals(frame.Owner.Content, frame.Thumbnail))
+                        frame.Thumbnail.Preview.ShowUnavailable();
                 }
             }));
         }
@@ -321,6 +327,10 @@ public partial class MainWindow
             if (CurrentCapturePresentation(request, image, OverlayRoute.CaptureDetail))
             {
                 image.ShowUnavailable();
+                // The compact page may scroll the preview's placeholder out of
+                // view to reveal its recovery action. Keep the reason beside
+                // that action as well as in the full preview.
+                SetEntryDescription("capture-folder", "File unavailable · check saved PNGs");
                 FeedbackText("The screenshot was removed or could not be read. Refresh the gallery.");
             }
         }
