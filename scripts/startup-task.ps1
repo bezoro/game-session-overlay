@@ -26,7 +26,9 @@ if ($Action -eq 'Install') {
             (Join-Path $PSScriptRoot 'ApolloOverlay.exe'),
             (Join-Path (Split-Path -Parent $PSScriptRoot) 'ApolloOverlay.exe')
         ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
-        if (-not $candidate) { throw 'Inicializador não encontrado. Informe ExecutablePath.' }
+        if (-not $candidate) {
+            throw 'Inicializador não encontrado. Informe ExecutablePath.'
+        }
         $ExecutablePath = $candidate
     }
     $item = Get-Item -LiteralPath $ExecutablePath
@@ -49,7 +51,8 @@ if ($Action -eq 'Install') {
     }
     Write-Output "Tarefa instalada para $identity. A overlay iniciará oculta no próximo logon."
     Write-Output 'Valide no próximo logon se a tarefa foi executada e o Guide funciona na sua sessão.'
-} else {
+}
+else {
     $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
     if ($task) {
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false

@@ -11,9 +11,13 @@ $sourceFiles = @(
     }
 )
 $arguments = @('format', 'whitespace', $root, '--folder', '--include') + $sourceFiles
-if ($Verify) { $arguments += '--verify-no-changes' }
+if ($Verify) {
+    $arguments += '--verify-no-changes'
+}
 & dotnet @arguments
-if ($LASTEXITCODE -ne 0) { throw 'C# formatting failed. Run ./scripts/format.ps1 to apply the repository style.' }
+if ($LASTEXITCODE -ne 0) {
+    throw 'C# formatting failed. Run ./scripts/format.ps1 to apply the repository style.'
+}
 
 $xmlFiles = @(
     Get-Item -LiteralPath (Join-Path $root 'Directory.Build.props')
@@ -37,13 +41,27 @@ foreach ($file in $xmlFiles) {
     $stream = [System.IO.MemoryStream]::new()
     try {
         $writer = [System.Xml.XmlWriter]::Create($stream, $settings)
-        try { $document.Save($writer) } finally { $writer.Dispose() }
+        try {
+            $document.Save($writer)
+        }
+        finally {
+            $writer.Dispose()
+        }
         $formatted = [System.Text.Encoding]::UTF8.GetString($stream.ToArray()).TrimEnd() + "`n"
-    } finally { $stream.Dispose() }
+    }
+    finally {
+        $stream.Dispose()
+    }
     if ([System.IO.File]::ReadAllText($file.FullName) -cne $formatted) {
-        if ($Verify) { $invalid += $file.FullName }
-        else { [System.IO.File]::WriteAllText($file.FullName, $formatted, [System.Text.UTF8Encoding]::new($false)) }
+        if ($Verify) {
+            $invalid += $file.FullName
+        }
+        else {
+            [System.IO.File]::WriteAllText($file.FullName, $formatted, [System.Text.UTF8Encoding]::new($false))
+        }
     }
 }
-if ($invalid.Count -gt 0) { throw "XML formatting differs. Run ./scripts/format.ps1:`n$($invalid -join "`n")" }
+if ($invalid.Count -gt 0) {
+    throw "XML formatting differs. Run ./scripts/format.ps1:`n$($invalid -join "`n")"
+}
 Write-Host "Formatting verified: $($sourceFiles.Count) C# files and $($xmlFiles.Count) XML files."
