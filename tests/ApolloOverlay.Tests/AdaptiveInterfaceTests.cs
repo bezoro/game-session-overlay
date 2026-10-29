@@ -148,7 +148,7 @@ internal static class AdaptiveInterfaceTests
                 var source = PresentationSource.FromVisual(w)!;
                 w.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.LeftShift) { RoutedEvent = Keyboard.PreviewKeyDownEvent });
                 Require(InputPrompt.Read((TextBlock)w.FindName("ModeLabel")).Contains("Enter") && InputPrompt.Read(((ActionButtonContent)shortcut.Content).Description).StartsWith("Enter"), "Keyboard activity did not restore keyboard prompts");
-                Require(new[] { "Enter", "Esc", "Arrows", "Tab", "PgUp", "PgDn" }.All(key => Glyphs((TextBlock)w.FindName("ModeLabel")).Contains(key)), "Keyboard instructions did not render keycap vectors");
+                Require(new[] { "Enter", "Esc", "Arrows", "Tab", "PgUp", "PgDn" }.All(key => Glyphs((TextBlock)w.FindName("ModeLabel")).Contains(key)), "Keyboard instructions did not render their keycaps and arrow glyphs");
             }
             finally
             {
@@ -226,7 +226,7 @@ internal static class AdaptiveInterfaceTests
 
     private static void Click(MainWindow window, string id) => ReviewFixTests.Button(window, id).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
     private static string[] Glyphs(TextBlock label) => label.Inlines.OfType<InlineUIContainer>()
-        .Select(inline => ((VectorIcon)inline.Child).Tag as string ?? "").ToArray();
+        .Select(inline => ((FrameworkElement)inline.Child).Tag as string ?? "").ToArray();
     private static void Require(bool condition, string message)
     {
         if (!condition)

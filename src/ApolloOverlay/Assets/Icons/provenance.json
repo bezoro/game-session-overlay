@@ -408,46 +408,6 @@
     "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
   },
   {
-    "name": "input-enter",
-    "url": "https://kenney.nl/assets/input-prompts",
-    "version": "1.5A",
-    "archivePath": "Keyboard & Mouse/Vector/keyboard_enter.svg",
-    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
-    "sha256": "e592001ec1dd482e9f44ff9118e2e674a6d6cbce50f63ee2e42a15490a475880",
-    "license": "CC0-1.0",
-    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
-  },
-  {
-    "name": "input-esc",
-    "url": "https://kenney.nl/assets/input-prompts",
-    "version": "1.5A",
-    "archivePath": "Keyboard & Mouse/Vector/keyboard_escape.svg",
-    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
-    "sha256": "877ed5d62b78a468a2206dd18530802a851e7f25efca2be99b90fac46c7ce02a",
-    "license": "CC0-1.0",
-    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
-  },
-  {
-    "name": "input-space",
-    "url": "https://kenney.nl/assets/input-prompts",
-    "version": "1.5A",
-    "archivePath": "Keyboard & Mouse/Vector/keyboard_space.svg",
-    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
-    "sha256": "e6c3941bfae3a1db04c69792cbd550d45ab0756ecd747375e1a4cf8bdab96027",
-    "license": "CC0-1.0",
-    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
-  },
-  {
-    "name": "input-tab",
-    "url": "https://kenney.nl/assets/input-prompts",
-    "version": "1.5A",
-    "archivePath": "Keyboard & Mouse/Vector/keyboard_tab.svg",
-    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
-    "sha256": "d6f3c37cf0ca5f516ed7f4ea03ac256f39cce0e532c167f28a338a0fd652aa72",
-    "license": "CC0-1.0",
-    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
-  },
-  {
     "name": "input-arrows",
     "url": "https://kenney.nl/assets/input-prompts",
     "version": "1.5A",
@@ -464,56 +424,6 @@
     "archivePath": "Keyboard & Mouse/Vector/keyboard_arrows_horizontal_outline.svg",
     "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
     "sha256": "2c1cd7fe3f4a751a47948386993cf70703b87173871619245328f441f5fbf7fd",
-    "license": "CC0-1.0",
-    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
-  },
-  {
-    "name": "input-pgup",
-    "url": "https://kenney.nl/assets/input-prompts",
-    "version": "1.5A",
-    "archivePath": "Keyboard & Mouse/Vector/keyboard_page_up.svg",
-    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
-    "sha256": "02dc47f39563f3f4432d104d7e1077207e59125527ff1e57a42ef02f5bc522b8",
-    "license": "CC0-1.0",
-    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
-  },
-  {
-    "name": "input-pgdn",
-    "url": "https://kenney.nl/assets/input-prompts",
-    "version": "1.5A",
-    "archivePath": "Keyboard & Mouse/Vector/keyboard_page_down.svg",
-    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
-    "sha256": "9b5c8998c5496d9f05f9df927cf32badb2e73cea49b71d5be5f06162ef44307d",
-    "license": "CC0-1.0",
-    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
-  },
-  {
-    "name": "input-keyx",
-    "url": "https://kenney.nl/assets/input-prompts",
-    "version": "1.5A",
-    "archivePath": "Keyboard & Mouse/Vector/keyboard_x.svg",
-    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
-    "sha256": "4119699987f7eeb59aa50fc285ac1b09d0a4b5b0e298716788847c3b802bf0e8",
-    "license": "CC0-1.0",
-    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
-  },
-  {
-    "name": "input-shift",
-    "url": "https://kenney.nl/assets/input-prompts",
-    "version": "1.5A",
-    "archivePath": "Keyboard & Mouse/Vector/keyboard_shift.svg",
-    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
-    "sha256": "7143bd165a266ed950705cb45bb678a32a70bda73b5de221985c3fa1d3d527be",
-    "license": "CC0-1.0",
-    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
-  },
-  {
-    "name": "input-ctrl",
-    "url": "https://kenney.nl/assets/input-prompts",
-    "version": "1.5A",
-    "archivePath": "Keyboard & Mouse/Vector/keyboard_ctrl.svg",
-    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
-    "sha256": "822abacef97c5bb74e5942e357c202fbec6abd9a6a3960f6be713f39ebc2a267",
     "license": "CC0-1.0",
     "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
   },

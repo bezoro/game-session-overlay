@@ -38,7 +38,7 @@ public partial class MainWindow
                 content.Description.Text = description;
                 AutomationProperties.SetName(content.Description, description);
             }
-            content.Description.Visibility = description.Length > 0 && !CompactAction(id) ? Visibility.Visible : Visibility.Collapsed;
+            content.Description.Visibility = description.Length > 0 && (!CompactAction(id) || !entry.Available) ? Visibility.Visible : Visibility.Collapsed;
         }
 
         AutomationProperties.SetHelpText(entry.Button, description);
@@ -253,7 +253,9 @@ public partial class MainWindow
             grid.Title.FontSize = 14;
             grid.Title.TextWrapping = TextWrapping.NoWrap;
             grid.Title.TextTrimming = TextTrimming.CharacterEllipsis;
-            grid.Description.Visibility = Visibility.Collapsed;
+            grid.Description.FontSize = 12;
+            grid.Description.Margin = new(0, 2, 0, 0);
+            grid.Description.Visibility = available ? Visibility.Collapsed : Visibility.Visible;
             grid.ColumnDefinitions[0].Width = new GridLength(26);
             grid.Icon.Width = grid.Icon.Height = 20;
             badge.Width = badge.Height = 22;

@@ -1,16 +1,21 @@
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Automation;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 
 namespace ApolloOverlay;
 
-/// <summary>Explicit input tokens become source vectors and readable accessibility names.</summary>
+/// <summary>Explicit input tokens become vectors or legible keycaps, with complete accessible names.</summary>
 internal static partial class InputPrompt
 {
-    private sealed record Glyph(string Name, string Tone);
+    private sealed record Glyph(string Name, string Tone, string? Keycap = null);
+    private sealed class KeycapLabel : TextBlock
+    {
+        protected override AutomationPeer? OnCreateAutomationPeer() => null;
+    }
     private sealed record RenderState(string Template, double FontSize, Inline? FirstInline);
     private static readonly DependencyProperty RenderStateProperty = DependencyProperty.RegisterAttached("RenderState", typeof(RenderState), typeof(InputPrompt));
 
@@ -26,17 +31,17 @@ internal static partial class InputPrompt
         ["DpadHorizontal"] = new("Left / right", ThemeSupport.IconTools),
         ["Guide"] = new("Guide", ThemeSupport.IconGame),
         ["RS"] = new("Right stick", ThemeSupport.IconTools),
-        ["Enter"] = new("Enter", ThemeSupport.IconNavigation),
-        ["Esc"] = new("Esc", ThemeSupport.Critical),
-        ["Space"] = new("Space", ThemeSupport.IconNavigation),
-        ["Tab"] = new("Tab", ThemeSupport.IconNavigation),
+        ["Enter"] = new("Enter", ThemeSupport.IconNavigation, "Enter"),
+        ["Esc"] = new("Esc", ThemeSupport.Critical, "Esc"),
+        ["Space"] = new("Space", ThemeSupport.IconNavigation, "Space"),
+        ["Tab"] = new("Tab", ThemeSupport.IconNavigation, "Tab"),
         ["Arrows"] = new("Arrows", ThemeSupport.IconNavigation),
         ["ArrowsHorizontal"] = new("Left / right", ThemeSupport.IconNavigation),
-        ["PgUp"] = new("PgUp", ThemeSupport.IconTools),
-        ["PgDn"] = new("PgDn", ThemeSupport.IconTools),
-        ["KeyX"] = new("X", ThemeSupport.IconNavigation),
-        ["Shift"] = new("Shift", ThemeSupport.IconNavigation),
-        ["Ctrl"] = new("Ctrl", ThemeSupport.IconNavigation),
+        ["PgUp"] = new("PgUp", ThemeSupport.IconTools, "PgUp"),
+        ["PgDn"] = new("PgDn", ThemeSupport.IconTools, "PgDn"),
+        ["KeyX"] = new("X", ThemeSupport.IconNavigation, "X"),
+        ["Shift"] = new("Shift", ThemeSupport.IconNavigation, "Shift"),
+        ["Ctrl"] = new("Ctrl", ThemeSupport.IconNavigation, "Ctrl"),
         ["MouseLeft"] = new("Left click", ThemeSupport.IconNavigation),
         ["MouseRight"] = new("Right click", ThemeSupport.IconTools),
         ["MouseScroll"] = new("Mouse wheel", ThemeSupport.IconNavigation),
@@ -76,9 +81,34 @@ internal static partial class InputPrompt
         target.SetValue(RenderStateProperty, new RenderState(template, target.FontSize, target.Inlines.FirstInline));
     }
 
-    internal static VectorIcon CreateGlyph(FrameworkElement resources, string key, double height)
+    internal static FrameworkElement CreateGlyph(FrameworkElement resources, string key, double height)
     {
         var definition = Definition(key);
+        if (definition.Keycap is { } caption)
+        {
+            var label = new KeycapLabel
+            {
+                Text = caption,
+                FontSize = Math.Clamp(height * .56, 10, 13),
+                FontWeight = FontWeights.SemiBold,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            label.SetResourceReference(TextBlock.ForegroundProperty, ThemeSupport.Surface);
+            var keycap = new Border
+            {
+                Child = label,
+                Height = height,
+                MinWidth = height,
+                Padding = new(4, 0, 4, 0),
+                CornerRadius = new(3),
+                IsHitTestVisible = false,
+                Focusable = false,
+                Tag = key
+            };
+            keycap.SetResourceReference(Border.BackgroundProperty, definition.Tone);
+            return keycap;
+        }
         var geometry = (Geometry)resources.FindResource("InputGlyph." + key);
         var icon = new VectorIcon
         {

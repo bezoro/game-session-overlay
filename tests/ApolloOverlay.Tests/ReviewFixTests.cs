@@ -461,7 +461,7 @@ internal static class ReviewFixTests
                             var texts = (StackPanel)grid.Children[1];
                             Require(peer.GetName() == ((TextBlock)texts.Children[0]).Text, "Action name differs: " + button.Tag);
                             if (texts.Children.Count > 1 && texts.Children[1] is TextBlock desc)
-                                Require(peer.GetHelpText() == desc.Text, "Description differs: " + button.Tag);
+                                Require(peer.GetHelpText() == InputPrompt.Read(desc), "Accessible description differs from rendered prompt: " + button.Tag);
                         }
                         else
                             Require(peer.GetName().StartsWith("Options for "), "Sibling options missing full target name");

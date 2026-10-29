@@ -165,7 +165,7 @@ internal static class MotionAndControllerTests
                 {
                     if (vector.Data is null || vector.Visibility != Visibility.Visible)
                         continue;
-                    var source = new Rect(new Point(), vector.SourceSize);
+                    var source = new Rect(vector.SourceOrigin, vector.SourceSize);
                     source.Inflate(.1, .1);
                     Require(source.Contains(vector.Data.Bounds), "Vector exceeds its declared source frame");
                 }

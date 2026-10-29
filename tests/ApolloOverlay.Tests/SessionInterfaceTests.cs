@@ -347,7 +347,7 @@ internal static class SessionInterfaceTests
     {
         foreach (var light in new[] { false, true })
             foreach (var width in new[] { 572, 360 })
-                foreach (var state in new[] { "controller", "mouse", "success", "warning", "focus", "unknown-controller", "wired-controller" })
+                foreach (var state in new[] { "controller", "mouse", "success", "warning", "focus", "unknown-controller", "wired-controller", "unavailable-action", "selected-audio", "breathing" })
                 {
                     ThemeSupport.ForceForValidation(app, light);
                     using var host = new Host(gameTitle: "Elden Ring", identities: state switch
@@ -360,7 +360,15 @@ internal static class SessionInterfaceTests
                     var height = width == 572 ? 940 : 600;
                     host.Open(width, height, forCapture: true);
                     AdaptiveInterfaceTests.UseController(window);
-                    if (state == "mouse")
+                    if (state == "unavailable-action")
+                        Pick(window, "steam-overlay");
+                    else if (state is "selected-audio" or "breathing")
+                    {
+                        Pick(window, "audio");
+                        if (state == "breathing")
+                            Complete(Task.Delay(TimeSpan.FromMilliseconds(1550)));
+                    }
+                    else if (state == "mouse")
                     {
                         window.ObservePointerPosition(new(100, 100));
                         window.ObservePointerPosition(new(120, 100));
