@@ -18,11 +18,16 @@ internal sealed record ControllerBadgeModel(
     bool LowBattery,
     ControllerPowerState Power,
     bool ChargeKnown,
-    string Description
+    string Description,
+    bool Disconnected = false
 )
 {
-    internal static ControllerBadgeModel Create(int connected, IReadOnlyList<ControllerIdentity> identities, ControllerDeviceSnapshot? battery, string status)
+    internal static ControllerBadgeModel Create(int connected, IReadOnlyList<ControllerIdentity> identities, ControllerDeviceSnapshot? battery, string status,
+        bool previouslyObserved = false)
     {
+        if (previouslyObserved && connected == 0 && identities.Count == 0)
+            return new(true, "Controller disconnected", "controller", "", 0, false, ControllerPowerState.Unknown, false,
+                "Controller disconnected. Use mouse or keyboard to continue. Esc closes the panel.", Disconnected: true);
         // RawGameController does not expose an XInput slot mapping. Multiple candidates
         // must remain unassociated rather than displaying another device's model/charge.
         var known = connected <= 1 && identities.Count == 1 ? identities[0] : null;

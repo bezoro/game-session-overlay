@@ -53,6 +53,8 @@ internal static class SessionInterfaceTests
                 Require(surface.Background is SolidColorBrush brush
                     && brush.Color == ((SolidColorBrush)host.Window.FindResource(ThemeSupport.SliderThumb)).Color,
                     "The slider inherited a theme gradient instead of its system-mapped palette");
+                Require(((ScrollViewer)host.Window.FindName("ContentScroll")).OpacityMask is null,
+                    "A viewport fade changes the high contrast system colors");
             }
             finally { ThemeSupport.ForceForValidation(app, false); }
         });
@@ -583,8 +585,10 @@ internal static class SessionInterfaceTests
                     {
                         window.UpdateControllerTelemetry([default, default, default, default], null, Environment.TickCount64);
                         Complete(window.ControllerBadgeTask);
-                        Require(((FrameworkElement)window.FindName("ControllerInfoBar")).Visibility == Visibility.Collapsed,
-                            "Disconnected evidence retained a connected identity or charge");
+                        Require(((FrameworkElement)window.FindName("ControllerInfoBar")).IsVisible
+                            && ((TextBlock)window.FindName("ControllerModelLabel")).Text == "Controller disconnected"
+                            && !((TextBlock)window.FindName("ControllerBatteryLabel")).IsVisible,
+                            "Disconnected evidence lacks recovery or retained a charge claim");
                     }
                     if (state == "unavailable-action")
                         Pick(window, "steam-overlay");
@@ -603,7 +607,7 @@ internal static class SessionInterfaceTests
                         window.RefreshRows();
                     }
                     window.RefreshOperationNotice(Environment.TickCount64 + 200);
-                    var bitmap = RenderCapture(window, width, height, state == "mouse" ? "mouse" : "controller");
+                    var bitmap = RenderCapture(window, width, height, state == "controller-lost" ? "keyboard" : state == "mouse" ? "mouse" : "controller");
                     var png = new PngBitmapEncoder();
                     png.Frames.Add(BitmapFrame.Create(bitmap));
                     var name = $"{(light ? "light" : "dark")}-{width}-notice-{state}.png";
@@ -907,7 +911,7 @@ internal static class SessionInterfaceTests
                     {
                         Choose(w, "keyboard-editor");
                         Require(Keyboard.FocusedElement is TextBox, "The local hexadecimal editor did not receive focus");
-                        ((TextBox)Keyboard.FocusedElement).Text = "1B1918";
+                        ((TextBox)Keyboard.FocusedElement).Text = ((SolidColorBrush)w.FindResource(ThemeSupport.FocusBackground)).Color.ToString()[3..];
                         TapKey((UIElement)Keyboard.FocusedElement, Key.Tab);
                         Choose(w, "keyboard-insert");
                     }

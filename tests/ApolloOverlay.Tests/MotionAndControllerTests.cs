@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using ApolloOverlay;
@@ -145,6 +146,57 @@ internal static class MotionAndControllerTests
             var gearLeft = gear.TranslatePoint(new(), w).X;
             Require(right <= gearLeft + 1 && label.ActualWidth > 0 && label.TextTrimming == TextTrimming.CharacterEllipsis, "Long controller model overlapped the system button or disappeared");
             Require(power.Visibility == Visibility.Visible && power.Data is not null, "Charging state has no vector icon");
+        });
+        test("controller disconnect offers honest keyboard recovery without moving focus and reconnect restores live metadata", () =>
+        {
+            using var host = new Host();
+            var window = host.Window;
+            var badge = (FrameworkElement)window.FindName("ControllerInfoBar");
+            Disconnect(window, 0);
+            Complete(window.ControllerBadgeTask);
+            Require(badge.Visibility == Visibility.Collapsed, "Initial keyboard-only use showed a disconnect warning");
+            host.Source.Items = [new("xbox", "Xbox One", ControllerFamily.Xbox, true, 76, false)];
+            Connect(window, 1);
+            Complete(window.ControllerBadgeTask);
+            AdaptiveInterfaceTests.UseController(window);
+            Complete(window.ControllerBadgeTask);
+            var hints = (TextBlock)window.FindName("ModeLabel");
+            Require(InputPrompt.Read(hints).Contains("LB/RB"), "PRECONDITION: controller prompts were not active");
+            var selected = window.SelectedAction;
+            var focused = Keyboard.FocusedElement;
+            host.Source.Items = [];
+            var now = Environment.TickCount64;
+            Disconnect(window, now);
+            Complete(window.ControllerBadgeTask);
+            var battery = (TextBlock)window.FindName("ControllerBatteryLabel");
+            Require(badge.IsVisible && ((TextBlock)window.FindName("ControllerModelLabel")).Text == "Controller disconnected",
+                "A confirmed disappearance has no discreet recovery indication");
+            Require(battery.Visibility == Visibility.Collapsed && battery.Text.Length == 0
+                && ((FrameworkElement)window.FindName("ControllerBatteryMeter")).Visibility == Visibility.Collapsed
+                && ((FrameworkElement)window.FindName("ControllerPowerGlyph")).Visibility == Visibility.Collapsed,
+                "Disconnected recovery retained a charge or invented a power state");
+            var guidance = AutomationProperties.GetName(badge);
+            Require(guidance.Contains("mouse or keyboard") && guidance.Contains("Esc"), "Recovery has no accessible input and close guidance");
+            Require(InputPrompt.Read(hints).Contains("Enter") && InputPrompt.Read(hints).Contains("Esc")
+                && !InputPrompt.Read(hints).Contains("LB/RB"), "Disconnected recovery kept controller-only prompts");
+            Require(window.SelectedAction == selected && ReferenceEquals(Keyboard.FocusedElement, focused), "Input recovery moved the selection or keyboard focus");
+            host.Source.Items = [new("xbox", "Xbox One", ControllerFamily.Xbox, true, 58, false)];
+            Connect(window, now + 1);
+            Complete(window.ControllerBadgeTask);
+            Require(((TextBlock)window.FindName("ControllerModelLabel")).Text == "Xbox One" && battery.IsVisible && battery.Text == "58%",
+                "Reconnection retained the warning or stale charge");
+            AdaptiveInterfaceTests.UseController(window);
+            Require(InputPrompt.Read(hints).Contains("LB/RB"), "Fresh controller input did not restore controller prompts");
+        });
+        test("disconnect recovery requires prior observation and preserves Windows-only controller evidence", () =>
+        {
+            Require(!ControllerBadgeModel.Create(0, [], null, "").Visible, "Keyboard-only startup showed a controller warning");
+            var recovery = ControllerBadgeModel.Create(0, [], null, "", previouslyObserved: true);
+            Require(recovery.Visible && recovery.Disconnected && !recovery.ChargeKnown && recovery.BatteryText.Length == 0,
+                "Disconnected state guessed a charge or omitted recovery");
+            var windowsOnly = ControllerBadgeModel.Create(0, [new("windows", "Windows controller", ControllerFamily.Unknown, true, 76, false)], null, "", previouslyObserved: true);
+            Require(windowsOnly.Visible && !windowsOnly.Disconnected && windowsOnly.BatteryText == "76%"
+                && windowsOnly.Description.Contains("unconfirmed"), "Missing XInput slots falsely classified a Windows-reported controller as disconnected");
         });
         test("controller badge does not assign ambiguous models and makes no hidden metadata requests", () =>
         {

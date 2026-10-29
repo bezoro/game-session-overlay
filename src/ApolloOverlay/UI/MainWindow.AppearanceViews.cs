@@ -12,7 +12,7 @@ public partial class MainWindow
     {
         var draft = appearanceDraft ??= AppearanceCatalog.Normalize(Controller.Settings.Appearance);
         var pane = AppearancePane(out var content, out var commands);
-        AppearanceParagraph(content, SystemParameters.HighContrast
+        AppearanceParagraph(content, ThemeSupport.HighContrastActive
             ? "Windows high contrast controls the visible colors. Your custom palettes are preserved."
             : "Make the panel your own. Preview changes here, then save only when you are ready.");
         var valid = AppearanceDraftValid(out var validationReason);

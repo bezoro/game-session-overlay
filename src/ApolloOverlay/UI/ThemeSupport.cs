@@ -71,6 +71,8 @@ internal static class ThemeSupport
         ApplySystemPalette(application);
     }
 
+    internal static bool HighContrastActive => SystemParameters.HighContrast || validationHighContrast;
+
     internal static bool UsesLightPalette(AppearanceSettings? appearance) => appearance?.Mode switch
     {
         "Light" => true,
@@ -95,7 +97,7 @@ internal static class ThemeSupport
     {
         if (application is null)
             return;
-        var highContrast = SystemParameters.HighContrast || validationHighContrast;
+        var highContrast = HighContrastActive;
         var resolved = AppearanceCatalog.Resolve(current, UsesLightPalette(current));
         if (!highContrast && !appliedHighContrast && applied == resolved && palette is not null
             && application.Resources.MergedDictionaries.Contains(palette))

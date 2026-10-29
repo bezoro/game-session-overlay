@@ -11,6 +11,30 @@ internal static class AppearanceTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        foreach (var light in new[] { false, true })
+            test("unsafe color explanation stays beside pinned commands light=" + light, () =>
+            {
+                var app = Application.Current ?? new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+                ThemeSupport.ForceForValidation(app, light);
+                using var host = new SessionInterfaceTests.Host(root => UserSettings.Save(Path.Combine(root, "settings.json"),
+                    new(Appearance: new(Mode: light ? "Light" : "Dark"))), preview: false);
+                var window = host.Window;
+                host.Open(360, 480);
+                window.OpenAppearance();
+                window.OpenAppearanceColor(PaletteRole.Focus);
+                var background = ((SolidColorBrush)window.FindResource(ThemeSupport.FocusBackground)).Color.ToString()[3..];
+                EnterHex(window, background);
+                var status = PremiumInterfaceTests.Descendants<TextBlock>((DependencyObject)window.FindName("Rows"))
+                    .Single(text => Equals(text.Tag, "color-status"));
+                var viewport = (ScrollViewer)window.FindName("ContentScroll");
+                var bounds = status.TransformToAncestor(viewport).TransformBounds(new Rect(status.RenderSize));
+                Require(status.IsVisible && status.Text.Contains("Draft only", StringComparison.Ordinal)
+                    && bounds.Top >= 0 && bounds.Bottom <= viewport.ViewportHeight,
+                    "The unsafe-draft explanation scrolled away from Keep/Cancel");
+                SessionInterfaceTests.Choose(window, "color-apply");
+                Require(!ReviewFixTests.Button(window, "appearance-save").IsEnabled && window.AppearanceDirty,
+                    "The visible warning allowed an unreadable palette to be saved");
+            });
         test("dynamic color hints keep commands concise and the edited role identifiable", () =>
         {
             using var host = DarkHost();

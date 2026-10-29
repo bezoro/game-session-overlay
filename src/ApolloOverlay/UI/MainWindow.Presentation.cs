@@ -334,7 +334,7 @@ public partial class MainWindow
         var selected = entries.FirstOrDefault(entry => entry.Id == navigation.Id);
         var target = selected is null ? null : FocusTarget(selected);
         var clearanceFits = target is null || !ContentScroll.IsAncestorOf(target) || target.ActualHeight + ScrollFadeHeight + 4 <= ContentScroll.ViewportHeight;
-        if (more && clearanceFits && !SystemParameters.HighContrast)
+        if (more && clearanceFits && !ThemeSupport.HighContrastActive)
         {
             scrollFade.GradientStops[1].Offset = 1 - Math.Min(.25, ScrollFadeHeight / ContentScroll.ViewportHeight);
             ContentScroll.OpacityMask = scrollFade;

@@ -8,7 +8,7 @@ namespace ApolloOverlay;
 public partial class MainWindow
 {
     private Border? appearanceColorSwatch;
-    private TextBlock? appearanceColorLabel, appearanceColorStatus;
+    private TextBlock? appearanceColorLabel, appearanceColorStatus, appearanceColorDetail;
 
     private void BuildColorEditor()
     {
@@ -56,7 +56,21 @@ public partial class MainWindow
             UpdateAppearanceColorPreview();
             RefreshRows();
         });
-        appearanceColorStatus = AppearanceParagraph(content, "");
+        appearanceColorDetail = AppearanceParagraph(content, "");
+        appearanceColorStatus = new TextBlock
+        {
+            Tag = "color-status",
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new(0, 4, 0, 8)
+        };
+        appearanceColorStatus.SetResourceReference(TextBlock.FontSizeProperty, "SessionType.Caption");
+        pane.RowDefinitions.Add(new()
+        {
+            Height = GridLength.Auto
+        });
+        Grid.SetRow(commands, 2);
+        Grid.SetRow(appearanceColorStatus, 1);
+        pane.Children.Add(appearanceColorStatus);
         var valid = TryColorProposal(out _, out var reason);
         AppearanceCommand(commands, "color-apply", "Keep color", ApplyAppearanceColor,
             valid ? "Keep this color in the unsaved appearance draft" : "Keep this draft color; fix contrast before saving. " + reason, true, 0);
@@ -131,10 +145,16 @@ public partial class MainWindow
         if (appearanceColorStatus is not null)
         {
             appearanceColorStatus.Text = valid
-                ? SystemParameters.HighContrast ? "Readable palette. Windows high contrast keeps using the system colors." : "Readable contrast · Preview active"
-                : reason + " Keep the draft and adjust the other colors before saving. Navigation keeps its last readable palette.";
+                ? ThemeSupport.HighContrastActive ? "Readable palette · Windows colors stay active" : "Readable contrast · Preview active"
+                : "Draft only · preview unchanged\nFix contrast before saving.";
             appearanceColorStatus.SetResourceReference(TextBlock.ForegroundProperty, valid ? ThemeSupport.SecondaryText : ThemeSupport.Critical);
-            AutomationProperties.SetName(appearanceColorStatus, appearanceColorStatus.Text);
+            AutomationProperties.SetName(appearanceColorStatus, valid ? appearanceColorStatus.Text : appearanceColorStatus.Text + " " + reason);
+        }
+        if (appearanceColorDetail is not null)
+        {
+            appearanceColorDetail.Text = reason;
+            appearanceColorDetail.Visibility = valid ? Visibility.Collapsed : Visibility.Visible;
+            AutomationProperties.SetName(appearanceColorDetail, reason);
         }
         SetFeatureEntry("color-apply", "Keep color", valid ? "Keep this color in the unsaved appearance draft" : "Keep this draft color; fix contrast before saving. " + reason, true);
         SetEntryDescription("color-hex", appearanceColorValue);
