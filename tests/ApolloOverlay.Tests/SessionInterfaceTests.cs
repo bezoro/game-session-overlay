@@ -362,24 +362,26 @@ internal static class SessionInterfaceTests
         // Keep the native, loaded tree attached. Detaching it loses inherited
         // implicit templates and can render empty buttons with otherwise valid geometry.
         Require(root.IsLoaded && PresentationSource.FromVisual(root) is not null, "Capture tree is detached from its real WPF presentation source");
-        var buttons = PremiumInterfaceTests.Descendants<Button>(root)
+        foreach (var button in PremiumInterfaceTests.Descendants<Button>(root))
+            button.ApplyTemplate();
+        window.UpdateLayout();
+        root.UpdateLayout();
+        window.Dispatcher.Invoke(DispatcherPriority.Render, new Action(() => { }));
+        // Inspect the settled visual tree, including text created by ContentPresenter.
+        // The logical tree does not contain template-generated labels for string content.
+        var buttons = CaptureVisuals<Button>(root)
             .Where(button => button.IsVisible && button.ActualWidth > 0 && button.ActualHeight > 0)
             .ToArray();
         Require(buttons.Length >= 4, "Capture has no rendered command buttons");
         var rows = (FrameworkElement)window.FindName("Rows");
         Require(buttons.Any(button => rows.IsAncestorOf(button)), "Capture has chrome but no rendered page actions");
         foreach (var button in buttons)
-            button.ApplyTemplate();
-        window.UpdateLayout();
-        root.UpdateLayout();
-        window.Dispatcher.Invoke(DispatcherPriority.Render, new Action(() => { }));
-        foreach (var button in buttons)
         {
             Require(button.Template is not null && VisualTreeHelper.GetChildrenCount(button) > 0, "Capture button has no template visuals: " + button.Tag);
             if (button.Content is FrameworkElement content)
                 Require(content.IsVisible && content.ActualWidth > 0 && content.ActualHeight > 0 && PresentationSource.FromVisual(content) is not null, "Capture button content is disconnected or empty: " + button.Tag);
             else if (button.Content is string text && text.Length > 0)
-                Require(PremiumInterfaceTests.Descendants<TextBlock>(button).Any(label => label.IsVisible && label.ActualWidth > 0 && label.ActualHeight > 0 && label.Text.Length > 0), "Capture button text is not rendered: " + button.Tag);
+                Require(CaptureVisuals<TextBlock>(button).Any(label => label.IsVisible && label.ActualWidth > 0 && label.ActualHeight > 0 && label.Text.Length > 0), "Capture button text is not rendered: " + button.Tag);
         }
         if (((Border)window.FindName("ContextCard")).Visibility == Visibility.Visible)
         {
@@ -405,6 +407,18 @@ internal static class SessionInterfaceTests
         var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(window);
         return bitmap;
+    }
+
+    private static IEnumerable<T> CaptureVisuals<T>(DependencyObject root) where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            var child = VisualTreeHelper.GetChild(root, index);
+            if (child is T match)
+                yield return match;
+            foreach (var nested in CaptureVisuals<T>(child))
+                yield return nested;
+        }
     }
 
     private static void Navigate(MainWindow w, string page)
