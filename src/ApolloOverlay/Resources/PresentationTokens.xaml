@@ -1,0 +1,53 @@
+<ResourceDictionary
+  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+  <FontFamily
+    x:Key="SessionFont.Display">Segoe UI Variable Display, Segoe UI</FontFamily>
+  <FontFamily
+    x:Key="SessionFont.Text">Segoe UI Variable Text, Segoe UI</FontFamily>
+  <sys:Double
+    x:Key="SessionType.Title">26</sys:Double>
+  <sys:Double
+    x:Key="SessionType.Section">17</sys:Double>
+  <sys:Double
+    x:Key="SessionType.Body">15</sys:Double>
+  <sys:Double
+    x:Key="SessionType.Caption">13</sys:Double>
+  <sys:Double
+    x:Key="SessionType.CompactBody">14</sys:Double>
+  <sys:Double
+    x:Key="SessionSpace.4">4</sys:Double>
+  <sys:Double
+    x:Key="SessionSpace.8">8</sys:Double>
+  <sys:Double
+    x:Key="SessionSpace.12">12</sys:Double>
+  <sys:Double
+    x:Key="SessionSpace.16">16</sys:Double>
+  <sys:Double
+    x:Key="SessionSpace.24">24</sys:Double>
+  <sys:Double
+    x:Key="SessionSpace.32">32</sys:Double>
+  <CornerRadius
+    x:Key="SessionRadius.Control">10</CornerRadius>
+  <CornerRadius
+    x:Key="SessionRadius.Card">12</CornerRadius>
+  <CornerRadius
+    x:Key="SessionRadius.Panel">16</CornerRadius>
+  <Thickness
+    x:Key="SessionThickness.Action">12,8</Thickness>
+  <Thickness
+    x:Key="SessionThickness.ActionMargin">0,4</Thickness>
+  <Thickness
+    x:Key="SessionThickness.Panel">24,20</Thickness>
+  <Duration
+    x:Key="SessionMotion.Press">0:0:0.10</Duration>
+  <Duration
+    x:Key="SessionMotion.Focus">0:0:0.12</Duration>
+  <Duration
+    x:Key="SessionMotion.Route">0:0:0.16</Duration>
+  <Duration
+    x:Key="SessionMotion.Panel">0:0:0.20</Duration>
+  <Duration
+    x:Key="SessionMotion.Notice">0:0:0.14</Duration>
+</ResourceDictionary>

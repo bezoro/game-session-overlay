@@ -79,6 +79,12 @@ public partial class MainWindow
             case OverlayRoute.CaptureDetail:
                 BuildCaptureDetail();
                 return true;
+            case OverlayRoute.Appearance:
+                BuildAppearance();
+                return true;
+            case OverlayRoute.ColorEdit:
+                BuildColorEditor();
+                return true;
             default:
                 return false;
         }
@@ -94,6 +100,8 @@ public partial class MainWindow
         OverlayRoute.Keyboard => "Keyboard",
         OverlayRoute.Captures => "Your captures",
         OverlayRoute.CaptureDetail => "Session capture",
+        OverlayRoute.Appearance => "Appearance",
+        OverlayRoute.ColorEdit => "Edit color",
         _ => null
     };
 }

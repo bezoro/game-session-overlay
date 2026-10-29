@@ -30,7 +30,9 @@ public enum OverlayRoute
     Media,
     Keyboard,
     Captures,
-    CaptureDetail
+    CaptureDetail,
+    Appearance,
+    ColorEdit
 }
 
 public sealed record OverlayViewFrame(

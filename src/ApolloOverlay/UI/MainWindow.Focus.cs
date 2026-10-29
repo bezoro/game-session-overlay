@@ -100,10 +100,14 @@ public partial class MainWindow
     {
         var foreground = FocusForeground();
         var wasVisible = IsVisible;
+        var reversingFade = fadingOut && wasVisible && IsActive && OwnForeground;
+        var interruptedOpacity = reversingFade ? Math.Clamp(Opacity, 0, 1) : 0;
         fadeGeneration++;
         fadingOut = false;
         CancelOpenAnimation();
         RevokeFocus("request");
+        if (reversingFade)
+            Opacity = interruptedOpacity;
         var cycle = focusCycle;
         CancelHandoff();
         CancelHold();
@@ -208,7 +212,8 @@ public partial class MainWindow
             return false;
         using var activation = new CancellationTokenSource();
         activationCancellation = activation;
-        var needsReveal = Opacity == 0 || !IsActive || !OwnForeground;
+        var needsReveal = Opacity < 1 || !IsActive || !OwnForeground;
+        var revealFrom = IsActive && OwnForeground ? Math.Clamp(Opacity, 0, 1) : 0;
         opening = true;
         if (needsReveal)
             PrepareOpenAnimation();
@@ -246,7 +251,7 @@ public partial class MainWindow
                     TraceFocus("confirmed", ResultKind.Completed);
                     FeedbackText("Panel ready. Navigate with your preferred input.");
                     if (needsReveal)
-                        AnimateOpen();
+                        AnimateOpen(revealFrom);
                     return true;
                 }
 

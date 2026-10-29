@@ -128,7 +128,9 @@ public partial class MainWindow
     {
         var frame = view.Current;
         EnsurePlayniteScan(frame.BrowserFolder);
-        Paragraph(frame.BrowserFolder is null ? "Choose a drive and browse its folders to find Playnite." : frame.BrowserFolder);
+        FeatureHeading("Locate Playnite", "Choose its installation folder. This does not launch or install Playnite.", "configure-playnite");
+        if (frame.BrowserFolder is not null)
+            FeatureFact("Folder", frame.BrowserFolder);
         var listing = playniteListing;
         if (listing is null)
             AddRow("playnite-loading", "Loading folders…", "Wait or go back", () =>
@@ -149,7 +151,7 @@ public partial class MainWindow
             }
 
             if (listing.Folders.Length == 0 && listing.Executable is null && listing.Error is null)
-                Paragraph(frame.BrowserFolder is null ? "No local drives found." : "No folders or Playnite installation found here.");
+                FeatureEmpty(frame.BrowserFolder is null ? "No local drives found" : "No installation found here", "Go back to choose another folder, or use the Windows file picker.", "capture-folder");
             if (listing.Truncated)
                 Paragraph("This folder has many subfolders. Use the Windows file picker if the folder you need is not listed.");
             if (page > 0)

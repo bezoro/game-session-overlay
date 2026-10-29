@@ -31,12 +31,12 @@ public partial class MainWindow
     {
         var media = CurrentMedia;
         if (media is null)
-            Paragraph("Play music or video in an app that supports Windows media controls.");
+            FeatureEmpty("No active playback", "Play music or video in an app that supports Windows media controls.", "session-media");
         else
         {
-            Paragraph(media.Title.Length > 0 ? media.Title : "Media playback", 24);
-            if (media.Artist.Length > 0)
-                Paragraph(media.Artist);
+            FeatureHeading(media.Title.Length > 0 ? media.Title : "Media playback", media.Artist, "session-media");
+            if (media.Application.Length > 0)
+                FeatureFact("Source", media.Application);
         }
 
         AddRow("media-toggle", media?.Playing == true ? "Pause" : "Play", media is null ? "No active media" : "Control playback", () => MediaCommand(SessionMediaCommand.Toggle), media?.CanToggle == true);
@@ -44,6 +44,8 @@ public partial class MainWindow
         AddRow("media-previous", "Previous", "Go to the previous track", () => MediaCommand(SessionMediaCommand.Previous), media?.CanPrevious == true, row: first, column: 0, compactGrid: true);
         AddRow("media-next", "Next", "Skip to the next track", () => MediaCommand(SessionMediaCommand.Next), media?.CanNext == true, row: first, column: 1, compactGrid: true);
         if (sessionMedia.Current.Items.Count > 1)
+        {
+            Section("Playback sources");
             foreach (var item in sessionMedia.Current.Items)
             {
                 var selected = item;
@@ -53,6 +55,7 @@ public partial class MainWindow
                     RefreshRows();
                 });
             }
+        }
 
         AddRow("media-refresh", "Refresh media", sessionMedia.Current.Status, () => featureTask = sessionMedia.RefreshAsync());
         AddRow("back", "Back", "Session panel", Back);

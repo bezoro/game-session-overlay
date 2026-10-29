@@ -2,6 +2,22 @@ namespace ApolloOverlay;
 
 public partial class MainWindow
 {
+    internal void ShowRollbackForValidation(InstalledBuild build)
+    {
+        if (!diagnostic)
+            throw new InvalidOperationException("Rollback presentation fixtures require diagnostic mode.");
+        rollbackReview = build;
+        updateReview = null;
+        OpenView(new(OverlayRoute.UpdateReview, SelectedId: "apply-rollback"));
+    }
+
+    internal void ShowPlayniteFolderForValidation(string folder)
+    {
+        if (!diagnostic)
+            throw new InvalidOperationException("Folder presentation fixtures require diagnostic mode.");
+        OpenView(new(OverlayRoute.PlayniteBrowser, SelectedId: "playnite-loading", BrowserFolder: folder));
+    }
+
     public void SetRenderState(string state)
     {
         switch (state)

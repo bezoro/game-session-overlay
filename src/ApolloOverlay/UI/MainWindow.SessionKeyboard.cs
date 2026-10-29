@@ -9,16 +9,26 @@ namespace ApolloOverlay;
 public partial class MainWindow
 {
     private string keyboardText = "";
-    private bool keyboardUpper, keyboardSymbols, keyboardForProfile;
+    private enum TextEntryPurpose
+    {
+        WindowText, ProfileName, ColorHex
+    }
+    private bool keyboardUpper, keyboardSymbols;
+    private TextEntryPurpose keyboardPurpose;
+    private bool KeyboardForProfile => keyboardPurpose == TextEntryPurpose.ProfileName;
+    private bool KeyboardForColor => keyboardPurpose == TextEntryPurpose.ColorHex;
+    private bool KeyboardIsLocal => keyboardPurpose != TextEntryPurpose.WindowText;
+    private int KeyboardTextLimit => KeyboardForColor ? 7 : KeyboardForProfile ? 48 : 512;
+    private string KeyboardTextLabel => KeyboardForColor ? "Hex color" : KeyboardForProfile ? "Profile name" : "Text to insert";
     private WindowRef? keyboardTarget;
     private TextBox? keyboardEditor;
     private void OpenKeyboard(bool forProfile)
     {
-        keyboardForProfile = forProfile;
+        keyboardPurpose = forProfile ? TextEntryPurpose.ProfileName : TextEntryPurpose.WindowText;
         keyboardText = forProfile ? profileDraft?.Name ?? "" : "";
         keyboardUpper = false;
         keyboardSymbols = false;
-        keyboardTarget = Controller.ReturnTarget is { } previous && Controller.Platform.Valid(previous) && !previous.Protected ? previous : Controller.Session.Anchor;
+        keyboardTarget = forProfile ? null : Controller.ReturnTarget is { } previous && Controller.Platform.Valid(previous) && !previous.Protected ? previous : Controller.Session.Anchor;
         OpenFeature(OverlayRoute.Keyboard, "key:q");
     }
 
@@ -45,7 +55,7 @@ public partial class MainWindow
         {
             Height = GridLength.Auto
         });
-        if (!keyboardForProfile)
+        if (!KeyboardIsLocal)
         {
             var title = "To: " + (keyboardTarget?.Title ?? "Choose a window");
             var destination = KeyboardButton("keyboard-target", title, () =>
@@ -72,7 +82,7 @@ public partial class MainWindow
         keyboardEditor = new TextBox
         {
             Text = keyboardText,
-            MaxLength = keyboardForProfile ? 48 : 512,
+            MaxLength = KeyboardTextLimit,
             AcceptsReturn = false,
             TextWrapping = TextWrapping.NoWrap,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
@@ -81,16 +91,17 @@ public partial class MainWindow
             Padding = new(6, 2, 4, 2),
             BorderThickness = new(0),
             FontSize = compact ? 18 : 20,
-            ToolTip = keyboardForProfile ? "Profile name" : "Text to insert; Enter is never sent"
+            ToolTip = KeyboardIsLocal ? KeyboardTextLabel : "Text to insert; Enter is never sent"
         };
-        AutomationProperties.SetName(keyboardEditor, keyboardForProfile ? "Profile name" : "Text to insert");
+        AutomationProperties.SetName(keyboardEditor, KeyboardTextLabel);
         keyboardEditor.SetResourceReference(ForegroundProperty, ThemeSupport.Text);
         keyboardEditor.SetResourceReference(BackgroundProperty, ThemeSupport.Surface);
-        keyboardEditor.SetResourceReference(TextBox.CaretBrushProperty, ThemeSupport.Focus);
-        keyboardEditor.SetResourceReference(TextBox.SelectionBrushProperty, ThemeSupport.FocusBackground);
+        keyboardEditor.SetResourceReference(TextBox.CaretBrushProperty, ThemeSupport.Caret);
+        keyboardEditor.SetResourceReference(TextBox.SelectionBrushProperty, ThemeSupport.TextSelection);
+        keyboardEditor.SetResourceReference(TextBox.SelectionTextBrushProperty, ThemeSupport.TextSelectionForeground);
         var count = new TextBlock
         {
-            Text = keyboardText.Length + "/" + (keyboardForProfile ? 48 : 512),
+            Text = keyboardText.Length + "/" + KeyboardTextLimit,
             FontSize = 11,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center
@@ -101,7 +112,7 @@ public partial class MainWindow
         editorContent.Children.Add(count);
         var placeholder = new TextBlock
         {
-            Text = keyboardForProfile ? "Profile name" : "Type or choose keys",
+            Text = KeyboardIsLocal ? KeyboardTextLabel : "Type or choose keys",
             Margin = new(8, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
             IsHitTestVisible = false,
@@ -115,12 +126,12 @@ public partial class MainWindow
         {
             keyboardText = editor.Text;
             SetEntryDescription("keyboard-editor", keyboardText.Length + " characters");
-            count.Text = keyboardText.Length + "/" + (keyboardForProfile ? 48 : 512);
+            count.Text = keyboardText.Length + "/" + KeyboardTextLimit;
             placeholder.Visibility = keyboardText.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         };
         AddKeyboardButton(pane, editorButton, 1);
 
-        var keyRows = keyboardSymbols
+        var keyRows = KeyboardForColor ? new[] { "0123456789", "ABCDEF" } : keyboardSymbols
             ? new[] { "1234567890", "@#$%&*()-_", "!?/:;+=%" }
             : new[] { "qwertyuiop", "asdfghjkl", "zxcvbnm,.?" };
         const int columns = 10;
@@ -162,19 +173,22 @@ public partial class MainWindow
             {
                 Width = new GridLength(width, GridUnitType.Star)
             });
-        AddKeyboardButton(edits, KeyboardButton("keyboard-space", "Space", () => AppendKeyboard(" "), "Insert a space", actionHeight), 0, 0);
+        if (!KeyboardForColor)
+            AddKeyboardButton(edits, KeyboardButton("keyboard-space", "Space", () => AppendKeyboard(" "), "Insert a space", actionHeight), 0, 0);
         AddKeyboardButton(edits, KeyboardButton("keyboard-delete", "Delete", () =>
         {
             keyboardText = SessionTextEntry.Backspace(keyboardText);
             if (keyboardEditor is not null)
                 keyboardEditor.Text = keyboardText;
         }, "Remove the last character", actionHeight), 0, 1);
-        AddKeyboardButton(edits, KeyboardButton("keyboard-case", keyboardUpper ? "abc" : "ABC", () =>
+        if (!KeyboardForColor)
+            AddKeyboardButton(edits, KeyboardButton("keyboard-case", keyboardUpper ? "abc" : "ABC", () =>
         {
             keyboardUpper = !keyboardUpper;
             RefreshRows();
         }, "Change letter case", actionHeight), 0, 2);
-        AddKeyboardButton(edits, KeyboardButton("keyboard-symbols", keyboardSymbols ? "Keys" : "123", () =>
+        if (!KeyboardForColor)
+            AddKeyboardButton(edits, KeyboardButton("keyboard-symbols", keyboardSymbols ? "Keys" : "123", () =>
         {
             keyboardSymbols = !keyboardSymbols;
             RefreshRows();
@@ -196,14 +210,15 @@ public partial class MainWindow
             Width = new GridLength(64)
         });
         commands.ColumnDefinitions.Add(new());
-        var back = KeyboardButton("back", "Back", Back, "Return without sending text", compact ? 44 : 48);
+        var back = KeyboardButton("back", "Back", Back, KeyboardIsLocal ? "Return without using this text" : "Return without sending text", compact ? 44 : 48);
         back.Content = new IconLabel(this, "back", "Back");
         AddKeyboardButton(commands, back, 0, 0);
-        var insert = KeyboardButton("keyboard-insert", keyboardForProfile ? "Use name" : "Insert text", SubmitSessionKeyboard,
-            keyboardForProfile ? "Return to the profile without sending text to another app" : "Sends text only; Enter is never sent", compact ? 44 : 48, keyboardForProfile || keyboardTarget is not null);
+        var command = KeyboardForColor ? "Use color" : KeyboardForProfile ? "Use name" : "Insert text";
+        var insert = KeyboardButton("keyboard-insert", command, SubmitSessionKeyboard,
+            KeyboardIsLocal ? "Use this value locally; no text is sent to another app" : "Sends text only; Enter is never sent", compact ? 44 : 48, KeyboardIsLocal || keyboardTarget is not null);
         var insertContent = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        insertContent.Children.Add(new IconLabel(this, keyboardForProfile ? "profile-accept" : "keyboard-insert", keyboardForProfile ? "Use name" : "Insert text", 13, 16));
-        var insertionHint = new TextBlock { Text = keyboardForProfile ? "Return to profile" : "Text only · never Enter", FontSize = 11, TextAlignment = TextAlignment.Center };
+        insertContent.Children.Add(new IconLabel(this, KeyboardIsLocal ? "profile-accept" : "keyboard-insert", command, 13, 16));
+        var insertionHint = new TextBlock { Text = KeyboardForColor ? "Local color only" : KeyboardForProfile ? "Return to profile" : "Text only · never Enter", FontSize = 11, TextAlignment = TextAlignment.Center };
         insertionHint.SetResourceReference(ForegroundProperty, ThemeSupport.SecondaryText);
         insertContent.Children.Add(insertionHint);
         insert.Content = insertContent;
@@ -262,7 +277,7 @@ public partial class MainWindow
 
     private void AppendKeyboard(string value)
     {
-        var maximum = keyboardForProfile ? 48 : 512;
+        var maximum = KeyboardTextLimit;
         if (keyboardText.Length + value.Length > maximum)
         {
             FeedbackText("Text limit reached.");
@@ -280,7 +295,12 @@ public partial class MainWindow
 
     private void SubmitSessionKeyboard()
     {
-        if (keyboardForProfile)
+        if (KeyboardForColor)
+        {
+            SubmitAppearanceHex();
+            return;
+        }
+        if (KeyboardForProfile)
         {
             var name = keyboardText.Trim();
             if (name.Length == 0)

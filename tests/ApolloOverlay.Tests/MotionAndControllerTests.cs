@@ -10,6 +10,26 @@ internal static class MotionAndControllerTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        test("reopening an owned panel reverses its fade without a full-opacity or transparent jump", () =>
+        {
+            using var host = new Host();
+            var window = host.Window;
+            if (!InteractionMotion.Allowed)
+            {
+                Require(window.Opacity == 1, "The animation-restricted panel was not fully presented");
+                return;
+            }
+            window.ForceFadeFixture = true;
+            window.BeginFadeFixture();
+            Pump(90);
+            var before = window.Opacity;
+            Require(window.FadePending && before > 0 && before < .99, "PRECONDITION: close animation did not reach an intermediate frame");
+            window.OpenPanel();
+            Require(Math.Abs(window.Opacity - before) < .02, "Reopening reset the current fade rather than reversing it");
+            ReviewFixTests.Complete(window.OpeningTask);
+            Pump(260);
+            Require(window.IsVisible && !window.FadePending && window.Opacity == 1, "An obsolete close continuation hid the reopened panel");
+        });
         test("enabled and unavailable actions render a single selection outline", () =>
         {
             using var host = new Host();
@@ -31,31 +51,35 @@ internal static class MotionAndControllerTests
                 Require(strokes == 1, "Selection renders " + strokes + " overlapping outlines for " + id);
             }
         });
-        test("selection breathing and sheen preserve geometry and stop on focus change and hide", () =>
+        test("selection acknowledges immediately then settles without moving layout or retaining obsolete motion", () =>
         {
             using var host = new Host();
-            var w = host.Window;
-            var button = (Button)w.FindName("SessionCardButton");
+            var window = host.Window;
+            var button = (Button)window.FindName("SessionCardButton");
             button.ApplyTemplate();
-            var breath = (Border)button.Template.FindName("SelectionBreath", button);
+            var outline = (Border)button.Template.FindName("SelectionBreath", button);
             var sheen = (Border)button.Template.FindName("SelectionSheen", button);
-            var label = (TextBlock)w.FindName("TargetLabel");
-            var before = System.Windows.Controls.Primitives.LayoutInformation.GetLayoutSlot(label);
-            var scale = (ScaleTransform)((Grid)button.Template.FindName("ButtonSurface", button)).RenderTransform;
-            Require(InteractionMotion.GetIsSelected(button) == InteractionMotion.Allowed, "Visible selection did not follow the motion policy");
-            Require(breath.HasAnimatedProperties == InteractionMotion.Allowed && sheen.Background.RelativeTransform.HasAnimatedProperties == InteractionMotion.Allowed, "Selection effects did not start");
-            Pump(180);
-            Require(System.Windows.Controls.Primitives.LayoutInformation.GetLayoutSlot(label) == before, "Breathing changed layout instead of only rendering scale");
-            Require(scale.HasAnimatedProperties == InteractionMotion.Allowed && scale.ScaleX is >= 1 and <= 1.0081 && scale.ScaleY == scale.ScaleX, "Breathing scale is missing, asymmetric or excessive");
-            w.Sequential(1);
+            var label = (TextBlock)window.FindName("TargetLabel");
+            var layout = System.Windows.Controls.Primitives.LayoutInformation.GetLayoutSlot(label);
+            var surface = (ScaleTransform)((Grid)button.Template.FindName("ButtonSurface", button)).RenderTransform;
+            Require(window.SelectedAction == "session-card" && button.IsKeyboardFocusWithin, "Motion delayed the logical selection or keyboard focus");
+            Require(Strokes(button) == 1 && outline.Opacity > 0, "Initial selection has no immediate, single visible outline");
+            Pump(350);
+            Require(System.Windows.Controls.Primitives.LayoutInformation.GetLayoutSlot(label) == layout, "Selection acknowledgement changed layout");
+            Require(surface.ScaleX == 1 && surface.ScaleY == 1 && !surface.HasAnimatedProperties, "Selection retained decorative scaling after settling");
+            var settled = outline.Opacity;
+            Require(sheen.Opacity == 0, "The selected action kept a repeating light sweep");
+            Pump(250);
+            Require(Math.Abs(outline.Opacity - settled) < .001 && sheen.Opacity == 0, "A settled selection continued decorative breathing or sheen");
+            window.Sequential(1);
             Pump(10);
-            Require(!breath.HasAnimatedProperties && !sheen.Background.RelativeTransform.HasAnimatedProperties, "Previous selection kept its animation clocks");
-            Require(!scale.HasAnimatedProperties && scale.ScaleX == 1 && scale.ScaleY == 1, "Previous selection kept its scale");
-            Pick(w, "session-card");
-            w.Hide();
+            Require(!outline.HasAnimatedProperties && !sheen.HasAnimatedProperties && !sheen.Background.RelativeTransform.HasAnimatedProperties,
+                "The previous selection retained obsolete animation clocks");
+            Pick(window, "session-card");
+            window.Hide();
             Pump(10);
-            Require(!InteractionMotion.GetIsSelected(button) && !breath.HasAnimatedProperties && !sheen.Background.RelativeTransform.HasAnimatedProperties, "Hidden overlay kept selection animation clocks alive");
-            Require(!scale.HasAnimatedProperties && scale.ScaleX == 1, "Hidden overlay kept scale animation clocks alive");
+            Require(!InteractionMotion.GetIsSelected(button) && !outline.HasAnimatedProperties && !sheen.HasAnimatedProperties,
+                "A hidden overlay kept selection acknowledgement clocks");
         });
         test("press animation returns to neutral and obsolete motion preferences do not suppress it", () =>
         {

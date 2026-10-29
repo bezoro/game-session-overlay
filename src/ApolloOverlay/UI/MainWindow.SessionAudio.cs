@@ -129,7 +129,7 @@ public partial class MainWindow
 
     private void BuildSessionMixer()
     {
-        Paragraph("Adjust only the selected app. Other processes keep their own audio settings.");
+        FeatureHeading("Per-app audio", "Adjust a selected app without changing other processes or the Windows master volume.", "session-mixer");
         AddRow("mixer-refresh", "Refresh apps", "Check audio sessions", () =>
         {
             nextFeatureRead = 0;
@@ -267,12 +267,15 @@ public partial class MainWindow
 
     private void BuildAudioDevices()
     {
-        Paragraph("Choose the Windows output for games and media. The TV's own volume is separate.");
+        FeatureHeading("Windows audio devices", "Choose the output for games and media. The TV's physical volume is separate.", "audio-devices");
         AddRow("device-refresh", "Refresh devices", systemAudio.Current.Status, () =>
         {
             nextFeatureRead = 0;
             StartFeatureRead();
         });
+        Section("Audio output");
+        if (systemAudio.Current.Outputs.Count == 0)
+            FeatureEmpty("No audio output available", "Connect an audio device, then refresh this list.", "audio-devices");
         foreach (var output in systemAudio.Current.Outputs)
         {
             var chosen = output;
@@ -284,6 +287,7 @@ public partial class MainWindow
             });
         }
 
+        Section("Microphone");
         AddRow("microphone", MicrophoneTitle, systemAudio.Current.MicrophoneName, ToggleMicrophone, systemAudio.Current.MicrophoneMuted is not null);
         AddRow("back", "Back", "Session audio", Back);
     }

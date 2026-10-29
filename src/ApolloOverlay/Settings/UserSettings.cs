@@ -20,7 +20,8 @@ public sealed record UserSettings(
     string PanelSide = "Left",
     bool SoundFeedbackEnabled = false,
     bool HapticFeedbackEnabled = false,
-    bool SetupSeen = false
+    bool SetupSeen = false,
+    AppearanceSettings? Appearance = null
 )
 {
     public static UserSettings Parse(string text) => Parse(text, out _);

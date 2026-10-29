@@ -18,7 +18,7 @@ public partial class MainWindow
 
     private void BuildSystem()
     {
-        Section("App");
+        Section("Application");
         AddRow("updates", "Version and updates", AppBuild.Current.Display + " · update or restore an earlier version", OpenUpdates);
         AddStartup();
         if (Controller.Operation is { } result)
@@ -27,20 +27,23 @@ public partial class MainWindow
         AddDisplay();
         AddRow("side", "Side · " + (Controller.Settings.PanelSide == "Right" ? "Right" : "Left"), "Choose which side to use", () => Change(Controller.Settings with { PanelSide = Controller.Settings.PanelSide == "Left" ? "Right" : "Left" }));
         AddScale();
+        AddRow("appearance", "Appearance", "Theme presets and every overlay color", OpenAppearance);
         Section("Controller");
         controllerStatusParagraph = Paragraph(controllerStatus);
         AddRow("deadzone", "Deadzone · " + (Controller.Settings.Deadzone * 100d / short.MaxValue).ToString("0", System.Globalization.CultureInfo.InvariantCulture) + "%", "Ignore movement near the stick center", () => Change(Controller.Settings with { Deadzone = Controller.Settings.Deadzone < 12000 ? 12000 : Controller.Settings.Deadzone < 18000 ? 18000 : Controller.Settings.Deadzone < 24000 ? 24000 : 12000 }));
         AddGuideToggle();
         AddGuideLimit();
-        Section("Make it yours");
-        AddRow("customize", "Customize quick access", $"{SessionHubSettings.Favorites(Controller.Settings).Length} visible actions · order and visibility", () => OpenView(new(OverlayRoute.Customize, SelectedId: "favorite:playnite")));
+        Section("Feedback");
         AddFeedback();
+        Section("Your panel");
+        AddRow("customize", "Customize quick access", $"{SessionHubSettings.Favorites(Controller.Settings).Length} visible actions · order and visibility", () => OpenView(new(OverlayRoute.Customize, SelectedId: "favorite:playnite")));
         AddRow("setup", "Setup guide", "Three optional steps · leave at any time", () => OpenView(new(OverlayRoute.Setup, SelectedId: "setup-next")));
         Section("Integrations");
         AddRow("configure-playnite", "Playnite location", Controller.Settings.PlaynitePath is null ? "Choose executable…" : "Installation configured", ConfigurePlaynite);
         AddRow("shortcut", "Steam shortcut · " + Controller.Settings.SteamShortcut, "A switches Shift+Tab / Ctrl+Tab", () => Change(Controller.Settings with { SteamShortcut = Controller.Settings.SteamShortcut == "Shift+Tab" ? "Ctrl+Tab" : "Shift+Tab" }));
         AddRow("integrations", "Integrations and limits", "Guide, Steam and external features", () => Subpage("integrations", "test-steam"));
-        AddRow("save", "Save settings", "Save on this computer", Save);
+        Section("Settings and background services");
+        AddRow("save", "Save settings", "Keep your changes on this computer", Save);
         AddRow("exit", "Quit overlay", Controller.SettingsDirty ? "Unsaved changes will be lost" : "Stops background services and removes the tray icon", () => QueueHandoff(Close));
     }
 
@@ -59,7 +62,11 @@ public partial class MainWindow
             UiScalePercent = scales[(Array.IndexOf(scales, Controller.Settings.UiScalePercent) + 1) % scales.Length]
         });
     });
-    private void AddGuideToggle() => AddRow("guide", "Xbox / Guide button · " + (Controller.Settings.GuideXInputEnabled ? "on" : "off"), GuideDescription(), () => Change(Controller.Settings with { GuideXInputEnabled = !Controller.Settings.GuideXInputEnabled }), !diagnostic && !Controller.Platform.IsPreview);
+    private void AddGuideToggle()
+    {
+        var button = AddRow("guide", "Xbox / Guide button · " + (Controller.Settings.GuideXInputEnabled ? "On" : "Off"), GuideDescription(), () => Change(Controller.Settings with { GuideXInputEnabled = !Controller.Settings.GuideXInputEnabled }), !diagnostic && !Controller.Platform.IsPreview);
+        AddToggleIndicator(button, Controller.Settings.GuideXInputEnabled);
+    }
     private void AddGuideLimit()
     {
         var button = AddRow("guide-limit", GuideLimitTitle(), "← / → adjusts · 0.5–3.0 s", () =>
@@ -116,9 +123,39 @@ public partial class MainWindow
 
     private void AddFeedback()
     {
-        AddRow("sound-feedback", "Sounds · " + (Controller.Settings.SoundFeedbackEnabled ? "On" : "Off"), "Navigation, confirmation and back · preview when enabled", () => Change(Controller.Settings with { SoundFeedbackEnabled = !Controller.Settings.SoundFeedbackEnabled }));
-        AddRow("haptic-feedback", "Vibration · " + (Controller.Settings.HapticFeedbackEnabled ? "On" : "Off"), "Active controller only · short pulses", () => Change(Controller.Settings with { HapticFeedbackEnabled = !Controller.Settings.HapticFeedbackEnabled }));
+        var sound = AddRow("sound-feedback", "Sounds · " + (Controller.Settings.SoundFeedbackEnabled ? "On" : "Off"), "Quiet navigation, confirmation and back cues", () => Change(Controller.Settings with { SoundFeedbackEnabled = !Controller.Settings.SoundFeedbackEnabled }));
+        AddToggleIndicator(sound, Controller.Settings.SoundFeedbackEnabled);
+        var haptic = AddRow("haptic-feedback", "Vibration · " + (Controller.Settings.HapticFeedbackEnabled ? "On" : "Off"), "Active controller only · short pulses", () => Change(Controller.Settings with { HapticFeedbackEnabled = !Controller.Settings.HapticFeedbackEnabled }));
+        AddToggleIndicator(haptic, Controller.Settings.HapticFeedbackEnabled);
         AddRow("test-feedback", "Test feedback", FeedbackDescription(), TestFeedback, Controller.Settings.SoundFeedbackEnabled || Controller.Settings.HapticFeedbackEnabled);
+    }
+
+    private void AddToggleIndicator(Button button, bool enabled)
+    {
+        if (button.Content is not ActionButtonContent content)
+            return;
+        var indicator = new Border
+        {
+            Width = 36,
+            Height = 20,
+            CornerRadius = new(10),
+            Margin = new(8, 0, 0, 0),
+            IsHitTestVisible = false,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        indicator.SetResourceReference(Border.BackgroundProperty, enabled ? ThemeSupport.ToggleOn : ThemeSupport.ToggleOff);
+        var thumb = new System.Windows.Shapes.Ellipse
+        {
+            Width = 14,
+            Height = 14,
+            Margin = new(3),
+            HorizontalAlignment = enabled ? HorizontalAlignment.Right : HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        thumb.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, enabled ? ThemeSupport.ToggleThumbOn : ThemeSupport.ToggleThumbOff);
+        indicator.Child = thumb;
+        Grid.SetColumn(indicator, 2);
+        content.Children.Add(indicator);
     }
 
     private void BuildCustomize()

@@ -12,22 +12,23 @@ public partial class MainWindow
         var text = new TextBlock
         {
             Text = title,
-            FontSize = compactChrome ? 12 : 14,
+            FontFamily = (System.Windows.Media.FontFamily)FindResource("SessionFont.Display"),
+            FontSize = ResourceNumber("SessionType.Section", 17),
             FontWeight = FontWeights.SemiBold,
-            Margin = new(2, compactChrome ? 10 : 18, 0, compactChrome ? 6 : 8)
+            Margin = new(0, Rows.RowDefinitions.Count == 0 ? 4 : ResourceNumber("SessionSpace.16"), 0, ResourceNumber("SessionSpace.8"))
         };
-        text.SetResourceReference(TextBlock.ForegroundProperty, ThemeSupport.SecondaryText);
+        text.SetResourceReference(TextBlock.ForegroundProperty, ThemeSupport.Text);
         AddVisual(text);
     }
 
-    private TextBlock Paragraph(string text, int size = 16)
+    private TextBlock Paragraph(string text, int size = 15)
     {
         var block = new TextBlock
         {
             Text = text,
             FontSize = size,
             TextWrapping = TextWrapping.Wrap,
-            Margin = new(2, 6, 2, 14)
+            Margin = new(0, 4, 0, ResourceNumber("SessionSpace.12"))
         };
         block.SetResourceReference(TextBlock.ForegroundProperty, ThemeSupport.SecondaryText);
         AutomationProperties.SetName(block, text);

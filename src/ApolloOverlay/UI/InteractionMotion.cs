@@ -58,14 +58,15 @@ public static class InteractionMotion
         }
 
         var generation = ++state.Generation;
+        var duration = PresentationTokens.Duration(button, "SessionMotion.Press", 100).TimeSpan;
         var animation = new DoubleAnimationUsingKeyFrames
         {
-            Duration = TimeSpan.FromMilliseconds(220),
+            Duration = duration,
             FillBehavior = FillBehavior.Stop
         };
         animation.KeyFrames.Add(new LinearDoubleKeyFrame(state.Scale.ScaleX, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-        animation.KeyFrames.Add(new EasingDoubleKeyFrame(.987, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(65)), new CubicEase { EasingMode = EasingMode.EaseOut }));
-        animation.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(220)), new CubicEase { EasingMode = EasingMode.EaseOut }));
+        animation.KeyFrames.Add(new EasingDoubleKeyFrame(.987, KeyTime.FromTimeSpan(TimeSpan.FromTicks((long)(duration.Ticks * .45))), new CubicEase { EasingMode = EasingMode.EaseOut }));
+        animation.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(duration), new CubicEase { EasingMode = EasingMode.EaseOut }));
         animation.Completed += (_, _) =>
         {
             if (state.Generation == generation)

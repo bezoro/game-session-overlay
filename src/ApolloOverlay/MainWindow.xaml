@@ -7,8 +7,8 @@
   Language="en-US"
   Width="572"
   Height="940"
-  FontFamily="Segoe UI Variable Text, Segoe UI"
-  FontSize="16"
+  FontFamily="{DynamicResource SessionFont.Text}"
+  FontSize="{DynamicResource SessionType.Body}"
   TextOptions.TextFormattingMode="Display"
   Foreground="{DynamicResource TextFillColorPrimaryBrush}"
   WindowStyle="None"
@@ -23,10 +23,215 @@
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary
+          Source="Resources/PresentationTokens.xaml" />
+        <ResourceDictionary
           Source="Assets/Icons/Icons.xaml" />
         <ResourceDictionary
           Source="Assets/Icons/InputGlyphs.xaml" />
       </ResourceDictionary.MergedDictionaries>
+      <DropShadowEffect
+        x:Key="SessionPanelShadow"
+        Color="{DynamicResource SessionShadowColor}"
+        BlurRadius="16"
+        ShadowDepth="3"
+        Opacity="0.18" />
+      <Style
+        TargetType="TextBox">
+        <Setter
+          Property="FontFamily"
+          Value="{DynamicResource SessionFont.Text}" />
+        <Setter
+          Property="FontSize"
+          Value="{DynamicResource SessionType.Body}" />
+        <Setter
+          Property="Foreground"
+          Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter
+          Property="Background"
+          Value="{DynamicResource ControlFillColorDefaultBrush}" />
+        <Setter
+          Property="BorderBrush"
+          Value="{DynamicResource ControlStrokeColorDefaultBrush}" />
+        <Setter
+          Property="CaretBrush"
+          Value="{DynamicResource SessionCaretBrush}" />
+        <Setter
+          Property="SelectionBrush"
+          Value="{DynamicResource SessionTextSelectionBrush}" />
+        <Setter
+          Property="SelectionTextBrush"
+          Value="{DynamicResource SessionTextSelectionForegroundBrush}" />
+        <Setter
+          Property="SelectionOpacity"
+          Value="1" />
+        <Setter
+          Property="Padding"
+          Value="8" />
+        <Setter
+          Property="FocusVisualStyle"
+          Value="{x:Null}" />
+        <Setter
+          Property="Template">
+          <Setter.Value>
+            <ControlTemplate
+              TargetType="TextBox">
+              <Border
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                Padding="{TemplateBinding Padding}"
+                CornerRadius="{DynamicResource SessionRadius.Control}">
+                <ScrollViewer
+                  x:Name="PART_ContentHost" />
+              </Border>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+      <ControlTemplate
+        x:Key="ScrollPageButton"
+        TargetType="RepeatButton">
+        <Border
+          Background="Transparent" />
+      </ControlTemplate>
+      <Style
+        TargetType="ScrollBar">
+        <Setter
+          Property="Width"
+          Value="8" />
+        <Setter
+          Property="Background"
+          Value="Transparent" />
+        <Setter
+          Property="Focusable"
+          Value="False" />
+        <Setter
+          Property="Template">
+          <Setter.Value>
+            <ControlTemplate
+              TargetType="ScrollBar">
+              <Grid
+                Background="{TemplateBinding Background}">
+                <Track
+                  x:Name="PART_Track"
+                  Orientation="{TemplateBinding Orientation}"
+                  IsDirectionReversed="True"
+                  Minimum="{TemplateBinding Minimum}"
+                  Maximum="{TemplateBinding Maximum}"
+                  ViewportSize="{TemplateBinding ViewportSize}"
+                  Value="{Binding Value, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                  <Track.DecreaseRepeatButton>
+                    <RepeatButton
+                      x:Name="DecreasePage"
+                      Command="{x:Static ScrollBar.PageUpCommand}"
+                      Template="{StaticResource ScrollPageButton}"
+                      Focusable="False" />
+                  </Track.DecreaseRepeatButton>
+                  <Track.Thumb>
+                    <Thumb
+                      x:Name="ScrollThumb"
+                      MinHeight="24"
+                      MinWidth="6"
+                      Margin="1"
+                      Opacity="0.65">
+                      <Thumb.Template>
+                        <ControlTemplate
+                          TargetType="Thumb">
+                          <Border
+                            Background="{DynamicResource SessionSliderThumbBrush}"
+                            CornerRadius="3" />
+                        </ControlTemplate>
+                      </Thumb.Template>
+                    </Thumb>
+                  </Track.Thumb>
+                  <Track.IncreaseRepeatButton>
+                    <RepeatButton
+                      x:Name="IncreasePage"
+                      Command="{x:Static ScrollBar.PageDownCommand}"
+                      Template="{StaticResource ScrollPageButton}"
+                      Focusable="False" />
+                  </Track.IncreaseRepeatButton>
+                </Track>
+              </Grid>
+              <ControlTemplate.Triggers>
+                <Trigger
+                  Property="Orientation"
+                  Value="Horizontal">
+                  <Setter
+                    TargetName="PART_Track"
+                    Property="IsDirectionReversed"
+                    Value="False" />
+                  <Setter
+                    TargetName="ScrollThumb"
+                    Property="MinHeight"
+                    Value="6" />
+                  <Setter
+                    TargetName="ScrollThumb"
+                    Property="MinWidth"
+                    Value="24" />
+                  <Setter
+                    TargetName="DecreasePage"
+                    Property="Command"
+                    Value="{x:Static ScrollBar.PageLeftCommand}" />
+                  <Setter
+                    TargetName="IncreasePage"
+                    Property="Command"
+                    Value="{x:Static ScrollBar.PageRightCommand}" />
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+          <Trigger
+            Property="Orientation"
+            Value="Horizontal">
+            <Setter
+              Property="Width"
+              Value="Auto" />
+            <Setter
+              Property="Height"
+              Value="8" />
+          </Trigger>
+        </Style.Triggers>
+      </Style>
+      <Style
+        TargetType="ProgressBar">
+        <Setter
+          Property="Foreground"
+          Value="{DynamicResource SessionSliderActiveBrush}" />
+        <Setter
+          Property="Background"
+          Value="{DynamicResource SessionSliderTrackBrush}" />
+        <Setter
+          Property="Template">
+          <Setter.Value>
+            <ControlTemplate
+              TargetType="ProgressBar">
+              <Border
+                x:Name="PART_Track"
+                Background="{TemplateBinding Background}"
+                CornerRadius="3">
+                <Border
+                  x:Name="PART_Indicator"
+                  HorizontalAlignment="Left"
+                  Background="{TemplateBinding Foreground}"
+                  CornerRadius="3" />
+              </Border>
+              <ControlTemplate.Triggers>
+                <Trigger
+                  Property="IsIndeterminate"
+                  Value="True">
+                  <Setter
+                    TargetName="PART_Indicator"
+                    Property="Visibility"
+                    Value="Hidden" />
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
       <Style
         TargetType="Image">
         <Setter
@@ -37,7 +242,7 @@
         TargetType="Button">
         <Setter
           Property="FontFamily"
-          Value="Segoe UI Variable Text, Segoe UI" />
+          Value="{DynamicResource SessionFont.Text}" />
         <Setter
           Property="Foreground"
           Value="{DynamicResource TextFillColorPrimaryBrush}" />
@@ -52,16 +257,16 @@
           Value="1" />
         <Setter
           Property="Padding"
-          Value="16,12" />
+          Value="{DynamicResource SessionThickness.Action}" />
         <Setter
           Property="Margin"
-          Value="0,4" />
+          Value="{DynamicResource SessionThickness.ActionMargin}" />
         <Setter
           Property="MinHeight"
           Value="48" />
         <Setter
           Property="FontSize"
-          Value="16" />
+          Value="{DynamicResource SessionType.Body}" />
         <Setter
           Property="HorizontalContentAlignment"
           Value="Stretch" />
@@ -84,7 +289,7 @@
                   Background="{TemplateBinding Background}"
                   BorderBrush="{TemplateBinding BorderBrush}"
                   BorderThickness="{TemplateBinding BorderThickness}"
-                  CornerRadius="10"
+                  CornerRadius="{DynamicResource SessionRadius.Control}"
                   Padding="{TemplateBinding Padding}">
                   <ContentPresenter
                     TextElement.FontFamily="{TemplateBinding FontFamily}"
@@ -94,15 +299,18 @@
                 </Border>
                 <Border
                   x:Name="SelectionBreath"
-                  Margin="2"
+                  Margin="0"
                   BorderBrush="{DynamicResource SessionFocusBrush}"
                   BorderThickness="2"
-                  CornerRadius="11"
+                  CornerRadius="{DynamicResource SessionRadius.Control}"
                   IsHitTestVisible="False"
                   Opacity="0" />
                 <Border
                   x:Name="SelectionSheen"
-                  CornerRadius="10"
+                  Height="1"
+                  VerticalAlignment="Top"
+                  Margin="8,4,8,0"
+                  CornerRadius="{DynamicResource SessionRadius.Control}"
                   IsHitTestVisible="False"
                   Opacity="0">
                   <Border.Background>
@@ -114,34 +322,40 @@
                           X="-1.4" />
                       </LinearGradientBrush.RelativeTransform>
                       <GradientStop
-                        Color="#00FFFFFF"
+                        Color="Transparent"
                         Offset="0" />
                       <GradientStop
-                        Color="#00FFFFFF"
+                        Color="Transparent"
                         Offset="0.3" />
                       <GradientStop
-                        Color="#12FFFFFF"
+                        Color="{DynamicResource SessionSheenColor}"
                         Offset="0.5" />
                       <GradientStop
-                        Color="#00FFFFFF"
+                        Color="Transparent"
                         Offset="0.7" />
                       <GradientStop
-                        Color="#00FFFFFF"
+                        Color="Transparent"
                         Offset="1" />
                     </LinearGradientBrush>
                   </Border.Background>
                 </Border>
                 <Border
                   x:Name="Interaction"
-                  CornerRadius="10"
+                  Height="2"
+                  Margin="8,4,8,0"
+                  VerticalAlignment="Top"
+                  CornerRadius="1"
                   IsHitTestVisible="False"
-                  Background="{DynamicResource TextFillColorPrimaryBrush}"
+                  Background="{DynamicResource SessionHoverBrush}"
                   Opacity="0" />
                 <Border
                   x:Name="ActivationFeedback"
-                  CornerRadius="10"
+                  Height="2"
+                  Margin="8,4,8,0"
+                  VerticalAlignment="Top"
+                  CornerRadius="1"
                   IsHitTestVisible="False"
-                  Background="{DynamicResource TextFillColorPrimaryBrush}"
+                  Background="{DynamicResource SessionPressBrush}"
                   Opacity="0" />
               </Grid>
               <ControlTemplate.Triggers>
@@ -152,72 +366,33 @@
                     TargetName="SurfaceBorder"
                     Property="BorderBrush"
                     Value="Transparent" />
+                  <Setter
+                    TargetName="SelectionBreath"
+                    Property="Opacity"
+                    Value="1" />
                   <Trigger.EnterActions>
                     <BeginStoryboard
                       Name="SelectionMotion">
                       <Storyboard>
                         <DoubleAnimation
-                          Storyboard.TargetName="SelectionBreath"
-                          Storyboard.TargetProperty="Opacity"
-                          From="0.65"
-                          To="1"
-                          Duration="0:0:1.5"
-                          AutoReverse="True"
-                          RepeatBehavior="Forever" />
-                        <DoubleAnimation
-                          Storyboard.TargetName="ButtonSurface"
-                          Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
-                          From="1"
-                          To="1.008"
-                          Duration="0:0:1.5"
-                          AutoReverse="True"
-                          RepeatBehavior="Forever">
-                          <DoubleAnimation.EasingFunction>
-                            <SineEase
-                              EasingMode="EaseInOut" />
-                          </DoubleAnimation.EasingFunction>
-                        </DoubleAnimation>
-                        <DoubleAnimation
-                          Storyboard.TargetName="ButtonSurface"
-                          Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
-                          From="1"
-                          To="1.008"
-                          Duration="0:0:1.5"
-                          AutoReverse="True"
-                          RepeatBehavior="Forever">
-                          <DoubleAnimation.EasingFunction>
-                            <SineEase
-                              EasingMode="EaseInOut" />
-                          </DoubleAnimation.EasingFunction>
-                        </DoubleAnimation>
-                        <DoubleAnimation
                           Storyboard.TargetName="SelectionSheen"
                           Storyboard.TargetProperty="Opacity"
-                          To="1"
-                          Duration="0:0:0.25" />
-                        <DoubleAnimationUsingKeyFrames
+                          From="0.10"
+                          To="0"
+                          Duration="{StaticResource SessionMotion.Panel}"
+                          FillBehavior="Stop" />
+                        <DoubleAnimation
                           Storyboard.TargetName="SelectionSheen"
                           Storyboard.TargetProperty="(Border.Background).(Brush.RelativeTransform).(TranslateTransform.X)"
-                          Duration="0:0:5"
-                          RepeatBehavior="Forever">
-                          <LinearDoubleKeyFrame
-                            KeyTime="0:0:0"
-                            Value="-1.4" />
-                          <LinearDoubleKeyFrame
-                            KeyTime="0:0:0.5"
-                            Value="-1.4" />
-                          <EasingDoubleKeyFrame
-                            KeyTime="0:0:2.4"
-                            Value="1.4">
-                            <EasingDoubleKeyFrame.EasingFunction>
-                              <SineEase
-                                EasingMode="EaseInOut" />
-                            </EasingDoubleKeyFrame.EasingFunction>
-                          </EasingDoubleKeyFrame>
-                          <DiscreteDoubleKeyFrame
-                            KeyTime="0:0:5"
-                            Value="1.4" />
-                        </DoubleAnimationUsingKeyFrames>
+                          From="-1.4"
+                          To="1.4"
+                          Duration="{StaticResource SessionMotion.Panel}"
+                          FillBehavior="Stop">
+                          <DoubleAnimation.EasingFunction>
+                            <CubicEase
+                              EasingMode="EaseOut" />
+                          </DoubleAnimation.EasingFunction>
+                        </DoubleAnimation>
                       </Storyboard>
                     </BeginStoryboard>
                   </Trigger.EnterActions>
@@ -232,7 +407,7 @@
                   <Setter
                     TargetName="Interaction"
                     Property="Opacity"
-                    Value="0.06" />
+                    Value="0.45" />
                 </Trigger>
                 <Trigger
                   Property="IsPressed"
@@ -240,7 +415,7 @@
                   <Setter
                     TargetName="Interaction"
                     Property="Opacity"
-                    Value="0.13" />
+                    Value="0.75" />
                 </Trigger>
                 <Trigger
                   Property="IsKeyboardFocusWithin"
@@ -316,10 +491,10 @@
         TargetType="Slider">
         <Setter
           Property="Foreground"
-          Value="{DynamicResource SessionFocusBrush}" />
+          Value="{DynamicResource SessionSliderActiveBrush}" />
         <Setter
           Property="Background"
-          Value="{DynamicResource ControlStrokeColorDefaultBrush}" />
+          Value="{DynamicResource SessionSliderTrackBrush}" />
         <Setter
           Property="FocusVisualStyle"
           Value="{x:Null}" />
@@ -366,9 +541,9 @@
                         <ControlTemplate
                           TargetType="Thumb">
                           <Border
-                            Background="{DynamicResource TextFillColorPrimaryBrush}"
-                            BorderBrush="{DynamicResource SessionFocusBrush}"
-                            BorderThickness="4"
+                            Background="{DynamicResource SessionSliderThumbBrush}"
+                            BorderBrush="{DynamicResource SessionSliderThumbStrokeBrush}"
+                            BorderThickness="1"
                             CornerRadius="11" />
                         </ControlTemplate>
                       </Thumb.Template>
@@ -377,14 +552,6 @@
                 </Track>
               </Grid>
               <ControlTemplate.Triggers>
-                <Trigger
-                  Property="IsKeyboardFocused"
-                  Value="True">
-                  <Setter
-                    TargetName="SliderFocus"
-                    Property="Visibility"
-                    Value="Visible" />
-                </Trigger>
                 <Trigger
                   Property="IsEnabled"
                   Value="False">
@@ -403,14 +570,14 @@
     Margin="12">
     <Border
       x:Name="GlassSurface"
-      CornerRadius="18"
+      CornerRadius="{DynamicResource SessionRadius.Panel}"
       Background="{DynamicResource ApplicationBackgroundBrush}" />
     <Border
       x:Name="Sidebar"
-      CornerRadius="18"
+      CornerRadius="{DynamicResource SessionRadius.Panel}"
       BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
       BorderThickness="1"
-      Padding="24,22">
+      Padding="{DynamicResource SessionThickness.Panel}">
       <Grid>
         <Grid.RowDefinitions>
           <RowDefinition
@@ -458,18 +625,27 @@
             Grid.Column="1">
             <Grid
               x:Name="HeaderIdentityRow"
-              Margin="0,0,0,7">
+              Margin="0">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition />
                 <ColumnDefinition
                   Width="Auto" />
               </Grid.ColumnDefinitions>
+              <local:VectorIcon
+                Data="{StaticResource Icon.controller}"
+                Fill="{DynamicResource SessionAccentBrush}"
+                Width="20"
+                Height="20"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Center" />
               <TextBlock
                 x:Name="HeaderBrand"
-                Text="Game Session Overlay"
-                FontSize="13"
+                Text="Game Session"
+                FontSize="{DynamicResource SessionType.CompactBody}"
                 FontWeight="SemiBold"
-                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                Margin="28,0,8,0"
+                TextTrimming="CharacterEllipsis"
+                Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                 VerticalAlignment="Center" />
               <Border
                 x:Name="HeaderIdentityBadge"
@@ -481,14 +657,15 @@
                   x:Name="HeaderIdentity"
                   Text="v0.2"
                   FontSize="12"
-                  Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                  Foreground="{DynamicResource SessionMutedTextBrush}" />
               </Border>
             </Grid>
             <TextBlock
               x:Name="PageTitle"
               Text="Your session"
-              FontFamily="Segoe UI Variable Display, Segoe UI"
-              FontSize="25"
+              Margin="0,12,0,0"
+              FontFamily="{DynamicResource SessionFont.Display}"
+              FontSize="{DynamicResource SessionType.Title}"
               FontWeight="SemiBold"
               TextTrimming="CharacterEllipsis" />
             <TextBlock
@@ -503,7 +680,7 @@
               LastChildFill="True"
               MaxWidth="280"
               HorizontalAlignment="Left"
-              Margin="0,5,0,0"
+              Margin="0,8,0,0"
               Visibility="Collapsed"
               AutomationProperties.LiveSetting="Polite">
               <local:VectorIcon
@@ -512,7 +689,7 @@
                 Width="23"
                 Height="20"
                 Margin="0,0,7,0"
-                Fill="{DynamicResource TextFillColorSecondaryBrush}" />
+                Fill="{DynamicResource SessionIconNeutralBrush}" />
               <StackPanel
                 DockPanel.Dock="Right"
                 Orientation="Horizontal"
@@ -563,7 +740,7 @@
               <TextBlock
                 x:Name="ControllerModelLabel"
                 FontSize="13"
-                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                Foreground="{DynamicResource SessionMutedTextBrush}"
                 VerticalAlignment="Center"
                 TextTrimming="CharacterEllipsis" />
             </DockPanel>
@@ -592,10 +769,12 @@
         <Border
           x:Name="TabArea"
           Grid.Row="1"
-          Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
-          CornerRadius="10"
-          Padding="3"
-          Margin="0,0,0,16">
+          Background="Transparent"
+          BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+          BorderThickness="0,0,0,1"
+          CornerRadius="0"
+          Padding="0,0,0,4"
+          Margin="0,0,0,12">
           <UniformGrid
             Columns="3">
             <Button
@@ -646,124 +825,149 @@
             <Border
               x:Name="ContextCard"
               FocusVisualStyle="{x:Null}"
-              Margin="0,0,0,14"
-              CornerRadius="18"
+              Margin="0,0,0,12"
+              CornerRadius="{DynamicResource SessionRadius.Card}"
               Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
               BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
               BorderThickness="1">
-              <Grid>
-                <Border
-                  Width="3"
-                  Margin="0,18,0,18"
-                  HorizontalAlignment="Left"
-                  CornerRadius="2"
-                  Background="{DynamicResource SessionAccentBrush}"
-                  IsHitTestVisible="False"
-                  Panel.ZIndex="1" />
+              <StackPanel>
+                <Grid
+                  x:Name="SessionIdentity"
+                  Margin="16,14,16,12">
+                  <Grid.RowDefinitions>
+                    <RowDefinition
+                      Height="Auto" />
+                    <RowDefinition
+                      Height="Auto" />
+                  </Grid.RowDefinitions>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition
+                      x:Name="SessionIconColumn"
+                      Width="66" />
+                    <ColumnDefinition />
+                  </Grid.ColumnDefinitions>
+                  <Border
+                    x:Name="SessionArtwork"
+                    Grid.Row="0"
+                    Grid.ColumnSpan="2"
+                    Height="116"
+                    CornerRadius="{DynamicResource SessionRadius.Control}"
+                    Margin="0,0,0,12"
+                    Visibility="Collapsed"
+                    IsHitTestVisible="False" />
+                  <Border
+                    x:Name="SessionIconHost"
+                    Grid.Row="1"
+                    Background="{DynamicResource ControlFillColorDefaultBrush}"
+                    CornerRadius="{DynamicResource SessionRadius.Control}"
+                    Margin="0,0,12,0"
+                    Height="54">
+                    <Grid>
+                      <local:VectorIcon
+                        x:Name="ContextGlyph"
+                        Data="{StaticResource Icon.window}"
+                        Fill="{DynamicResource SessionIconGameBrush}"
+                        Width="25"
+                        Height="25" />
+                      <Image
+                        x:Name="ContextIcon"
+                        Width="42"
+                        Height="42"
+                        Visibility="Collapsed" />
+                    </Grid>
+                  </Border>
+                  <StackPanel
+                    Grid.Column="1"
+                    Grid.Row="1"
+                    VerticalAlignment="Center">
+                    <TextBlock
+                      x:Name="SessionKicker"
+                      Text="Session window"
+                      FontSize="{DynamicResource SessionType.Caption}"
+                      FontWeight="SemiBold"
+                      Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    <TextBlock
+                      x:Name="TargetLabel"
+                      Text="No window selected"
+                      FontFamily="{DynamicResource SessionFont.Display}"
+                      FontSize="{DynamicResource SessionType.Title}"
+                      TextWrapping="Wrap"
+                      MaxHeight="68"
+                      FontWeight="SemiBold"
+                      Margin="0,0,0,4"
+                      TextTrimming="CharacterEllipsis" />
+                    <WrapPanel>
+                      <TextBlock
+                        x:Name="SessionEvidence"
+                        Text="Windows"
+                        FontSize="{DynamicResource SessionType.Caption}"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                      <Ellipse
+                        x:Name="ContextStatusDot"
+                        Width="7"
+                        Height="7"
+                        Fill="{DynamicResource SystemFillColorSuccessBrush}"
+                        Margin="10,0,6,0" />
+                      <TextBlock
+                        x:Name="ContextStatus"
+                        Text="Available"
+                        FontSize="{DynamicResource SessionType.Caption}"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    </WrapPanel>
+                    <TextBlock
+                      x:Name="SessionAudioLabel"
+                      Visibility="Collapsed"
+                      FontSize="{DynamicResource SessionType.Caption}"
+                      Margin="0,8,0,0"
+                      TextWrapping="Wrap"
+                      Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                  </StackPanel>
+                </Grid>
                 <Button
                   x:Name="SessionCardButton"
-                  Margin="0"
-                  Padding="16,18"
+                  Margin="12,0,12,12"
+                  Padding="12,8"
+                  MinHeight="48"
                   Background="Transparent"
-                  BorderThickness="0">
+                  BorderThickness="1">
                   <Grid>
-                    <Grid.RowDefinitions>
-                      <RowDefinition
-                        Height="Auto" />
-                      <RowDefinition
-                        Height="Auto" />
-                    </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                       <ColumnDefinition
-                        x:Name="SessionIconColumn"
-                        Width="66" />
+                        Width="32" />
                       <ColumnDefinition />
+                      <ColumnDefinition
+                        Width="20" />
                     </Grid.ColumnDefinitions>
-                    <Border
-                      x:Name="SessionArtwork"
-                      Grid.Row="0"
-                      Grid.ColumnSpan="2"
-                      Height="116"
-                      CornerRadius="10"
-                      Margin="0,0,0,12"
-                      Visibility="Collapsed"
-                      IsHitTestVisible="False" />
-                    <Border
-                      x:Name="SessionIconHost"
-                      Grid.Row="1"
-                      Background="{DynamicResource ControlFillColorDefaultBrush}"
-                      CornerRadius="10"
-                      Margin="0,0,12,0"
-                      Height="54">
-                      <Grid>
-                        <local:VectorIcon
-                          x:Name="ContextGlyph"
-                          Data="{StaticResource Icon.window}"
-                          Fill="{DynamicResource SessionIconGameBrush}"
-                          Width="25"
-                          Height="25" />
-                        <Image
-                          x:Name="ContextIcon"
-                          Width="42"
-                          Height="42"
-                          Visibility="Collapsed" />
-                      </Grid>
-                    </Border>
-                    <StackPanel
+                    <local:VectorIcon
+                      Data="{StaticResource Icon.play}"
+                      Fill="{DynamicResource SessionAccentBrush}"
+                      Width="20"
+                      Height="20"
+                      HorizontalAlignment="Left" />
+                    <TextBlock
+                      x:Name="SessionHint"
                       Grid.Column="1"
-                      Grid.Row="1">
-                      <TextBlock
-                        x:Name="SessionKicker"
-                        Text="Session window"
-                        FontSize="13"
-                        FontWeight="SemiBold"
-                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                      <TextBlock
-                        x:Name="TargetLabel"
-                        Text="Choose a window"
-                        FontSize="28"
-                        TextWrapping="NoWrap"
-                        MaxHeight="40"
-                        FontWeight="SemiBold"
-                        Margin="0,2,0,4"
-                        TextTrimming="CharacterEllipsis" />
-                      <WrapPanel>
-                        <TextBlock
-                          x:Name="SessionEvidence"
-                          Text="Windows"
-                          FontSize="14"
-                          Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                        <Ellipse
-                          x:Name="ContextStatusDot"
-                          Width="7"
-                          Height="7"
-                          Fill="{DynamicResource SystemFillColorSuccessBrush}"
-                          Margin="10,0,6,0" />
-                        <TextBlock
-                          x:Name="ContextStatus"
-                          Text="Available"
-                          FontSize="14"
-                          Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                      </WrapPanel>
-                      <TextBlock
-                        x:Name="SessionAudioLabel"
-                        Visibility="Collapsed"
-                        FontSize="14"
-                        Margin="0,8,0,0"
-                        TextWrapping="Wrap"
-                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                      <TextBlock
-                        x:Name="SessionHint"
-                        Text="Enter · Resume   X · Options"
-                        TextWrapping="NoWrap"
-                        TextTrimming="CharacterEllipsis"
-                        FontSize="14"
-                        Margin="0,6,0,0"
-                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                    </StackPanel>
+                      Text="Resume"
+                      TextWrapping="NoWrap"
+                      TextTrimming="CharacterEllipsis"
+                      FontSize="{DynamicResource SessionType.Body}"
+                      FontWeight="SemiBold"
+                      VerticalAlignment="Center" />
+                    <local:VectorIcon
+                      Grid.Column="2"
+                      Data="{StaticResource Icon.back}"
+                      Fill="{DynamicResource TextFillColorSecondaryBrush}"
+                      Width="14"
+                      Height="14"
+                      RenderTransformOrigin="0.5,0.5">
+                      <local:VectorIcon.RenderTransform>
+                        <RotateTransform
+                          Angle="180" />
+                      </local:VectorIcon.RenderTransform>
+                    </local:VectorIcon>
                   </Grid>
                 </Button>
-              </Grid>
+              </StackPanel>
             </Border>
             <Grid
               x:Name="Rows" />
@@ -794,7 +998,7 @@
           Grid.RowSpan="2"
           Visibility="Collapsed"
           Background="{DynamicResource ApplicationBackgroundBrush}"
-          CornerRadius="16">
+          CornerRadius="{DynamicResource SessionRadius.Panel}">
           <Grid>
             <Grid.RowDefinitions>
               <RowDefinition />
@@ -869,6 +1073,8 @@
           Grid.Row="4"
           Visibility="Hidden"
           Background="Transparent"
+          CornerRadius="8"
+          Padding="8,0,0,0"
           Height="44"
           Margin="0,4,0,0">
           <Grid>
@@ -881,16 +1087,16 @@
               <ColumnDefinition
                 Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock
+            <local:VectorIcon
               x:Name="OperationGlyph"
-              FontFamily="Segoe UI Variable Text, Segoe UI"
-              FontWeight="Bold"
-              FontSize="16"
+              Width="16"
+              Height="16"
+              HorizontalAlignment="Left"
               VerticalAlignment="Center" />
             <TextBlock
               x:Name="OperationLabel"
               Grid.Column="1"
-              FontSize="14"
+              FontSize="{DynamicResource SessionType.Caption}"
               TextWrapping="NoWrap"
               TextTrimming="CharacterEllipsis"
               LineHeight="17"
@@ -978,23 +1184,22 @@
           <TextBlock
             x:Name="SharedControlNotice"
             Text="Controller input may also reach the game."
-            FontSize="14"
-            FontWeight="SemiBold"
+            FontSize="{DynamicResource SessionType.Caption}"
             TextWrapping="Wrap"
-            Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
             AutomationProperties.Name="Controller input may also reach the game while this panel is open." />
           <TextBlock
             x:Name="StatusLabel"
             Visibility="Collapsed"
-            FontSize="14"
+            FontSize="{DynamicResource SessionType.Caption}"
             Margin="0,4,0,0"
             TextTrimming="CharacterEllipsis"
             ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
             Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
           <TextBlock
             x:Name="ModeLabel"
-            FontSize="14"
-            LineHeight="19"
+            FontSize="{DynamicResource SessionType.Caption}"
+            LineHeight="22"
             Margin="0,5,0,0"
             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
             TextWrapping="Wrap" />

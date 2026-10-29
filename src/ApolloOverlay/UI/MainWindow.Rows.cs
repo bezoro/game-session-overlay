@@ -38,7 +38,7 @@ public partial class MainWindow
                 content.Description.Text = ActionDescription(id, description, entry.Available);
                 AutomationProperties.SetName(content.Description, description);
             }
-            content.Description.Visibility = description.Length > 0 && (!CompactAction(id) || !entry.Available) ? Visibility.Visible : Visibility.Collapsed;
+            content.Description.Visibility = description.Length > 0 && (id == "audio" || !(CompactAction(id) || QuickAccessAction(id)) || !entry.Available) ? Visibility.Visible : Visibility.Collapsed;
         }
 
         AutomationProperties.SetHelpText(entry.Button, description);
@@ -131,7 +131,7 @@ public partial class MainWindow
         automationRevision++;
         NoteAutomationTargets();
         HeaderIdentity.Text = "v" + AppBuild.Current.Version.Split('+')[0];
-        HeaderBrand.Visibility = compactChrome || narrow || view.Depth > 0 ? Visibility.Collapsed : Visibility.Visible;
+        HeaderBrand.Visibility = narrow || compactChrome ? Visibility.Collapsed : Visibility.Visible;
         HeaderIdentity.ToolTip = AppBuild.Current.Display + " · " + AppBuild.Current.BuildId + " · " + AppBuild.Current.Commit;
         if (Confirming)
         {
@@ -154,7 +154,7 @@ public partial class MainWindow
         _ = UpdateSessionArtwork();
         SessionKicker.Visibility = Visibility.Collapsed;
         ApplySessionCardDensity();
-        TargetLabel.Text = target?.Title ?? "Choose a window";
+        TargetLabel.Text = target?.Title ?? "No window selected";
         TargetLabel.ToolTip = target?.Title;
         AutomationProperties.SetName(ContextCard, target?.Title ?? "No window selected");
         SessionEvidence.Text = target?.ProcessName ?? "Apps";
@@ -186,7 +186,7 @@ public partial class MainWindow
                 pair.Item1.SetResourceReference(BorderBrushProperty, ThemeSupport.Focus);
             else
                 pair.Item1.BorderBrush = Brushes.Transparent;
-            pair.Item1.SetResourceReference(BackgroundProperty, selected ? ThemeSupport.Control : ThemeSupport.Card);
+            pair.Item1.Background = Brushes.Transparent;
             pair.Item1.SetResourceReference(ForegroundProperty, selected ? ThemeSupport.Text : ThemeSupport.SecondaryText);
             AutomationProperties.SetName(pair.Item1, (pair.Item2 switch
             {
@@ -231,8 +231,9 @@ public partial class MainWindow
     }
 
     private string GuideDescription() => Controller.Platform.IsPreview ? "Preview · Guide connection is not queried" : !Controller.Settings.GuideXInputEnabled ? "Disabled · double-click the tray icon to open" : guideBackend?.Active == true ? guideBackend.Status : guideConnection?.Status ?? "Controller or Guide input unavailable";
+    private bool QuickAccessAction(string id) => view.Current.Route == OverlayRoute.Hub && SessionHubSettings.Catalog.Contains(id);
     private bool CompactAction(string id) => narrow && (view.Current.Route == OverlayRoute.Hub && SessionHubSettings.Catalog.Contains(id) || view.Current.Route == OverlayRoute.Media && id is "media-previous" or "media-next");
-    private string ActionDescription(string id, string description, bool available) => CompactAction(id) && !available ? id switch
+    private string ActionDescription(string id, string description, bool available) => QuickAccessAction(id) && !available ? id switch
     {
         "playnite" => "Set up in System",
         "steam-overlay" => "Unavailable here",
@@ -242,6 +243,11 @@ public partial class MainWindow
     {
         var glyph = ActionIcon(id.StartsWith("favorite:", StringComparison.Ordinal) ? id[9..] : id);
         var grid = new ActionButtonContent(glyph, title, ActionDescription(id, description, available), showIcon: true);
+        grid.Title.SetResourceReference(TextBlock.FontSizeProperty, "SessionType.Section");
+        grid.Description.SetResourceReference(TextBlock.FontSizeProperty, "SessionType.Caption");
+        grid.Description.Margin = new(0, 4, 0, 0);
+        if (QuickAccessAction(id) && id != "audio" && available)
+            grid.Description.Visibility = Visibility.Collapsed;
         AutomationProperties.SetName(grid.Description, description);
         var badge = new Border
         {
@@ -257,14 +263,17 @@ public partial class MainWindow
         var compactAction = CompactAction(id);
         if (compactAction)
         {
-            grid.Title.FontSize = 14;
-            grid.Title.TextWrapping = TextWrapping.NoWrap;
+            grid.Title.SetResourceReference(TextBlock.FontSizeProperty, "SessionType.CompactBody");
+            grid.Title.TextWrapping = TextWrapping.Wrap;
             grid.Title.TextTrimming = TextTrimming.CharacterEllipsis;
-            grid.Description.FontSize = 12;
+            grid.Title.LineHeight = 19;
+            grid.Title.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
+            grid.Title.MaxHeight = 38;
+            grid.Description.SetResourceReference(TextBlock.FontSizeProperty, "SessionType.Caption");
             grid.Description.Margin = new(0, 2, 0, 0);
             grid.Description.TextWrapping = TextWrapping.NoWrap;
             grid.Description.TextTrimming = TextTrimming.CharacterEllipsis;
-            grid.Description.Visibility = available || description.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+            grid.Description.Visibility = description.Length > 0 && (!available || id == "audio") ? Visibility.Visible : Visibility.Collapsed;
             grid.ColumnDefinitions[0].Width = new GridLength(26);
             grid.Icon.Width = grid.Icon.Height = 20;
             badge.Width = badge.Height = 22;
@@ -294,9 +303,9 @@ public partial class MainWindow
         {
             Content = grid,
             Tag = id,
-            MinHeight = compactAction ? 48 : id == "return" ? 76 : 56,
+            MinHeight = compactAction ? 52 : id == "return" ? 72 : 56,
             IsEnabled = available,
-            Padding = compactAction ? new(6, 4, 6, 4) : new(12, 8, 12, 8)
+            Padding = compactAction ? new(8, 8, 8, 8) : new(12, 8, 12, 8)
         };
         if (page == 0 && subpage == "" && id == "apps")
         {
