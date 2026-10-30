@@ -1,51 +1,38 @@
-# Painel da sessão
+# Session command center
 
-Esta evolução parte da foto da versão 32: o jogo precisa identificar a sessão, e áudio, microfone e tarefas frequentes devem aparecer antes dos atalhos de bibliotecas. A navegação continua disponível por controle, mouse e teclado.
+Game Session Overlay is a native WPF side panel for controller, keyboard and mouse use. It works with local PC play and with the controller Windows receives from a streaming host. Apollo is optional.
 
-## Direção visual
+## Primary flow
 
-- Obsidiana `#15191F`: superfície opaca, legível sobre jogos claros.
-- Porcelana `#F2F3F5`: títulos e ações.
-- Aço `#A5B0BD`: descrições secundárias.
-- Névoa `#92BDEA`: seleção, com contorno duplo e preenchimento discreto.
-- Cobre `#C89A70`: identidade da sessão, usado com moderação.
-- Verde `#78C999`: resultado confirmado, distinto da seleção.
+The Session page prioritizes the selected game or window, a separate **Resume** action, ordered Quick access, Open apps, session audio and utilities, then Recent. Resume targets the exact selected window. X or right-click opens window options; there is no duplicate ellipsis. Apps and Audio remain the other primary tabs; the header gear opens System.
 
-Segoe UI Variable Display nos títulos e Segoe UI Variable Text nos controles. Alinhamento à esquerda, linhas curtas, números de volume alinhados e controles com tamanho consistente. O tema claro recebe equivalentes com contraste; alto contraste conserva as cores do sistema. A seleção respira no contorno e recebe um reflexo de baixa opacidade; o clique comprime brevemente o controle. Efeitos param ao ocultar, descarregar ou perder foco. A preferência antiga de reduzir movimento é apenas lida para compatibilidade e não participa mais da interface. Sons e vibração seguem as preferências existentes.
+The header uses real application/controller metadata and a short installed version. Game imagery comes from the actual window icon or a validated local capture. No game library, artwork download, statistics or stream telemetry is inferred.
 
-```text
-Game Session                       v32   Ajustes
-Sessão             Aplicativos           Áudio
+## Appearance and interaction
 
-Imagem real / ícone    Nome do jogo
-                      Retomar       Opções
+The default dark palette uses subtly warm charcoal surfaces and a restrained amber accent. Light mode has its own contrast-checked colors; Windows high contrast uses SystemColors. Segoe UI Variable Display/Text, shared spacing and radius resources, original vector frames and one clear focus outline keep the panel consistent at different sizes and DPI.
 
-Jogo                   volume / sem som
-Saída do Windows       volume / sem som
-Microfone              estado explícito
+Appearance exposes presets and all semantic color roles, including surfaces, text, focus, controls, status, icons, input prompts and effects. A local draft supports preview, hexadecimal/RGB entry, Save, Discard and restore defaults. Unsafe intermediate edits remain editable while navigation uses the last valid palette. Saving colors requires readable contrast and preserves unrelated settings drafts. High-contrast colors always remain under Windows control.
 
-Perfil TV / Computador     Capturar tela
-Mídia                     Teclado
+Focus responds immediately. Short press and route feedback indicate received input; completion is a separate observed result. Motion uses opacity and render transforms, is interruptible, and stops on hiding or context changes. System animation restrictions remove unnecessary transitions. Sound and vibration remain independent opt-in preferences; failure of either cannot block an action.
 
-Bibliotecas e atalhos secundários
+Input prompts follow the latest deliberate controller, keyboard or mouse interaction without rebuilding editors. Selecting an action does not copy its description into the footer. Routine acknowledgements stay discreet; uncertain or failed results retain details and recovery actions.
 
-Entrada compartilhada       instruções contextuais
-```
+## Feature boundaries
 
-A imagem da sessão é o único elemento expressivo. Os controles permanecem discretos; os efeitos contínuos ficam restritos ao item selecionado, com respiração de três segundos e um reflexo a cada cinco segundos. Imagens vêm de ícones reais ou capturas locais, com fallback legível. A versão curta permanece visível; build e commit continuam acessíveis nos detalhes.
+- Windows master volume, per-process audio and physical TV volume are distinct. Output selection and the default microphone mute reflect actual backend capabilities.
+- Profiles save display, side, scale and optional audio settings. Saving does not apply a profile. Applying requires a deliberate action; undo preserves subsequent external changes.
+- Media controls use actual Windows media-session title, artist and source. Unsupported artwork, seek and duration are not invented.
+- The virtual keyboard keeps destination, buffer and insertion visible. Inserting text never presses Enter. Profile names and hexadecimal colors are local editing purposes and never use SendInput.
+- Captures are deliberate local screenshots. Gallery thumbnails decode off the UI thread with bounded work, cancellation and identity checks. The overlay does not record video or capture continuously.
+- Updates use Velopack, explicit Stable/Testing channels, verified packages and retained local rollback history. Installed build/commit and package facts are real values.
 
-## Entregas funcionais
+## Focus and input safety
 
-1. Volumes independentes das sessões identificadas, microfone padrão e seleção explícita da saída do Windows. O dispositivo alterado aparece pelo nome. A overlay não afirma controlar o volume físico da TV.
-2. Perfis TV e Computador, salvos explicitamente, com monitor da overlay, escala e áudio. Ajustes pendentes bloqueiam aplicação; falhas parciais e mudanças externas não são sobrescritas por uma restauração cega.
-3. Mídia pelos controles do Windows nos aplicativos compatíveis, com estado observado e comandos indisponíveis explicados.
-4. Teclado virtual para controle, edição local e inserção deliberada de texto em uma janela identificada. Inserir texto não pressiona Enter automaticamente. Foco, soltura e identidade continuam obrigatórios.
-5. Captura deliberada do monitor e galeria local, confirmando arquivo salvo. Nenhuma gravação ou captura contínua. Imagens protegidas e tela cheia exclusiva não recebem promessas de compatibilidade universal.
+A provisional opening remains transparent until both native foreground ownership and WPF activation are confirmed. Refusal hides it and provides tray recovery. Explicit administrator restart uses Windows consent; persistent elevated startup is configured separately. Input release, window/process identity, cancellation and fresh hold-to-close guards remain part of every handoff.
 
-O estado de entrada compartilhada continua explícito. Foco não comprova bloqueio global de XInput; esta evolução não anuncia isolamento sem integração e observação que o demonstrem.
+Window focus does not establish universal controller isolation. Background readers can still consume the public device. Physical controller identity, connection and battery are reported only when Windows provides corresponding evidence; virtual streaming devices do not prove the TV controller model or charge. See [controller focus and isolation](controller-isolation.md).
 
-## Verificação
+## Validation
 
-Exercitar serviços com interfaces simuladas sem alterar áudio, mídia, entrada ou tela do runner. Os testes da interface precisam observar foco real, estados disponíveis/indisponíveis, seleção após reconstrução, cancelamento e perfis em ambos os canais. Gerar capturas dos temas e dos layouts TV/compacto, inspecioná-las e medir custo quando oculto. A publicação depende dos checks Windows e de review do Codex sem apontamentos pendentes.
-
-O indicador do controle fica no topo, com silhueta por família e bateria. A identificação usa metadados oficiais de Windows.Gaming.Input; o roteamento de entrada continua independente. Não se associa um modelo ao slot quando há múltiplos dispositivos possíveis. Uma porcentagem exige capacidades válidas da bateria; XInput categórico não é convertido em porcentagem. A consulta ocorre somente com o painel visível e confirmado, no máximo a cada cinco segundos.
+Changes require meaningful behavior and lifecycle tests, actual attached-tree WPF captures, and three independent screenshot reviews. The acceptance threshold is at least 9/10 from each reviewer with no outstanding actionable findings. Screenshots, synthetic fixtures and hosted-runner measurements do not certify physical TV/controller behavior, game compatibility, sign-in or GPU frame rates. Approved previews are published through the Testing workflow before merging.

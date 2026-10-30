@@ -37,6 +37,7 @@ public partial class MainWindow
             _ => ""
         };
         navigation = new(view.Current.SelectedId);
+        AppearanceNavigationChanged();
     }
 
     private void OpenView(OverlayViewFrame next)
@@ -81,6 +82,7 @@ public partial class MainWindow
     }, detail, first));
     private void SetSelection(bool restoreFocus = true)
     {
+        UpdateSessionActionHint();
         if (navigation.Id != "exit" && !IsFooterAction(navigation.Id) && entries.Any(entry => entry.Id == navigation.Id))
             lastContentSelection = navigation.Id;
         foreach (var entry in entries)
@@ -97,7 +99,10 @@ public partial class MainWindow
                 entry.Button.Background = Brushes.Transparent;
             if (page == 0 && subpage == "" && entry.Id == "apps")
             {
-                entry.Button.Background = selected ? (Brush)FindResource(ThemeSupport.Card) : Brushes.Transparent;
+                if (selected)
+                    entry.Button.SetResourceReference(BackgroundProperty, ThemeSupport.Card);
+                else
+                    entry.Button.Background = Brushes.Transparent;
                 entry.Button.BorderThickness = new(2);
             }
 
@@ -116,7 +121,12 @@ public partial class MainWindow
                 host.BorderThickness = new(2);
                 host.CornerRadius = new(primary ? 12 : 10);
                 if (!primary)
-                    host.Background = selected && !entry.Available ? (Brush)FindResource(ThemeSupport.FocusBackground) : Brushes.Transparent;
+                {
+                    if (selected && !entry.Available)
+                        host.SetResourceReference(Border.BackgroundProperty, ThemeSupport.FocusBackground);
+                    else
+                        host.Background = Brushes.Transparent;
+                }
                 if (selected && !entry.Available)
                     host.SetResourceReference(Border.BorderBrushProperty, ThemeSupport.Focus);
                 else
@@ -193,7 +203,7 @@ public partial class MainWindow
             }
         }
 
-        if (AdjustSessionFeature(direction) || AdjustGuideLimit(direction))
+        if (AdjustAppearanceColor(direction) || AdjustSessionFeature(direction) || AdjustGuideLimit(direction))
             return;
         if (subpage == "audio" && navigation.Id == "volume" && direction is NavDirection.Left or NavDirection.Right)
         {
@@ -371,8 +381,10 @@ public partial class MainWindow
         CancelCloseButton.Content = new IconLabel(this, "back", "Cancel");
         HoldCloseButton.Content = new IconLabel(this, "confirm-hold", "Hold to close", 16, 20);
         SessionCardButton.Click += (_, _) => ActivatePointerEntry(SessionCardButton);
-        SessionCardButton.PreviewMouseRightButtonUp += (_, args) =>
+        ContextCard.PreviewMouseUp += (_, args) =>
         {
+            if (args.ChangedButton != System.Windows.Input.MouseButton.Right)
+                return;
             if (!NavigationAllowed || busy || TransitionPending || Confirming || view.Current.Route != OverlayRoute.Hub)
                 return;
             SetInputMethod("mouse");

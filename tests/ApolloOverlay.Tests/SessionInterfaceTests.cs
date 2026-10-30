@@ -1,4 +1,8 @@
+using System.Diagnostics;
 using System.IO;
+using System.Net.Http;
+using System.Runtime.InteropServices;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -11,8 +15,118 @@ using ApolloOverlay;
 
 internal static class SessionInterfaceTests
 {
+    private static readonly string[] Routes =
+    [
+        "home", "apps", "system", "options", "details", "audio", "integrations", "customize",
+        "setup", "operation", "confirmation", "browser", "updates", "update-review", "mixer", "devices",
+        "profiles", "edit", "media", "keyboard", "gallery", "capture-detail", "appearance", "color-editor"
+    ];
+    private static readonly UpdateCandidate NextUpdate = new(42, "0.49.0-preview.42.1+1111111", "ui-fixture-next", new string('1', 40), "testing",
+        DateTimeOffset.Parse("2026-10-28T12:00:00Z"), "Interface fixture release. No update is installed.\n• Clearer session navigation\n• Local capture previews\n• Custom appearance", 201, "fixture-only.nupkg", 8_388_608, new string('a', 64));
     internal static void Run(Action<string, Action> test)
     {
+        test("controller-loss evidence waits for the current identity epoch after an older read", () =>
+        {
+            var source = new PendingIdentitySource();
+            using var host = new Host(identitySource: source);
+            var window = host.Window;
+            try
+            {
+                host.Open();
+                AdaptiveInterfaceTests.UseController(window);
+                window.UpdateControllerTelemetry([new(true, 0), default, default, default], null, Environment.TickCount64 + 5001);
+                Complete(source.PendingRead.WaitAsync(TimeSpan.FromSeconds(5)));
+                window.UpdateControllerTelemetry([default, default, default, default], null, Environment.TickCount64 + 5002);
+                source.Items = [];
+                source.Release();
+                AwaitControllerDisconnect(window);
+                Require(((TextBlock)window.FindName("ControllerModelLabel")).Text == "Controller disconnected"
+                    && !((TextBlock)window.FindName("ControllerBatteryLabel")).IsVisible,
+                    "The old connected identity replaced fresh disconnect evidence");
+            }
+            finally { source.Release(); }
+        });
+        test("activation glyph belongs only to the selected Resume action", () =>
+        {
+            using var host = new Host();
+            var window = host.Window;
+            host.Open();
+            AdaptiveInterfaceTests.UseController(window);
+            Pick(window, "session-card");
+            var hint = (TextBlock)window.FindName("SessionHint");
+            Require(InputPrompt.Read(hint).StartsWith("A ", StringComparison.Ordinal), "Selected Resume has no controller prompt");
+            Pick(window, "audio");
+            Require(InputPrompt.Read(hint) == "Resume", "Unselected Resume still advertises the selected action's input");
+        });
+        test("high contrast slider uses the actual system-mapped solid thumb", () =>
+        {
+            var app = Application.Current ?? new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            ThemeSupport.ForceHighContrastForValidation(app);
+            try
+            {
+                using var host = new Host();
+                host.Open();
+                var slider = CaptureVisuals<Slider>((DependencyObject)host.Window.FindName("Rows")).First();
+                slider.ApplyTemplate();
+                var thumb = (System.Windows.Controls.Primitives.Thumb)slider.Template.FindName("VolumeThumb", slider);
+                thumb.ApplyTemplate();
+                var surface = (Border)thumb.Template.FindName("ThumbSurface", thumb);
+                Require(surface.Background is SolidColorBrush brush
+                    && brush.Color == ((SolidColorBrush)host.Window.FindResource(ThemeSupport.SliderThumb)).Color,
+                    "The slider inherited a theme gradient instead of its system-mapped palette");
+                Require(((ScrollViewer)host.Window.FindName("ContentScroll")).OpacityMask is null,
+                    "A viewport fade changes the high contrast system colors");
+            }
+            finally { ThemeSupport.ForceForValidation(app, false); }
+        });
+        foreach (var compact in new[] { false, true })
+            test("scroll gutter and reorder commands fit their actual bounds compact=" + compact, () =>
+            {
+                using var host = new Host();
+                var window = host.Window;
+                host.Open(compact ? 360 : 572, compact ? 480 : 940);
+                Navigate(window, "customize", host);
+                window.UpdateLayout();
+                var scroll = (ScrollViewer)window.FindName("ContentScroll");
+                scroll.ApplyTemplate();
+                var bar = (FrameworkElement)scroll.Template.FindName("PART_VerticalScrollBar", scroll);
+                Require(bar.ActualWidth is >= 7.9 and <= 8.1, "A theme minimum expanded the reserved scrollbar lane");
+                var buttons = CaptureVisuals<Button>((DependencyObject)window.FindName("Rows"))
+                    .Where(button => button.Tag is string id && (id.StartsWith("earlier:", StringComparison.Ordinal) || id.StartsWith("later:", StringComparison.Ordinal))).ToArray();
+                Require(buttons.Length == 12, "The customization fixture has no complete reorder controls");
+                foreach (var button in buttons)
+                {
+                    Pick(window, (string)button.Tag);
+                    var holder = (Border)button.Resources["DescriptionTarget"];
+                    var bounds = button.TransformToAncestor(holder).TransformBounds(new Rect(button.RenderSize));
+                    Require(bounds.Left >= holder.BorderThickness.Left - .1 && bounds.Top >= holder.BorderThickness.Top - .1
+                        && bounds.Right <= holder.ActualWidth - holder.BorderThickness.Right + .1
+                        && bounds.Bottom <= holder.ActualHeight - holder.BorderThickness.Bottom + .1,
+                        "A reorder command is clipped by its focus holder: " + button.Tag);
+                }
+            });
+        foreach (var compact in new[] { false, true })
+            test("result reader keeps recovery actions pinned with one scroll context compact=" + compact, () =>
+            {
+                using var host = new Host();
+                var window = host.Window;
+                host.Open(compact ? 360 : 572, compact ? 480 : 940);
+                Navigate(window, "operation", host);
+                window.UpdateLayout();
+                var viewport = (ScrollViewer)window.FindName("ContentScroll");
+                Require(viewport.ScrollableHeight <= 1, "Result page adds a second scrolling context");
+                var reader = CaptureVisuals<TextBox>((DependencyObject)window.FindName("Rows")).Single();
+                Require(reader.ActualHeight >= 80, "The pinned commands leave no useful message area");
+                foreach (var id in new[] { "operation-text", "dismiss-operation", "back" })
+                {
+                    Pick(window, id);
+                    window.UpdateLayout();
+                    var button = ReviewFixTests.Button(window, id);
+                    var bounds = button.TransformToAncestor(viewport).TransformBounds(new Rect(button.RenderSize));
+                    Require(bounds.Top >= -1 && bounds.Bottom <= viewport.ViewportHeight + 1,
+                        "A result recovery action is clipped: " + id);
+                }
+            });
         foreach (var height in new[] { 480, 600 })
             test("compact keyboard keeps target buffer and explicit insertion visible " + height, () =>
             {
@@ -38,30 +152,16 @@ internal static class SessionInterfaceTests
         }
 
         )
-            foreach (var route in new[]
-            {
-                "home",
-                "system",
-                "apps",
-                "mixer",
-                "devices",
-                "profiles",
-                "edit",
-                "media",
-                "keyboard",
-                "gallery"
-            }
-
-            )
+            foreach (var route in Routes)
             {
                 var dimensions = size;
                 var page = route;
                 test($"session interface real focus and visible navigation {page} {dimensions.Item1}", () =>
                 {
-                    using var host = new Host();
+                    using var host = new Host(populateCaptures: page == "capture-detail");
                     var w = host.Window;
                     host.Open(dimensions.Item1, dimensions.Item2);
-                    Navigate(w, page);
+                    Navigate(w, page, host);
                     if (page == "system")
                     {
                         w.UpdateLayout();
@@ -290,83 +390,227 @@ internal static class SessionInterfaceTests
     internal static void Capture(string output)
     {
         Directory.CreateDirectory(output);
-        var app = Application.Current ?? new Application
+        var app = Application.Current ?? new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        var manifest = new List<object>();
+        var scenarios = Routes.Concat(new[]
         {
-            ShutdownMode = ShutdownMode.OnExplicitShutdown
-        };
-        foreach (var light in new[]
-        {
-            false,
-            true
-        }
-
-        )
-            foreach (var width in new[]
-            {
-                572,
-                360
-            }
-
-            )
-                foreach (var route in new[]
-                {
-                    "home",
-                    "system",
-                    "system-controller",
-                    "system-feedback",
-                    "apps",
-                    "mixer",
-                    "devices",
-                    "profiles",
-                    "edit",
-                    "media",
-                    "keyboard",
-                    "gallery"
-                }
-
-                )
-                {
-                    ThemeSupport.ForceForValidation(app, light);
-                    using var host = new Host(gameTitle: "Elden Ring");
-                    var w = host.Window;
-                    var height = width == 572 ? 940 : 600;
-                    host.Open(width, height, forCapture: true);
-                    Navigate(w, route);
-                    w.RefreshOperationNotice(Environment.TickCount64 + 200);
-                    w.UpdateLayout();
-                    var bitmap = RenderCapture(w, width, height, "keyboard");
-                    var png = new PngBitmapEncoder();
-                    png.Frames.Add(BitmapFrame.Create(bitmap));
-                    using var file = File.Create(Path.Combine(output, $"{(light ? "light" : "dark")}-{width}-{route}.png"));
-                    png.Save(file);
-                }
-        CaptureAcknowledgements(output, app);
-    }
-
-    private static void CaptureAcknowledgements(string output, Application app)
-    {
+            "system-controller", "system-feedback", "setup-display", "setup-finish", "gallery-empty", "capture-missing",
+            "updates-available", "update-ready", "update-downloading", "update-error", "update-rollback",
+            "no-session", "apps-empty", "audio-empty", "long-device", "media-empty", "long-title",
+            "system-save", "system-discard", "appearance-save", "appearance-discard", "color-keep", "color-cancel",
+            "update-download-action", "update-install-action", "color-hex-keyboard", "color-unsafe", "gallery-loading"
+        }).ToArray();
         foreach (var light in new[] { false, true })
             foreach (var width in new[] { 572, 360 })
-                foreach (var state in new[] { "controller", "mouse", "success", "warning", "unknown-controller", "wired-controller", "unavailable-action", "selected-audio", "breathing" })
+                foreach (var route in scenarios)
                 {
+                    Console.WriteLine($"CAPTURE START theme={(light ? "light" : "dark")}; requested={width}x{(width == 572 ? 940 : 480)}; route={route}");
+                    ThemeSupport.ForceForValidation(app, light);
+                    using var host = CaptureHost(route);
+                    var window = host.Window;
+                    var height = width == 572 ? 940 : 480;
+                    host.Open(width, height, forCapture: true);
+                    Navigate(window, route, host);
+                    if (route == "gallery")
+                    {
+                        var previews = CaptureVisuals<CapturePreview>((DependencyObject)window.FindName("Rows")).ToArray();
+                        Require(previews.Length == 6 && previews.All(preview => preview.Source is { IsFrozen: true }),
+                            "The populated gallery capture has not published every actual thumbnail");
+                    }
+                    window.RefreshOperationNotice(Environment.TickCount64 + 200);
+                    window.UpdateLayout();
+                    var bitmap = RenderCapture(window, width, height, "keyboard");
+                    var name = $"{(light ? "light" : "dark")}-{width}-{route}.png";
+                    WritePng(bitmap, Path.Combine(output, name));
+                    manifest.Add(new
+                    {
+                        file = name,
+                        route,
+                        theme = light ? "light" : "dark",
+                        requestedWidth = width,
+                        requestedHeight = height,
+                        actualWidth = window.ActualWidth,
+                        actualHeight = window.ActualHeight,
+                        selected = window.SelectedAction,
+                        fixture = true,
+                        attachedNativeWpfTree = true,
+                        actualForegroundConfirmed = true
+                    });
+                }
+        manifest.AddRange(CaptureAcknowledgements(output, app));
+        manifest.AddRange(CaptureHighContrast(output, app));
+        File.WriteAllText(Path.Combine(output, "capture-manifest.json"), JsonSerializer.Serialize(new
+        {
+            status = "completed",
+            scope = "Actual attached WPF rendering using deterministic service fixtures. These images do not certify games, physical input, TVs or streaming.",
+            environment = EnvironmentFacts(),
+            routes = Routes,
+            captures = manifest
+        }, new JsonSerializerOptions { WriteIndented = true }));
+        CapturePerformance(output, app);
+    }
+
+    private static IEnumerable<object> CaptureHighContrast(string output, Application app)
+    {
+        var results = new List<object>();
+        foreach (var width in new[] { 572, 360 })
+            foreach (var route in new[] { "home", "devices", "edit", "confirmation", "keyboard", "appearance", "color-editor", "operation", "media-empty" })
+            {
+                Console.WriteLine($"CAPTURE START theme=high-contrast-palette; requested={width}x{(width == 572 ? 940 : 480)}; route={route}");
+                ThemeSupport.ForceHighContrastForValidation(app);
+                using var host = CaptureHost(route);
+                var height = width == 572 ? 940 : 480;
+                host.Open(width, height, forCapture: true);
+                Navigate(host.Window, route, host);
+                host.Window.RefreshOperationNotice(Environment.TickCount64 + 200);
+                var name = $"contrast-{width}-{route}.png";
+                WritePng(RenderCapture(host.Window, width, height, "keyboard"), Path.Combine(output, name));
+                results.Add(new
+                {
+                    file = name,
+                    route,
+                    theme = "high-contrast-palette",
+                    requestedWidth = width,
+                    requestedHeight = height,
+                    actualWidth = host.Window.ActualWidth,
+                    actualHeight = host.Window.ActualHeight,
+                    selected = host.Window.SelectedAction,
+                    fixture = true,
+                    attachedNativeWpfTree = true,
+                    actualForegroundConfirmed = true,
+                    limitation = "Windows SystemColors resource simulation; the operating system high-contrast preference was not changed."
+                });
+            }
+        ThemeSupport.ForceForValidation(app, false);
+        return results;
+    }
+
+    private static Host CaptureHost(string route)
+    {
+        ISystemAudioBackend? backend = route switch
+        {
+            "audio-empty" => new SnapshotAudioFixture(SystemAudioSnapshot.Empty),
+            "long-device" => new SnapshotAudioFixture(new([new("long-output", "Living room television — NVIDIA High Definition Audio with a deliberately long output name")],
+                "long-output", "long-output", "long-mic", "USB microphone — a deliberately long manufacturer and product name", false, "Fixture devices")),
+            _ => null
+        };
+        return new Host(backend: backend,
+            gameTitle: route == "long-title" ? "A deliberately long game title — Complete Definitive Edition with additional session context" : "Elden Ring",
+            populateCaptures: route is "gallery" or "gallery-loading" or "capture-detail" or "capture-missing",
+            emptyApps: route == "apps-empty", emptyMedia: route == "media-empty");
+    }
+
+    private static void WritePng(BitmapSource bitmap, string path)
+    {
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var file = File.Create(path);
+        encoder.Save(file);
+    }
+
+    private static object EnvironmentFacts() => new
+    {
+        framework = RuntimeInformation.FrameworkDescription,
+        operatingSystem = RuntimeInformation.OSDescription,
+        architecture = RuntimeInformation.ProcessArchitecture.ToString(),
+        processors = Environment.ProcessorCount,
+        renderTier = RenderCapability.Tier >> 16,
+        primaryScreenDip = new
+        {
+            width = SystemParameters.PrimaryScreenWidth,
+            height = SystemParameters.PrimaryScreenHeight
+        },
+        clientAreaAnimation = SystemParameters.ClientAreaAnimation,
+        actualOsHighContrast = SystemParameters.HighContrast,
+        graphicsDevice = "Not queried; WPF render tier is not a GPU capability or frame-rate guarantee."
+    };
+
+    private static void CapturePerformance(string output, Application app)
+    {
+        ThemeSupport.ForceForValidation(app, false);
+        var samples = new List<object>();
+        using var process = Process.GetCurrentProcess();
+        using var host = new Host(populateCaptures: true, gameTitle: "Performance fixture");
+        var watch = Stopwatch.StartNew();
+        host.Open(572, 940, forCapture: true);
+        host.Window.Dispatcher.Invoke(DispatcherPriority.Render, new Action(() => { }));
+        var opening = watch.Elapsed.TotalMilliseconds;
+        var initialCpu = process.TotalProcessorTime;
+        process.Refresh();
+        var initialBytes = process.PrivateMemorySize64;
+        var total = Stopwatch.StartNew();
+        // Measure route construction through the loaded WPF tree. This deliberately
+        // excludes external services, input transport and a physical display scanout.
+        for (var cycle = 0; cycle < 8; cycle++)
+        {
+            foreach (var route in new[] { "home", "apps", "system", "profiles", "media", "gallery" })
+            {
+                host.Window.Page(0);
+                watch.Restart();
+                Navigate(host.Window, route, host);
+                host.Window.UpdateLayout();
+                host.Window.Dispatcher.Invoke(DispatcherPriority.Render, new Action(() => { }));
+                var elapsed = watch.Elapsed.TotalMilliseconds;
+                var scroll = (ScrollViewer)host.Window.FindName("ContentScroll");
+                scroll.ScrollToEnd();
+                host.Window.UpdateLayout();
+                scroll.ScrollToTop();
+                host.Window.UpdateLayout();
+                process.Refresh();
+                samples.Add(new
+                {
+                    cycle,
+                    route,
+                    dispatchToRenderMs = elapsed,
+                    privateBytes = process.PrivateMemorySize64
+                });
+            }
+        }
+        process.Refresh();
+        File.WriteAllText(Path.Combine(output, "presentation-cost.json"), JsonSerializer.Serialize(new
+        {
+            environment = EnvironmentFacts(),
+            scope = "Loaded WPF fixture on the declared runner. No physical gamepad, Apollo, TV or scanout latency measurement.",
+            itemCount = 8,
+            cycles = 8,
+            openingToRenderMs = opening,
+            totalMs = total.Elapsed.TotalMilliseconds,
+            cpuMs = (process.TotalProcessorTime - initialCpu).TotalMilliseconds,
+            privateStart = initialBytes,
+            privateEnd = process.PrivateMemorySize64,
+            samples,
+            limitations = new[] { "No before/after comparison on the same physical machine.", "No GPU frame-time or dropped-frame measurement.", "Memory samples are observations, not proof of leak freedom." }
+        }, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private static IEnumerable<object> CaptureAcknowledgements(string output, Application app)
+    {
+        var results = new List<object>();
+        foreach (var light in new[] { false, true })
+            foreach (var width in new[] { 572, 360 })
+                foreach (var state in new[] { "controller", "mouse", "success", "warning", "unknown-controller", "wired-controller", "controller-lost", "unavailable-action", "selected-audio", "focused-action" })
+                {
+                    Console.WriteLine($"CAPTURE START theme={(light ? "light" : "dark")}; requested={width}x{(width == 572 ? 940 : 480)}; notice={state}");
                     ThemeSupport.ForceForValidation(app, light);
                     using var host = new Host(gameTitle: "Elden Ring", identities: state switch
                     {
-                        "unknown-controller" => [],
+                        "unknown-controller" or "controller-lost" => [],
                         "wired-controller" => [new("virtual-xbox", "Xbox 360", ControllerFamily.Xbox, false, null, false)],
                         _ => null
                     });
                     var window = host.Window;
-                    var height = width == 572 ? 940 : 600;
+                    var height = width == 572 ? 940 : 480;
                     host.Open(width, height, forCapture: true);
                     AdaptiveInterfaceTests.UseController(window);
+                    if (state == "controller-lost")
+                    {
+                        AwaitControllerDisconnect(window);
+                    }
                     if (state == "unavailable-action")
                         Pick(window, "steam-overlay");
-                    else if (state is "selected-audio" or "breathing")
+                    else if (state is "selected-audio" or "focused-action")
                     {
                         Pick(window, "audio");
-                        if (state == "breathing")
-                            Complete(Task.Delay(TimeSpan.FromMilliseconds(1550)));
                     }
                     else if (state == "mouse")
                     {
@@ -379,12 +623,28 @@ internal static class SessionInterfaceTests
                         window.RefreshRows();
                     }
                     window.RefreshOperationNotice(Environment.TickCount64 + 200);
-                    var bitmap = RenderCapture(window, width, height, state == "mouse" ? "mouse" : "controller");
+                    var bitmap = RenderCapture(window, width, height, state == "controller-lost" ? "keyboard" : state == "mouse" ? "mouse" : "controller");
                     var png = new PngBitmapEncoder();
                     png.Frames.Add(BitmapFrame.Create(bitmap));
-                    using var file = File.Create(Path.Combine(output, $"{(light ? "light" : "dark")}-{width}-notice-{state}.png"));
+                    var name = $"{(light ? "light" : "dark")}-{width}-notice-{state}.png";
+                    using var file = File.Create(Path.Combine(output, name));
                     png.Save(file);
+                    results.Add(new
+                    {
+                        file = name,
+                        route = "notice-" + state,
+                        theme = light ? "light" : "dark",
+                        requestedWidth = width,
+                        requestedHeight = height,
+                        actualWidth = window.ActualWidth,
+                        actualHeight = window.ActualHeight,
+                        selected = window.SelectedAction,
+                        fixture = true,
+                        attachedNativeWpfTree = true,
+                        actualForegroundConfirmed = true
+                    });
                 }
+        return results;
     }
 
     private static RenderTargetBitmap RenderCapture(MainWindow window, int requestedWidth, int requestedHeight, string expectedInput)
@@ -403,9 +663,17 @@ internal static class SessionInterfaceTests
         var buttons = CaptureVisuals<Button>(root)
             .Where(button => button.IsVisible && button.ActualWidth > 0 && button.ActualHeight > 0)
             .ToArray();
-        Require(buttons.Length >= 4, "Capture has no rendered command buttons");
+        var confirmation = ((FrameworkElement)window.FindName("ConfirmPanel")).IsVisible;
+        if (confirmation)
+            Require(buttons.Any(button => Equals(button.Tag, "confirm-hold"))
+                && buttons.Any(button => Equals(button.Tag, "confirm-cancel")),
+                "Confirmation capture is missing its actual hold or cancel command");
+        else
+            Require(buttons.Length >= 4, "Capture has no rendered command buttons: selected=" + window.SelectedAction + "; visible=" + buttons.Length
+                + "; all=" + string.Join(", ", CaptureVisuals<Button>(root).Select(button => $"{button.Tag}:{button.Visibility}/{button.IsVisible}/{button.ActualWidth:F1}x{button.ActualHeight:F1}")));
         var rows = (FrameworkElement)window.FindName("Rows");
-        Require(buttons.Any(button => rows.IsAncestorOf(button)), "Capture has chrome but no rendered page actions");
+        Require(buttons.Any(button => rows.IsAncestorOf(button)) || confirmation,
+            "Capture has chrome but no rendered page actions");
         foreach (var button in buttons)
         {
             Require(button.Template is not null && VisualTreeHelper.GetChildrenCount(button) > 0, "Capture button has no template visuals: " + button.Tag);
@@ -414,16 +682,24 @@ internal static class SessionInterfaceTests
             else if (button.Content is string text && text.Length > 0)
                 Require(CaptureVisuals<TextBlock>(button).Any(label => label.IsVisible && label.ActualWidth > 0 && label.ActualHeight > 0 && label.Text.Length > 0), "Capture button text is not rendered: " + button.Tag);
         }
-        if (((Border)window.FindName("ContextCard")).Visibility == Visibility.Visible)
+        if (((Border)window.FindName("ContextCard")).IsVisible)
         {
             var title = (TextBlock)window.FindName("TargetLabel");
             Require(title.IsVisible && title.ActualWidth > 0 && title.ActualHeight > 0 && title.Text.Length > 0, "Capture game title is not rendered");
         }
+        if (confirmation)
+        {
+            var target = (TextBlock)window.FindName("ConfirmTarget");
+            Require(target.IsVisible && target.ActualWidth > 0 && target.ActualHeight > 0 && target.Text.Length > 0,
+                "Confirmation capture does not identify its actual close target");
+        }
 
-        var footer = InputPrompt.Read((TextBlock)window.FindName("ModeLabel"));
+        var footer = confirmation && ((Button)window.FindName("HoldCloseButton")).Content is IconLabel hold
+            ? InputPrompt.Read(hold.Label)
+            : InputPrompt.Read((TextBlock)window.FindName("ModeLabel"));
         var expectedPrompt = expectedInput switch
         {
-            "controller" => "LB/RB",
+            "controller" => confirmation ? "A" : "LB/RB",
             "mouse" => "Left click",
             _ => "Enter"
         };
@@ -452,12 +728,18 @@ internal static class SessionInterfaceTests
         }
     }
 
-    private static void Navigate(MainWindow w, string page)
+    private static void Navigate(MainWindow w, string page, Host? host = null)
     {
         switch (page)
         {
             case "system":
                 w.Page(2);
+                break;
+            case "system-save":
+            case "system-discard":
+                w.Page(2);
+                Choose(w, "sound-feedback");
+                Pick(w, page == "system-save" ? "save-pending" : "discard-pending");
                 break;
             case "system-controller":
                 w.Page(2);
@@ -468,13 +750,113 @@ internal static class SessionInterfaceTests
                 Pick(w, "sound-feedback");
                 break;
             case "apps":
+            case "apps-empty":
                 w.Page(1);
+                break;
+            case "options":
+                w.SetRenderState("options");
+                break;
+            case "details":
+                w.SetRenderState("details");
+                break;
+            case "audio":
+                w.SetRenderState("audio");
+                break;
+            case "integrations":
+                w.SetRenderState("integrations");
+                break;
+            case "customize":
+                w.Page(2);
+                Choose(w, "customize");
+                break;
+            case "setup":
+                w.Page(2);
+                Choose(w, "setup");
+                break;
+            case "setup-display":
+            case "setup-finish":
+                w.Page(2);
+                Choose(w, "setup");
+                Choose(w, "setup-next");
+                if (page == "setup-finish")
+                    Choose(w, "setup-next");
+                break;
+            case "operation":
+                w.Controller.SetOperation("Unconfirmed", "The selected window changed before the command could be confirmed. Select it again in Apps. No additional command was sent.", "fixture", summary: "Select the window again.");
+                w.RefreshRows();
+                Choose(w, "operation-details");
+                break;
+            case "confirmation":
+                w.SetRenderState("confirmation");
+                break;
+            case "browser":
+                if (host is null)
+                    throw new InvalidOperationException("Browser fixture requires its owned temporary folder.");
+                var folder = Path.Combine(host.Root, "Playnite");
+                Directory.CreateDirectory(Path.Combine(folder, "Themes"));
+                Directory.CreateDirectory(Path.Combine(folder, "Extensions"));
+                File.WriteAllText(Path.Combine(folder, "Playnite.FullscreenApp.exe"), "This is an inert UI fixture, never executed.");
+                w.ShowPlayniteFolderForValidation(folder);
+                WaitUntil(() => w.ActionIds.Contains("playnite-use"), "Playnite folder did not finish its real directory scan");
+                break;
+            case "updates":
+                w.Page(2);
+                Choose(w, "updates");
+                break;
+            case "updates-available":
+            case "update-review":
+            case "update-ready":
+            case "update-downloading":
+            case "update-download-action":
+            case "update-install-action":
+                w.Page(2);
+                Choose(w, "updates");
+                Choose(w, "check-updates");
+                Complete(w.UpdateTask);
+                if (page == "updates-available")
+                    Pick(w, "release:" + NextUpdate.BuildId);
+                else
+                {
+                    Choose(w, "release:" + NextUpdate.BuildId);
+                    if (page is "update-ready" or "update-install-action")
+                    {
+                        Choose(w, "prepare-update");
+                        Complete(w.UpdateTask);
+                        if (page == "update-install-action")
+                            Pick(w, "apply-update");
+                    }
+                    else if (page == "update-downloading")
+                    {
+                        if (host is null)
+                            throw new InvalidOperationException("Pending update fixture has no source owner.");
+                        host.Updates.Pending = true;
+                        Choose(w, "prepare-update");
+                        WaitUntil(() => !w.UpdateTask.IsCompleted, "Download fixture did not enter its pending state");
+                        Complete(Task.Delay(30));
+                    }
+                    else if (page == "update-download-action")
+                        Pick(w, "prepare-update");
+                }
+                break;
+            case "update-error":
+                if (host is null)
+                    throw new InvalidOperationException("Update error fixture has no source owner.");
+                host.Updates.Fail = true;
+                w.Page(2);
+                Choose(w, "updates");
+                Choose(w, "check-updates");
+                Complete(w.UpdateTask);
+                break;
+            case "update-rollback":
+                w.ShowRollbackForValidation(new("fixture-previous", "0.47.1+2222222", new string('2', 40), DateTimeOffset.Parse("2026-10-27T12:00:00Z")));
                 break;
             case "mixer":
                 Choose(w, "session-mixer");
                 Complete(w.FeatureTask);
                 break;
             case "devices":
+            case "audio-empty":
+            case "long-device":
                 w.SetRenderState("audio");
                 Choose(w, "audio-devices");
                 Complete(w.FeatureTask);
@@ -487,28 +869,109 @@ internal static class SessionInterfaceTests
                 Choose(w, "profile-edit:tv");
                 break;
             case "media":
+            case "media-empty":
                 Choose(w, "session-media");
                 break;
             case "keyboard":
                 Choose(w, "session-keyboard");
                 break;
             case "gallery":
+            case "gallery-loading":
+            case "gallery-empty":
+            case "capture-detail":
+            case "capture-missing":
+                if (page == "gallery-loading")
+                {
+                    // Isolate the gallery's delayed work from session artwork,
+                    // which deliberately shares the production decoder budget.
+                    w.Controller.ClearSelection();
+                    w.RefreshRows();
+                    var pending = new TaskCompletionSource<BitmapSource>();
+                    w.CaptureImageReaderFixture = (_, _, cancellation) => pending.Task.WaitAsync(cancellation);
+                }
                 Choose(w, "session-gallery");
                 Complete(w.FeatureTask);
+                if (page != "gallery-loading")
+                    Complete(w.CapturePresentationTask);
+                if (page is "capture-detail" or "capture-missing")
+                {
+                    if (page == "capture-missing" && host is not null)
+                        foreach (var path in Directory.EnumerateFiles(new ScreenCaptures(host.Root).DirectoryPath, "*.png"))
+                            File.Delete(path);
+                    Choose(w, w.ActionIds.First(id => id.StartsWith("capture:", StringComparison.Ordinal)));
+                    Complete(w.CapturePresentationTask);
+                }
+                break;
+            case "appearance":
+                w.OpenAppearance();
+                break;
+            case "appearance-save":
+            case "appearance-discard":
+                w.OpenAppearance();
+                Choose(w, "appearance-preset:Graphite");
+                Pick(w, page);
+                break;
+            case "color-editor":
+            case "color-keep":
+            case "color-cancel":
+            case "color-hex-keyboard":
+            case "color-unsafe":
+                w.OpenAppearance();
+                Choose(w, "appearance-color:" + PaletteRole.Focus);
+                if (page is "color-keep" or "color-cancel")
+                    Pick(w, page == "color-keep" ? "color-apply" : "color-cancel");
+                else if (page is "color-hex-keyboard" or "color-unsafe")
+                {
+                    Choose(w, "color-hex");
+                    if (page == "color-unsafe")
+                    {
+                        Choose(w, "keyboard-editor");
+                        Require(Keyboard.FocusedElement is TextBox, "The local hexadecimal editor did not receive focus");
+                        ((TextBox)Keyboard.FocusedElement).Text = ((SolidColorBrush)w.FindResource(ThemeSupport.FocusBackground)).Color.ToString()[3..];
+                        TapKey((UIElement)Keyboard.FocusedElement, Key.Tab);
+                        Choose(w, "keyboard-insert");
+                    }
+                }
+                break;
+            case "no-session":
+                w.Controller.ClearSelection();
+                w.RefreshRows();
                 break;
         }
-
         w.UpdateLayout();
     }
 
-    private static void Choose(MainWindow w, string id)
+    private static void AwaitControllerDisconnect(MainWindow window)
+    {
+        // Diagnostic hosts have no frame timer. Keep delivering actual absent
+        // frames so a prior identity read can settle and this epoch can be read,
+        // just as the production polling loop does after a disconnect.
+        WaitUntil(() =>
+        {
+            window.UpdateControllerTelemetry([default, default, default, default], null, Environment.TickCount64);
+            return ((FrameworkElement)window.FindName("ControllerInfoBar")).IsVisible
+                && ((TextBlock)window.FindName("ControllerModelLabel")).Text == "Controller disconnected"
+                && !((TextBlock)window.FindName("ControllerBatteryLabel")).IsVisible;
+        }, "Disconnected evidence lacks fresh recovery or retained a charge claim");
+        window.UpdateLayout();
+    }
+
+    private static void WaitUntil(Func<bool> condition, string message)
+    {
+        var deadline = Stopwatch.StartNew();
+        while (!condition() && deadline.Elapsed < TimeSpan.FromSeconds(5))
+            Complete(Task.Delay(10));
+        Require(condition(), message);
+    }
+
+    internal static void Choose(MainWindow w, string id)
     {
         Pick(w, id);
         w.ActivateEntry();
         w.UpdateLayout();
     }
 
-    private static void Pick(MainWindow w, string id)
+    internal static void Pick(MainWindow w, string id)
     {
         for (var i = 0; i <= w.ActionIds.Count && w.SelectedAction != id; i++)
             w.Sequential(1);
@@ -516,7 +979,7 @@ internal static class SessionInterfaceTests
         w.UpdateLayout();
     }
 
-    private static void TapKey(UIElement element, Key key)
+    internal static void TapKey(UIElement element, Key key)
     {
         var source = PresentationSource.FromVisual(element) ?? throw new Exception("Window has no source");
         element.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, key) { RoutedEvent = Keyboard.PreviewKeyDownEvent });
@@ -548,19 +1011,48 @@ internal static class SessionInterfaceTests
             throw new Exception(message);
     }
 
-    private static void Complete(Task task) => ReviewFixTests.Complete(task);
-    private sealed class Host : IDisposable
+    internal static void Complete(Task task) => ReviewFixTests.Complete(task);
+    private sealed class PendingIdentitySource : IControllerIdentitySource
+    {
+        private readonly TaskCompletionSource<bool> pending = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private ControllerIdentity[] items = [new("pending-xbox", "Xbox One", ControllerFamily.Xbox, true, 76, false)];
+        private int reads;
+        internal Task PendingRead => pending.Task;
+        internal ControllerIdentity[] Items
+        {
+            get => Volatile.Read(ref items);
+            set => Volatile.Write(ref items, value);
+        }
+
+        internal void Release() => released.TrySetResult(true);
+
+        public IReadOnlyList<ControllerIdentity> Read()
+        {
+            var snapshot = Items;
+            if (Interlocked.Increment(ref reads) == 2)
+            {
+                pending.TrySetResult(true);
+                released.Task.WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
+            }
+            return snapshot;
+        }
+    }
+
+    internal sealed class Host : IDisposable
     {
         private readonly SynchronizationContext? previous = SynchronizationContext.Current;
         internal readonly string Root = Path.Combine(Path.GetTempPath(), "SessionInterface", Guid.NewGuid().ToString("N"));
         internal readonly AudioFixture Audio = new(), Mixer = new();
         internal readonly MediaFixture Media = new();
+        internal readonly UpdateFixture Updates = new();
         internal MainWindow Window
         {
             get;
         }
 
-        internal Host(Action<string>? initialize = null, ISystemAudioBackend? backend = null, bool preview = true, string? gameTitle = null, ControllerIdentity[]? identities = null)
+        internal Host(Action<string>? initialize = null, ISystemAudioBackend? backend = null, bool preview = true, string? gameTitle = null, ControllerIdentity[]? identities = null,
+            bool populateCaptures = false, bool emptyApps = false, bool emptyMedia = false, IControllerIdentitySource? identitySource = null)
         {
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
             var app = Application.Current ?? new Application
@@ -570,14 +1062,22 @@ internal static class SessionInterfaceTests
             if (app.TryFindResource(ThemeSupport.Card) is null)
                 ThemeSupport.ForceForValidation(app, false);
             initialize?.Invoke(Root);
-            var platform = new PremiumInterfaceTests.FixturePlatform(preview);
+            if (populateCaptures)
+            {
+                var captures = new ScreenCaptures(Root, new CaptureFixture());
+                for (var index = 0; index < 8; index++)
+                    Complete(captures.CaptureAsync(new("fixture", 0, 0, 120, 80, true), "Local screenshot " + (index + 1).ToString("00"), "eldenring"));
+            }
+            if (emptyMedia)
+                Media.Clear();
+            var platform = new PremiumInterfaceTests.FixturePlatform(preview) { Empty = emptyApps };
             if (gameTitle is not null)
                 platform.Window = platform.Window with
                 {
                     Title = gameTitle,
                     ProcessName = "eldenring"
                 };
-            Window = new(renderOnly: true, platform: platform, diagnostics: new(Root), appAudioService: Audio, media: Media, systemAudioBackend: backend ?? new PreviewSystemAudioBackend(), mixerAudioService: Mixer, controllerIdentitySource: new PreviewControllerIdentitySource { Items = identities ?? [new("fixture-xbox", "Xbox One", ControllerFamily.Xbox, true, 76, false)] });
+            Window = new(renderOnly: true, platform: platform, diagnostics: new(Root), appAudioService: Audio, media: Media, systemAudioBackend: backend ?? new PreviewSystemAudioBackend(), mixerAudioService: Mixer, updates: Updates, controllerIdentitySource: identitySource ?? new PreviewControllerIdentitySource { Items = identities ?? [new("fixture-xbox", "Xbox One", ControllerFamily.Xbox, true, 76, false)] });
             Window.PhysicalKeyReader = _ => 0;
             Window.DpiReader = _ => 96;
             Window.Controller.CaptureReturn();
@@ -623,7 +1123,7 @@ internal static class SessionInterfaceTests
         }
     }
 
-    private sealed class AudioFixture : IApplicationAudio
+    internal sealed class AudioFixture : IApplicationAudio
     {
         private WindowRef? target;
         private long generation, revision;
@@ -685,8 +1185,15 @@ internal static class SessionInterfaceTests
         public CapturePixels Capture(DisplayRef display)
         {
             var pixels = new byte[120 * 80 * 4];
-            for (var i = 3; i < pixels.Length; i += 4)
-                pixels[i] = 255;
+            for (var y = 0; y < 80; y++)
+                for (var x = 0; x < 120; x++)
+                {
+                    var pixel = (y * 120 + x) * 4;
+                    pixels[pixel] = (byte)(34 + y / 2);
+                    pixels[pixel + 1] = (byte)(54 + x / 3);
+                    pixels[pixel + 2] = (byte)(116 + (x + y) / 3);
+                    pixels[pixel + 3] = 255;
+                }
             return new(120, 80, pixels);
         }
     }
@@ -721,7 +1228,7 @@ internal static class SessionInterfaceTests
         }
     }
 
-    private sealed class MediaFixture : ISessionMedia
+    internal sealed class MediaFixture : ISessionMedia
     {
         public SessionMediaSnapshot Current
         {
@@ -732,6 +1239,7 @@ internal static class SessionInterfaceTests
         public event Action<SessionMediaSnapshot>? Changed;
         internal int Commands;
         internal string LastId = "";
+        internal void Clear() => Current = new(1, [], "", "No media is available.");
         public void SetVisible(bool visible)
         {
         }
@@ -760,4 +1268,29 @@ internal static class SessionInterfaceTests
             Changed = null;
         }
     }
+    internal sealed class UpdateFixture : IUpdateSource
+    {
+        internal bool Pending, Fail;
+        public Task<IReadOnlyList<UpdateCandidate>> CheckAsync(string channel, CancellationToken cancellation) => Fail
+            ? Task.FromException<IReadOnlyList<UpdateCandidate>>(new HttpRequestException("Fixture query failure"))
+            : Task.FromResult<IReadOnlyList<UpdateCandidate>>([NextUpdate]);
+        public async Task<PreparedUpdate> StageAsync(UpdateCandidate candidate, IProgress<UpdateProgress>? progress, CancellationToken cancellation)
+        {
+            progress?.Report(new("Downloading update", candidate.Size / 3, candidate.Size));
+            if (Pending)
+                await Task.Delay(Timeout.Infinite, cancellation);
+            return new("fixture-only-never-installed", new(candidate.Version, candidate.BuildId, candidate.Commit, candidate.Channel));
+        }
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class SnapshotAudioFixture(SystemAudioSnapshot state) : ISystemAudioBackend
+    {
+        public SystemAudioSnapshot Read() => state;
+        public ActionResult SetMicrophoneMuted(string expectedId, bool muted, Func<bool> continuing) => new(ResultKind.Unavailable, "Read-only presentation fixture");
+        public ActionResult SetOutputs(string expectedConsole, string expectedMedia, string console, string media, Func<bool> continuing) => new(ResultKind.Unavailable, "Read-only presentation fixture");
+    }
+
 }

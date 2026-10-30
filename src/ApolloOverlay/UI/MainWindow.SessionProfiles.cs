@@ -13,7 +13,7 @@ public partial class MainWindow
 
     private void BuildSessionProfiles()
     {
-        Paragraph("Save display, text size and audio output for each setup.");
+        FeatureHeading("Choose a setup", "Apply a saved display and audio setup, or edit it before use.", "session-profiles");
         if (sessionProfiles.RecoveryNotice is { } notice)
             Paragraph(notice);
         foreach (var profile in sessionProfiles.Items)
@@ -47,6 +47,8 @@ public partial class MainWindow
     {
         var draft = profileDraft ?? sessionProfiles.Items.First(profile => profile.Id == editingProfile);
         profileDraft = draft;
+        FeatureHeading(draft.Name, "Saving keeps this profile for later. It does not apply the setup.", "profile-name");
+        Section("Profile");
         AddRow("profile-name", "Name · " + draft.Name, "Edit with a controller or keyboard", () => OpenKeyboard(true));
         AddRow("profile-presentation", "Interface · " + (draft.Presentation == "Desktop" ? "Desktop" : "TV"), "Compact panel or larger text", () =>
         {
@@ -64,6 +66,7 @@ public partial class MainWindow
             };
             RefreshRows();
         }, draft.GameKey is not null || Controller.Session.Anchor is not null);
+        Section("Display");
         AddRow("profile-monitor", "Display · " + DisplayName(draft.DisplayId), "Overlay display, without changing the game resolution", () =>
         {
             var ids = new string?[]
@@ -99,6 +102,7 @@ public partial class MainWindow
             };
             RefreshRows();
         });
+        Section("Audio");
         AddRow("profile-output", "Audio · " + (draft.OutputName ?? "Keep current output"), "Cycle through connected outputs", () =>
         {
             var outputs = systemAudio.Current.Outputs;
@@ -119,6 +123,7 @@ public partial class MainWindow
             };
             RefreshRows();
         });
+        Section("Save for later");
         AddRow("profile-current", "Use current layout", "Copy the current display, size and side", () =>
         {
             var settings = Controller.Settings;

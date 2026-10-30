@@ -217,6 +217,7 @@ internal static class TvUsabilityTests
                 Require(window.Controller.Session.Anchor is null, "The initial fixture unexpectedly selected a window");
                 Require(hint.Text.Contains("Choose", StringComparison.OrdinalIgnoreCase), "Empty session advertises resuming a window");
                 UseController(window);
+                SessionInterfaceTests.Pick(window, "session-card");
                 Require(InputPrompt.Read(hint).Contains("A", StringComparison.Ordinal) && InputPrompt.Read(hint).Contains("Choose", StringComparison.OrdinalIgnoreCase), "Controller hint does not explain the empty session action");
                 window.Controller.CaptureReturn();
                 window.RefreshRows();

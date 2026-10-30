@@ -12,8 +12,15 @@ public static class SessionHubSettings
         Version = 3,
         FavoriteQuickActions = Favorites(value),
         UiScalePercent = value.UiScalePercent is 100 or 115 or 130 or 150 ? value.UiScalePercent : 100,
-        PanelSide = value.PanelSide is "Left" or "Right" ? value.PanelSide : "Left"
+        PanelSide = value.PanelSide is "Left" or "Right" ? value.PanelSide : "Left",
+        Appearance = NormalizeAppearance(value.Appearance)
     };
+
+    private static AppearanceSettings? NormalizeAppearance(AppearanceSettings? appearance)
+    {
+        var normalized = AppearanceCatalog.Normalize(appearance);
+        return normalized == new AppearanceSettings() ? null : normalized;
+    }
     public static bool Equivalent(UserSettings a, UserSettings b)
     {
         var left = Copy(a);
@@ -69,6 +76,14 @@ public static class SessionHubSettings
             foreach (var property in root.EnumerateObject())
             {
                 var value = property.Value;
+                if (property.NameEquals(nameof(UserSettings.Appearance)))
+                {
+                    var appearance = AppearanceCatalog.ReadJson(value, out var appearanceRecovered);
+                    recovered |= appearanceRecovered;
+                    writer.WritePropertyName(property.Name);
+                    JsonSerializer.Serialize(writer, appearance, SettingsJson.Default.AppearanceSettings);
+                    continue;
+                }
                 var valid = property.Name switch
                 {
                     nameof(UserSettings.FavoriteQuickActions) => value.ValueKind is JsonValueKind.Null || value.ValueKind == JsonValueKind.Array && value.EnumerateArray().All(v => v.ValueKind == JsonValueKind.String),

@@ -11,12 +11,24 @@ public partial class MainWindow
     private TrayHost? tray;
     private bool ownedDialog;
     private bool placementQueued;
+    private bool appearanceQueued;
     private nint WindowMessage(nint hwnd, int message, nint w, nint l, ref bool handled)
     {
         if (message == SingleInstanceActivation.OpenMessage)
         {
             OpenPanel();
             handled = true;
+        }
+
+        if (message is 0x31A or 0x1A && !appearanceQueued)
+        {
+            appearanceQueued = true;
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+            {
+                appearanceQueued = false;
+                if (!exiting)
+                    UpdateAppearance();
+            });
         }
 
         if ((message is 0x7E or 0x2E0 || message == 0x1A && w == 47) && IsVisible && !placing && !placementQueued)

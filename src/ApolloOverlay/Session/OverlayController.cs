@@ -222,6 +222,37 @@ public sealed class OverlayController : IDisposable
         Status = "Settings saved.";
     }
 
+    internal ActionResult SaveAppearance(AppearanceSettings appearance)
+    {
+        foreach (var light in new[] { false, true })
+            if (!AppearanceCatalog.TryValidate(AppearanceCatalog.Resolve(appearance, light), out var reason))
+                return new(ResultKind.Unavailable, reason);
+        var value = AppearanceCatalog.Normalize(appearance);
+        if (Platform.IsPreview)
+        {
+            Settings = Settings with
+            {
+                Appearance = value
+            };
+            Status = "Preview · colors apply only to this session.";
+            return new(ResultKind.Simulated, Status);
+        }
+
+        // Persist this editor's scope without committing any unrelated settings draft.
+        var saved = SavedSettings with
+        {
+            Appearance = value
+        };
+        Diagnostics.Save(saved);
+        SavedSettings = saved;
+        Settings = Settings with
+        {
+            Appearance = value
+        };
+        Status = "Appearance saved.";
+        return new(ResultKind.Completed, Status);
+    }
+
     internal WindowRef? LaunchTarget(bool playnite) => Apps.FirstOrDefault(w => playnite ? w.ProcessName.Equals("Playnite.FullscreenApp", StringComparison.OrdinalIgnoreCase) : w.ProcessName.Equals("steam", StringComparison.OrdinalIgnoreCase));
     public async Task<ActionResult> Launch(bool playnite, CancellationToken cancellation = default, Func<bool>? continuing = null)
     {

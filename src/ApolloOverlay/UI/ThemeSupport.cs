@@ -4,47 +4,81 @@ using Microsoft.Win32;
 
 namespace ApolloOverlay;
 
+/// <summary>Applies validated local color data to dynamic resources without rebuilding the visual tree.</summary>
 internal static class ThemeSupport
 {
-    internal const string Surface = "ApplicationBackgroundBrush", Card = "CardBackgroundFillColorDefaultBrush", Control = "ControlFillColorDefaultBrush", Stroke = "ControlStrokeColorDefaultBrush", Text = "TextFillColorPrimaryBrush", SecondaryText = "TextFillColorSecondaryBrush", DisabledText = "TextFillColorDisabledBrush", Success = "SystemFillColorSuccessBrush", SuccessBackground = "SystemFillColorSuccessBackgroundBrush", Critical = "SystemFillColorCriticalBrush", CriticalBackground = "SystemFillColorCriticalBackgroundBrush";
-    internal const string Focus = "SessionFocusBrush", FocusBackground = "SessionFocusBackgroundBrush", Accent = "SessionAccentBrush";
-    internal const string IconGame = "SessionIconGameBrush", IconNavigation = "SessionIconNavigationBrush", IconAudio = "SessionIconAudioBrush", IconTools = "SessionIconToolsBrush", IconCapture = "SessionIconCaptureBrush";
-    private static ResourceDictionary? validation, contrast, palette;
-    private static ResourceDictionary Palette(bool light)
+    internal const string Surface = "ApplicationBackgroundBrush";
+    internal const string Card = "CardBackgroundFillColorDefaultBrush";
+    internal const string Control = "ControlFillColorDefaultBrush";
+    internal const string Stroke = "ControlStrokeColorDefaultBrush";
+    internal const string FocusBackground = "SessionFocusBackgroundBrush";
+    internal const string Text = "TextFillColorPrimaryBrush";
+    internal const string SecondaryText = "TextFillColorSecondaryBrush";
+    internal const string MutedText = "SessionMutedTextBrush";
+    internal const string DisabledText = "TextFillColorDisabledBrush";
+    internal const string TextSelection = "SessionTextSelectionBrush";
+    internal const string TextSelectionForeground = "SessionTextSelectionForegroundBrush";
+    internal const string Caret = "SessionCaretBrush";
+    internal const string Focus = "SessionFocusBrush";
+    internal const string Accent = "SessionAccentBrush";
+    internal const string SliderActive = "SessionSliderActiveBrush";
+    internal const string SliderTrack = "SessionSliderTrackBrush";
+    internal const string SliderThumb = "SessionSliderThumbBrush";
+    internal const string SliderThumbStroke = "SessionSliderThumbStrokeBrush";
+    internal const string ToggleOn = "SessionToggleOnBrush";
+    internal const string ToggleOff = "SessionToggleOffBrush";
+    internal const string ToggleThumb = "SessionToggleThumbBrush";
+    internal const string ToggleThumbOn = "SessionToggleThumbOnBrush", ToggleThumbOff = "SessionToggleThumbOffBrush";
+    internal const string Success = "SystemFillColorSuccessBrush";
+    internal const string SuccessBackground = "SystemFillColorSuccessBackgroundBrush";
+    internal const string Warning = "SessionWarningBrush";
+    internal const string WarningBackground = "SessionWarningBackgroundBrush";
+    internal const string Critical = "SystemFillColorCriticalBrush";
+    internal const string CriticalBackground = "SystemFillColorCriticalBackgroundBrush";
+    internal const string Information = "SessionInformationBrush";
+    internal const string InformationBackground = "SessionInformationBackgroundBrush";
+    internal const string IconGame = "SessionIconGameBrush";
+    internal const string IconNavigation = "SessionIconNavigationBrush";
+    internal const string IconAudio = "SessionIconAudioBrush";
+    internal const string IconTools = "SessionIconToolsBrush";
+    internal const string IconCapture = "SessionIconCaptureBrush";
+    internal const string IconNeutral = "SessionIconNeutralBrush";
+    internal const string PromptA = "SessionPromptABrush";
+    internal const string PromptB = "SessionPromptBBrush";
+    internal const string PromptX = "SessionPromptXBrush";
+    internal const string PromptY = "SessionPromptYBrush";
+    internal const string PromptShoulder = "SessionPromptShoulderBrush";
+    internal const string PromptDpad = "SessionPromptDpadBrush";
+    internal const string PromptGuide = "SessionPromptGuideBrush";
+    internal const string PromptKeyboard = "SessionPromptKeyboardBrush";
+    internal const string PromptMouse = "SessionPromptMouseBrush";
+    internal const string PromptForeground = "SessionPromptForegroundBrush";
+    internal const string Hover = "SessionHoverBrush";
+    internal const string Press = "SessionPressBrush";
+    internal const string Sheen = "SessionSheenBrush";
+    internal const string Shadow = "SessionShadowBrush";
+    internal const string SheenColor = "SessionSheenColor", ShadowColor = "SessionShadowColor";
+
+    private static AppearanceSettings current = new();
+    private static ColorPalette? applied;
+    private static ResourceDictionary? palette;
+    private static bool? validationLight;
+    private static bool validationHighContrast, appliedHighContrast;
+
+    internal static void ApplyAppearance(Application? application, AppearanceSettings? appearance)
     {
-        var result = new ResourceDictionary();
-        foreach (var pair in new[]
-        {
-            (Surface, light ? "#FFF0F2F5" : "#FF15191F"),
-            (Card, light ? "#FFFFFFFF" : "#FF1C222B"),
-            (Control, light ? "#FFE5EAF0" : "#FF242C37"),
-            (Stroke, light ? "#FFC1CBD7" : "#FF384453"),
-            (Text, light ? "#FF16202C" : "#FFF2F3F5"),
-            (SecondaryText, light ? "#FF4F6074" : "#FFA5B0BD"),
-            (DisabledText, light ? "#FF657386" : "#FF8593A5"),
-            (Focus, light ? "#FF24577F" : "#FF92BDEA"),
-            (FocusBackground, light ? "#FFE0ECF8" : "#FF253B51"),
-            (IconGame, light ? "#FF267154" : "#FF86CEA8"),
-            (IconNavigation, light ? "#FF3266A0" : "#FF9BBEEC"),
-            (IconAudio, light ? "#FF8A5C1D" : "#FFE3BB7F"),
-            (IconTools, light ? "#FF7057A1" : "#FFBBA8E1"),
-            (IconCapture, light ? "#FFA14C70" : "#FFE2A0B9"),
-            (Accent, light ? "#FF81562E" : "#FFC89A70"),
-            (Success, light ? "#FF176A3C" : "#FF78C999"),
-            (SuccessBackground, light ? "#FFE2F3E9" : "#FF20382D"),
-            (Critical, light ? "#FFAC2A36" : "#FFFF9296"),
-            (CriticalBackground, light ? "#FFFBE4E6" : "#FF442A32")
-        }
-
-        )
-        {
-            var brush = (SolidColorBrush)new BrushConverter().ConvertFromString(pair.Item2)!;
-            brush.Freeze();
-            result[pair.Item1] = brush;
-        }
-
-        return result;
+        current = AppearanceCatalog.Normalize(appearance);
+        ApplySystemPalette(application);
     }
+
+    internal static bool HighContrastActive => SystemParameters.HighContrast || validationHighContrast;
+
+    internal static bool UsesLightPalette(AppearanceSettings? appearance) => appearance?.Mode switch
+    {
+        "Light" => true,
+        "Dark" => false,
+        _ => validationLight ?? Light()
+    };
 
     private static bool Light()
     {
@@ -63,66 +97,72 @@ internal static class ThemeSupport
     {
         if (application is null)
             return;
-        if (contrast is not null)
-        {
-            application.Resources.MergedDictionaries.Remove(contrast);
-            contrast = null;
-        }
-
-        if (SystemParameters.HighContrast)
-        {
-            contrast = new();
-            foreach (var key in new[]
-            {
-                Surface,
-                Card,
-                Control,
-                SuccessBackground,
-                CriticalBackground,
-                FocusBackground
-            }
-
-            )
-                contrast[key] = SystemColors.WindowBrush;
-            foreach (var key in new[]
-            {
-                Text,
-                SecondaryText,
-                Stroke,
-                Accent,
-                IconGame,
-                IconNavigation,
-                IconAudio,
-                IconTools,
-                IconCapture
-            }
-
-            )
-                contrast[key] = SystemColors.WindowTextBrush;
-            contrast[DisabledText] = SystemColors.GrayTextBrush;
-            contrast[Success] = SystemColors.HighlightBrush;
-            contrast[Focus] = SystemColors.HighlightBrush;
-            contrast[Critical] = SystemColors.WindowTextBrush;
-            application.Resources.MergedDictionaries.Add(contrast);
+        var highContrast = HighContrastActive;
+        var resolved = AppearanceCatalog.Resolve(current, UsesLightPalette(current));
+        if (!highContrast && !appliedHighContrast && applied == resolved && palette is not null
+            && application.Resources.MergedDictionaries.Contains(palette))
             return;
-        }
 
-        if (validation is not null)
-            return;
-        if (palette is not null)
-            application.Resources.MergedDictionaries.Remove(palette);
-        palette = Palette(Light());
-        application.Resources.MergedDictionaries.Add(palette);
+        var replacement = highContrast ? HighContrastPalette() : Palette(resolved);
+        var index = palette is null ? -1 : application.Resources.MergedDictionaries.IndexOf(palette);
+        if (index >= 0)
+            application.Resources.MergedDictionaries[index] = replacement;
+        else
+            application.Resources.MergedDictionaries.Add(replacement);
+        palette = replacement;
+        applied = resolved;
+        appliedHighContrast = highContrast;
     }
+
+    private static ResourceDictionary Palette(ColorPalette colors)
+    {
+        var resources = new ResourceDictionary();
+        foreach (var info in AppearanceCatalog.Roles)
+        {
+            var color = (Color)ColorConverter.ConvertFromString(colors.Get(info.Role));
+            var brush = new SolidColorBrush(color);
+            brush.Freeze();
+            resources[info.ResourceKey] = brush;
+            resources[ColorKey(info.ResourceKey)] = color;
+        }
+        resources[ToggleThumbOn] = resources[ToggleThumb];
+        resources[ToggleThumbOff] = resources[ToggleThumb];
+        return resources;
+    }
+
+    private static ResourceDictionary HighContrastPalette()
+    {
+        var resources = new ResourceDictionary();
+        foreach (var info in AppearanceCatalog.Roles)
+        {
+            var brush = info.Role switch
+            {
+                PaletteRole.Surface or PaletteRole.Card or PaletteRole.Control or PaletteRole.FocusBackground
+                    or PaletteRole.SuccessBackground or PaletteRole.WarningBackground or PaletteRole.CriticalBackground
+                    or PaletteRole.InformationBackground or PaletteRole.SliderTrack or PaletteRole.ToggleOff
+                    or PaletteRole.PromptForeground => SystemColors.WindowBrush,
+                PaletteRole.Focus or PaletteRole.Accent or PaletteRole.SliderThumb or PaletteRole.ToggleOn
+                    or PaletteRole.TextSelection => SystemColors.HighlightBrush,
+                PaletteRole.TextSelectionForeground => SystemColors.HighlightTextBrush,
+                PaletteRole.DisabledText => SystemColors.GrayTextBrush,
+                _ => SystemColors.WindowTextBrush
+            };
+            resources[info.ResourceKey] = brush;
+            resources[ColorKey(info.ResourceKey)] = brush.Color;
+        }
+        // A single custom thumb color is shared in normal themes. Windows high
+        // contrast needs the foreground corresponding to each actual track state.
+        resources[ToggleThumbOn] = SystemColors.HighlightTextBrush;
+        resources[ToggleThumbOff] = SystemColors.WindowTextBrush;
+        return resources;
+    }
+
+    private static string ColorKey(string brushKey) => brushKey[..^"Brush".Length] + "Color";
 
     internal static void FollowSystem(Application application)
     {
-        if (validation is not null)
-        {
-            application.Resources.MergedDictionaries.Remove(validation);
-            validation = null;
-        }
-
+        validationLight = null;
+        validationHighContrast = false;
         if (!application.Resources.MergedDictionaries.Any(dictionary => dictionary.Source?.ToString() == "pack://application:,,,/PresentationFramework.Fluent;component/Themes/Fluent.xaml"))
             application.Resources.MergedDictionaries.Add(new()
             {
@@ -134,9 +174,17 @@ internal static class ThemeSupport
     internal static void ForceForValidation(Application application, bool light)
     {
         FollowSystem(application);
-        validation = Palette(light);
-        application.Resources.MergedDictionaries.Add(validation);
+        validationLight = light;
+        ApplySystemPalette(application);
     }
 
-    internal static bool FollowsSystem(Application application) => validation is null;
+    /// <summary>Exercises Windows SystemColors resource mapping without changing the host OS preference.</summary>
+    internal static void ForceHighContrastForValidation(Application application)
+    {
+        FollowSystem(application);
+        validationHighContrast = true;
+        ApplySystemPalette(application);
+    }
+
+    internal static bool FollowsSystem(Application application) => validationLight is null && !validationHighContrast;
 }

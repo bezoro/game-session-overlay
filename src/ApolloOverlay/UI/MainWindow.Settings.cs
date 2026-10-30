@@ -46,6 +46,7 @@ public partial class MainWindow
         var previous = appliedSettings;
         var settings = Controller.Settings;
         appliedSettings = settings;
+        ApplyAppearanceTheme();
         if (settings.SoundFeedbackEnabled != previous.SoundFeedbackEnabled || settings.HapticFeedbackEnabled != previous.HapticFeedbackEnabled)
             feedbackService.Suspend();
         feedbackService.Configure(settings.SoundFeedbackEnabled, settings.HapticFeedbackEnabled);

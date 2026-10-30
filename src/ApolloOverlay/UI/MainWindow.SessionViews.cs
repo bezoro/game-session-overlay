@@ -111,7 +111,7 @@ public partial class MainWindow
                 AddRow(id, "Playnite", Controller.Settings.PlaynitePath is null ? "Configure in System" : "Open library", () => RunEffect((token, keep) => Controller.Launch(true, token, keep), focusTarget: Controller.LaunchTarget(true)), Controller.Settings.PlaynitePath is not null || Controller.Apps.Any(a => a.ProcessName.Equals("Playnite.FullscreenApp", StringComparison.OrdinalIgnoreCase)), row: row, column: column, compactGrid: true);
                 break;
             case "steam":
-                AddRow(id, narrow ? "Big Picture" : "Steam Big Picture", Controller.SteamAvailable ? "Open library" : "Steam not found", () => RunEffect((token, keep) => Controller.Launch(false, token, keep), focusTarget: Controller.LaunchTarget(false)), Controller.SteamAvailable, row: row, column: column, compactGrid: true);
+                AddRow(id, "Steam Big Picture", Controller.SteamAvailable ? "Open library" : "Steam not found", () => RunEffect((token, keep) => Controller.Launch(false, token, keep), focusTarget: Controller.LaunchTarget(false)), Controller.SteamAvailable, row: row, column: column, compactGrid: true);
                 break;
             case "gamebar":
                 AddRow(id, "Game Bar", target is null ? "Choose a window" : "Xbox · session window", () => Shortcut("Win+G"), target is not null, row: row, column: column, compactGrid: true);
@@ -131,7 +131,7 @@ public partial class MainWindow
                 AddRow(id, "Task View", "Open windows", () => RunEffect(Controller.Platform.TaskView), row: row, column: column, compactGrid: true);
                 break;
             case "audio":
-                AddRow(id, narrow ? "Audio" : "Windows audio", audio.Current.Available ? audio.Current.Muted ? "Output muted" : audio.Current.Volume.ToString("P0") : "Output unavailable", () => Subpage("audio", "volume"), row: row, column: column, compactGrid: true);
+                AddRow(id, "Windows audio", audio.Current.Available ? audio.Current.Muted ? "Output muted" : audio.Current.Volume.ToString("P0") : "Output unavailable", () => Subpage("audio", "volume"), row: row, column: column, compactGrid: true);
                 break;
         }
     }
@@ -240,7 +240,7 @@ public partial class MainWindow
         AddRow("choose-session", "Choose another window", "Choose what to resume", ChooseSession);
         AddRow("details", "Window details", "View full details", () => OpenView(new(OverlayRoute.Details, target, "switch-detail")));
         AddRow("close", "Close window…", target.CanClose && valid ? "Confirm with a fresh 1.5-second hold" : "Window protected or unavailable", () => Confirm(target), valid && target.CanClose, true);
-        AddRow("back", "Back", "Back", Back);
+        AddRow("back", "Back", "", Back);
     }
 
     private void BuildDetails()
@@ -300,32 +300,4 @@ public partial class MainWindow
         AddRow("back", "Back", state.Status, Back);
     }
 
-    private void BuildResult()
-    {
-        if (Controller.Operation is not { } result)
-        {
-            AddRow("back", "Back", "No retained result", Back);
-            return;
-        }
-
-        AddRow("operation-text", "Read full message", "Arrows to scroll · B / Esc to go back", () => operationText?.Focus());
-        operationText = new TextBox
-        {
-            Text = result.Message,
-            IsReadOnly = true,
-            TextWrapping = TextWrapping.Wrap,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            MinHeight = 120,
-            MaxHeight = 160,
-            FontSize = 16,
-            Padding = new(12),
-            Margin = new(0, 8, 0, 8)
-        };
-        operationText.SetResourceReference(BackgroundProperty, ThemeSupport.Card);
-        operationText.SetResourceReference(ForegroundProperty, ThemeSupport.Text);
-        AutomationProperties.SetName(operationText, "Full result · " + result.State);
-        AddVisual(operationText);
-        AddRow("dismiss-operation", "Dismiss result", "Removes only this message", DismissOperation);
-        AddRow("back", "Back to panel", "Keeps the result available", Back);
-    }
 }

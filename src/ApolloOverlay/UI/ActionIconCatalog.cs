@@ -56,9 +56,28 @@ internal static class ActionIconCatalog
             return "history";
         if (action.StartsWith("media-source:", StringComparison.Ordinal))
             return "play";
+        if (action.StartsWith("playnite-folder:", StringComparison.Ordinal))
+            return "folder";
+        if (action.StartsWith("appearance-preset:", StringComparison.Ordinal))
+            return "profile";
+        if (action.StartsWith("appearance-color:", StringComparison.Ordinal))
+            return "edit";
         return action switch
         {
             "session-card" or "previous-window" or "back" or "back-header" => "back",
+            "setup-back" or "setup-skip" or "playnite-browser-back" or "color-cancel" => "back",
+            "setup-next" or "playnite-page-next" => "next",
+            "playnite-page-previous" => "previous",
+            "playnite-native" => "folder",
+            "playnite-use" or "color-apply" => "check",
+            "choose-session" => "window",
+            "operation-text" => "info",
+            "dismiss-operation" => "close",
+            "restore-favorites" or "appearance-defaults" or "appearance-discard" => "undo",
+            "appearance-save" => "save",
+            "appearance-preview" => "window",
+            "color-red" or "color-green" or "color-blue" => "options",
+            "color-hex" => "keyboard",
             "steam" or "steam-overlay" or "test-steam" => "steam",
             "guide" or "chord" or "gamebar" => "gamebar",
             "session" or "select-session" or "profile-game" => "controller",
@@ -77,8 +96,8 @@ internal static class ActionIconCatalog
             "session-profiles" or "profile-new" or "profile-current" => "profile",
             "session-media" => "play",
             "media-toggle" => playing ? "pause" : "play",
-            "media-next" => "next",
-            "media-previous" => "previous",
+            "media-next" or "capture-next" => "next",
+            "media-previous" or "capture-previous" => "previous",
             "session-keyboard" or "keyboard-editor" or "keyboard-insert" or "shortcut" => "keyboard",
             "keyboard-target" => "window",
             "session-capture" => "camera",

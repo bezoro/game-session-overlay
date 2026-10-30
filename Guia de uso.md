@@ -1,87 +1,91 @@
-# Controle da sessão
+# Session controls
 
-Abra o painel por cima do jogo para alternar janelas, ajustar o áudio ou acessar suas bibliotecas. Funciona no Windows 11 com controle XInput conectado ao PC e durante uma transmissão pelo Apollo. O Apollo não precisa estar aberto para usar o painel localmente.
+Open the panel over your game to switch windows, adjust audio or reach your libraries. It works on Windows 11 with an XInput controller connected to the PC or supplied by an Apollo stream. Apollo does not need to be running for local use.
 
-## Primeira execução
+## First run
 
-1. Baixe o instalador **GameSessionOverlay-testing-Setup.exe** em [Releases](https://github.com/bezoro/game-session-overlay/releases). Se uma versão anterior estiver aberta, encerre pela bandeja.
-2. Execute o Setup do Game Session Overlay. O Velopack instala o aplicativo, cria atalhos e disponibiliza a desinstalação em Aplicativos do Windows.
-3. Em **Sistema**, escolha o monitor, o lado do painel e o tamanho da interface. Se usar Playnite, selecione sua pasta. Pressione **Salvar** para manter as alterações.
+1. Download **GameSessionOverlay-testing-Setup.exe** from [Releases](https://github.com/bezoro/game-session-overlay/releases). If an older instance is running, exit it from the tray.
+2. Run the Game Session Overlay Setup. Velopack installs the app, creates shortcuts and adds the Windows uninstall entry.
+3. In **System**, choose the monitor, panel side and interface scale. Select the Playnite folder if you use it. Choose **Save** to keep the changes.
 
-Na próxima entrada no Windows, a overlay inicia oculta. Um toque curto no botão **Guide**, o X iluminado no centro do controle Xbox, abre o painel quando você solta o botão. Você também pode dar duplo clique no ícone da bandeja ou escolher **Abrir overlay** no menu do botão direito.
+At the next Windows sign-in, the overlay starts hidden. A short press of **Guide**, the illuminated Xbox button in the middle of the controller, opens the panel when released. You can also double-click the tray icon or choose **Open overlay** from its context menu.
 
-## Usar pelo controle
+## Controller navigation
 
-| Controle | Ação |
+| Control | Action |
 | --- | --- |
-| Direcional ou analógico esquerdo | Mover a seleção |
-| A | Acionar a opção selecionada |
-| B | Voltar; na tela Sessão, ocultar o painel |
-| LB / RB | Trocar de aba |
-| X | Abrir opções da janela em Sessão e Aplicativos |
-| Guide | Abrir ou ocultar o painel; se estiver sem foco, tentar ativá-lo novamente |
-| Esquerda / direita sobre Volume | Ajustar em passos de 5% |
+| D-pad or left stick | Move selection |
+| A | Activate the selected action |
+| B | Go back; hide the panel from Session |
+| LB / RB | Switch tabs |
+| X | Open window options in Session and Apps |
+| Guide | Open or hide the panel |
+| Left / right on a volume control | Adjust in 5% steps |
 
-Solte os botões e os analógicos ao voltar ao jogo. O painel espera a soltura para devolver o foco. Se você mover a seleção e apertar A ao mesmo tempo, apenas a seleção muda; aperte A novamente para acionar a opção.
+Release the buttons and sticks when returning to the game. The panel waits for release before handing focus back. If direction and A arrive together, only the selection changes; press A again to activate it.
 
-O cartão principal retoma a janela da sessão. Se ela tiver sido fechada, o cartão oferece escolher outra. Nas opções da janela ficam o áudio do aplicativo, minimizar, detalhes e fechamento. Para fechar, selecione **Fechar janela**, solte A e faça uma nova pressão de 1,5 segundo. Soltar antes ou apertar B cancela.
+**Resume** returns to the selected session window. If that window has closed, choose another one. Window options include application audio, minimize, details and close. To close a window, choose **Close window…**, release A, then make a new 1.5-second hold. Releasing early or pressing B cancels.
 
-O controle ainda pode agir no jogo enquanto o painel está aberto. A overlay não bloqueia a entrada de outros aplicativos. Pause o jogo antes de navegar quando uma ação involuntária puder atrapalhar sua partida.
+Controller input may still reach the game while the panel is open. Foreground focus does not block every other application's controller reads. Pause the game before navigating if an unintended action could disrupt play.
 
-## Ajustar para sua TV
+## Set up your TV
 
-Em **Sistema**, comece com o monitor automático. Ele acompanha a janela ativa; ao abrir pela bandeja, tenta usar a janela preservada da sessão. Escolha um monitor específico se quiser manter o painel na tela virtual do Apollo ou em outra tela.
+In **System**, start with automatic monitor selection. It follows the active window; when opened from the tray, it tries the preserved session window. Choose a specific monitor to keep the panel on Apollo's virtual display or another screen.
 
-Aumente a escala até conseguir ler os títulos da sua posição habitual. O painel usa rolagem quando falta espaço. A seleção respira suavemente, recebe um reflexo discreto e os botões reagem ao pressionar. As preferências de animação e alto contraste do Windows são respeitadas.
+Increase the scale until titles are readable from your usual seat. The panel scrolls when space is limited. Selection has one clear outline, a short subtle sheen and press feedback. Windows animation restrictions and high contrast are respected.
 
-Em **Personalizar acesso rápido**, mantenha as ações que você usa e coloque as mais frequentes primeiro. Sons e vibração são opcionais e começam desativados. Os ajustes só persistem depois de **Salvar**; **Descartar** recupera os últimos ajustes salvos.
+In **Customize quick access**, keep the actions you use and put frequent actions first. Sounds and vibration are separate opt-ins, both off by default. Changes persist only after **Save**; **Discard** restores the saved settings.
 
-Em **Sistema → Sons**, ative os sinais e use **Testar retorno** para ouvir uma amostra. Navegação, confirmação e retorno têm sons diferentes. Uma falha usa um sinal grave; o som de conclusão só toca quando o resultado foi confirmado. O teste solicita a reprodução, mas você precisa conferir se a saída de áudio está chegando à TV.
+Enable **Sounds** in System and use **Test feedback** to request a sample. Navigation, confirmation and back have different cues. Failure has a lower cue; completion sounds only follow confirmed results. Check that the sound actually reaches the TV: a playback request alone does not establish audible output.
 
-A opção selecionada mantém o contorno de foco. Ao acionar uma função, o botão recebe um destaque breve, com uma breve compressão e retorno. Resultados também usam texto e símbolos para distinguir espera, conclusão e problemas.
+The selected action keeps its focus outline. Activating it produces a brief highlight and gentle compression. Separate text and symbols distinguish pending, completed and uncertain outcomes.
 
-**Áudio do Windows** controla a saída padrão do PC. **Áudio do aplicativo**, nas opções da janela, afeta as sessões de áudio identificadas daquele aplicativo. Nenhum deles garante alterar o volume físico da TV.
+**Windows audio** controls the PC's default output. Application audio in window options affects the identified audio sessions of that process. Neither guarantees control of the TV's physical volume.
 
-## Atualizar e voltar a uma versão anterior
+**Appearance** offers warm charcoal, amber and off-white defaults, presets, and separate dark/light color palettes. Edit colors with RGB controls or local hexadecimal entry. **Keep color** adds the edit to the draft; **Save colors** persists it without saving unrelated settings changes. Unsafe intermediate colors remain editable while navigation keeps its last readable palette. Windows high contrast uses system colors.
 
-A versão aparece no cabeçalho do painel e em **Sistema → Versão e atualizações**. O identificador também inclui o build e o commit para distinguir as alterações que você está testando.
+## Update and restore an earlier version
 
-1. Na página de versões, escolha **Testes** para receber os novos builds aprovados nas verificações do projeto, ou **Estável** para as versões da branch principal.
-2. O repositório é público. Não é necessário conectar uma conta ou informar token do GitHub.
-3. Use **Buscar atualizações**, escolha uma versão e leia as alterações.
-4. Selecione **Baixar atualização**. B / Esc cancela sem trocar a versão instalada.
-5. Depois da verificação do download, salve ou descarte os ajustes pendentes e selecione **Instalar e reiniciar**.
+The version appears in the header and in **System → Version and updates**. Build and commit identifiers distinguish the changes being tested.
 
-Os pacotes anteriores ficam preservados em uma pasta de histórico separada do cache do Velopack. A reversão é uma escolha explícita na interface; não há detecção automática de falhas da aplicação.
+1. Choose **Testing** for approved preview builds or **Stable** for releases from the main branch.
+2. The repository is public. No GitHub account connection or token is required.
+3. Choose **Check for updates**, select a version and read its changes.
+4. Choose **Download update**. B / Esc cancels preparation without changing the installed version.
+5. After verification, save or discard pending settings and choose **Install and restart**.
 
-Para voltar manualmente, use **Voltar a uma versão anterior**, escolha uma versão local e confirme **Voltar e reiniciar**. Esse caminho funciona sem internet. Os ajustes compatíveis preservados para a versão escolhida também são recuperados. O histórico local lista versões que foram executadas e tiveram seu pacote preservado.
+Earlier packages are preserved in a history folder separate from Velopack's cache. Restoration is an explicit choice; there is no automatic application-health rollback.
 
-As atualizações são publicadas após os testes dos canais configurados, sem substituir releases anteriores. A primeira versão com este recurso precisa ser instalada a partir do pacote. Depois dessa instalação inicial, a navegação das atualizações pode ser feita pelo controle, sem autenticação. Veja os [detalhes das atualizações](docs/updates.md).
+Use the earlier-version list to select a local build and confirm **Restore and restart**. This path works offline. Compatible settings preserved for that version are restored too. Local history lists versions that ran and had their package preserved.
 
-## Quando algo não funcionar
+Updates are published after their configured checks, without replacing earlier releases. An installation lacking the updater needs the current Setup once; after that, update navigation works with the controller and without authentication. See [update details](docs/updates.md).
 
-| Situação | O que tentar |
+## Troubleshooting
+
+| Situation | What to try |
 | --- | --- |
-| Guide não abre o painel | Abra pela bandeja, confira Guide em Sistema e faça um toque curto, soltando dentro do limite configurado. A leitura de Guide é experimental. |
-| Steam ou Game Bar abre junto | Desative a abertura pelo botão Guide nas configurações desses aplicativos. |
-| Painel não recebe comandos | Solte os botões e toque Guide para tentar recuperar o foco. B / Esc continua permitindo ocultar o painel. Como alternativa, abra novamente pela bandeja. |
-| Painel não aparece sobre o jogo | Teste o jogo em janela sem bordas. Tela cheia exclusiva não tem compatibilidade garantida. |
-| Painel aparece na tela errada | Escolha o monitor em Sistema e salve. Confira novamente após conectar ou remover telas. |
-| Playnite não aparece | Em Sistema, escolha a unidade e as pastas até encontrar a instalação. Selecione **Usar Playnite desta pasta** e salve. |
-| Resultado de uma ação ficou incerto | Use **Ler** para ver a mensagem completa e confira a janela antes de repetir a ação. |
+| Guide does not open the panel | Open it from the tray, check Guide in System, and release a short press within the configured limit. Guide polling is experimental. |
+| Steam or Game Bar opens too | Disable their Guide-button activation settings. |
+| Windows refuses overlay focus | The failed opening hides instead of leaving an unusable panel over the game. Open it again from the tray. For an elevated game, use **Restart as administrator** and approve Windows consent. |
+| Panel does not appear over the game | Try borderless windowed mode. Exclusive fullscreen is not guaranteed. |
+| Panel appears on the wrong screen | Choose the monitor in System and save. Recheck after adding or removing displays. |
+| Playnite is not found | In System, browse drives and folders to its installation, select the offered Playnite folder and save. |
+| An action result is uncertain | Use **Read** to inspect the full result and check the window before retrying. |
 
-Você também pode usar mouse e teclado: clique nos botões e abas, use a roda para rolar, setas para navegar, Tab/Shift+Tab para avançar ou voltar, Enter/Espaço para selecionar e Esc para voltar ou ocultar. Nos leitores de detalhes, Tab/Shift+Tab retorna às ações; no ajuste do limite do Guide, Tab entra no slider e as setas alteram o valor.
+Mouse and keyboard are supported: click actions and tabs, use the wheel to scroll, arrows to navigate, Tab/Shift+Tab to move between actions, Enter/Space to select and Esc to go back or hide. Detail readers return to actions with Tab/Shift+Tab. On the Guide-limit control, Tab enters the slider and arrows adjust it. Prompts follow the last deliberate input source.
 
-Se a janela estiver ativa, mas sem foco confirmado, o primeiro clique ou tecla de navegação tenta recuperar o controle do painel sem executar a opção sob ele. Solte e selecione novamente. Se o Windows não ativar a janela, tente abri-la pela bandeja. Para encerrar a overlay, abra o menu do ícone da bandeja e escolha **Sair**.
+During focus recovery, navigation does not execute the action beneath it. Release and select again after focus is confirmed. To exit, open the tray menu and choose **Exit**.
 
-O instalador inclui também uma [CLI para agentes e terminais](docs/cli.md), com consulta de versão, atualização e retorno a versões preservadas.
+The installation also includes a [CLI for agents and terminals](docs/cli.md) to query versions, update and restore preserved builds.
 
-## Inicialização e remoção
+## Startup and removal
 
-A inicialização comum não exige administrador. Você pode desativá-la em **Configurações do Windows → Aplicativos → Inicialização**. Se mover a pasta do aplicativo, abra a overlay uma vez no novo local para atualizar a entrada existente.
+Normal startup does not require administrator privileges. Toggle **Start with Windows** in System, or disable it under **Windows Settings → Apps → Startup**. If you move the app folder, run it once from the new location to refresh its existing registration.
 
-Para instalar a inicialização elevada, abra PowerShell como administrador na pasta `%LOCALAPPDATA%\GameSessionOverlay\current` e execute `./startup-task.ps1 -Action Install`. Use a conta que vai utilizar a overlay. A instalação exige confirmação do Windows e só vale para os próximos logons. Para remover essa tarefa, execute `./startup-task.ps1 -Action Uninstall` também como administrador. A elevação não isola o controle do jogo.
+For an elevated game, **Restart as administrator** requests Windows consent for this session only. After an approved restart, **Administrator startup** separately configures the current user's highest-privilege startup task. Startup Off and Windows opt-outs remain respected. Elevation does not isolate controller input.
 
-Para remover o aplicativo, encerre pela bandeja e use **Configurações do Windows → Aplicativos → Game Session Overlay → Desinstalar**. Se houver uma tarefa elevada, remova-a também pelo script de inicialização. Seus ajustes e logs permanecem em `%LOCALAPPDATA%\Bezoro\GameSessionOverlay` até você excluí-los.
+The installed `startup-task.ps1` is also available for explicit administrative setup. From PowerShell running as the intended user with administrator privileges, run `./startup-task.ps1 -Action Install` in the permanent installation folder. `./startup-task.ps1 -Action Uninstall` removes that task and disables its startup. Test the real sign-in session after configuring it.
 
-Os limites conhecidos estão em [compatibilidade](docs/pilot-checklist.md) e [isolamento do controle](docs/controller-isolation.md). Informações de compilação e diagnóstico estão no [README](README.md).
+To uninstall, exit from the tray and use **Windows Settings → Apps → Game Session Overlay → Uninstall**. Remove an elevated startup task if one remains. Settings and logs remain in `%LOCALAPPDATA%\Bezoro\GameSessionOverlay` until you delete them.
+
+Known limits are documented in the [physical validation checklist](docs/pilot-checklist.md) and [controller focus and isolation](docs/controller-isolation.md). Build and diagnostic information is in the [README](README.md).

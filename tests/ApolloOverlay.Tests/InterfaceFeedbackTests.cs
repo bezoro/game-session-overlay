@@ -1,7 +1,9 @@
 using System.Buffers.Binary;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Media;
 using ApolloOverlay;
 
 internal static class InterfaceFeedbackTests
@@ -207,27 +209,32 @@ internal static class InterfaceFeedbackTests
                 w.Close();
             }
         });
-        test("interface result symbols distinguish requested completed and uncertain states", () =>
+        test("interface result vectors and semantic tones distinguish confirmed and uncertain outcomes", () =>
         {
             var w = Fixture(out _);
             try
             {
-                foreach (var (state, symbol) in new[]
+                foreach (var (state, asset, tone) in new[]
                 {
-                    ("Pending", "…"),
-                    ("Requested", "i"),
-                    ("Completed", "✓"),
-                    ("Unconfirmed", "!"),
-                    ("Failed", "!"),
-                    ("Cancelled", "×")
+                    ("Pending", "timer", ThemeSupport.Information),
+                    ("Requested", "info", ThemeSupport.Information),
+                    ("Completed", "check", ThemeSupport.Success),
+                    ("Unconfirmed", "info", ThemeSupport.Warning),
+                    ("Failed", "close", ThemeSupport.Critical),
+                    ("Cancelled", "close", ThemeSupport.Information)
                 }
 
                 )
                 {
                     w.Controller.SetOperation(state, "Fixture result");
                     w.RefreshRows();
-                    Require(((TextBlock)w.FindName("OperationGlyph")).Text == symbol, "Misleading result symbol for " + state);
-                    Require(((TextBlock)w.FindName("OperationLabel")).Text.Contains(state), "Result depends solely on color/symbol");
+                    var glyph = (VectorIcon)w.FindName("OperationGlyph");
+                    Require(ReferenceEquals(glyph.Data, w.FindResource("Icon." + asset)), "Misleading result vector for " + state);
+                    Require(glyph.Fill is SolidColorBrush actual && w.FindResource(tone) is SolidColorBrush expected && actual.Color == expected.Color,
+                        "Result uses the wrong semantic tone for " + state);
+                    Require(((TextBlock)w.FindName("OperationLabel")).Text.Contains(state)
+                        && AutomationProperties.GetItemStatus((DependencyObject)w.FindName("OperationPanel")) == state,
+                        "Result depends solely on color or geometry without visible and accessible state");
                 }
             }
             finally

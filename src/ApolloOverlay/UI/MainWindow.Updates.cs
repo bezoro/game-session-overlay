@@ -33,9 +33,9 @@ public partial class MainWindow
     private void OpenUpdates() => OpenView(new(OverlayRoute.Updates, SelectedId: "check-updates"));
     private void BuildUpdates()
     {
-        Paragraph("Installed version", 14);
-        Paragraph(AppBuild.Current.Display, 23);
-        Paragraph("Build " + AppBuild.Current.BuildId + " · commit " + AppBuild.Current.ShortCommit, 14);
+        FeatureHeading(AppBuild.Current.Display, "Installed version · " + (AppBuild.Current.Channel == "stable" ? "Stable" : "Testing"), "updates");
+        FeatureFact("Build", AppBuild.Current.BuildId);
+        FeatureFact("Commit", AppBuild.Current.ShortCommit);
         updateProgressLabel = Paragraph(updateStatus);
         AutomationProperties.SetLiveSetting(updateProgressLabel, AutomationLiveSetting.Polite);
         AddRow("check-updates", "Check for updates", "Check versions published on GitHub", () => UpdateTask = CheckUpdatesAsync(), updateSource is not PreviewUpdateSource);
@@ -127,6 +127,10 @@ public partial class MainWindow
             preparedUpdate = null;
         }
 
+        updateStatus = preparedUpdate is null
+            ? "Ready to download. The installed version has not changed."
+            : "Download verified. The installed version has not changed.";
+        SetUpdateStatus(updateStatus);
         OpenView(new(OverlayRoute.UpdateReview, SelectedId: preparedUpdate is null ? "prepare-update" : "apply-update"));
     }
 
@@ -135,10 +139,9 @@ public partial class MainWindow
         updateNotesText = null;
         if (rollbackReview is { } old)
         {
-            Paragraph("Restore " + old.Version, 23);
-            Paragraph("The current version will remain in history. Rollback restores that version's saved settings when a compatible copy is available.");
+            FeatureHeading("Restore " + old.Version, "The current version stays in local history. Compatible saved settings are restored when available.", "apply-rollback");
             updateProgressLabel = Paragraph("The earlier version is available on this computer.");
-            AddRow("apply-rollback", "Restore and restart", "Restores a version retained on this computer", () => BeginUpdateCommit(async () =>
+            AddRow("apply-rollback", "Restore and restart", old.Version + " · retained on this computer", () => BeginUpdateCommit(async () =>
             {
                 var target = await VelopackInstallation.PrepareRollbackAsync(old.BuildId);
                 await VelopackInstallation.ScheduleApplyAsync(target);
@@ -146,14 +149,16 @@ public partial class MainWindow
         }
         else if (updateReview is { } candidate)
         {
-            Paragraph("Update to " + candidate.Version, 23);
-            Paragraph("Installed: " + AppBuild.Current.Display + "\nUpdate commit: " + candidate.Commit[..7]);
+            FeatureHeading(preparedUpdate is null ? "Update available" : "Update downloaded", candidate.Version + " · " + (candidate.Channel == "stable" ? "Stable" : "Testing"), "updates");
+            FeatureFact("Installed", AppBuild.Current.Display);
+            FeatureFact("Update commit", candidate.Commit[..7]);
+            FeatureFact("Download", (candidate.Size / 1024d / 1024d).ToString("N1") + " MB");
             updateProgressLabel = Paragraph(preparedUpdate is null ? updateStatus : "Download verified. The installed version has not changed.");
             AutomationProperties.SetLiveSetting(updateProgressLabel, AutomationLiveSetting.Polite);
             if (preparedUpdate is null)
-                AddRow("prepare-update", "Download update", "Cancel with B / Esc. Your current installation will be preserved.", () => UpdateTask = DownloadUpdateAsync(candidate), updateSource is not PreviewUpdateSource);
+                AddRow("prepare-update", "Download update", UpdateActionContext(candidate), () => UpdateTask = DownloadUpdateAsync(candidate), updateSource is not PreviewUpdateSource);
             else
-                AddRow("apply-update", "Install and restart", "Keeps the current version in history · updated by Velopack", () =>
+                AddRow("apply-update", "Install and restart", UpdateActionContext(candidate) + " · verified", () =>
                 {
                     var staged = preparedUpdate;
                     if (staged is null || staged.Build.BuildId != candidate.BuildId)
@@ -374,6 +379,9 @@ public partial class MainWindow
             updateProgressLabel.Text = message;
         FeedbackText(message);
     }
+
+    private static string UpdateActionContext(UpdateCandidate candidate) => candidate.Version + " · "
+        + (candidate.Channel == "stable" ? "Stable" : "Testing");
 
     private bool CancelUpdateInteraction()
     {

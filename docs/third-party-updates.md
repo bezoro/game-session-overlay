@@ -1,8 +1,8 @@
-# Atualizador de terceiros
+# Third-party updater
 
-O instalador e o mecanismo de atualização usam [Velopack](https://github.com/velopack/velopack), versão 1.2.161. O pacote .NET e a ferramenta `vpk` estão fixados nessa versão.
+The installer and update mechanism use [Velopack](https://github.com/velopack/velopack) 1.2.161. Both the .NET package and `vpk` tool are pinned to this version.
 
-Fonte da licença: https://github.com/velopack/velopack/blob/1.2.161/LICENSE
+License source: https://github.com/velopack/velopack/blob/1.2.161/LICENSE
 
 ```text
 Copyright © 2021 Caelan Sayler
@@ -27,4 +27,4 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-O cálculo de versões no desenvolvimento/CI usa GitVersion.Tool 6.8.2, projeto [GitTools/GitVersion](https://github.com/GitTools/GitVersion), licença MIT. A versão fica fixada em `.config/dotnet-tools.json`; a ferramenta não é incorporada ao aplicativo instalado. `GitVersion.yml` configura GitHub Flow e as mensagens de Conventional Commits. O transporte, instalação e retorno continuam sendo responsabilidade do Velopack.
+Development/CI version calculation uses GitVersion.Tool 6.8.2 from [GitTools/GitVersion](https://github.com/GitTools/GitVersion), licensed under MIT. Its version is pinned in `.config/dotnet-tools.json`; the tool is not included in the installed app. `GitVersion.yml` configures GitHub Flow and Conventional Commit messages. Transport, installation and rollback remain Velopack responsibilities.

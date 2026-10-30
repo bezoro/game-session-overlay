@@ -25,6 +25,7 @@ public partial class MainWindow
 
     private void SuspendSessionFeatures()
     {
+        SuspendCapturePresentation();
         featureEpoch++;
         featureRead?.Cancel();
         nextFeatureRead = 0;

@@ -1,37 +1,37 @@
-# Compatibilidade real pendente
+# Pending physical compatibility checks
 
-Use **Abrir overlay.cmd**. O produto opera normalmente; não há flag de piloto ou confirmação de entrada.
+Use the installed shortcut or tray. The product runs normally; no pilot flag or input-consent gate is required.
 
-- Controle USB/Bluetooth/virtual: verificar que o Guide experimental está ligado nas configurações. Após uma leitura neutra com Guide solto, pressionar brevemente e soltar dentro do limite configurado para abrir; depois navegar em todas as páginas, desconectar/reconectar e retornar com B. Se o Guide não estiver disponível, abrir pelo menu da bandeja. Observar se o jogo ou outro aplicativo também recebe o Guide; a leitura não bloqueia o botão para outros processos.
-- Janelas borderless DX11/DX12/Vulkan: abertura, alt-tab, retorno, recusa de foco e troca de sessão. Fullscreen exclusivo não é garantido.
-- Steam/Playnite presentes e ausentes; Big Picture, atalhos e abertura/reuso. Só considerar visibilidade confirmada se realmente observada. Confirmar que uma pressão de Guide acima do limite não abre o painel ao soltar. O toque curto pode também acionar Steam/Game Bar; a compatibilidade física e o comportamento de pressão longa/desligamento precisam de validação manual.
-- Dois monitores/DPI misto, origem negativa, monitor virtual Apollo, resolução removida/trocada, 4K100% na TV; assegurar texto e foco legíveis.
-- Claro/escuro enquanto o painel já está aberto, alto contraste, animações do Windows desativadas e HDR. Não alterar configurações do usuário durante checks automáticos.
-- Áudio: mudança do endpoint durante página aberta, desconexão, volume/mudo por outro aplicativo. Confirmar atualização sem reiniciar.
-- Fechar somente uma janela de teste antes de experimentar um jogo: pressão nova1,5s, cancelar, trabalho não salvo e recusa. Nunca forçar encerramento.
-- Stream Apollo/Sunshine → Moonlight/Aurora/TV: verificar captura da janela, input e Game Bar; compatibilidade depende da sessão e não é inferida pela presença de monitor virtual.
+- USB/Bluetooth/virtual controller: confirm experimental Guide is enabled. After a neutral baseline with Guide released, make a short press and release within the configured limit. Navigate all pages, disconnect/reconnect and return with B. Use the tray when Guide is unavailable. Observe whether another app also receives Guide; polling does not block it globally.
+- Borderless DX11/DX12/Vulkan: opening, Alt+Tab, return, refused focus and session switching. Exclusive fullscreen is not guaranteed.
+- Steam/Playnite present and absent: Big Picture, shortcuts and launch/reuse. Treat visibility as confirmed only when observed. A Guide hold beyond the limit must not open on release. Short presses can also trigger Steam/Game Bar; physical long-hold/power-off behavior needs manual validation.
+- Two monitors, mixed DPI, negative origins, Apollo virtual display, removed/changed resolution and 4K at 100% on the TV: confirm readable text and focus.
+- Live light/dark changes, Windows high contrast, disabled Windows animations and HDR. Do not change user settings during automatic checks.
+- Audio: change/disconnect endpoints with the page open; alter volume/mute from another app and confirm live refresh.
+- Close an owned test window before trying a game: new 1.5-second hold, cancellation, unsaved work and refusal. Never force termination.
+- Apollo/Sunshine → Moonlight/Aurora/TV: inspect capture visibility, input and Game Bar. A virtual monitor alone does not establish stream compatibility.
+- Elevated games: test an ordinary opening, explicit **Restart as administrator**, rejected UAC, successful same-user restart and separately consented elevated startup. Confirm native/WPF focus and actual game input behavior; administrator privileges do not establish universal controller isolation.
 
-Checks automáticos usam janelas próprias e dados de contexto reais dessas janelas. Capturas offscreen demonstram layout, não compatibilidade de hardware. Medições partem de comandos de software e não medem botão físico ou latência de rede.
+Automatic checks use owned windows and their real context. Offscreen captures show layout, not hardware compatibility. Software-command timings do not measure physical-button or network latency.
 
+## Session panel
 
-## Painel da sessão: validação complementar
+- Activate Resume with mouse/A/Enter and options with X/right-click. Read a long title fully in Details; confirm actual focus and arrow-key scrolling to the end.
+- In owned audio test apps, compare active/muted/mixed states and multiple outputs. The command affects that application, never global audio as a fallback. Check device loss, external changes and partial results; dispatch is not completion.
+- Minimize only an owned window, observe the minimized state and keep the panel open. Previous/Recent must promote only confirmed foreground changes; enumeration must not mutate history.
+- Reorder, hide and restore every shortcut. Test 100/115/130/150% scaling, both sides, monitor work areas and revealed selection. At 360×480 with pending settings and a retained result, Save/Discard stay fixed and reading/dismissal remain reachable.
+- Traverse all optional setup steps, Back/Esc/Skip/Finish. Preserve drafts and save only explicitly. Check v1/v2→v3 recovery and an empty favorites list.
+- With explicit hardware authorization, check active slot, reconnection, categorical/wired/unknown battery, no hidden polling and foreground polling at most every five seconds. Sound/vibration start off; verify deliberate cues, opt-in testing and stopping on focus loss/hide/disconnect. An accepted XInput call proves neither perception nor isolation.
+- Inspect warm dark, light and custom colors from the normal viewing distance. Change paired text/background colors through a temporary unsafe draft; navigation must retain a readable palette, Save must reject unsafe contrast and Discard must restore the previous appearance. High contrast remains under Windows control.
 
-- Conferir cartão por mouse/A/Enter e opções por botão irmão/Tab/direita/X. Ler título longo completo em Detalhes; confirmar foco real e leitura com setas até o fim.
-- Em aplicativo próprio de teste, comparar som ativo/mudo/misto e múltiplas saídas. O comando afeta o aplicativo e suas janelas, nunca o volume global como alternativa. Conferir perda de dispositivo, alteração externa e resultado parcial; não confundir envio com confirmação.
-- Minimizar somente janela própria, observar o estado minimizado e manter o painel aberto. Retorno anterior/recentes só devem promover mudanças de primeiro plano confirmadas, sem gravação do histórico.
-- Reordenar e ocultar/restaurar todas as ações; testar escala100/115/130/150%, ambos os lados, DPI/monitores/área útil e seleção revelada. Verificar360×480 com ajustes pendentes e resultado retido: Salvar/Descartar fixos e leitura/dispensa alcançáveis na rolagem.
-- Percorrer os três passos opcionais, Back/Esc/Pular/Concluir, preservar rascunho e salvar apenas explicitamente. Conferir recuperação v1/v2→v3 e lista de favoritos vazia.
-- Com autorização explícita para hardware, verificar slot ativo, reconexão, bateria categórica/com fio/desconhecida, ausência de consulta oculta e consulta visível no máximo a cada5s. Sons/vibração começam desligados; verificar sinais deliberados, teste opt-in e parada ao perder foco/ocultar/desconectar. Resultado XInput aceito não prova percepção nem isolamento contra outro processo.
+Service tests use synthetic catalogs, COM, vibration and audio. Focus/reader tests operate only on owned windows, and captures render the app's own visual tree. They do not certify physical DPI, external audio or native positioning across every monitor.
 
-Os testes de serviços usam catálogos/COM/vibração/áudio sintéticos. Testes de foco e leitura usam apenas janelas próprias fora da área visível; capturas renderizam somente a árvore visual própria. Isso não estabelece compatibilidade com hardware, DPI físico, áudio externo ou posição nativa em todos os monitores.
+## Audio, environment and session tools
 
-
-## Áudio, ambiente e ferramentas da sessão
-
-- No Playnite fullscreen, abrir pelo Guide, verificar o foco real e percorrer as ações. Voltar com B/Guide e conferir que o launcher retoma. Repetir sem Apollo e pela bandeja. A navegação em aplicativos que leem XInput em segundo plano ainda pode ser compartilhada.
-- Com dois aplicativos reproduzindo áudio, ajustar somente um pelo mixer. Alterar volume/mudo por outro aplicativo enquanto a overlay está aberta; o slider selecionado deve manter foco e refletir a leitura nova.
-- Silenciar/ativar o microfone de comunicação e confirmar no Windows. Alternar saída jogos/mídia, remover um dispositivo e verificar os resultados sem substituir silenciosamente a saída.
-- Aplicar TV/Computador e um perfil personalizado. Alterar um valor depois e desfazer: a mudança posterior deve permanecer. Desconectar o monitor/saída de um perfil e confirmar a recusa informativa.
-- Abrir música/vídeo compatível com SMTC, testar fontes separadas e comandos disponíveis. Conferir a reprodução no aplicativo; aceitação da API não comprova mudança de faixa.
-- Em um editor de teste, inserir texto pelo teclado virtual, com acentos e emoji. Conferir destino, ausência de Enter automático, perda de foco e cancelamento. Testar também edição pelo mouse/teclado e saída do campo por Tab.
-- Capturar o monitor deliberadamente, confirmar que a overlay desaparece da imagem, abrir a galeria/pasta e verificar o PNG. Testar HDR e conteúdo protegido separadamente; tela preta ou cores diferentes não devem ser tratadas como aprovação.
+- In Playnite fullscreen, open with Guide, verify actual focus and traverse actions. Return with B/Guide and confirm the launcher resumes. Repeat without Apollo and from the tray. Background XInput readers may still receive input.
+- With two audio-playing apps, adjust only one in the mixer. Change volume/mute externally while the overlay is open; the selected slider must retain focus and reflect the new reading.
+- Mute/unmute the default communications microphone and verify in Windows. Switch game/media output, remove a device and inspect results without silent substitution.
+- Apply TV/Desktop and a custom profile. Change a value afterward, then undo: the later change must remain. Disconnect the profile's display/output and confirm an informative refusal.
+- Use a compatible SMTC music/video app; test separate sources and offered commands. Confirm playback in the source app: API acceptance does not establish a track change.
+- Insert accented text and emoji into an owned test editor. Check destination, no implicit Enter, focus loss and cancellation. Test mouse/keyboard editing and Tab exit.
+- Deliberately capture the monitor, confirm the overlay is absent from the image, open gallery/folder and inspect the PNG. Test HDR/protected content separately; black images or altered colors are not approval.

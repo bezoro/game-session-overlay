@@ -7,7 +7,7 @@ internal sealed record ProofConfig(uint Modifiers, uint Key, PadButtons Chord, i
     internal static ProofConfig Parse(string hotkey, string chord, int hold)
     {
         if (hold < 300 || hold > 2000)
-            throw new ArgumentException("hold-ms deve estar entre 300 e 2000.");
+            throw new ArgumentException("hold-ms must be between 300 and 2000.");
         uint modifiers = 0, key = 0;
         foreach (var token in hotkey.Split('+'))
         {
@@ -21,20 +21,20 @@ internal sealed record ProofConfig(uint Modifiers, uint Key, PadButtons Chord, i
             if (modifier != 0)
             {
                 if ((modifiers & modifier) != 0)
-                    throw new ArgumentException("Modificador repetido.");
+                    throw new ArgumentException("Repeated modifier.");
                 modifiers |= modifier;
                 continue;
             }
 
             if (key != 0)
-                throw new ArgumentException("Use uma única tecla.");
+                throw new ArgumentException("Use a single key.");
             key = token.Equals("Space", StringComparison.OrdinalIgnoreCase) ? 32u : token.Length == 1 && char.IsAsciiLetter(token[0]) ? (uint)char.ToUpperInvariant(token[0]) : 0;
             if (key == 0)
-                throw new ArgumentException("Atalho aceita letras ou Space.");
+                throw new ArgumentException("Hotkeys accept letters or Space.");
         }
 
         if (modifiers == 0 || key == 0)
-            throw new ArgumentException("Atalho exige modificador e tecla.");
+            throw new ArgumentException("Hotkeys require a modifier and a key.");
         PadButtons buttons = 0;
         foreach (var token in chord.Split('+'))
         {
@@ -50,13 +50,13 @@ internal sealed record ProofConfig(uint Modifiers, uint Key, PadButtons Chord, i
                 _ => PadButtons.None
             };
             if (button == 0 || (buttons & button) != 0)
-                throw new ArgumentException("Combinação inválida ou repetida.");
+                throw new ArgumentException("Invalid or repeated combination.");
             buttons |= button;
         }
 
         var bits = (ushort)buttons;
         if ((bits & (bits - 1)) == 0)
-            throw new ArgumentException("Use ao menos dois botões comuns.");
+            throw new ArgumentException("Use at least two ordinary buttons.");
         return new(modifiers | 0x4000, key, buttons, hold); // MOD_NOREPEAT
     }
 }
@@ -171,7 +171,7 @@ internal static class ProofNavigation
         void Assert(bool value)
         {
             if (!value)
-                throw new InvalidOperationException("Comportamento inesperado.");
+                throw new InvalidOperationException("Unexpected behavior.");
         }
 
         Test("valid configurable hotkey/chord", () =>

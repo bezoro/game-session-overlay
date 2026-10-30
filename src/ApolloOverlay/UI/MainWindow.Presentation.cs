@@ -51,7 +51,7 @@ public partial class MainWindow
         Opacity = 0;
     }
 
-    internal void AnimateOpen()
+    internal void AnimateOpen(double from = 0)
     {
         if (!OpenAnimationAllowed)
         {
@@ -60,7 +60,11 @@ public partial class MainWindow
         }
 
         Opacity = 1;
-        BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(150)) { FillBehavior = FillBehavior.Stop });
+        BeginAnimation(OpacityProperty, new DoubleAnimation(Math.Clamp(from, 0, 1), 1, ResourceDuration("SessionMotion.Panel", 200))
+        {
+            FillBehavior = FillBehavior.Stop,
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        });
     }
 
     private void OnSystemParametersChanged(object? sender, PropertyChangedEventArgs args)
@@ -83,14 +87,12 @@ public partial class MainWindow
         }
         else if (IsVisible)
             SetSelection(restoreFocus: false);
-        ThemeSupport.ApplySystemPalette(Application.Current);
+        ApplyAppearanceTheme();
         GlassSurface.Opacity = 1;
-        GlassSurface.Effect = SystemParameters.HighContrast ? null : new System.Windows.Media.Effects.DropShadowEffect
-        {
-            BlurRadius = 18,
-            ShadowDepth = 4,
-            Opacity = .18
-        };
+        if (SystemParameters.HighContrast)
+            GlassSurface.Effect = null;
+        else
+            GlassSurface.SetResourceReference(EffectProperty, "SessionPanelShadow");
     }
 
     internal void Place()
@@ -183,6 +185,7 @@ public partial class MainWindow
         if (!IsVisible || fadingOut)
             return;
         var wasForeground = Native.GetForegroundWindow() == new WindowInteropHelper(this).Handle;
+        var closingOpacity = Math.Clamp(Opacity, 0, 1);
         RevokeFocus("hide");
         CancelHandoff();
         heldKeys.Clear();
@@ -206,19 +209,20 @@ public partial class MainWindow
         }
 
         // Steam requires the window to disappear before its focus handshake. Diagnostics stay synchronous.
-        if (!immediate && !preserveSteam && (ForceFadeFixture || !diagnostic && OpenAnimationAllowed))
+        if (!immediate && !preserveSteam && closingOpacity > 0 && (ForceFadeFixture || !diagnostic && OpenAnimationAllowed))
         {
             fadingOut = true;
-            var animation = new DoubleAnimation(Opacity, 0, TimeSpan.FromMilliseconds(180))
+            var duration = ResourceDuration("SessionMotion.Panel", 200);
+            var animation = new DoubleAnimation(closingOpacity, 0, duration)
             {
                 FillBehavior = FillBehavior.HoldEnd,
                 EasingFunction = new CubicEase
                 {
-                    EasingMode = EasingMode.EaseOut
+                    EasingMode = EasingMode.EaseIn
                 }
             };
             BeginAnimation(OpacityProperty, animation);
-            await Task.Delay(180);
+            await Task.Delay(duration.TimeSpan);
             if (exiting || generation != fadeGeneration)
                 return;
             // Recheck at the handoff itself: the timer may have been delayed on the UI thread.
@@ -269,19 +273,9 @@ public partial class MainWindow
             return;
         }
 
+        UpdateSessionActionHint();
         var sessionTarget = Controller.Session.Anchor;
-        RenderHint(SessionHint, (sessionTarget is null || !Controller.Platform.Valid(sessionTarget)) ? inputMethod switch
-        {
-            "controller" => "{A} Choose window",
-            "mouse" => "{MouseLeft} Choose window",
-            _ => "{Enter} Choose window"
-        } : inputMethod switch
-        {
-            "controller" => "{A} Resume   {X} Options",
-            "mouse" => "{MouseLeft} Resume   {MouseRight} Options",
-            _ => "{Enter} Resume   {KeyX} Options"
-        });
-        var details = page == 1 || subpage == "details";
+        var details = page == 1 || subpage == "details" || view.Current.Route == OverlayRoute.Hub && sessionTarget is not null && Controller.Platform.Valid(sessionTarget);
         var prompt = inputMethod switch
         {
             "mouse" => "{MouseLeft} Select · {MouseScroll} Scroll" + (details ? " · {MouseRight} Options" : ""),
@@ -289,6 +283,19 @@ public partial class MainWindow
             _ => "{Enter} select · {Esc} back" + (details ? " · {KeyX} options" : "") + "\n{Arrows} / {Tab} move · {PgUp}/{PgDn} tabs"
         };
         RenderHint(ModeLabel, prompt);
+    }
+
+    private void UpdateSessionActionHint()
+    {
+        var target = Controller.Session.Anchor;
+        var label = target is null || !Controller.Platform.Valid(target) ? "Choose window" : "Resume";
+        var glyph = navigation.Id != "session-card" ? "" : inputMethod switch
+        {
+            "controller" => "{A} ",
+            "mouse" => "{MouseLeft} ",
+            _ => "{Enter} "
+        };
+        RenderHint(SessionHint, glyph + label);
     }
 
     private void PlaceCompactStatus()
@@ -311,7 +318,8 @@ public partial class MainWindow
         StatusLabel.TextWrapping = compactChrome && important ? TextWrapping.Wrap : TextWrapping.NoWrap;
         StatusLabel.TextTrimming = compactChrome && important ? TextTrimming.None : TextTrimming.CharacterEllipsis;
         StatusLabel.MaxHeight = compactChrome && important ? 60 : double.PositiveInfinity;
-        StatusLabel.Visibility = string.IsNullOrWhiteSpace(StatusLabel.Text) || compactChrome && !important ? Visibility.Collapsed : Visibility.Visible;
+        var updateDetailAlreadyVisible = (view.Current.Route is OverlayRoute.Updates or OverlayRoute.UpdateReview) && StatusLabel.Text == updateStatus;
+        StatusLabel.Visibility = string.IsNullOrWhiteSpace(StatusLabel.Text) || compactChrome && !important || updateDetailAlreadyVisible ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private const double ScrollFadeHeight = 24;
@@ -326,7 +334,7 @@ public partial class MainWindow
         var selected = entries.FirstOrDefault(entry => entry.Id == navigation.Id);
         var target = selected is null ? null : FocusTarget(selected);
         var clearanceFits = target is null || !ContentScroll.IsAncestorOf(target) || target.ActualHeight + ScrollFadeHeight + 4 <= ContentScroll.ViewportHeight;
-        if (more && clearanceFits && !SystemParameters.HighContrast)
+        if (more && clearanceFits && !ThemeSupport.HighContrastActive)
         {
             scrollFade.GradientStops[1].Offset = 1 - Math.Min(.25, ScrollFadeHeight / ContentScroll.ViewportHeight);
             ContentScroll.OpacityMask = scrollFade;
@@ -348,22 +356,26 @@ public partial class MainWindow
     private void ApplySessionCardDensity()
     {
         var compact = compactChrome || narrow;
-        TargetLabel.FontSize = compact ? 23 : 28;
-        TargetLabel.MaxHeight = compact ? 32 : 40;
+        TargetLabel.FontSize = compact ? 24 : ResourceNumber("SessionType.Title", 26);
+        TargetLabel.LineHeight = compact ? 28 : 32;
+        TargetLabel.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
+        TargetLabel.MaxHeight = TargetLabel.LineHeight * 2;
         TargetLabel.Margin = new(0, 0, 0, compact ? 2 : 4);
-        SessionEvidence.FontSize = compact ? 12 : 14;
-        SessionHint.FontSize = compact ? 12 : 14;
-        SessionHint.Margin = new(0, compact ? 4 : 6, 0, 0);
+        SessionEvidence.FontSize = ResourceNumber("SessionType.Caption", 13);
+        SessionHint.FontSize = ResourceNumber(compact ? "SessionType.CompactBody" : "SessionType.Body", compact ? 14 : 15);
+        SessionHint.Margin = new(0);
         SessionIconColumn.Width = new(compact ? 48 : 66);
         SessionIconHost.Height = compact ? 40 : 54;
         SessionIconHost.Margin = new(0, 0, compact ? 8 : 12, 0);
+        SessionIdentity.Margin = compact ? new(12, 8, 12, 8) : new(16, 14, 16, 12);
         ContextGlyph.Width = ContextGlyph.Height = compact ? 22 : 25;
         ContextIcon.Width = ContextIcon.Height = compact ? 32 : 42;
-        SessionCardButton.Padding = compact ? new(10, 10, 10, 10) : new(14, 12, 14, 12);
+        SessionCardButton.Padding = new(12, 8, 12, 8);
+        SessionCardButton.Margin = compact ? new(8, 0, 8, 8) : new(12, 0, 12, 12);
         ContextCard.Margin = new(0, 0, 0, compact ? 8 : 12);
-        // On the compact home screen the active Session tab supplies the page title.
-        // Give the game, rather than duplicate chrome, the main typographic emphasis.
-        PageTitle.Visibility = compactChrome && view.Current.Route == OverlayRoute.Hub ? Visibility.Collapsed : Visibility.Visible;
+        // Root tabs provide their own label. Nested views keep a distinct heading.
+        PageTitle.Visibility = view.Current.Route == OverlayRoute.Hub || view.Depth == 0 && view.Current.Route == OverlayRoute.Apps
+            ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void UpdateCompactChrome(double height)
@@ -375,27 +387,32 @@ public partial class MainWindow
         if (pointerDown)
             CancelHold();
         HeaderIdentity.Visibility = Visibility.Visible;
-        HeaderBrand.Visibility = compact || narrow || view.Depth > 0 ? Visibility.Collapsed : Visibility.Visible;
+        HeaderBrand.Visibility = (compact || narrow) && view.Current.Route != OverlayRoute.Hub ? Visibility.Collapsed : Visibility.Visible;
+        HeaderBrand.FontSize = ResourceNumber(compact || narrow ? "SessionType.Caption" : "SessionType.CompactBody", compact || narrow ? 13 : 14);
         ControllerStatusLabel.Visibility = Visibility.Collapsed;
         DirtyLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        HeaderArea.Margin = new(0, 0, 0, compact ? 6 : 12);
-        HeaderIdentityRow.Margin = new(0, 0, 0, compact ? 3 : 7);
+        HeaderArea.Margin = new(0, 0, 0, compact ? 4 : 12);
+        HeaderIdentityRow.Margin = new(0);
         HeaderIdentityBadge.Padding = compact ? new(4, 2, 4, 2) : new(6, 3, 6, 3);
-        HeaderIdentity.FontSize = compact ? 10 : 12;
-        HeaderIdentityRow.HorizontalAlignment = compact ? HorizontalAlignment.Left : HorizontalAlignment.Stretch;
-        PageTitle.FontSize = compact ? 20 : 25;
-        ControllerInfoBar.Margin = new(0, compact ? 3 : 5, 0, 0);
+        HeaderIdentity.FontSize = 12;
+        HeaderIdentityRow.HorizontalAlignment = HorizontalAlignment.Stretch;
+        PageTitle.FontSize = compact ? 24 : ResourceNumber("SessionType.Title", 26);
+        PageTitle.Margin = new(0, 12, 0, 0);
+        ControllerInfoBar.Margin = new(0, compact ? 4 : 8, 0, 0);
         DirtyStrip.Margin = new(0, compact ? 8 : 12, 0, 0);
         DirtyStrip.Padding = new(12, compact ? 6 : 8, 12, compact ? 6 : 8);
-        TabArea.Margin = new(0, 0, 0, compact ? 8 : 16);
-        Sidebar.Padding = compact ? new(20, 14, 20, 14) : new(24, 22, 24, 22);
+        TabArea.Margin = new(0, 0, 0, compact ? 4 : 12);
+        TabArea.Padding = compact ? new(0) : new(0, 0, 0, 4);
+        Sidebar.Padding = compact ? new(16, 10, 16, 10) : new(24, 20, 24, 20);
         FooterArea.Margin = new(0, compact ? 6 : 10, 0, 0);
         FooterDivider.Margin = new(0, 0, 0, compact ? 4 : 8);
-        SharedControlNotice.FontSize = compact ? 12 : 14;
-        StatusLabel.FontSize = compact ? 12 : 14;
+        SharedControlNotice.FontSize = ResourceNumber("SessionType.Caption", 13);
+        SharedControlNotice.FontWeight = FontWeights.Normal;
+        SharedControlNotice.SetResourceReference(TextBlock.ForegroundProperty, ThemeSupport.SecondaryText);
+        StatusLabel.FontSize = ResourceNumber("SessionType.Caption", 13);
         StatusLabel.Margin = new(0, compact ? 2 : 4, 0, 0);
-        ModeLabel.FontSize = compact ? 12 : 14;
-        ModeLabel.LineHeight = compact ? 19 : 21;
+        ModeLabel.FontSize = ResourceNumber("SessionType.Caption", 13);
+        ModeLabel.LineHeight = compact ? 20 : 22;
         ModeLabel.Margin = new(0, compact ? 3 : 5, 0, 0);
         if (!compact)
         {
@@ -405,6 +422,7 @@ public partial class MainWindow
 
         // Header, navigation, notices and Save/Discard keep their fixed grid rows.
         ApplySessionCardDensity();
+        RefreshOperationNotice(Environment.TickCount64);
         UpdateStatusPresentation(importantStatus);
         PlaceCompactStatus();
         revealPending = true;

@@ -76,10 +76,10 @@ public partial class MainWindow
         if (button.Resources["ActivationTimer"] is DispatcherTimer previous)
             previous.Stop();
         highlight.BeginAnimation(OpacityProperty, null);
-        highlight.Opacity = .18;
+        highlight.Opacity = .6;
         if (OpenAnimationAllowed)
         {
-            highlight.BeginAnimation(OpacityProperty, new DoubleAnimation(.18, 0, TimeSpan.FromMilliseconds(180)));
+            highlight.BeginAnimation(OpacityProperty, new DoubleAnimation(.6, 0, ResourceDuration("SessionMotion.Notice", 140)));
             return;
         }
 

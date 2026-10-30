@@ -1,34 +1,34 @@
 # GuideProbe
 
-Ferramenta de diagnóstico .NET 10/Windows x64 para observar GameInput v2 e XInput. É separada da overlay: não abre sua interface, não envia teclas, não intercepta o controle e não altera ajustes do produto. A política atual de ativação do produto está no [README principal](../../README.md).
+This .NET 10/Windows x64 diagnostic tool observes GameInput v2 and XInput. It is separate from the overlay: it does not open its interface, send keys, intercept controller input or change product settings. The [main README](../../README.md) describes the product's current activation policy.
 
-A solução compila esta ferramenta e o CI executa apenas testes sintéticos:
+The solution builds this tool, and CI runs synthetic tests only:
 
 ```powershell
 dotnet tools/GuideProbe/bin/Release/net10.0-windows/GuideProbe.dll --self-test
 ```
 
-## Consulta explícita de hardware
+## Explicit hardware queries
 
-Execute em uma sessão Windows quando quiser investigar um problema real. O destino deve ser um arquivo novo; Ctrl+C cancela a observação.
+Run these commands in a Windows session to investigate an actual issue. The output must be a new file. Ctrl+C cancels observation.
 
 ```powershell
-# Capacidades e botões anunciados; até 60 segundos.
+# Advertised capabilities and buttons; up to 60 seconds.
 GuideProbe.exe --device-check --output capabilities.jsonl
 
-# Procura um label público XboxGuide único antes de observar bordas.
+# Find a unique public XboxGuide label before observing edges.
 GuideProbe.exe --raw-guide-check --output raw-guide.jsonl
 
-# Observação passiva com duração de 90 a 120 segundos.
+# Passive observation lasting 90 to 120 seconds.
 GuideProbe.exe --duration-seconds 90 --output guide.jsonl
 ```
 
-GameInput usa os contratos públicos v2. Identidades efêmeras agrupam eventos apenas nesta execução, sem registrar ponteiros, seriais, títulos de janelas ou mapear automaticamente um dispositivo a um slot XInput. As opções de capacidades usam a política local `BackgroundInput + BackgroundGuide`; o modo passivo usa `BackgroundGuide`. Falha em uma fonte não prova ausência global do botão Guide.
+GameInput uses public v2 contracts. Ephemeral identities group events within this run, without recording pointers, serial numbers or window titles, or automatically mapping a device to an XInput slot. Capability options use the local `BackgroundInput + BackgroundGuide` policy. Passive mode uses `BackgroundGuide`. Failure in one source does not prove that Guide is globally absent.
 
-Os registros distinguem tempos nativos em microssegundos, chegada monotônica em milissegundos e durações de pares down/up. Bordas órfãs, repetição, relógio regressivo, desconexão, overflow ou leitura incompleta não produzem uma duração confirmada. Limites: fila de 256, 16 dispositivos, 6.000 registros ordinários e cópias de até 128 botões/labels.
+Records distinguish native timestamps in microseconds, monotonic arrival in milliseconds and down/up pair durations. Orphan edges, repetition, a regressing clock, disconnection, overflow or incomplete reads cannot establish a confirmed duration. Limits are a queue of 256, 16 devices, 6,000 ordinary records and copies of up to 128 buttons/labels.
 
-A limpeza interrompe todos os tokens antes de removê-los, drena callbacks e só então libera dispositivos, contexto e DLL. Se o runtime não confirmar a remoção, essas referências permanecem retidas até a saída do processo para impedir uso após liberação. O resultado fica incompleto.
+Cleanup stops all tokens before removing them, drains callbacks and only then releases devices, context and DLL. If the runtime does not confirm removal, those references remain held until process exit to prevent use after release. The result stays incomplete.
 
-A observação isolada não associa um dispositivo ao controle físico usado pela pessoa. Entrega do Guide, suporte anunciado e funcionamento na TV são conclusões diferentes; os relatórios preservam `inconclusive` quando essa associação ou as leituras necessárias não foram confirmadas.
+Isolated observation does not associate a device with the person's physical controller. Guide delivery, advertised support and TV operation are separate conclusions. Reports retain `inconclusive` when that association or the required reads have not been confirmed.
 
-Referência do callback público: [GameInputSystemButtonCallback](https://learn.microsoft.com/en-us/gaming/gdk/docs/reference/input/gameinput/functions/gameinputsystembuttoncallback). Os testes sintéticos cobrem assinaturas v2, ponteiros de saída, offsets, reconexão, retenção de referências e classificação; não consultam hardware.
+Public callback reference: [GameInputSystemButtonCallback](https://learn.microsoft.com/en-us/gaming/gdk/docs/reference/input/gameinput/functions/gameinputsystembuttoncallback). Synthetic tests cover v2 signatures, output pointers, offsets, reconnection, reference retention and classification. They do not query hardware.

@@ -115,6 +115,18 @@ static class Program
             return Finish(args[0]);
         }
 
+        if (args.Length == 2 && args[1] == "--appearance")
+        {
+            AppearanceTests.Run(Case);
+            return Finish(args[0]);
+        }
+
+        if (args.Length == 2 && args[1] == "--capture-presentation")
+        {
+            CapturePresentationTests.Run(Case);
+            return Finish(args[0]);
+        }
+
         if (args.Length == 2 && args[1] == "--session-interface-captures")
         {
             SessionInterfaceTests.Capture(args[0]);
@@ -906,6 +918,8 @@ static class Program
         SessionMediaLifecycleTests.Run(Case);
         SessionUtilityTests.Run(Case);
         SessionInterfaceTests.Run(Case);
+        AppearanceTests.Run(Case);
+        CapturePresentationTests.Run(Case);
         PremiumInterfaceTests.Run(Case);
         SessionHubTests.Run(Case);
         SessionHubServiceTests.Run(Case);

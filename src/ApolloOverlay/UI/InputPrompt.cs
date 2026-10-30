@@ -21,34 +21,34 @@ internal static partial class InputPrompt
 
     private static readonly IReadOnlyDictionary<string, Glyph> glyphs = new Dictionary<string, Glyph>(StringComparer.Ordinal)
     {
-        ["A"] = new("A", ThemeSupport.IconGame),
-        ["B"] = new("B", ThemeSupport.Critical),
-        ["X"] = new("X", ThemeSupport.IconNavigation),
-        ["Y"] = new("Y", ThemeSupport.IconAudio),
-        ["LB"] = new("LB", ThemeSupport.IconNavigation),
-        ["RB"] = new("RB", ThemeSupport.IconNavigation),
-        ["Dpad"] = new("D-pad", ThemeSupport.IconTools),
-        ["DpadHorizontal"] = new("Left / right", ThemeSupport.IconTools),
-        ["Guide"] = new("Guide", ThemeSupport.IconGame),
-        ["RS"] = new("Right stick", ThemeSupport.IconTools),
-        ["Enter"] = new("Enter", ThemeSupport.IconNavigation, "Enter"),
-        ["Esc"] = new("Esc", ThemeSupport.Critical, "Esc"),
-        ["Space"] = new("Space", ThemeSupport.IconNavigation, "Space"),
-        ["Tab"] = new("Tab", ThemeSupport.IconNavigation, "Tab"),
-        ["Arrows"] = new("Arrows", ThemeSupport.IconNavigation, Group: ["Up", "Down", "Left", "Right"]),
-        ["Up"] = new("Up arrow", ThemeSupport.IconNavigation, "↑"),
-        ["Down"] = new("Down arrow", ThemeSupport.IconNavigation, "↓"),
-        ["Left"] = new("Left arrow", ThemeSupport.IconNavigation, "←"),
-        ["Right"] = new("Right arrow", ThemeSupport.IconNavigation, "→"),
-        ["PgUp"] = new("PgUp", ThemeSupport.IconTools, "PgUp"),
-        ["PgDn"] = new("PgDn", ThemeSupport.IconTools, "PgDn"),
-        ["KeyX"] = new("X", ThemeSupport.IconNavigation, "X"),
-        ["Shift"] = new("Shift", ThemeSupport.IconNavigation, "Shift"),
-        ["Ctrl"] = new("Ctrl", ThemeSupport.IconNavigation, "Ctrl"),
-        ["MouseLeft"] = new("Left click", ThemeSupport.IconNavigation),
-        ["MouseRight"] = new("Right click", ThemeSupport.IconTools),
-        ["MouseScroll"] = new("Mouse wheel", ThemeSupport.IconNavigation),
-        ["MouseMove"] = new("Mouse", ThemeSupport.IconNavigation)
+        ["A"] = new("A", ThemeSupport.PromptA),
+        ["B"] = new("B", ThemeSupport.PromptB),
+        ["X"] = new("X", ThemeSupport.PromptX),
+        ["Y"] = new("Y", ThemeSupport.PromptY),
+        ["LB"] = new("LB", ThemeSupport.PromptShoulder),
+        ["RB"] = new("RB", ThemeSupport.PromptShoulder),
+        ["Dpad"] = new("D-pad", ThemeSupport.PromptDpad),
+        ["DpadHorizontal"] = new("Left / right", ThemeSupport.PromptDpad),
+        ["Guide"] = new("Guide", ThemeSupport.PromptGuide),
+        ["RS"] = new("Right stick", ThemeSupport.PromptDpad),
+        ["Enter"] = new("Enter", ThemeSupport.PromptKeyboard, "Enter"),
+        ["Esc"] = new("Esc", ThemeSupport.PromptKeyboard, "Esc"),
+        ["Space"] = new("Space", ThemeSupport.PromptKeyboard, "Space"),
+        ["Tab"] = new("Tab", ThemeSupport.PromptKeyboard, "Tab"),
+        ["Arrows"] = new("Arrows", ThemeSupport.PromptKeyboard, Group: ["Up", "Down", "Left", "Right"]),
+        ["Up"] = new("Up arrow", ThemeSupport.PromptKeyboard, "↑"),
+        ["Down"] = new("Down arrow", ThemeSupport.PromptKeyboard, "↓"),
+        ["Left"] = new("Left arrow", ThemeSupport.PromptKeyboard, "←"),
+        ["Right"] = new("Right arrow", ThemeSupport.PromptKeyboard, "→"),
+        ["PgUp"] = new("PgUp", ThemeSupport.PromptKeyboard, "PgUp"),
+        ["PgDn"] = new("PgDn", ThemeSupport.PromptKeyboard, "PgDn"),
+        ["KeyX"] = new("X", ThemeSupport.PromptKeyboard, "X"),
+        ["Shift"] = new("Shift", ThemeSupport.PromptKeyboard, "Shift"),
+        ["Ctrl"] = new("Ctrl", ThemeSupport.PromptKeyboard, "Ctrl"),
+        ["MouseLeft"] = new("Left click", ThemeSupport.PromptMouse),
+        ["MouseRight"] = new("Right click", ThemeSupport.PromptMouse),
+        ["MouseScroll"] = new("Mouse wheel", ThemeSupport.PromptMouse),
+        ["MouseMove"] = new("Mouse", ThemeSupport.PromptMouse)
     };
 
     [GeneratedRegex(@"\{([A-Za-z][A-Za-z0-9]*)\}", RegexOptions.CultureInvariant)]
@@ -108,7 +108,7 @@ internal static partial class InputPrompt
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
             };
-            label.SetResourceReference(TextBlock.ForegroundProperty, ThemeSupport.Surface);
+            label.SetResourceReference(TextBlock.ForegroundProperty, ThemeSupport.PromptForeground);
             var keycap = new Border
             {
                 Child = label,

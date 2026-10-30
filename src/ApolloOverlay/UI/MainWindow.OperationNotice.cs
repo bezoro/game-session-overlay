@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace ApolloOverlay;
 
@@ -14,8 +15,11 @@ public partial class MainWindow
         var changed = operationNotice.Update(Controller.Operation, now);
         var operation = operationNotice.Operation;
         var show = operationNotice.Visible && !Confirming && subpage != "operation";
-        // Reserve one quiet line so acknowledgements never move the selected action.
-        OperationPanel.Visibility = Confirming ? Visibility.Collapsed : show ? Visibility.Visible : Visibility.Hidden;
+        // A desktop panel reserves its quiet line. Compact panels reclaim empty
+        // space and reveal the current selection when the viewport changes.
+        OperationPanel.Visibility = Confirming || compactChrome && !show
+            ? Visibility.Collapsed : show ? Visibility.Visible : Visibility.Hidden;
+        OperationPanel.Height = compactChrome && !operationNotice.AllowsActions ? 24 : 44;
         OperationPanel.Opacity = show && IsVisible && OpenAnimationAllowed ? operationNotice.Opacity(now) : 1;
         var actions = operationNotice.AllowsActions ? Visibility.Visible : Visibility.Collapsed;
         OperationDetailsButton.Visibility = actions;
@@ -38,17 +42,18 @@ public partial class MainWindow
 
     private void UpdateOperationAppearance(string? state)
     {
-        var problem = state is "Failed" or "Unavailable" or "Partial" or "Unconfirmed";
-        var complete = state == "Completed";
-        OperationGlyph.SetResourceReference(TextBlock.ForegroundProperty, problem ? ThemeSupport.Critical : complete ? ThemeSupport.Success : ThemeSupport.SecondaryText);
-        OperationGlyph.Text = state switch
+        var (tone, surface, icon) = state switch
         {
-            "Completed" => "✓",
-            "Pending" => "…",
-            "Cancelled" => "×",
-            "Failed" or "Unavailable" or "Partial" or "Unconfirmed" => "!",
-            _ => "i"
+            "Completed" => (ThemeSupport.Success, ThemeSupport.SuccessBackground, "check"),
+            "Failed" => (ThemeSupport.Critical, ThemeSupport.CriticalBackground, "close"),
+            "Unavailable" or "Partial" or "Unconfirmed" => (ThemeSupport.Warning, ThemeSupport.WarningBackground, "info"),
+            "Pending" => (ThemeSupport.Information, ThemeSupport.InformationBackground, "timer"),
+            "Cancelled" => (ThemeSupport.Information, ThemeSupport.InformationBackground, "close"),
+            _ => (ThemeSupport.Information, ThemeSupport.InformationBackground, "info")
         };
+        OperationGlyph.SetResourceReference(VectorIcon.FillProperty, tone);
+        OperationGlyph.Data = (Geometry)FindResource("Icon." + icon);
+        OperationPanel.SetResourceReference(Border.BackgroundProperty, surface);
         AutomationProperties.SetItemStatus(OperationPanel, state ?? "");
     }
 

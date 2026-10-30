@@ -2,7 +2,7 @@ name: PR conventions
 
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened, ready_for_review]
+    types: [opened, edited]
 
 permissions:
   contents: read
@@ -10,6 +10,7 @@ permissions:
 jobs:
   title:
     name: Conventional Commit title
+    if: ${{ github.event.action == 'opened' || github.event.changes.title != null }}
     runs-on: ubuntu-latest
     env:
       PR_TITLE: ${{ github.event.pull_request.title }}
@@ -19,5 +20,5 @@ jobs:
         run: |
           $pattern = '^(feat|fix|perf|refactor|docs|style|test|build|ci|chore|revert)(\([a-z0-9][a-z0-9./_-]*\))?!?: \S.*$'
           if ($env:PR_TITLE -cnotmatch $pattern) {
-            throw 'Use a Conventional Commit title, for example: feat(audio): adiciona mixer por aplicativo'
+            throw 'Use a Conventional Commit title, for example: feat(audio): add per-app mixer'
           }

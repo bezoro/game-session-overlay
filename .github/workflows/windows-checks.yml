@@ -1,7 +1,7 @@
 name: Windows checks
 
 on:
-  pull_request:
+  # Merges reach main as pushes. Feature-branch pushes do not spend Windows CI minutes.
   push:
     branches:
       - main
@@ -43,8 +43,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Install the SDK specified by global.json
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
@@ -57,9 +56,9 @@ jobs:
       - name: Stamp semantic build identity
         id: identity
         env:
-          SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
-          SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
-          MAIN_BRANCH_BUILD: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+          SOURCE_COMMIT: ${{ github.sha }}
+          SOURCE_BRANCH: ${{ github.ref_name }}
+          MAIN_BRANCH_BUILD: ${{ github.ref == 'refs/heads/main' }}
           BUILD_NUMBER: ${{ github.run_number }}
           BUILD_ATTEMPT: ${{ github.run_attempt }}
           REQUESTED_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || '' }}
@@ -208,7 +207,7 @@ jobs:
       - name: Build official Velopack installer and packages
         id: package
         env:
-          RELEASE_NOTES: ${{ github.event.head_commit.message || github.event.pull_request.title || inputs.notes }}
+          RELEASE_NOTES: ${{ github.event.head_commit.message || inputs.notes }}
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 8
         run: |
@@ -250,7 +249,7 @@ jobs:
     needs: windows
     # Only repository pushes to main publish stable. An authorized dispatch may
     # publish any local branch to testing, including an unmerged feature branch.
-    # Pull-request events (including same-repository PRs) never gain write access.
+    # Validation-only dispatches never gain publication permissions.
     if: ${{ needs.windows.result == 'success' && needs.windows.outputs.release_required == 'true' && github.repository_id == '1430327913' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.channel == 'testing' && startsWith(github.ref, 'refs/heads/'))) }}
     runs-on: windows-latest
     timeout-minutes: 10
