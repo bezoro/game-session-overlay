@@ -13,19 +13,35 @@ Os canais são:
 | Canal | Origem | Publicação |
 | --- | --- | --- |
 | Estável | Push em `main` | Release normal |
-| Testes | Push em `codex/controller-overlay-polish` | Prerelease |
+| Testes | Execução autorizada de Windows checks em uma branch do repositório, com `channel: testing` | Prerelease |
 
 Somente compilações aprovadas nas verificações do Windows são publicadas. Pull requests executam as verificações com permissões de leitura e não publicam versões. O repositório é identificado também pelo ID `1430327913`, que continua válido após uma mudança de nome.
 
+A opção `validate` executa as verificações sem publicar. Com `testing`, o workflow publica o commit da branch selecionada depois de todos os checks passarem, mesmo antes do merge da PR. Eventos de pull request continuam sem permissão de publicação; branches de forks não são publicadas por esse fluxo. Uma execução de testes não publica no canal estável.
+
+Para quem usa a overlay, basta escolher **Testes** em **Sistema → Versão e atualizações**, procurar atualizações e selecionar **Instalar e reiniciar**. Não é necessário baixar o instalador de uma PR. O catálogo identifica a versão e o commit; as versões preservadas continuam disponíveis para retorno.
+
+Um mantenedor ou agente com acesso de escrita pode publicar uma prévia pela interface do GitHub Actions, selecionando a branch e `channel: testing`, ou pela CLI. O campo opcional `notes` fornece as notas exibidas no atualizador:
+
+```sh
+gh workflow run windows-checks.yml --repo bezoro/game-session-overlay --ref feat/session-command-center -f channel=testing
+```
+
+O despacho exige uma branch do próprio repositório. A publicação confere o commit, o canal autorizado, a identidade compilada e os hashes do pacote validado. O canal de testes é compartilhado entre as prévias publicadas; a publicação só fica disponível na overlay depois que o job **Publish validated update** termina com sucesso.
+
 ## Identificar a versão
 
-A versão exibida vem dos metadados compilados do executável em uso. Ela inclui a execução do CI, sua tentativa e o commit de origem. Exemplos:
+A versão exibida vem dos metadados compilados do executável. GitVersion 6.8.2 calcula `MAJOR.MINOR.PATCH` pelos commits e tags; o CI acrescenta o rótulo de prévia e o commit. Exemplos:
 
-- `0.2.0-preview.42.1+abc1234`: versão de testes, execução 42, tentativa 1.
-- `0.42.1+abc1234`: versão estável da mesma execução.
-- `0.2.0-dev+local`: compilação local sem uma publicação identificada.
+- `0.48.0-preview.55.1+abc1234`: prévia de 0.48.0, execução 55, tentativa 1.
+- `0.48.0+abc1234`: versão estável; o número da execução não altera seu significado.
+- `0.2.0-dev+local`: build local sem identidade de publicação.
 
-O identificador `ci-42-a1-abc1234` distingue a compilação. A versão usada pelo formato NuGet do Velopack é a parte anterior ao sinal `+`; o commit e a identificação completa continuam disponíveis na interface e nos metadados do aplicativo. Cada nova tentativa recebe outra versão NuGet para evitar colisões de cache.
+O identificador `ci-55-a1-abc1234` rastreia a execução separadamente da versão. O formato NuGet do Velopack usa a parte anterior ao `+`; o commit continua no executável e nos metadados. Tags antigas, inclusive `0.47.1`, permanecem válidas e estabelecem a ordem da migração.
+
+`feat` avança MINOR; `fix`, `perf`, `refactor`, `build` e `revert` avançam PATCH. `!` ou `BREAKING CHANGE:` avançam MAJOR. `docs`, `style`, `test`, `ci` e `chore` não criam uma release estável por si só. A [convenção para contribuidores](../CONTRIBUTING.md#commits-e-versões) explica os títulos e exemplos.
+
+Uma tag reserva a versão; o CI não reconstrói uma release estável existente com outros bytes. Para repetir uma publicação que falhou, reexecute somente o job **Publish validated update**, reutilizando o artefato original aprovado. Prévias recebem outro identificador NuGet em cada tentativa. Uma prévia solicitada a partir de uma versão estável já reservada usa o próximo PATCH, para continuar sendo mais nova para o atualizador.
 
 ## Voltar a uma versão anterior
 

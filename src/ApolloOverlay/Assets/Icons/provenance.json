@@ -90,5 +90,361 @@
     "url": "https://raw.githubusercontent.com/JosefNemec/Playnite/3e8abb241873e326e27c75b59dd0d2ea367698e3/LICENSE.md",
     "commit": "3e8abb241873e326e27c75b59dd0d2ea367698e3",
     "sha256": "10c0871ee7dd3ac9f6ef53097a173113229edd1b23e9218d952287889b2b84eb"
+  },
+  {
+    "name": "microphone",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Mic/SVG/ic_fluent_mic_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "fd21c3468e1b22a4969982a36041189d96eb74fe6000d33dea3deef1f2eb30ca"
+  },
+  {
+    "name": "profile",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Desktop/SVG/ic_fluent_desktop_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "320f7422cc8da3425d060c8c16e073c698209f2b970ade3c07b6553e1a52988d"
+  },
+  {
+    "name": "next",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Next/SVG/ic_fluent_next_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "a9165f30a5e6db5629f6572fab5e19b6048a02d3acd7daed73007bfe6f949d7c"
+  },
+  {
+    "name": "previous",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Previous/SVG/ic_fluent_previous_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "8892f443cf8f3a5efa4b1de29ed3595743752a994998138dea879baf146a95ff"
+  },
+  {
+    "name": "keyboard",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Keyboard/SVG/ic_fluent_keyboard_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "28ab75dbebc0371f8f4f28ca1011ed289439a895bbb0fac2679690987902b7cc"
+  },
+  {
+    "name": "window",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Window/SVG/ic_fluent_window_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "6e2ec499c1bff13971b59a44b2fd3212d5aeb26bf78c31e1695a40dfac05cb4d"
+  },
+  {
+    "name": "camera",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Camera/SVG/ic_fluent_camera_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "b98fc06c9abe687437c55ee7e4d90a883f8deac1b706b96c0da4d77d51b4a315"
+  },
+  {
+    "name": "gallery",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Image%20Multiple/SVG/ic_fluent_image_multiple_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "3d98fe242eab2dfc572c24f9265937bf6d3766cb2b106be319d7ff72d3381ca9"
+  },
+  {
+    "name": "usb",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Plug%20Connected/SVG/ic_fluent_plug_connected_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "5082c942dfb966a9d15f3eb9a0692157d9b48b1efbbe7e5cc7988305e3bce956"
+  },
+  {
+    "name": "charging",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Flash/SVG/ic_fluent_flash_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "675a6af0b74a43001de66d67c952fe0c2257fecf4bd0b19e17d4cf19f1e2591f"
+  },
+  {
+    "name": "pause",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Pause/SVG/ic_fluent_pause_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "c500f2b5d0e71a9fc29359887b9df17448111956f7bbe91ea52ad36b7a5a066f"
+  },
+  {
+    "name": "refresh",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Arrow%20Clockwise/SVG/ic_fluent_arrow_clockwise_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "488566eef8203823292a19660c47d4b9c86ca64e6910848342e6b5fa3c5a7558"
+  },
+  {
+    "name": "save",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Save/SVG/ic_fluent_save_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "35d473d8af5134ab3679d3f41e7270d6ac6bce66fc5f98caccb42d75350b237f",
+    "license": "MIT",
+    "transformation": "Original SVG retained byte-for-byte. Unchanged path geometry is rendered in the 24x24 source frame with the application semantic icon palette."
+  },
+  {
+    "name": "download",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Arrow%20Download/SVG/ic_fluent_arrow_download_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "2749dfd0860188f7de7a573a634f3e37fe8ea4e99aa36fd1559e62d1a8243910",
+    "license": "MIT",
+    "transformation": "Original SVG retained byte-for-byte. Unchanged path geometry is rendered in the 24x24 source frame with the application semantic icon palette."
+  },
+  {
+    "name": "history",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/History/SVG/ic_fluent_history_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "07d75bb67b1b81cf504b86952cf90fc7af2de44ee6b335595ee3806047fc45b4",
+    "license": "MIT",
+    "transformation": "Original SVG retained byte-for-byte. Unchanged path geometry is rendered in the 24x24 source frame with the application semantic icon palette."
+  },
+  {
+    "name": "resize",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Resize/SVG/ic_fluent_resize_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "cdae809b2948d5a97cfec900b9a12bb3de39613e2dae3bee537d5de16ae47706",
+    "license": "MIT",
+    "transformation": "Original SVG retained byte-for-byte. Unchanged path geometry is rendered in the 24x24 source frame with the application semantic icon palette."
+  },
+  {
+    "name": "options",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Options/SVG/ic_fluent_options_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "1738b2ee6e1d07119ac9e3b2faac51897bc451f248a42a2e65af882a4a3da858",
+    "license": "MIT",
+    "transformation": "Original SVG retained byte-for-byte. Unchanged path geometry is rendered in the 24x24 source frame with the application semantic icon palette."
+  },
+  {
+    "name": "timer",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Timer/SVG/ic_fluent_timer_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "beb3918cb04c5ac833b974777d12bc0a714b944c8c12a8ee406295bff118fe45",
+    "license": "MIT",
+    "transformation": "Original SVG retained byte-for-byte. Unchanged path geometry is rendered in the 24x24 source frame with the application semantic icon palette."
+  },
+  {
+    "name": "power",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Power/SVG/ic_fluent_power_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "370bb663ee39f2c327c1f615b1d2a5725803c5372867159a3f90067732265083",
+    "license": "MIT",
+    "transformation": "Original SVG retained byte-for-byte. Unchanged path geometry is rendered in the 24x24 source frame with the application semantic icon palette."
+  },
+  {
+    "name": "panel-left",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Panel%20Left/SVG/ic_fluent_panel_left_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "4f9e2178b40bfcf45e1319490d8c18a21371de42877888ce167f2af79c773176",
+    "license": "MIT",
+    "transformation": "Original SVG retained byte-for-byte. Unchanged path geometry is rendered in the 24x24 source frame with the application semantic icon palette."
+  },
+  {
+    "name": "panel-right",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Panel%20Right/SVG/ic_fluent_panel_right_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "6f3c2964c9352fe6062ee59ef2c658cdf56ddbcf68629ac8ab0b222d9742abd9",
+    "license": "MIT",
+    "transformation": "Original SVG retained byte-for-byte. Unchanged path geometry is rendered in the 24x24 source frame with the application semantic icon palette."
+  },
+  {
+    "name": "pulse",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Pulse/SVG/ic_fluent_pulse_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "f6fee6e3c277f8e301d4060d93a51499bd4d3a902a6eb4eea324b563125af3ce",
+    "license": "MIT",
+    "transformation": "Original SVG retained byte-for-byte. Unchanged path geometry is rendered in the 24x24 source frame with the application semantic icon palette."
+  },
+  {
+    "name": "book",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Book%20Open/SVG/ic_fluent_book_open_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "d7623873a8264a1ade7f195bafa80e202a85ff10e3e4411e04290d993be1aafa",
+    "license": "MIT",
+    "transformation": "Original SVG retained byte-for-byte. Unchanged path geometry is rendered in the 24x24 source frame with the application semantic icon palette."
+  },
+  {
+    "name": "edit",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Edit/SVG/ic_fluent_edit_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "2dae3a8425dbeb5ff15a0e1af84f5d15719fe62b012937a6a5457a1481804c73",
+    "license": "MIT",
+    "transformation": "Original SVG retained byte-for-byte. Unchanged path geometry is rendered in the 24x24 source frame with the application semantic icon palette."
+  },
+  {
+    "name": "undo",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Arrow%20Undo/SVG/ic_fluent_arrow_undo_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "2508592007082dd399d1031d43453dac7d343e01a2f0b4cdbacafc1858407e2f",
+    "license": "MIT",
+    "transformation": "Original SVG retained byte-for-byte. Unchanged path geometry is rendered in the 24x24 source frame with the application semantic icon palette."
+  },
+  {
+    "name": "folder",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Folder%20Open/SVG/ic_fluent_folder_open_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "d1a653db2d775144808d375b0f5c2a0b64db646e54e54283ecce1610882352c9",
+    "license": "MIT",
+    "transformation": "Original SVG retained byte-for-byte. Unchanged path geometry is rendered in the 24x24 source frame with the application semantic icon palette."
+  },
+  {
+    "name": "info",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Info/SVG/ic_fluent_info_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "ec9891767b25630079faca1b06026cab94eee56129dc1264a40d256aa65911bb",
+    "license": "MIT",
+    "transformation": "Original SVG retained byte-for-byte. Unchanged path geometry is rendered in the 24x24 source frame with the application semantic icon palette."
+  },
+  {
+    "name": "check",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Checkmark/SVG/ic_fluent_checkmark_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "643b76be6638a22b348c14990f0957335fbe98b39e9adb7ba7b4dc86b6745177",
+    "license": "MIT",
+    "transformation": "Original SVG retained byte-for-byte. Unchanged path geometry is rendered in the 24x24 source frame with the application semantic icon palette."
+  },
+  {
+    "name": "delete",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Delete/SVG/ic_fluent_delete_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "0f0769b54d5862f2390ea7e51aab825e5dc10d4fa36da34d1559acc55799be92",
+    "license": "MIT",
+    "transformation": "Original SVG retained byte-for-byte. Unchanged path geometry is rendered in the 24x24 source frame with the application semantic icon palette."
+  },
+  {
+    "name": "backspace",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Backspace/SVG/ic_fluent_backspace_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "828b02b5b48ce7a86ddd2aafbf0ed4ce2a90579086dd941d2d6e04a6adf9ecc9",
+    "license": "MIT",
+    "transformation": "Original SVG retained byte-for-byte. Unchanged path geometry in the 24x24 source frame with the semantic icon palette."
+  },
+  {
+    "name": "input-a",
+    "url": "https://kenney.nl/assets/input-prompts",
+    "version": "1.5A",
+    "archivePath": "Xbox Series/Vector/xbox_button_color_a.svg",
+    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
+    "sha256": "63d1a6d0798c09c70f1bd25cf03dce39bd0c04e721240fda62facd5dafe08bdc",
+    "license": "CC0-1.0",
+    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
+  },
+  {
+    "name": "input-b",
+    "url": "https://kenney.nl/assets/input-prompts",
+    "version": "1.5A",
+    "archivePath": "Xbox Series/Vector/xbox_button_color_b.svg",
+    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
+    "sha256": "1a50644b6cb5a59564a3fdb977b16abb33ebe356e65e1b610dc2f8fb21e49fe0",
+    "license": "CC0-1.0",
+    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
+  },
+  {
+    "name": "input-x",
+    "url": "https://kenney.nl/assets/input-prompts",
+    "version": "1.5A",
+    "archivePath": "Xbox Series/Vector/xbox_button_color_x.svg",
+    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
+    "sha256": "49840e42f7aa78d107a3c496a15093b4bdf6a114b0141807f86facdbe0461154",
+    "license": "CC0-1.0",
+    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
+  },
+  {
+    "name": "input-y",
+    "url": "https://kenney.nl/assets/input-prompts",
+    "version": "1.5A",
+    "archivePath": "Xbox Series/Vector/xbox_button_color_y.svg",
+    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
+    "sha256": "27436f37e982d0e2502a761d889b7502faa3fcfabf0a868dcf85bfe204dfeb38",
+    "license": "CC0-1.0",
+    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
+  },
+  {
+    "name": "input-lb",
+    "url": "https://kenney.nl/assets/input-prompts",
+    "version": "1.5A",
+    "archivePath": "Xbox Series/Vector/xbox_lb.svg",
+    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
+    "sha256": "6463d4c86715f1445838dd502e2060cc1719bcc66af705a15efb69fa9949c36c",
+    "license": "CC0-1.0",
+    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
+  },
+  {
+    "name": "input-rb",
+    "url": "https://kenney.nl/assets/input-prompts",
+    "version": "1.5A",
+    "archivePath": "Xbox Series/Vector/xbox_rb.svg",
+    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
+    "sha256": "066ac893d3baa92d4ba9e3b7e12b1829cce3cdf7d0676fbab4eb56d4cf17e63b",
+    "license": "CC0-1.0",
+    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
+  },
+  {
+    "name": "input-dpad",
+    "url": "https://kenney.nl/assets/input-prompts",
+    "version": "1.5A",
+    "archivePath": "Xbox Series/Vector/xbox_dpad.svg",
+    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
+    "sha256": "1d3528fa6ae21e2356484744c78754b455d9fce97974b5508ec424cce675f495",
+    "license": "CC0-1.0",
+    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
+  },
+  {
+    "name": "input-dpadhorizontal",
+    "url": "https://kenney.nl/assets/input-prompts",
+    "version": "1.5A",
+    "archivePath": "Xbox Series/Vector/xbox_dpad_horizontal_outline.svg",
+    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
+    "sha256": "2018162f5cd92e868d9f40901deb481ec10b2934d91355f48b61a4154950b888",
+    "license": "CC0-1.0",
+    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
+  },
+  {
+    "name": "input-guide",
+    "url": "https://kenney.nl/assets/input-prompts",
+    "version": "1.5A",
+    "archivePath": "Xbox Series/Vector/xbox_guide.svg",
+    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
+    "sha256": "00cb4ae70d051095b4ce83ecdfd89c377eb2265cea256141415787aefc969cda",
+    "license": "CC0-1.0",
+    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
+  },
+  {
+    "name": "input-rs",
+    "url": "https://kenney.nl/assets/input-prompts",
+    "version": "1.5A",
+    "archivePath": "Xbox Series/Vector/xbox_rs.svg",
+    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
+    "sha256": "44bb273b93df6389733a43902fcc684b0397b1135a49bb0d170634c2a81ffcc2",
+    "license": "CC0-1.0",
+    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
+  },
+  {
+    "name": "input-mouseleft",
+    "url": "https://kenney.nl/assets/input-prompts",
+    "version": "1.5A",
+    "archivePath": "Keyboard & Mouse/Vector/mouse_left_outline.svg",
+    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
+    "sha256": "fee4d6dcfb672d08c70a98a9b6acefa488c569cc9fb3126c99d0008de80da145",
+    "license": "CC0-1.0",
+    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
+  },
+  {
+    "name": "input-mouseright",
+    "url": "https://kenney.nl/assets/input-prompts",
+    "version": "1.5A",
+    "archivePath": "Keyboard & Mouse/Vector/mouse_right_outline.svg",
+    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
+    "sha256": "d51da4c8d39e27128a7a1965833c4ae033d2abbe8c94d6e699082f242f42a1f3",
+    "license": "CC0-1.0",
+    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
+  },
+  {
+    "name": "input-mousescroll",
+    "url": "https://kenney.nl/assets/input-prompts",
+    "version": "1.5A",
+    "archivePath": "Keyboard & Mouse/Vector/mouse_scroll_outline.svg",
+    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
+    "sha256": "181af4a26cea59ffddb2e1ec3b8c4456c315547f5050626946e119921cea1c79",
+    "license": "CC0-1.0",
+    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
+  },
+  {
+    "name": "input-mousemove",
+    "url": "https://kenney.nl/assets/input-prompts",
+    "version": "1.5A",
+    "archivePath": "Keyboard & Mouse/Vector/mouse_move.svg",
+    "archiveSha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
+    "sha256": "4b0d20b7ee578b0cd06b5c862530324dc70ad1bf8a2f8fd82943252729164e94",
+    "license": "CC0-1.0",
+    "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
   }
 ]

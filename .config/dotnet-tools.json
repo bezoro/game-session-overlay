@@ -4,8 +4,17 @@
   "tools": {
     "vpk": {
       "version": "1.2.161",
-      "commands": ["vpk"],
+      "commands": [
+        "vpk"
+      ],
       "rollForward": true
+    },
+    "gitversion.tool": {
+      "version": "6.8.2",
+      "commands": [
+        "dotnet-gitversion"
+      ],
+      "rollForward": false
     }
   }
 }

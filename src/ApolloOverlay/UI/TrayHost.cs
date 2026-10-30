@@ -1,0 +1,80 @@
+using System.Windows;
+using System.Windows.Threading;
+using Drawing = System.Drawing;
+using Forms = System.Windows.Forms;
+
+namespace ApolloOverlay;
+
+internal sealed class TrayHost : IDisposable
+{
+    private readonly Dispatcher dispatcher;
+    private readonly Action open, exit;
+    private readonly Forms.NotifyIcon icon;
+    private readonly Drawing.Icon artwork;
+    private bool disposed;
+    internal Forms.ContextMenuStrip Menu
+    {
+        get;
+    }
+
+    internal TrayHost(Dispatcher dispatcher, Action open, Action exit, bool visible = true, Action? restartAdministrator = null)
+    {
+        this.dispatcher = dispatcher;
+        this.open = open;
+        this.exit = exit;
+        using var resource = Application.GetResourceStream(new Uri("/ApolloOverlay;component/Assets/overlay-controller.ico", UriKind.Relative))?.Stream ?? throw new InvalidOperationException("Tray icon missing.");
+        artwork = new Drawing.Icon(resource);
+        Menu = new Forms.ContextMenuStrip();
+        Menu.Items.Add("Open overlay", null, (_, _) => Dispatch(open));
+        if (restartAdministrator is not null)
+            Menu.Items.Add("Restart as administrator…", null, (_, _) => Dispatch(restartAdministrator));
+        Menu.Items.Add("Quit", null, (_, _) => Dispatch(exit));
+        icon = new Forms.NotifyIcon
+        {
+            Icon = artwork,
+            Text = ("Game Session Overlay · " + AppBuild.Current.Display).Length > 127 ? ("Game Session Overlay · " + AppBuild.Current.Display)[..127] : "Game Session Overlay · " + AppBuild.Current.Display,
+            ContextMenuStrip = Menu
+        };
+        icon.MouseDoubleClick += OnDoubleClick;
+        icon.BalloonTipClicked += OnResultClick;
+        icon.Visible = visible;
+    }
+
+    internal void OnDoubleClick(object? sender, Forms.MouseEventArgs args)
+    {
+        if (args.Button == Forms.MouseButtons.Left && args.Clicks == 2)
+            Dispatch(open);
+    }
+
+    private void OnResultClick(object? sender, EventArgs args) => Dispatch(open);
+    internal void NotifyResult(string message)
+    {
+        if (disposed || !icon.Visible)
+            return;
+        icon.ShowBalloonTip(5000, "Game Session Overlay · command result", message, Forms.ToolTipIcon.Warning);
+    }
+
+    private void Dispatch(Action action)
+    {
+        if (disposed || dispatcher.HasShutdownStarted)
+            return;
+        dispatcher.BeginInvoke(() =>
+        {
+            if (!disposed && !dispatcher.HasShutdownStarted)
+                action();
+        });
+    }
+
+    public void Dispose()
+    {
+        if (disposed)
+            return;
+        disposed = true;
+        icon.MouseDoubleClick -= OnDoubleClick;
+        icon.BalloonTipClicked -= OnResultClick;
+        icon.Visible = false;
+        icon.Dispose();
+        Menu.Dispose();
+        artwork.Dispose();
+    }
+}

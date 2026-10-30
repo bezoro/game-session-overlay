@@ -32,13 +32,13 @@ O controle ainda pode agir no jogo enquanto o painel está aberto. A overlay nã
 
 Em **Sistema**, comece com o monitor automático. Ele acompanha a janela ativa; ao abrir pela bandeja, tenta usar a janela preservada da sessão. Escolha um monitor específico se quiser manter o painel na tela virtual do Apollo ou em outra tela.
 
-Aumente a escala até conseguir ler os títulos da sua posição habitual. O painel usa rolagem quando falta espaço. A opção de reduzir animações remove as transições; as preferências de animação e alto contraste do Windows também são respeitadas.
+Aumente a escala até conseguir ler os títulos da sua posição habitual. O painel usa rolagem quando falta espaço. A seleção respira suavemente, recebe um reflexo discreto e os botões reagem ao pressionar. As preferências de animação e alto contraste do Windows são respeitadas.
 
 Em **Personalizar acesso rápido**, mantenha as ações que você usa e coloque as mais frequentes primeiro. Sons e vibração são opcionais e começam desativados. Os ajustes só persistem depois de **Salvar**; **Descartar** recupera os últimos ajustes salvos.
 
 Em **Sistema → Sons**, ative os sinais e use **Testar retorno** para ouvir uma amostra. Navegação, confirmação e retorno têm sons diferentes. Uma falha usa um sinal grave; o som de conclusão só toca quando o resultado foi confirmado. O teste solicita a reprodução, mas você precisa conferir se a saída de áudio está chegando à TV.
 
-A opção selecionada mantém o contorno de foco. Ao acionar uma função, o botão recebe um destaque breve, inclusive com animações reduzidas. Resultados também usam texto e símbolos para distinguir espera, conclusão e problemas.
+A opção selecionada mantém o contorno de foco. Ao acionar uma função, o botão recebe um destaque breve, com uma breve compressão e retorno. Resultados também usam texto e símbolos para distinguir espera, conclusão e problemas.
 
 **Áudio do Windows** controla a saída padrão do PC. **Áudio do aplicativo**, nas opções da janela, afeta as sessões de áudio identificadas daquele aplicativo. Nenhum deles garante alterar o volume físico da TV.
 

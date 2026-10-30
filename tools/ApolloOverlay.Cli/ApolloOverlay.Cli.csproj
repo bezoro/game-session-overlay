@@ -1,4 +1,16 @@
-<Project Sdk="Microsoft.NET.Sdk">
- <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0-windows</TargetFramework><JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault></PropertyGroup>
- <ItemGroup><Compile Include="../../src/ApolloOverlay/AutomationProtocol.cs" Link="AutomationProtocol.cs"/><Compile Include="../../src/ApolloOverlay/AutomationPipeSecurity.cs" Link="AutomationPipeSecurity.cs"/></ItemGroup>
+<Project
+  Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile
+      Include="../../src/ApolloOverlay/Automation/AutomationProtocol.cs"
+      Link="AutomationProtocol.cs" />
+    <Compile
+      Include="../../src/ApolloOverlay/Automation/AutomationPipeSecurity.cs"
+      Link="AutomationPipeSecurity.cs" />
+  </ItemGroup>
 </Project>

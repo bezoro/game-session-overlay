@@ -1,0 +1,547 @@
+using System.Diagnostics;
+using System.IO;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+
+namespace ApolloOverlay;
+
+internal sealed record NativeCase(string Name, bool Passed, string? Detail);
+internal sealed record CpuReading(double Milliseconds, double Percent, long PrivateBytes);
+internal sealed record ProductCost(string Phase, double Milliseconds, double CpuMean, double CpuPeak, long PrivateStart, long PrivateEnd, List<CpuReading> Samples);
+internal sealed class NativeReport
+{
+    public string Status
+    {
+        get;
+        set;
+    } = "running";
+    public List<NativeCase> Cases
+    {
+        get;
+        set;
+    } = [];
+    public List<string> Captures
+    {
+        get;
+        set;
+    } = [];
+    public List<ProductCost> Costs
+    {
+        get;
+        set;
+    } = [];
+    public List<double> ShowMs
+    {
+        get;
+        set;
+    } = [];
+    public List<double> InputMs
+    {
+        get;
+        set;
+    } = [];
+    public Dictionary<string, string> Facts
+    {
+        get;
+        set;
+    } = [];
+}
+
+[JsonSerializable(typeof(NativeReport))]
+[JsonSourceGenerationOptions(WriteIndented = true)]
+internal partial class NativeReportJson : JsonSerializerContext;
+internal static class NativeValidation
+{
+    private static async Task Gpu(string output, NativeReport report)
+    {
+        var command = @"$ErrorActionPreference='Stop'; Get-Counter -Counter '\GPU Engine(pid_" + Environment.ProcessId + @"_*)\Utilization Percentage' -SampleInterval 1 -MaxSamples 3 | ForEach-Object { $_.CounterSamples | Select-Object Path,CookedValue,Status } | ConvertTo-Json -Depth 3";
+        var start = new ProcessStartInfo("C:/Program Files/PowerShell/7/pwsh.exe")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        foreach (var arg in new[]
+        {
+            "-NoProfile",
+            "-Command",
+            command
+        }
+
+        )
+            start.ArgumentList.Add(arg);
+        using var child = new Process
+        {
+            StartInfo = start
+        };
+        child.Start();
+        var stdout = child.StandardOutput.ReadToEndAsync();
+        var stderr = child.StandardError.ReadToEndAsync();
+        try
+        {
+            await child.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(8));
+        }
+        catch (TimeoutException)
+        {
+            child.Kill();
+            await child.WaitForExitAsync();
+        }
+
+        File.WriteAllText(Path.Combine(output, "gpu.stdout.json"), await stdout);
+        File.WriteAllText(Path.Combine(output, "gpu.stderr.txt"), await stderr);
+        File.WriteAllText(Path.Combine(output, "gpu.command.txt"), command + Environment.NewLine + "exit=" + child.ExitCode);
+        report.Facts["gpuCounterExit"] = child.ExitCode.ToString();
+        report.Facts["gpuMeaning"] = "Own-PID engine activity during real UI animations; tier/default alone are not proof of actual acceleration of every frame.";
+    }
+
+    private static async Task Layouts(MainWindow host, string output, NativeReport report)
+    {
+        foreach (var light in new[]
+        {
+            false,
+            true
+        }
+
+        )
+            foreach (var item in new[]
+            {
+                ("1080", 1920, 1080, 96d),
+                ("1440", 2560, 1440, 96d),
+                ("4k100", 3840, 2160, 96d),
+                ("4k200", 3840, 2160, 192d),
+                ("small", 800, 600, 96d)
+            }
+
+            )
+            {
+                ThemeSupport.ForceForValidation(Application.Current, light);
+                var overlay = new MainWindow(renderOnly: true, platform: new PreviewPlatform(host.Controller.Session.Anchor));
+                overlay.Controller.CaptureReturn();
+                await overlay.Controller.Refresh();
+                overlay.Page(0);
+                var visual = (FrameworkElement)overlay.Content;
+                var display = new DisplayRef(item.Item1, 0, 0, item.Item2, item.Item3, true);
+                var bounds = SidebarLayout.Place(display, item.Item4);
+                var density = SidebarLayout.Density(display, item.Item4);
+                visual.LayoutTransform = new ScaleTransform(density, density);
+                var size = new Size(bounds.Width / (item.Item4 / 96), bounds.Height / (item.Item4 / 96));
+                visual.Measure(size);
+                visual.Arrange(new Rect(new Point(), size));
+                visual.UpdateLayout();
+                var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(bounds.Width, bounds.Height, item.Item4, item.Item4, PixelFormats.Pbgra32);
+                bitmap.Render(visual);
+                var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
+                var path = Path.Combine(output, $"layout-{(light ? "light" : "dark")}-{item.Item1}.png");
+                using (var file = File.Create(path))
+                    encoder.Save(file);
+                report.Facts["layout-" + item.Item1] = $"offscreen layout only; {bounds.Width}x{bounds.Height}px; dpi={item.Item4}; density={density:F3}; action nominal px={22 * density * item.Item4 / 96:F1}";
+                report.Cases.Add(new("layout bounds " + item.Item1 + " " + light, bounds.X + bounds.Width <= display.Width && bounds.Y + bounds.Height <= display.Height && visual.DesiredSize.Width <= size.Width + 1, null));
+                overlay.Close();
+            }
+
+        report.Facts["systemThemeMechanism"] = "Fluent.xaml automatic dictionary + DynamicResource; official release/10.0 guide line50 and WPF ThemeManager.OnSystemThemeChanged. No authored registry polling/ThemeMode calls.";
+        report.Facts["actualOsThemeTransition"] = "unexecuted: no Windows preference mutation; same-tree resource transitions checked deterministically";
+    }
+
+    private static Brush Pattern(bool alternate)
+    {
+        var drawing = new DrawingGroup();
+        var first = alternate ? Color.FromRgb(109, 78, 101) : Color.FromRgb(47, 79, 93);
+        var second = alternate ? Color.FromRgb(151, 116, 92) : Color.FromRgb(78, 116, 124);
+        drawing.Children.Add(new GeometryDrawing(new SolidColorBrush(first), null, new RectangleGeometry(new Rect(0, 0, 80, 80))));
+        drawing.Children.Add(new GeometryDrawing(new SolidColorBrush(second), null, new RectangleGeometry(new Rect(0, 0, 40, 40))));
+        drawing.Children.Add(new GeometryDrawing(new SolidColorBrush(second), null, new RectangleGeometry(new Rect(40, 40, 40, 40))));
+        return new DrawingBrush(drawing)
+        {
+            TileMode = TileMode.Tile,
+            Viewport = new Rect(0, 0, 80, 80),
+            ViewportUnits = BrushMappingMode.Absolute
+        };
+    }
+
+    internal static async Task<int> Execute(string output, bool captureOnly, bool alphaOnly = false)
+    {
+        Directory.CreateDirectory(output);
+        var report = new NativeReport();
+        var area = SystemParameters.WorkArea;
+        var fixture = new Window
+        {
+            Title = "Owned test window",
+            WindowStyle = WindowStyle.None,
+            AllowsTransparency = true,
+            Topmost = true,
+            Width = Math.Min(1180, area.Width - 64),
+            Height = Math.Min(1120, area.Height - 48),
+            Left = area.Left + 32,
+            Top = area.Top + 24,
+            Background = new SolidColorBrush(Color.FromRgb(66, 78, 86)),
+            Content = new TextBlock
+            {
+                Text = "OWNED TEST WINDOW · NOT A GAME",
+                FontSize = 18,
+                Foreground = Brushes.White,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Margin = new(24)
+            }
+        };
+        MainWindow? overlay = null;
+        try
+        {
+            var label = (UIElement)fixture.Content;
+            fixture.Content = null;
+            var underlay = new Grid
+            {
+                Background = Pattern(false)
+            };
+            underlay.Children.Add(label);
+            fixture.Background = underlay.Background;
+            fixture.Content = underlay;
+            fixture.Show();
+            fixture.Activate();
+            var handle = NativeCapture.Handle(fixture);
+            var window = new WindowRef(handle, Environment.ProcessId, NativeCapture.StartTicks, fixture.Title, "owned test window");
+            overlay = new(renderOnly: true, platform: new PreviewPlatform(window));
+            overlay.Controller.CaptureReturn();
+            await overlay.Controller.Refresh();
+            overlay.Width = Math.Min(572, fixture.Width - 60);
+            overlay.Height = fixture.Height - 44;
+            overlay.Left = fixture.Left + 28;
+            overlay.Top = fixture.Top + 20;
+            overlay.RefreshRows();
+            overlay.ShowDiagnostic();
+            await Task.Delay(250);
+            async Task Capture(string name)
+            {
+                await Task.Delay(120);
+                Console.WriteLine($"CAPTURE-GUARD {name}: foreground={Native.GetForegroundWindow()} underlay={handle} overlay={NativeCapture.Handle(overlay)} visible={overlay.IsVisible} active={overlay.IsActive}");
+                if (name.EndsWith("-home", StringComparison.Ordinal))
+                {
+                    var scroll = (ScrollViewer)overlay.FindName("ContentScroll");
+                    var rows = (Grid)overlay.FindName("Rows");
+                    foreach (var button in rows.Children.OfType<Button>().Where(b => b.Tag is "taskview" or "audio"))
+                    {
+                        var rect = button.TransformToAncestor(scroll).TransformBounds(new Rect(0, 0, button.ActualWidth, button.ActualHeight));
+                        report.Cases.Add(new(name + " " + button.Tag + " fully visible", rect.Bottom <= scroll.ActualHeight + 1 && rect.Top >= 0, $"row={rect}; viewportHeight={scroll.ActualHeight}"));
+                    }
+                }
+
+                NativeCapture.GetWindowRect(NativeCapture.Handle(overlay), out var bounds);
+                bounds.Left -= 6;
+                bounds.Top -= 6;
+                bounds.Right += 6;
+                bounds.Bottom += 6;
+                var path = Path.Combine(output, name + ".png");
+                NativeCapture.Capture(handle, NativeCapture.Handle(overlay), bounds, window.Started, path);
+                report.Captures.Add(path);
+                Console.WriteLine("CAPTURE " + path);
+            }
+
+            if (alphaOnly)
+            {
+                var visual = new System.Windows.Media.Imaging.RenderTargetBitmap((int)underlay.ActualWidth, (int)underlay.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                visual.Render(underlay);
+                var png = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(visual));
+                using (var file = File.Create(Path.Combine(output, "underlay-visual.png")))
+                    png.Save(file);
+                report.Facts["overlayBackground"] = overlay.Background.ToString();
+                report.Facts["compositionBackground"] = System.Windows.Interop.HwndSource.FromHwnd(NativeCapture.Handle(overlay)).CompositionTarget.BackgroundColor.ToString();
+                report.Facts["rootGridBackground"] = ((Grid)overlay.Content).Background?.ToString() ?? "null";
+                report.Facts["sidebarBackground"] = ((Border)overlay.FindName("Sidebar")).Background?.ToString() ?? "null";
+                report.Facts["fixtureContentSize"] = $"{underlay.ActualWidth}x{underlay.ActualHeight}";
+                foreach (var alternate in new[]
+                {
+                    false,
+                    true
+                }
+
+                )
+                {
+                    overlay.Hide();
+                    underlay.Background = Pattern(alternate);
+                    fixture.Background = underlay.Background;
+                    fixture.Activate();
+                    Native.SetForegroundWindow(handle);
+                    await Task.Delay(150);
+                    NativeCapture.GetWindowRect(NativeCapture.Handle(overlay), out var box);
+                    var path = Path.Combine(output, alternate ? "baseline-b.png" : "baseline-a.png");
+                    NativeCapture.Capture(handle, NativeCapture.Handle(overlay), box, window.Started, path);
+                    report.Captures.Add(path);
+                    overlay.ShowDiagnostic();
+                    await Capture(alternate ? "composed-b" : "composed-a");
+                }
+            }
+            else if (captureOnly)
+            {
+                ThemeSupport.FollowSystem(Application.Current);
+                overlay.Page(0);
+                await Capture("system-home");
+                report.Facts["normalThemeOverride"] = "none; Fluent.xaml normal system resources";
+                report.Cases.Add(new("NT01 normal Fluent resources exist without palette override", ThemeSupport.FollowsSystem(Application.Current)
+                    && new[] { ThemeSupport.Surface, ThemeSupport.Success, ThemeSupport.Text }.All(key => overlay.TryFindResource(key) is SolidColorBrush brush
+                    && brush.Color.A > 0), null));
+                report.Facts["normalSurface"] = ((System.Windows.Media.SolidColorBrush?)overlay.TryFindResource(ThemeSupport.Surface))?.Color.ToString() ?? "missing";
+                report.Facts["normalSuccess"] = ((System.Windows.Media.SolidColorBrush?)overlay.TryFindResource(ThemeSupport.Success))?.Color.ToString() ?? "missing";
+                foreach (var light in new[]
+                {
+                    false,
+                    true
+                }
+
+                )
+                {
+                    ThemeSupport.ForceForValidation(Application.Current, light);
+                    foreach (var state in new[]
+                    {
+                        "home",
+                        "apps",
+                        "system",
+                        "audio",
+                        "integrations",
+                        "details",
+                        "confirmation",
+                        "long-error",
+                        "steam-unavailable"
+                    }
+
+                    )
+                    {
+                        overlay.Page(0);
+                        overlay.SetRenderState(state);
+                        await Capture((light ? "light-" : "dark-") + state);
+                    }
+
+                    overlay.Page(0);
+                    underlay.Background = Pattern(true);
+                    await Capture((light ? "light-" : "dark-") + "home-pattern-b");
+                    underlay.Background = Pattern(false);
+                }
+
+                await Layouts(overlay, output, report);
+                report.Facts["captureMethod"] = "Actual desktop composition over two known layered owned-window checker patterns. Normal Fluent fixture redirected white in this environment; layered fixture was required. Actual own-window context, no game/art. Layout-*.png are explicitly offscreen, not physical4K.";
+            }
+            else
+            {
+                ThemeSupport.FollowSystem(Application.Current);
+                report.Facts["renderTier"] = (RenderCapability.Tier >> 16).ToString();
+                report.Facts["renderMode"] = RenderOptions.ProcessRenderMode.ToString();
+                report.Facts["latencyMethod"] = "Software command to one-shot Rendering; not physical input latency; no pixel readback measurement in this focused product run.";
+                overlay.Page(0);
+                void RoutedKey(Key key)
+                {
+                    var target = Keyboard.FocusedElement as UIElement ?? overlay;
+                    var source = PresentationSource.FromVisual(overlay) ?? throw new InvalidOperationException("Owned keyboard source missing.");
+                    var down = new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, key)
+                    {
+                        RoutedEvent = Keyboard.PreviewKeyDownEvent
+                    };
+                    target.RaiseEvent(down);
+                    if (!down.Handled)
+                    {
+                        down.RoutedEvent = Keyboard.KeyDownEvent;
+                        target.RaiseEvent(down);
+                    }
+
+                    var up = new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, key)
+                    {
+                        RoutedEvent = Keyboard.PreviewKeyUpEvent
+                    };
+                    target.RaiseEvent(up);
+                    if (!up.Handled)
+                    {
+                        up.RoutedEvent = Keyboard.KeyUpEvent;
+                        target.RaiseEvent(up);
+                    }
+                }
+
+                RoutedKey(Key.Tab);
+                RoutedKey(Key.Down);
+                RoutedKey(Key.Down);
+                var selected = overlay.SelectedAction;
+                var focused = (Keyboard.FocusedElement as FrameworkElement)?.Tag as string;
+                RoutedKey(Key.Enter);
+                report.Cases.Add(new("actual WPF preview routing: Tab, arrows, Enter dispatch green selection", selected == "apps" && focused == selected && overlay.ActionIds.Any(id => id.StartsWith("window:", StringComparison.Ordinal)), "WPF routed keyboard events on owned focused button; no SendInput or external effect"));
+                overlay.Page(0);
+                var active = 0;
+                async Task<double> Frame(Action action)
+                {
+                    var watch = Stopwatch.StartNew();
+                    var tcs = new TaskCompletionSource<double>();
+                    EventHandler? handler = null;
+                    handler = (_, _) =>
+                    {
+                        CompositionTarget.Rendering -= handler;
+                        active--;
+                        tcs.TrySetResult(watch.Elapsed.TotalMilliseconds);
+                    };
+                    CompositionTarget.Rendering += handler;
+                    active++;
+                    try
+                    {
+                        action();
+                        return await tcs.Task.WaitAsync(TimeSpan.FromSeconds(2));
+                    }
+                    finally
+                    {
+                        if (!tcs.Task.IsCompleted)
+                        {
+                            CompositionTarget.Rendering -= handler;
+                            active--;
+                        }
+                    }
+                }
+
+                for (var i = 0; i < 15; i++)
+                {
+                    overlay.Hide();
+                    fixture.Activate();
+                    Native.SetForegroundWindow(handle);
+                    report.ShowMs.Add(await Frame(overlay.ShowDiagnostic));
+                    var direction = i % 2 == 0 ? NavDirection.Down : NavDirection.Up;
+                    report.InputMs.Add(await Frame(() => overlay.Move(direction)));
+                    if (Native.GetForegroundWindow() != NativeCapture.Handle(overlay))
+                        throw new InvalidOperationException("Native focus cycle refused.");
+                }
+
+                report.Cases.Add(new("15 owned show/focus cycles, stable single overlay", Application.Current.Windows.Count == 2 && active == 0, null));
+                async Task Cost(string phase, int duration = 10000)
+                {
+                    using var proc = Process.GetCurrentProcess();
+                    proc.Refresh();
+                    var first = proc.PrivateMemorySize64;
+                    var cpu = proc.TotalProcessorTime;
+                    var time = Stopwatch.StartNew();
+                    double previous = 0;
+                    var samples = new List<CpuReading>();
+                    while (time.ElapsedMilliseconds < duration)
+                    {
+                        await Task.Delay(250);
+                        proc.Refresh();
+                        var now = time.Elapsed.TotalMilliseconds;
+                        var next = proc.TotalProcessorTime;
+                        samples.Add(new(now, (next - cpu).TotalMilliseconds / (now - previous) / Environment.ProcessorCount * 100, proc.PrivateMemorySize64));
+                        cpu = next;
+                        previous = now;
+                    }
+
+                    report.Costs.Add(new(phase, time.Elapsed.TotalMilliseconds, samples.Average(s => s.Percent), samples.Max(s => s.Percent), first, proc.PrivateMemorySize64, samples));
+                }
+
+                overlay.ValidationHost(false);
+                await Task.Delay(1000);
+                await Cost("hidden final host: 500ms discovery without pad / 120ms with pad, no audio or visual work");
+                overlay.ValidationHost(true);
+                await Task.Delay(1000);
+                await Cost("static final host: 30ms native input polling and default audio notifications");
+                report.Facts["costLimit"] = "Owned-window diagnostic actions are simulated; native polling/audio lifecycle and final UI are active. Tray and hotkey registration excluded from these cost phases.";
+                var animated = overlay;
+                async Task Animate()
+                {
+                    for (var i = 0; i < 12; i++)
+                    {
+                        animated.AnimateOpen();
+                        await Task.Delay(220);
+                    }
+                }
+
+                var gpu = Gpu(output, report);
+                var animation = Animate();
+                await Cost("bounded real open animations (140ms), own GPU helper overlaps, no continuous render listener", 3000);
+                await animation;
+                await gpu;
+                report.Facts["logicalProcessors"] = Environment.ProcessorCount.ToString();
+                report.Facts["physicalControllerSlots"] = string.Join(',', Enumerable.Range(0, 4).Where(i => Native.ReadPad((uint)i).Connected));
+                report.Facts["inputIsolation"] = "XInput is nonexclusive; no suppression. Physical simultaneous background reading unexecuted when no controller events observed.";
+                using (var availability = new OverlayController(diagnostics: new LocalDiagnostics(Path.Combine(output, "isolated-settings"))))
+                {
+                    await availability.Refresh();
+                    report.Facts["steamProtocolRegistered"] = availability.SteamAvailable.ToString();
+                    report.Facts["playniteDiscovered"] = availability.Settings.PlaynitePath is not null ? "true" : "false";
+                    report.Facts["integrationSmoke"] = "Public installation/protocol availability observed. No external app closed or fullscreen state changed; full launcher UI outcome not asserted.";
+                }
+
+                using (var audio = new WindowsAudio())
+                {
+                    audio.SetVisible(true);
+                    var original = audio.Read();
+                    report.Facts["audioOriginalAvailable"] = original.Available.ToString();
+                    report.Facts["audioOriginal"] = original.EndpointId + "; volume=" + original.Volume.ToString(System.Globalization.CultureInfo.InvariantCulture) + "; muted=" + original.Muted;
+                    if (original.Available)
+                    {
+                        AudioSnapshot? applied = null;
+                        try
+                        {
+                            var value = original.Volume > .98f ? original.Volume - .01f : original.Volume + .01f;
+                            var result = audio.Set(value, !original.Muted, original.EndpointId);
+                            applied = audio.Read();
+                            report.Facts["audioApplied"] = applied.EndpointId + "; volume=" + applied.Volume.ToString(System.Globalization.CultureInfo.InvariantCulture) + "; muted=" + applied.Muted;
+                            report.Cases.Add(new("real endpoint volume and mute bounded change readback", result.Kind == ResultKind.Completed && Math.Abs(applied.Volume - value) < .005f && applied.Muted != original.Muted, result.Message));
+                        }
+                        finally
+                        {
+                            if (applied is not null)
+                            {
+                                var current = audio.Read();
+                                var decision = AudioRestore.Decide(original, applied, current);
+                                report.Facts["audioRollback"] = decision.Reason;
+                                report.Facts["audioVolumeRestored"] = decision.Volume ? audio.Set(original.Volume, expectedEndpoint: original.EndpointId).Kind.ToString() : "skipped/conflict";
+                                current = audio.Read();
+                                decision = AudioRestore.Decide(original, applied, current);
+                                report.Facts["audioMuteRestored"] = decision.Mute ? audio.Set(muted: original.Muted, expectedEndpoint: original.EndpointId).Kind.ToString() : "skipped/conflict";
+                            }
+                        }
+                    }
+                    else
+                        report.Facts["audioSmoke"] = "unavailable; no volume/mute write";
+                }
+
+                overlay.Close();
+                overlay = null;
+                fixture.Activate();
+                Native.SetForegroundWindow(handle);
+                using var native = new WindowsPlatform(allowOwnedFixture: true);
+                var target = native.Foreground() ?? throw new InvalidOperationException("Owned fixture identity unavailable.");
+                if (target.Handle != handle || target.Pid != Environment.ProcessId)
+                    throw new InvalidOperationException("Owned fixture guard failed.");
+                System.ComponentModel.CancelEventHandler refuse = (_, e) =>
+                {
+                    fixture.Title = "";
+                    e.Cancel = true;
+                };
+                fixture.Closing += refuse;
+                var refused = await native.Close(target, CancellationToken.None);
+                report.Cases.Add(new("actual WM_CLOSE refusal and blank caption remain unconfirmed", refused.Kind == ResultKind.Unknown && Native.IsWindow(handle), refused.Message));
+                fixture.Closing -= refuse;
+                fixture.Title = "Owned test window";
+                var closed = await native.Close(target, CancellationToken.None);
+                report.Cases.Add(new("actual cooperative close confirms owned window destruction", closed.Kind == ResultKind.Completed && !Native.IsWindow(handle), closed.Message));
+            }
+
+            report.Status = report.Cases.All(c => c.Passed) ? "passed-with-explicit-limits" : "failed";
+        }
+        catch (Exception e)
+        {
+            report.Status = "failed";
+            report.Facts["failure"] = e.ToString();
+            Console.Error.WriteLine(e);
+        }
+        finally
+        {
+            overlay?.Close();
+            fixture.Close();
+            ThemeSupport.FollowSystem(Application.Current);
+            File.WriteAllText(Path.Combine(output, "native-report.json"), JsonSerializer.Serialize(report, NativeReportJson.Default.NativeReport));
+        }
+
+        Console.WriteLine($"NATIVE {report.Status}; cases={report.Cases.Count}; captures={report.Captures.Count}");
+        return report.Status == "failed" ? 1 : 0;
+    }
+}

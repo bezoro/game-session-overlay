@@ -5,8 +5,17 @@ on:
   push:
     branches:
       - main
-      - codex/controller-overlay-polish
   workflow_dispatch:
+    inputs:
+      channel:
+        description: Validate the selected branch or publish it to the testing channel
+        type: choice
+        options: [validate, testing]
+        default: validate
+      notes:
+        description: Preview notes shown in the updater (optional)
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -20,6 +29,8 @@ jobs:
     name: Build, tests and package
     runs-on: windows-latest
     timeout-minutes: 30
+    outputs:
+      release_required: ${{ steps.identity.outputs.release_required }}
     defaults:
       run:
         shell: pwsh
@@ -31,6 +42,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          fetch-depth: 0
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -39,29 +51,56 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Stamp immutable build identity
+      - name: Restore pinned build tools
+        run: dotnet tool restore
+
+      - name: Stamp semantic build identity
+        id: identity
         env:
           SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
-          SOURCE_BRANCH: ${{ github.ref_name }}
+          SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
+          MAIN_BRANCH_BUILD: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
           BUILD_NUMBER: ${{ github.run_number }}
           BUILD_ATTEMPT: ${{ github.run_attempt }}
+          REQUESTED_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || '' }}
         run: |
           $ErrorActionPreference = 'Stop'
           if ($env:SOURCE_COMMIT -notmatch '^[a-f0-9]{40}$' -or $env:BUILD_NUMBER -notmatch '^[0-9]+$' -or $env:BUILD_ATTEMPT -notmatch '^[0-9]+$') { throw 'Invalid build identity inputs.' }
           if ((git rev-parse HEAD) -cne $env:SOURCE_COMMIT) { throw 'Checkout differs from the identified source commit.' }
-          $short = $env:SOURCE_COMMIT.Substring(0, 7)
-          $channel = if ($env:SOURCE_BRANCH -eq 'main') { 'stable' } else { 'testing' }
-          $version = if ($channel -eq 'stable') { "0.$($env:BUILD_NUMBER).$($env:BUILD_ATTEMPT)+$short" } else { "0.2.0-preview.$($env:BUILD_NUMBER).$($env:BUILD_ATTEMPT)+$short" }
-          "OVERLAY_VERSION=$version" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
-          "OVERLAY_BUILD_ID=ci-$($env:BUILD_NUMBER)-a$($env:BUILD_ATTEMPT)-$short" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
-          "OVERLAY_COMMIT=$($env:SOURCE_COMMIT)" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+          git check-ref-format --branch $env:SOURCE_BRANCH
+          if ($LASTEXITCODE -ne 0) { throw 'Invalid source branch.' }
+          git checkout -B $env:SOURCE_BRANCH $env:SOURCE_COMMIT
+          if ($LASTEXITCODE -ne 0) { throw 'Could not establish the source branch for GitVersion.' }
+          $channel = if ($env:MAIN_BRANCH_BUILD -eq 'true' -and $env:REQUESTED_CHANNEL -ne 'testing') { 'stable' } else { 'testing' }
+          $identity = ./scripts/get-build-version.ps1 -Channel $channel -BuildNumber ([int]$env:BUILD_NUMBER) -Attempt ([int]$env:BUILD_ATTEMPT)
+          if ($identity.Commit -cne $env:SOURCE_COMMIT) { throw 'Semantic identity differs from the source commit.' }
+          "OVERLAY_VERSION=$($identity.Version)" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+          "OVERLAY_FILE_VERSION=$($identity.FileVersion)" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+          "OVERLAY_BUILD_ID=$($identity.BuildId)" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+          "OVERLAY_COMMIT=$($identity.Commit)" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
           "OVERLAY_CHANNEL=$channel" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+          "release_required=$($identity.ReleaseRequired.ToString().ToLowerInvariant())" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+          Write-Host "Version: $($identity.Version); channel: $channel; release required: $($identity.ReleaseRequired)"
 
       - name: Build solution
         id: build
         run: |
           ./scripts/verify.ps1 -Stage Build -OutputVersion native-v1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify source formatting and unused imports
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          ./scripts/format.ps1 -Verify
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet format style ApolloOverlay.sln --diagnostics IDE0005 --severity info --verify-no-changes --no-restore
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify release policy and proof cleanup
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          ./scripts/test-release-version.ps1
+          ./scripts/test-proof-cleanup.ps1
 
       # These suites exercise managed state, mocked native boundaries and settings on Windows.
       # They do not establish compatibility with a physical controller or interactive desktop.
@@ -73,7 +112,7 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $false
           $checks = 'artifacts/check-native-v1'
           New-Item -ItemType Directory -Path $checks -Force | Out-Null
-          $testDll = 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows/ApolloOverlay.Tests.dll'
+          $testDll = 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows10.0.19041.0/ApolloOverlay.Tests.dll'
           $failed = $false
           foreach ($suite in @('window-activation', 'guide-settings', 'guide-release-red', 'session-hub-services', 'steam-sequence', 'steam-effects-handshake')) {
             Write-Host "Running $suite"
@@ -99,9 +138,20 @@ jobs:
           if ($LASTEXITCODE -ne 0) { Write-Error "CLI roundtrip failed with exit code $LASTEXITCODE" -ErrorAction Continue; $failed = $true }
           if ($failed) { exit 1 }
 
+      - name: Run diagnostic tool synthetic tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 3
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & dotnet 'tools/GuideProbe/bin/Release/net10.0-windows/GuideProbe.dll' '--self-test'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & dotnet 'tools/NativeProof/bin/Release/net10.0-windows/Bezoro.NativeProof.dll' '--input-tests' '--output' 'artifacts/check-native-v1/native-proof-input'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       # These render the app's own WPF tree with fixtures and synthetic palettes.
       # Images are review artifacts, not a physical TV or streaming compatibility test.
       - name: Capture WPF interface fixtures
+        id: screenshots
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 8
         run: |
@@ -109,14 +159,23 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $false
           $checks = 'artifacts/check-native-v1'
           New-Item -ItemType Directory -Path $checks -Force | Out-Null
-          $testDll = 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows/ApolloOverlay.Tests.dll'
+          $testDll = 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows10.0.19041.0/ApolloOverlay.Tests.dll'
           $failed = $false
-          foreach ($mode in @('review-captures', 'session-hub-captures', 'session-hub-focus-captures', 'update-captures')) {
+          foreach ($mode in @('review-captures', 'session-hub-captures', 'session-hub-focus-captures', 'update-captures', 'session-interface-captures')) {
             Write-Host "Capturing $mode"
             & dotnet $testDll "$checks/$mode" "--$mode" 2>&1 | Tee-Object -FilePath "$checks/$mode.log"
             if ($LASTEXITCODE -ne 0) { Write-Error "$mode failed with exit code $LASTEXITCODE" -ErrorAction Continue; $failed = $true }
           }
           if ($failed) { exit 1 }
+
+      - name: Upload interface screenshots for visual review
+        if: ${{ !cancelled() && steps.screenshots.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: ui-review-screenshots
+          path: artifacts/check-native-v1/session-interface-captures/
+          if-no-files-found: error
+          retention-days: 14
 
       # Several WPF fixtures require a real interactive foreground window. Failure on a
       # hosted runner without an interactive desktop is reported, not treated as a pass.
@@ -128,7 +187,7 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $false
           $checks = 'artifacts/check-native-v1'
           New-Item -ItemType Directory -Path $checks -Force | Out-Null
-          & dotnet 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows/ApolloOverlay.Tests.dll' "$checks/behavior-report.json" 2>&1 | Tee-Object -FilePath "$checks/behavior.log"
+          & dotnet 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows10.0.19041.0/ApolloOverlay.Tests.dll' "$checks/behavior-report.json" 2>&1 | Tee-Object -FilePath "$checks/behavior.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       # PR identities use testing; exercise the stable channel before merging too.
@@ -143,13 +202,13 @@ jobs:
           New-Item -ItemType Directory -Path $checks -Force | Out-Null
           & dotnet build 'tests/ApolloOverlay.Tests/ApolloOverlay.Tests.csproj' -c Release --no-restore -p:OverlayChannel=stable 2>&1 | Tee-Object -FilePath "$checks/stable-update-build.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & dotnet 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows/ApolloOverlay.Tests.dll' "$checks/stable-agent-updates.json" '--agent-updates' 2>&1 | Tee-Object -FilePath "$checks/stable-agent-updates.log"
+          & dotnet 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows10.0.19041.0/ApolloOverlay.Tests.dll' "$checks/stable-agent-updates.json" '--agent-updates' 2>&1 | Tee-Object -FilePath "$checks/stable-agent-updates.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build official Velopack installer and packages
         id: package
         env:
-          RELEASE_NOTES: ${{ github.event.head_commit.message || github.event.pull_request.title }}
+          RELEASE_NOTES: ${{ github.event.head_commit.message || github.event.pull_request.title || inputs.notes }}
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 8
         run: |
@@ -189,7 +248,10 @@ jobs:
   publish-update:
     name: Publish validated update
     needs: windows
-    if: ${{ needs.windows.result == 'success' && github.event_name == 'push' && github.repository_id == '1430327913' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/controller-overlay-polish') }}
+    # Only repository pushes to main publish stable. An authorized dispatch may
+    # publish any local branch to testing, including an unmerged feature branch.
+    # Pull-request events (including same-repository PRs) never gain write access.
+    if: ${{ needs.windows.result == 'success' && needs.windows.outputs.release_required == 'true' && github.repository_id == '1430327913' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.channel == 'testing' && startsWith(github.ref, 'refs/heads/'))) }}
     runs-on: windows-latest
     timeout-minutes: 10
     permissions:
@@ -210,7 +272,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if ($env:UPDATE_STATUS_REPOSITORY -notmatch '^bezoro/[A-Za-z0-9_.-]+$' -or $env:UPDATE_STATUS_COMMIT -notmatch '^[a-f0-9]{40}$' -or $env:UPDATE_STATUS_RUN_URL -notmatch ('^https://github\.com/' + [Regex]::Escape($env:UPDATE_STATUS_REPOSITORY) + '/actions/runs/[0-9]+$')) { throw 'Invalid publication status target.' }
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28'; 'User-Agent' = 'GameSessionOverlay-release' }
-          $body = @{ state = 'pending'; context = 'overlay/update-release'; target_url = $env:UPDATE_STATUS_RUN_URL; description = 'Preparando publicação da atualização validada.' } | ConvertTo-Json
+          $body = @{ state = 'pending'; context = 'overlay/update-release'; target_url = $env:UPDATE_STATUS_RUN_URL; description = 'Preparing the validated update release.' } | ConvertTo-Json
           Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$($env:UPDATE_STATUS_REPOSITORY)/statuses/$($env:UPDATE_STATUS_COMMIT)" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
 
       - name: Checkout the validated source
@@ -239,9 +301,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_REPOSITORY: ${{ github.repository }}
           RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_CHANNEL: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'stable' || 'testing' }}
           RELEASE_NOTES: ${{ github.event.head_commit.message }}
         run: |
-          ./scripts/publish-release.ps1 -ArtifactDirectory artifacts/release -Repository $env:RELEASE_REPOSITORY -Commit $env:RELEASE_COMMIT
+          ./scripts/publish-release.ps1 -ArtifactDirectory artifacts/release -Repository $env:RELEASE_REPOSITORY -Commit $env:RELEASE_COMMIT -ExpectedChannel $env:RELEASE_CHANNEL
 
       - name: Report update publication result
         if: ${{ always() }}
@@ -252,10 +315,10 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if ($env:UPDATE_STATUS_REPOSITORY -notmatch '^bezoro/[A-Za-z0-9_.-]+$' -or $env:UPDATE_STATUS_COMMIT -notmatch '^[a-f0-9]{40}$' -or $env:UPDATE_STATUS_RUN_URL -notmatch ('^https://github\.com/' + [Regex]::Escape($env:UPDATE_STATUS_REPOSITORY) + '/actions/runs/[0-9]+$')) { throw 'Invalid publication status target.' }
           $success = $env:PUBLICATION_OUTCOME -eq 'success'
-          $description = 'Falha ao publicar atualização. Consulte os logs.'
+          $description = 'Update publication failed. Check the logs.'
           if ($success) {
             $manifest = Get-Content -LiteralPath 'artifacts/release/build-info.json' -Raw | ConvertFrom-Json
-            $description = "Versão publicada: $($manifest.version)"
+            $description = "Published version: $($manifest.version)"
           }
           if ($description.Length -gt 140) { $description = $description.Substring(0, 140) }
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28'; 'User-Agent' = 'GameSessionOverlay-release' }

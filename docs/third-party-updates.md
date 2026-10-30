@@ -26,3 +26,5 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
+
+O cálculo de versões no desenvolvimento/CI usa GitVersion.Tool 6.8.2, projeto [GitTools/GitVersion](https://github.com/GitTools/GitVersion), licença MIT. A versão fica fixada em `.config/dotnet-tools.json`; a ferramenta não é incorporada ao aplicativo instalado. `GitVersion.yml` configura GitHub Flow e as mensagens de Conventional Commits. O transporte, instalação e retorno continuam sendo responsabilidade do Velopack.

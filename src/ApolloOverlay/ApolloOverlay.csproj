@@ -1,8 +1,45 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWPF>true</UseWPF><UseWindowsForms>true</UseWindowsForms><AllowUnsafeBlocks>true</AllowUnsafeBlocks><ApplicationManifest>app.manifest</ApplicationManifest><ApplicationIcon>Assets/overlay-controller.ico</ApplicationIcon><StartupObject>ApolloOverlay.Program</StartupObject></PropertyGroup>
-  <Target Name="RemoveFormsGlobalUsings" BeforeTargets="GenerateGlobalUsings"><ItemGroup><Using Remove="System.Drawing"/><Using Remove="System.Windows.Forms"/></ItemGroup></Target>
-  <ItemGroup><PackageReference Include="Velopack" Version="1.2.161"/></ItemGroup>
-  <ItemGroup><Resource Include="Assets/overlay-controller.ico"/><None Update="Assets/overlay-controller.ico;Assets/overlay-controller.svg;Assets/overlay-provenance.json" CopyToPublishDirectory="PreserveNewest"/></ItemGroup>
-  <ItemGroup><RuntimeHostConfigurationOption Include="Switch.System.Windows.Appearance.DisableFluentThemeWindowBackdrop" Value="true"/></ItemGroup>
-  <ItemGroup><None Update="Assets/Icons/*.svg;Assets/Icons/*.txt;Assets/Icons/*.json" CopyToPublishDirectory="PreserveNewest"/></ItemGroup>
+<Project
+  Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets/overlay-controller.ico</ApplicationIcon>
+    <StartupObject>ApolloOverlay.Program</StartupObject>
+  </PropertyGroup>
+  <Target
+    Name="RemoveFormsGlobalUsings"
+    BeforeTargets="GenerateGlobalUsings">
+    <ItemGroup>
+      <Using
+        Remove="System.Drawing" />
+      <Using
+        Remove="System.Windows.Forms" />
+    </ItemGroup>
+  </Target>
+  <ItemGroup>
+    <PackageReference
+      Include="Velopack"
+      Version="1.2.161" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource
+      Include="Assets/overlay-controller.ico" />
+    <None
+      Update="Assets/overlay-controller.ico;Assets/overlay-controller.svg;Assets/overlay-provenance.json"
+      CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <RuntimeHostConfigurationOption
+      Include="Switch.System.Windows.Appearance.DisableFluentThemeWindowBackdrop"
+      Value="true" />
+  </ItemGroup>
+  <ItemGroup>
+    <None
+      Update="Assets/Icons/*.svg;Assets/Icons/*.txt;Assets/Icons/*.json"
+      CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

@@ -5,15 +5,20 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
-if (-not $IsWindows -or $env:GITHUB_ACTIONS -ne 'true' -or -not $env:RUNNER_TEMP) { throw 'This proof runs only on an isolated Windows GitHub Actions runner.' }
+. (Join-Path $PSScriptRoot 'proof-cleanup.ps1')
+if (-not $IsWindows -or $env:GITHUB_ACTIONS -ne 'true' -or -not $env:RUNNER_TEMP) {
+    throw 'This proof runs only on an isolated Windows GitHub Actions runner.'
+}
 $release = & (Join-Path $PSScriptRoot 'get-validated-velopack-release.ps1') -ArtifactDirectory $ReleasePath
 $proofId = [Guid]::NewGuid().ToString('N')
 $installRoot = Join-Path $env:RUNNER_TEMP "overlay-velopack-install-$proofId"
 $dataRoot = Join-Path $env:RUNNER_TEMP "overlay-velopack-proof-$proofId"
 $variantRoot = Join-Path $env:RUNNER_TEMP "overlay-velopack-variant-$proofId"
-if ((Test-Path -LiteralPath $installRoot) -or (Test-Path -LiteralPath $dataRoot) -or (Test-Path -LiteralPath $variantRoot)) { throw 'Proof directories must be fresh.' }
+if ((Test-Path -LiteralPath $installRoot) -or (Test-Path -LiteralPath $dataRoot) -or (Test-Path -LiteralPath $variantRoot)) {
+    throw 'Proof directories must be fresh.'
+}
 $originalEnvironment = @{}
-foreach ($name in @('OVERLAY_VERSION', 'OVERLAY_BUILD_ID', 'OVERLAY_COMMIT', 'OVERLAY_CHANNEL', 'RELEASE_NOTES')) {
+foreach ($name in @('OVERLAY_VERSION', 'OVERLAY_FILE_VERSION', 'OVERLAY_BUILD_ID', 'OVERLAY_COMMIT', 'OVERLAY_CHANNEL', 'RELEASE_NOTES')) {
     $originalEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
 }
 $report = [IO.Path]::GetFullPath($OutputPath)
@@ -24,47 +29,137 @@ $expectedApp = Join-Path $installRoot 'current/ApolloOverlay.exe'
 $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\GameSessionOverlay'
 $runPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $settingsKey = 'HKCU:\Software\Bezoro\GameSessionOverlay'
-function Require([bool]$Value, [string]$Reason) { if (-not $Value) { throw $Reason } }
+function Require([bool]$Value, [string]$Reason) {
+    if (-not $Value) {
+        throw $Reason
+    }
+}
 function Read-Value([string]$Path, [string]$Name) {
     $entry = Get-ItemProperty -LiteralPath $Path -Name $Name -ErrorAction SilentlyContinue
-    if ($entry) { return $entry.$Name }; return $null
+    if ($entry) {
+        return $entry.$Name
+    }
+    return $null
 }
 $priorRun = Read-Value $runPath 'Bezoro.GameSessionOverlay'
 $priorMarker = Read-Value $settingsKey 'StartupConfigured'
+$approvedPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run'
+$programsDirectory = [Environment]::GetFolderPath([Environment+SpecialFolder]::Programs)
+$startMenuShortcut = Join-Path $programsDirectory 'Game Session Overlay.lnk'
+$registrySnapshots = @(
+    foreach ($entry in @(@($runPath, 'Bezoro.GameSessionOverlay'), @($settingsKey, 'StartupConfigured'), @($settingsKey, 'StartupEnabled'), @($approvedPath, 'Bezoro.GameSessionOverlay'))) {
+        $key = Get-Item -LiteralPath $entry[0] -ErrorAction SilentlyContinue
+        try {
+            $present = $key -and $key.GetValueNames().Contains($entry[1])
+            @{ Path = $entry[0]; Name = $entry[1]; Present = $present
+                Value = if ($present) { ,$key.GetValue($entry[1], $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames) } else { $null }
+                Kind = if ($present) { $key.GetValueKind($entry[1]) } else { $null }
+            }
+        }
+        finally {
+            if ($key) { $key.Dispose() }
+        }
+    }
+)
 Require (-not (Test-Path -LiteralPath $uninstallKey)) 'An installation with this application ID already exists; refusing to overwrite it.'
+Require (-not (Test-Path -LiteralPath $startMenuShortcut)) 'A same-name Start-menu shortcut already exists; refusing to overwrite it in the installation proof.'
+function Read-Shortcut([string]$Path) {
+    $shell = $null
+    $shortcut = $null
+    try {
+        $shell = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut($Path)
+        return @{ Target = $shortcut.TargetPath; Arguments = $shortcut.Arguments }
+    }
+    finally {
+        if ($shortcut) { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($shortcut) | Out-Null }
+        if ($shell) { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell) | Out-Null }
+    }
+}
+function Restore-UserIntegration {
+    foreach ($snapshot in $registrySnapshots) {
+        $relative = $snapshot.Path.Substring('HKCU:\'.Length)
+        $key = if ($snapshot.Present) { [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($relative) } else { [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($relative, $true) }
+        try {
+            if ($key) {
+                if ($snapshot.Present) { $key.SetValue($snapshot.Name, $snapshot.Value, $snapshot.Kind) }
+                else { $key.DeleteValue($snapshot.Name, $false) }
+            }
+        }
+        finally {
+            if ($key) { $key.Dispose() }
+        }
+    }
+    if (Test-Path -LiteralPath $startMenuShortcut) {
+        $shortcut = Read-Shortcut $startMenuShortcut
+        Require ($shortcut.Target -eq (Join-Path $installRoot 'Game Session Overlay.exe') -or $shortcut.Target -eq $expectedApp) 'Refusing to remove an unrelated Start-menu shortcut during proof cleanup.'
+        Remove-Item -LiteralPath $startMenuShortcut -Force
+    }
+}
 function Owned-Apps {
     return @(Get-Process -Name ApolloOverlay -ErrorAction SilentlyContinue | Where-Object {
-        try { $_.Path -and [IO.Path]::GetFullPath($_.Path).StartsWith([IO.Path]::GetFullPath($installRoot) + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) } catch { $false }
-    })
+            try {
+                $_.Path -and [IO.Path]::GetFullPath($_.Path).StartsWith([IO.Path]::GetFullPath($installRoot) + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)
+            }
+            catch {
+                $false
+            }
+        })
 }
 function Stop-Owned([Diagnostics.Process]$Process) {
-    $path = $Process.Path; $created = $Process.StartTime.ToUniversalTime().Ticks
+    $path = $Process.Path
+    $created = $Process.StartTime.ToUniversalTime().Ticks
     $live = Get-Process -Id $Process.Id -ErrorAction SilentlyContinue
-    if (-not $live) { $script:lastStopMethod = 'already exited'; return }
+    if (-not $live) {
+        $script:lastStopMethod = 'already exited'
+        return
+    }
     Require ($live.Path -eq $path -and $live.StartTime.ToUniversalTime().Ticks -eq $created) 'Owned process identity changed; cleanup refused.'
-    if ($live.CloseMainWindow() -and $live.WaitForExit(5000)) { $script:lastStopMethod = 'WM_CLOSE'; return }
+    if ($live.CloseMainWindow() -and $live.WaitForExit(5000)) {
+        $script:lastStopMethod = 'WM_CLOSE'
+        return
+    }
     Stop-Process -InputObject $live -Force
     Require ($live.WaitForExit(10000)) 'Owned proof process did not exit.'
     $script:lastStopMethod = 'exact owned PID terminated'
 }
 function Run-Owned([string]$Executable, [string[]]$Arguments, [int]$TimeoutSeconds = 90) {
-    $start = [Diagnostics.ProcessStartInfo]::new($Executable); $start.UseShellExecute = $false; $start.WorkingDirectory = Split-Path -Parent $Executable
-    foreach ($argument in $Arguments) { $start.ArgumentList.Add($argument) }
+    $start = [Diagnostics.ProcessStartInfo]::new($Executable)
+    $start.UseShellExecute = $false
+    $start.WorkingDirectory = Split-Path -Parent $Executable
+    foreach ($argument in $Arguments) {
+        $start.ArgumentList.Add($argument)
+    }
     $process = [Diagnostics.Process]::Start($start)
     try {
-        if (-not $process.WaitForExit($TimeoutSeconds * 1000)) { Stop-Owned $process; throw 'Owned Velopack command timed out.' }
+        if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+            Stop-Owned $process
+            throw 'Owned Velopack command timed out.'
+        }
         return $process.ExitCode
-    } finally { $process.Dispose() }
+    }
+    finally {
+        $process.Dispose()
+    }
 }
 function Await([scriptblock]$Condition, [int]$Seconds, [string]$Reason) {
     $watch = [Diagnostics.Stopwatch]::StartNew()
-    do { if (& $Condition) { return }; Start-Sleep -Milliseconds 100 } while ($watch.Elapsed.TotalSeconds -lt $Seconds)
+    do {
+        if (& $Condition) {
+            return
+        }
+        Start-Sleep -Milliseconds 100
+    } while ($watch.Elapsed.TotalSeconds -lt $Seconds)
     throw $Reason
 }
 function Restore-BuildEnvironment {
     foreach ($name in $originalEnvironment.Keys) {
-        if ($null -eq $originalEnvironment[$name]) { Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue }
-        else { [Environment]::SetEnvironmentVariable($name, $originalEnvironment[$name], 'Process') }
+        if ($null -eq $originalEnvironment[$name]) {
+            Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
+        }
+        else {
+            [Environment]::SetEnvironmentVariable($name, $originalEnvironment[$name], 'Process')
+        }
     }
 }
 function Package-DllHash([string]$Path) {
@@ -72,9 +167,19 @@ function Package-DllHash([string]$Path) {
     try {
         $entry = @($archive.Entries | Where-Object FullName -CEQ 'lib/app/ApolloOverlay.dll')
         Require ($entry.Count -eq 1 -and $entry[0].Length -le 16777216) 'Proof package lacks its exact app assembly.'
-        $assemblyStream = $entry[0].Open(); $hash = [Security.Cryptography.SHA256]::Create()
-        try { return [Convert]::ToHexString($hash.ComputeHash($assemblyStream)) } finally { $assemblyStream.Dispose(); $hash.Dispose() }
-    } finally { $archive.Dispose() }
+        $assemblyStream = $entry[0].Open()
+        $hash = [Security.Cryptography.SHA256]::Create()
+        try {
+            return [Convert]::ToHexString($hash.ComputeHash($assemblyStream))
+        }
+        finally {
+            $assemblyStream.Dispose()
+            $hash.Dispose()
+        }
+    }
+    finally {
+        $archive.Dispose()
+    }
 }
 function Verify-History($Selected) {
     $directory = Join-Path (Join-Path $dataRoot 'rollback-packages') $Selected.Build.buildId
@@ -87,18 +192,30 @@ function Verify-History($Selected) {
 function Verify-PackagedCli($Selected, [Diagnostics.Process]$App, $Ready, [string]$Label) {
     $cliPath = Join-Path $installRoot 'current/ApolloOverlay.Cli.exe'
     Require ((Test-Path -LiteralPath $cliPath) -and (Test-Path -LiteralPath (Join-Path $installRoot 'current/gso.cmd'))) 'Installed package lacks its CLI or gso wrapper.'
-    $watch = [Diagnostics.Stopwatch]::StartNew(); $lastReply = $null
+    $watch = [Diagnostics.Stopwatch]::StartNew()
+    $lastReply = $null
     do {
-        $start = [Diagnostics.ProcessStartInfo]::new($cliPath); $start.UseShellExecute = $false; $start.WorkingDirectory = Split-Path -Parent $cliPath
-        $start.RedirectStandardOutput = $true; $start.RedirectStandardError = $true; $start.ArgumentList.Add('version')
+        $start = [Diagnostics.ProcessStartInfo]::new($cliPath)
+        $start.UseShellExecute = $false
+        $start.WorkingDirectory = Split-Path -Parent $cliPath
+        $start.RedirectStandardOutput = $true
+        $start.RedirectStandardError = $true
+        $start.ArgumentList.Add('version')
         $client = [Diagnostics.Process]::Start($start)
         try {
             $clientSession = $client.SessionId
-            $stdout = $client.StandardOutput.ReadToEndAsync(); $stderr = $client.StandardError.ReadToEndAsync()
-            if (-not $client.WaitForExit(12000)) { Stop-Owned $client; throw 'Installed CLI version query timed out.' }
-            $output = $stdout.GetAwaiter().GetResult(); $errorOutput = $stderr.GetAwaiter().GetResult()
+            $stdout = $client.StandardOutput.ReadToEndAsync()
+            $stderr = $client.StandardError.ReadToEndAsync()
+            if (-not $client.WaitForExit(12000)) {
+                Stop-Owned $client
+                throw 'Installed CLI version query timed out.'
+            }
+            $output = $stdout.GetAwaiter().GetResult()
+            $errorOutput = $stderr.GetAwaiter().GetResult()
             Require ($output.Length -le 2097152) 'Installed CLI response exceeded the proof bound.'
-            if ($errorOutput) { [IO.File]::WriteAllText((Join-Path $evidence "cli-$Label-stderr.log"), $errorOutput.Substring(0, [Math]::Min(16384, $errorOutput.Length))) }
+            if ($errorOutput) {
+                [IO.File]::WriteAllText((Join-Path $evidence "cli-$Label-stderr.log"), $errorOutput.Substring(0, [Math]::Min(16384, $errorOutput.Length)))
+            }
             if ($output) {
                 [IO.File]::WriteAllText((Join-Path $evidence "cli-$Label-version.json"), $output)
                 $lastReply = $output | ConvertFrom-Json
@@ -111,16 +228,22 @@ function Verify-PackagedCli($Selected, [Diagnostics.Process]$App, $Ready, [strin
                     return $lastReply
                 }
             }
-        } finally { $client.Dispose() }
+        }
+        finally {
+            $client.Dispose()
+        }
         Start-Sleep -Milliseconds 200
     } while ($watch.Elapsed.TotalSeconds -lt 30)
     throw "Installed CLI did not return a fresh Completed version receipt: $($lastReply.Outcome) $($lastReply.Reason)"
 }
-function Start-VerifiedApp($Selected, [string]$ExpectedDllHash, [string]$Label, [bool]$StartStub = $true) {
+function Start-VerifiedApp($Selected, [string]$ExpectedDllHash, [string]$Label, [bool]$StartStub = $true, [bool]$Hidden = $false) {
     $readyPath = Join-Path $dataRoot 'ready.json'
     if ($StartStub) {
-        if (Test-Path -LiteralPath $readyPath) { Remove-Item -LiteralPath $readyPath -Force }
-        Require ((Run-Owned (Join-Path $installRoot 'Game Session Overlay.exe') @('--velopack-proof', $dataRoot, '--show') 30) -eq 0) 'Official execution stub returned failure.'
+        if (Test-Path -LiteralPath $readyPath) {
+            Remove-Item -LiteralPath $readyPath -Force
+        }
+        $launchMode = if ($Hidden) { '--startup' } else { '--show' }
+        Require ((Run-Owned (Join-Path $installRoot 'Game Session Overlay.exe') @('--velopack-proof', $dataRoot, $launchMode) 30) -eq 0) 'Official execution stub returned failure.'
     }
     Await { Test-Path -LiteralPath $readyPath } 45 'Published installed app did not confirm initialized startup.'
     $ready = Get-Content -LiteralPath $readyPath -Raw | ConvertFrom-Json
@@ -136,16 +259,25 @@ function Start-VerifiedApp($Selected, [string]$ExpectedDllHash, [string]$Label, 
     Verify-History $Selected
     $cli = Verify-PackagedCli $Selected $app $ready $Label
     Copy-Item -LiteralPath $readyPath -Destination (Join-Path $evidence "ready-$Label.json")
-    return [pscustomobject]@{ Process = $app; Ready = $ready; DllHash = $ExpectedDllHash; Cli = $cli }
+    return [pscustomobject]@{ Process = $app
+        Ready = $ready
+        DllHash = $ExpectedDllHash
+        Cli = $cli
+    }
 }
 function Apply-NativePackage($Selected, [Diagnostics.Process]$Running, [string]$PriorDllHash, [string]$Label) {
     $cache = Join-Path $installRoot 'packages'
     $target = Join-Path $cache "GameSessionOverlay-$($Selected.PackageVersion)-full.nupkg"
     Copy-Item -LiteralPath $Selected.PackagePath -Destination $target -Force
     Require ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ieq $Selected.Asset.SHA256) 'Official package was not staged intact in the SDK cache.'
-    $oldPid = $Running.Id; $oldCreated = $Running.StartTime.ToUniversalTime().Ticks
-    $start = [Diagnostics.ProcessStartInfo]::new((Join-Path $installRoot 'Update.exe')); $start.UseShellExecute = $false; $start.WorkingDirectory = $installRoot
-    foreach ($argument in @('apply', '--package', $target, '--rootDir', $installRoot, '--waitPid', [string]$oldPid, '--silent', '--norestart', '--log', (Join-Path $evidence "$Label.log"))) { $start.ArgumentList.Add($argument) }
+    $oldPid = $Running.Id
+    $oldCreated = $Running.StartTime.ToUniversalTime().Ticks
+    $start = [Diagnostics.ProcessStartInfo]::new((Join-Path $installRoot 'Update.exe'))
+    $start.UseShellExecute = $false
+    $start.WorkingDirectory = $installRoot
+    foreach ($argument in @('apply', '--package', $target, '--rootDir', $installRoot, '--waitPid', [string]$oldPid, '--silent', '--norestart', '--log', (Join-Path $evidence "$Label.log"))) {
+        $start.ArgumentList.Add($argument)
+    }
     $updater = [Diagnostics.Process]::Start($start)
     try {
         Require (-not $updater.WaitForExit(600)) 'Official updater exited before the exact running app was closed.'
@@ -154,27 +286,51 @@ function Apply-NativePackage($Selected, [Diagnostics.Process]$Running, [string]$
             (Get-FileHash -LiteralPath (Join-Path $installRoot 'current/ApolloOverlay.dll') -Algorithm SHA256).Hash -eq $PriorDllHash) 'App identity or payload changed before the wait target exited.'
         Stop-Owned $stillRunning
         $closeMethod = $script:lastStopMethod
-        if (-not $updater.WaitForExit(60000)) { Stop-Owned $updater; throw 'Official update application timed out.' }
+        if (-not $updater.WaitForExit(60000)) {
+            Stop-Owned $updater
+            throw 'Official update application timed out.'
+        }
         Require ($updater.ExitCode -eq 0) 'Official updater returned failure.'
         Require ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ieq $Selected.Asset.SHA256) 'Applied package is missing or altered in the SDK cache.'
-        return [pscustomobject]@{ WaitedForPid = $oldPid; WaitedForStarted = $oldCreated; CloseMethod = $closeMethod; CachePath = $target }
-    } finally { $updater.Dispose() }
+        return [pscustomobject]@{ WaitedForPid = $oldPid
+            WaitedForStarted = $oldCreated
+            CloseMethod = $closeMethod
+            CachePath = $target
+        }
+    }
+    finally {
+        $updater.Dispose()
+    }
 }
 function Rollback-PackagedCli($Selected, $Running) {
     $readyPath = Join-Path $dataRoot 'ready.json'
-    if (Test-Path -LiteralPath $readyPath) { Remove-Item -LiteralPath $readyPath -Force }
+    if (Test-Path -LiteralPath $readyPath) {
+        Remove-Item -LiteralPath $readyPath -Force
+    }
     $cliPath = Join-Path $installRoot 'current/ApolloOverlay.Cli.exe'
-    $start = [Diagnostics.ProcessStartInfo]::new($cliPath); $start.UseShellExecute = $false; $start.WorkingDirectory = Split-Path -Parent $cliPath
-    $start.RedirectStandardOutput = $true; $start.RedirectStandardError = $true
-    foreach ($argument in @('rollback', $Selected.Build.buildId, '--timeout', '90')) { $start.ArgumentList.Add($argument) }
+    $start = [Diagnostics.ProcessStartInfo]::new($cliPath)
+    $start.UseShellExecute = $false
+    $start.WorkingDirectory = Split-Path -Parent $cliPath
+    $start.RedirectStandardOutput = $true
+    $start.RedirectStandardError = $true
+    foreach ($argument in @('rollback', $Selected.Build.buildId, '--timeout', '90')) {
+        $start.ArgumentList.Add($argument)
+    }
     $client = [Diagnostics.Process]::Start($start)
     try {
-        $stdout = $client.StandardOutput.ReadToEndAsync(); $stderr = $client.StandardError.ReadToEndAsync()
-        if (-not $client.WaitForExit(100000)) { Stop-Owned $client; throw 'Installed CLI rollback timed out; the mutation will not be repeated.' }
-        $output = $stdout.GetAwaiter().GetResult(); $errorOutput = $stderr.GetAwaiter().GetResult()
+        $stdout = $client.StandardOutput.ReadToEndAsync()
+        $stderr = $client.StandardError.ReadToEndAsync()
+        if (-not $client.WaitForExit(100000)) {
+            Stop-Owned $client
+            throw 'Installed CLI rollback timed out; the mutation will not be repeated.'
+        }
+        $output = $stdout.GetAwaiter().GetResult()
+        $errorOutput = $stderr.GetAwaiter().GetResult()
         Require ($output.Length -le 2097152) 'Installed CLI rollback response exceeded the proof bound.'
         [IO.File]::WriteAllText((Join-Path $evidence 'cli-rollback-B-to-A.json'), $output)
-        if ($errorOutput) { [IO.File]::WriteAllText((Join-Path $evidence 'cli-rollback-stderr.log'), $errorOutput.Substring(0, [Math]::Min(16384, $errorOutput.Length))) }
+        if ($errorOutput) {
+            [IO.File]::WriteAllText((Join-Path $evidence 'cli-rollback-stderr.log'), $errorOutput.Substring(0, [Math]::Min(16384, $errorOutput.Length)))
+        }
         $reply = $output | ConvertFrom-Json
         Require ($client.ExitCode -eq 0 -and $reply.Outcome -ceq 'Requested' -and $reply.Terminal -eq $false) "Installed CLI did not confirm a rollback request: $($reply.Outcome) $($reply.Reason)"
         Require ($reply.Pid -eq $Running.Process.Id -and $reply.Started -eq $Running.Ready.started -and $reply.Session -eq $Running.Cli.Session -and
@@ -182,19 +338,82 @@ function Rollback-PackagedCli($Selected, $Running) {
         $oldInstance = Get-Process -Id $Running.Process.Id -ErrorAction SilentlyContinue
         Require (-not $oldInstance -or $oldInstance.StartTime.ToUniversalTime().Ticks -ne $Running.Ready.started) 'CLI returned Requested before the exact old GUI exited.'
         return $reply
-    } finally { $client.Dispose() }
+    }
+    finally {
+        $client.Dispose()
+    }
+}
+function Verify-Visibility([Diagnostics.Process]$App, [bool]$Visible, [string]$Label) {
+    $watch = [Diagnostics.Stopwatch]::StartNew()
+    do {
+        $start = [Diagnostics.ProcessStartInfo]::new((Join-Path $installRoot 'current/ApolloOverlay.Cli.exe'))
+        $start.UseShellExecute = $false
+        $start.RedirectStandardOutput = $true
+        $start.RedirectStandardError = $true
+        $start.ArgumentList.Add('status')
+        $client = [Diagnostics.Process]::Start($start)
+        try {
+            $output = $client.StandardOutput.ReadToEndAsync()
+            $errorOutput = $client.StandardError.ReadToEndAsync()
+            if (-not $client.WaitForExit(12000)) { Stop-Owned $client; throw 'Installed visibility query timed out.' }
+            $text = $output.GetAwaiter().GetResult()
+            $null = $errorOutput.GetAwaiter().GetResult()
+            Require ($text.Length -le 2097152) 'Visibility response exceeded its bound.'
+            if ($text) {
+                $reply = $text | ConvertFrom-Json
+                if ($client.ExitCode -eq 0 -and $reply.Outcome -ceq 'Completed' -and $reply.Snapshot.Pid -eq $App.Id -and $reply.Snapshot.Started -eq $App.StartTime.ToUniversalTime().Ticks -and $reply.Snapshot.Visible -eq $Visible) {
+                    [IO.File]::WriteAllText((Join-Path $evidence "visibility-$Label.json"), $text)
+                    return
+                }
+            }
+        }
+        finally {
+            $client.Dispose()
+        }
+        Start-Sleep -Milliseconds 100
+    } while ($watch.Elapsed.TotalSeconds -lt 30)
+    throw "The exact installed instance did not confirm visibility=$Visible."
 }
 $failure = $null
 try {
     Require ((Run-Owned $release.SetupPath @('--silent', '--installto', $installRoot, '--log', (Join-Path $evidence 'setup.log'))) -eq 0) 'Official Setup.exe returned failure.'
     Require ((Test-Path -LiteralPath $expectedApp) -and (Test-Path -LiteralPath (Join-Path $installRoot 'Update.exe'))) 'Official installer did not create the installed app and updater.'
     Require (Test-Path -LiteralPath $uninstallKey) 'Official installer did not register an uninstall entry.'
-    $cases.Add(@{ name = 'official silent installer creates application and uninstall registration'; passed = $true })
+    $cases.Add(@{ name = 'official silent installer creates application and uninstall registration'
+            passed = $true
+        })
 
     $hashA = Package-DllHash $release.PackagePath
+    $expectedStartup = '"' + (Join-Path $installRoot 'Game Session Overlay.exe') + '" --startup'
+    @{ command = Read-Value $runPath 'Bezoro.GameSessionOverlay'
+        configured = Read-Value $settingsKey 'StartupConfigured'
+        preference = Read-Value $settingsKey 'StartupEnabled'
+        shortcutExists = Test-Path -LiteralPath $startMenuShortcut
+        expectedCommand = $expectedStartup
+    } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $evidence 'installed-integration.json') -Encoding utf8NoBOM
+    Require ((Read-Value $runPath 'Bezoro.GameSessionOverlay') -eq $expectedStartup) 'Silent install did not register the stable hidden-startup command.'
+    Require ((Read-Value $settingsKey 'StartupConfigured') -eq 1) 'Silent install did not complete startup registration.'
+    Require (Test-Path -LiteralPath $startMenuShortcut) 'Silent install did not create a searchable Start-menu shortcut.'
+    $shortcut = Read-Shortcut $startMenuShortcut
+    Require ($shortcut.Target -eq (Join-Path $installRoot 'Game Session Overlay.exe') -and $shortcut.Arguments -ceq '--show') 'Searchable shortcut does not use the stable visible launcher.'
+    $cases.Add(@{ name = 'silent install registers hidden startup and a searchable stable-launcher shortcut'; passed = $true })
+    $hidden = Start-VerifiedApp $release $hashA 'A-startup' $true $true
+    Verify-Visibility $hidden.Process $false 'hidden-startup'
+    $cases.Add(@{ name = 'registered hidden-startup command initializes the exact installed instance without showing its panel'; passed = $true; pid = $hidden.Process.Id })
+    Start-Process -FilePath $startMenuShortcut | Out-Null
+    Verify-Visibility $hidden.Process $true 'shortcut-existing-instance'
+    Require ((Owned-Apps).Count -eq 1 -and (Owned-Apps)[0].Id -eq $hidden.Process.Id) 'Searchable shortcut created a duplicate installed instance.'
+    $cases.Add(@{ name = 'Start-menu shortcut opens the existing hidden instance instead of creating a duplicate or modal warning'; passed = $true; pid = $hidden.Process.Id })
+    Stop-Owned $hidden.Process
     $initial = Start-VerifiedApp $release $hashA 'A-initial'
     $app = $initial.Process
-    $cases.Add(@{ name = 'official stable stub starts exact installed WPF app with isolated ready proof'; passed = $true; pid = $app.Id; started = $initial.Ready.started; path = $app.Path; dllSha256 = $hashA })
+    $cases.Add(@{ name = 'official stable stub starts exact installed WPF app with isolated ready proof'
+            passed = $true
+            pid = $app.Id
+            started = $initial.Ready.started
+            path = $app.Path
+            dllSha256 = $hashA
+        })
 
     $settings = Join-Path $dataRoot 'settings.json'
     $settingsBytes = '{"Version":3,"UiScalePercent":115,"SoundFeedbackEnabled":true}'
@@ -212,30 +431,53 @@ try {
     $releasesB = Join-Path $variantRoot 'releases'
     $dotnet = (Get-Command dotnet -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
     try {
-        $env:OVERLAY_VERSION = $versionB; $env:OVERLAY_BUILD_ID = $buildB
-        $env:OVERLAY_COMMIT = $release.Build.commit; $env:OVERLAY_CHANNEL = $release.Build.channel
+        $env:OVERLAY_VERSION = $versionB
+        $env:OVERLAY_FILE_VERSION = "$($majorA + 1).0.0.0"
+        $env:OVERLAY_BUILD_ID = $buildB
+        $env:OVERLAY_COMMIT = $release.Build.commit
+        $env:OVERLAY_CHANNEL = $release.Build.channel
         $env:RELEASE_NOTES = 'CI-only WPF update/rollback proof. Never publish this temporary fixture.'
         & $dotnet publish (Join-Path (Split-Path -Parent $PSScriptRoot) 'src/ApolloOverlay/ApolloOverlay.csproj') -c Release -r win-x64 --self-contained true --no-restore -o $publishB 2>&1 |
             Tee-Object -FilePath (Join-Path $evidence 'variant-build.log')
-        if ($LASTEXITCODE -ne 0) { throw 'Temporary self-contained WPF build failed.' }
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Temporary self-contained WPF build failed.'
+        }
         & (Join-Path $PSScriptRoot 'verify.ps1') -Stage CliPackage -CliDestination $publishB |
             Tee-Object -FilePath (Join-Path $evidence 'variant-cli-package.log')
-        if ($LASTEXITCODE -ne 0) { throw 'Temporary CLI packaging failed.' }
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Temporary CLI packaging failed.'
+        }
         & (Join-Path $PSScriptRoot 'build-release.ps1') -PublishDirectory $publishB -OutputDirectory $releasesB |
             Tee-Object -FilePath (Join-Path $evidence 'variant-package.log')
         $variant = & (Join-Path $PSScriptRoot 'get-validated-velopack-release.ps1') -ArtifactDirectory $releasesB -ExpectedVersion $versionB -ExpectedCommit $release.Build.commit
-    } finally { Restore-BuildEnvironment }
+    }
+    finally {
+        Restore-BuildEnvironment
+    }
     $hashB = Package-DllHash $variant.PackagePath
     Require ($hashB -ne $hashA -and $variant.Build.buildId -cne $release.Build.buildId -and $variant.PackageVersion -cne $release.PackageVersion) 'Proof variant is not a distinct executable payload and package version.'
     Require ((Get-FileHash -LiteralPath (Join-Path $installRoot 'current/ApolloOverlay.dll') -Algorithm SHA256).Hash -eq $hashA) 'Compiling the temporary variant altered the installed A payload.'
-    $cases.Add(@{ name = 'temporary self-contained WPF B has distinct compiled identity and payload'; passed = $true; version = $variant.Build.version; buildId = $variant.Build.buildId; dllSha256 = $hashB })
+    $cases.Add(@{ name = 'temporary self-contained WPF B has distinct compiled identity and payload'
+            passed = $true
+            version = $variant.Build.version
+            buildId = $variant.Build.buildId
+            dllSha256 = $hashB
+        })
 
     $upgrade = Apply-NativePackage $variant $app $hashA 'upgrade-A-to-B'
     $upgraded = Start-VerifiedApp $variant $hashB 'B-upgraded'
     Require (-not ($upgraded.Process.Id -eq $app.Id -and $upgraded.Ready.started -eq $initial.Ready.started)) 'Upgrade retained the old process identity.'
     Verify-History $release
     Require ((Get-FileHash -LiteralPath $settings -Algorithm SHA256).Hash -eq $settingsHash) 'Upgrade altered user settings.'
-    $cases.Add(@{ name = 'official native updater waits for exact A PID and applies B; stable stub starts verified B'; passed = $true; pid = $upgraded.Process.Id; started = $upgraded.Ready.started; wait = $upgrade; version = $variant.Build.version; dllSha256 = $hashB; settingsSha256 = $settingsHash })
+    $cases.Add(@{ name = 'official native updater waits for exact A PID and applies B; stable stub starts verified B'
+            passed = $true
+            pid = $upgraded.Process.Id
+            started = $upgraded.Ready.started
+            wait = $upgrade
+            version = $variant.Build.version
+            dllSha256 = $hashB
+            settingsSha256 = $settingsHash
+        })
 
     $rollback = Rollback-PackagedCli $release $upgraded
     $restored = Start-VerifiedApp $release $hashA 'A-restored' $false
@@ -243,35 +485,130 @@ try {
     Verify-History $variant
     Require ((Get-FileHash -LiteralPath $settings -Algorithm SHA256).Hash -eq $settingsHash) 'CLI rollback altered user settings.'
     Require ((Get-FileHash -LiteralPath $release.PackagePath -Algorithm SHA256).Hash -ieq $release.Asset.SHA256) 'Proof changed the actual published A package.'
-    $cases.Add(@{ name = 'packaged CLI rollback requests exact A; application SDK flow applies and restarts verified A with history and settings preserved'; passed = $true; pid = $restored.Process.Id; started = $restored.Ready.started; requestedOutcome = $rollback.Outcome; requestedBuildId = $rollback.Update.TargetBuildId; version = $release.Build.version; dllSha256 = $hashA; settingsSha256 = $settingsHash })
-    $cases.Add(@{ name = 'packaged CLI version obtains fresh exact WPF identity before upgrade and after both replacements'; passed = $true;
-        initial = @{ pid = $initial.Cli.Pid; started = $initial.Cli.Started; session = $initial.Cli.Session; instance = $initial.Cli.Instance; version = $initial.Cli.Update.Version; buildId = $initial.Cli.Update.BuildId };
-        upgraded = @{ pid = $upgraded.Cli.Pid; started = $upgraded.Cli.Started; session = $upgraded.Cli.Session; instance = $upgraded.Cli.Instance; version = $upgraded.Cli.Update.Version; buildId = $upgraded.Cli.Update.BuildId };
-        restored = @{ pid = $restored.Cli.Pid; started = $restored.Cli.Started; session = $restored.Cli.Session; instance = $restored.Cli.Instance; version = $restored.Cli.Update.Version; buildId = $restored.Cli.Update.BuildId } })
+    $cases.Add(@{ name = 'packaged CLI rollback requests exact A; application SDK flow applies and restarts verified A with history and settings preserved'
+            passed = $true
+            pid = $restored.Process.Id
+            started = $restored.Ready.started
+            requestedOutcome = $rollback.Outcome
+            requestedBuildId = $rollback.Update.TargetBuildId
+            version = $release.Build.version
+            dllSha256 = $hashA
+            settingsSha256 = $settingsHash
+        })
+    $cases.Add(@{ name = 'packaged CLI version obtains fresh exact WPF identity before upgrade and after both replacements'
+            passed = $true
+
+            initial = @{ pid = $initial.Cli.Pid
+                started = $initial.Cli.Started
+                session = $initial.Cli.Session
+                instance = $initial.Cli.Instance
+                version = $initial.Cli.Update.Version
+                buildId = $initial.Cli.Update.BuildId
+            }
+
+            upgraded = @{ pid = $upgraded.Cli.Pid
+                started = $upgraded.Cli.Started
+                session = $upgraded.Cli.Session
+                instance = $upgraded.Cli.Instance
+                version = $upgraded.Cli.Update.Version
+                buildId = $upgraded.Cli.Update.BuildId
+            }
+
+            restored = @{ pid = $restored.Cli.Pid
+                started = $restored.Cli.Started
+                session = $restored.Cli.Session
+                instance = $restored.Cli.Instance
+                version = $restored.Cli.Update.Version
+                buildId = $restored.Cli.Update.BuildId
+            }
+        })
     Stop-Owned $restored.Process
     Require ((Run-Owned (Join-Path $installRoot 'Update.exe') @('uninstall', '--silent', '--rootDir', $installRoot, '--log', (Join-Path $evidence 'uninstall.log')) 60) -eq 0) 'Official uninstaller returned failure.'
     Await { -not (Test-Path -LiteralPath $expectedApp) -and -not (Test-Path -LiteralPath $uninstallKey) } 30 'Official uninstall did not remove application files and registration.'
     Require ((Test-Path -LiteralPath $settings) -and (Get-FileHash -LiteralPath $settings -Algorithm SHA256).Hash -eq $settingsHash) 'Uninstall modified isolated user settings.'
-    $cases.Add(@{ name = 'official uninstaller removes application while retaining user settings'; passed = $true })
-    Require ((Read-Value $runPath 'Bezoro.GameSessionOverlay') -eq $priorRun -and (Read-Value $settingsKey 'StartupConfigured') -eq $priorMarker) 'Proof modified user startup registration.'
-    $cases.Add(@{ name = 'proof preserves hidden-startup user registration'; passed = $true })
-} catch { $failure = $_.Exception.Message; Write-Error -Message $_ -ErrorAction Continue }
+    $cases.Add(@{ name = 'official uninstaller removes application while retaining user settings'
+            passed = $true
+        })
+    Restore-UserIntegration
+    Require ((Read-Value $runPath 'Bezoro.GameSessionOverlay') -eq $priorRun -and (Read-Value $settingsKey 'StartupConfigured') -eq $priorMarker) 'Proof did not restore user startup registration.'
+    $cases.Add(@{ name = 'proof restores user startup values and removes only its owned shortcut'
+            passed = $true
+        })
+}
+catch {
+    $failure = $_.Exception.Message
+    Write-Error -Message $_ -ErrorAction Continue
+}
 finally {
     Restore-BuildEnvironment
-    foreach ($process in (Owned-Apps)) { Stop-Owned $process }
+    foreach ($process in (Owned-Apps)) {
+        Stop-Owned $process
+    }
     if ((Test-Path -LiteralPath (Join-Path $installRoot 'Update.exe')) -and (Test-Path -LiteralPath (Join-Path $installRoot 'current/sq.version'))) {
-        try { Run-Owned (Join-Path $installRoot 'Update.exe') @('uninstall', '--silent', '--rootDir', $installRoot, '--log', (Join-Path $evidence 'cleanup.log')) 45 | Out-Null }
-        catch { if (-not $failure) { $failure = $_.Exception.Message } }
+        try {
+            Run-Owned (Join-Path $installRoot 'Update.exe') @('uninstall', '--silent', '--rootDir', $installRoot, '--log', (Join-Path $evidence 'cleanup.log')) 45 | Out-Null
+        }
+        catch {
+            if (-not $failure) {
+                $failure = $_.Exception.Message
+            }
+        }
     }
     if (Test-Path -LiteralPath $dataRoot) {
         $proofFiles = @(Get-ChildItem -LiteralPath $dataRoot -File -Recurse | Where-Object { $_.Length -le 2097152 -and $_.Extension -in @('.json', '.log') } | Select-Object -First 16)
         $index = 0
-        foreach ($file in $proofFiles) { Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $evidence ("proof-$index-" + $file.Name)); $index++ }
+        foreach ($file in $proofFiles) {
+            Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $evidence ("proof-$index-" + $file.Name))
+            $index++
+        }
     }
-    @{ total = $cases.Count + $(if ($failure) { 1 } else { 0 }); passed = $cases.Count; failed = $(if ($failure) { 1 } else { 0 }); error = $failure; version = $release.Build.version; cases = $cases } |
+    $cleanupErrors = @()
+    $applicationLog = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) 'velopack/velopack_GameSessionOverlay.log'
+    if (Test-Path -LiteralPath $applicationLog) {
+        Get-Content -LiteralPath $applicationLog -Tail 500 | Set-Content -LiteralPath (Join-Path $evidence 'application-velopack.log') -Encoding utf8NoBOM
+    }
+    try {
+        Restore-UserIntegration
+    }
+    catch {
+        $cleanupErrors += $_.Exception.Message
+        if (!$failure) { $failure = 'Windows integration cleanup failed. See cleanupErrors.' }
+        Write-Warning "Windows integration cleanup failed: $($_.Exception.Message)"
+    }
+    foreach ($directory in @($installRoot, $dataRoot, $variantRoot)) {
+        try {
+            Remove-ProofDirectory -LiteralPath $directory
+        }
+        catch {
+            $cleanupErrors += $_.Exception.Message
+            if (!$failure) {
+                $failure = 'Temporary proof cleanup failed. See cleanupErrors.'
+            }
+            Write-Warning "Proof cleanup failed: $($_.Exception.Message)"
+        }
+    }
+    @{ total = $cases.Count + $(if ($failure) {
+                1
+            }
+            else {
+                0
+            })
+        passed = $cases.Count
+        failed = $(if ($failure) {
+                1
+            }
+            else {
+                0
+            })
+        error = $failure
+        cleanupErrors = $cleanupErrors
+        version = $release.Build.version
+        cases = $cases
+    } |
         ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $report -Encoding utf8NoBOM
-    foreach ($directory in @($installRoot, $dataRoot, $variantRoot)) { if (Test-Path -LiteralPath $directory) { Remove-Item -LiteralPath $directory -Recurse -Force -ErrorAction SilentlyContinue } }
 }
-if ($failure) { exit 1 }
+if ($failure) {
+    exit 1
+}
 Write-Output "VELOPACK INSTALL SMOKE $($cases.Count)/$($cases.Count) passed"
 exit 0

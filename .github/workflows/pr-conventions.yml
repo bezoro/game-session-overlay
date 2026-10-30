@@ -1,0 +1,23 @@
+name: PR conventions
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  title:
+    name: Conventional Commit title
+    runs-on: ubuntu-latest
+    env:
+      PR_TITLE: ${{ github.event.pull_request.title }}
+    steps:
+      - name: Check title
+        shell: pwsh
+        run: |
+          $pattern = '^(feat|fix|perf|refactor|docs|style|test|build|ci|chore|revert)(\([a-z0-9][a-z0-9./_-]*\))?!?: \S.*$'
+          if ($env:PR_TITLE -cnotmatch $pattern) {
+            throw 'Use a Conventional Commit title, for example: feat(audio): adiciona mixer por aplicativo'
+          }
