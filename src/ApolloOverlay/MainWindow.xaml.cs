@@ -27,7 +27,11 @@ public partial class MainWindow : Window
         updateSource = updates ?? (renderOnly || platform?.IsPreview == true ? new PreviewUpdateSource() : new GitHubUpdateSource());
         InitializeComponent();
         Controller = new(platform ?? (renderOnly ? new PreviewPlatform() : null), diagnostics);
-        var activation = new IsolatedWindowActivation(trace: Controller.Diagnostics.Log);
+        var activation = new IsolatedWindowActivation(trace: (category, outcome) =>
+        {
+            if (CommandLoggingEnabled)
+                Controller.Diagnostics.Log(category, outcome);
+        });
         FocusFallbackRequest = renderOnly ? null : (window, foreground, token) => activation.RequestAsync(window, foreground, token);
         appliedSettings = Controller.Settings;
         input = new(Controller.Settings);

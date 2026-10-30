@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "packages": [
+    {
+      "package": "serilog",
+      "version": "4.4.0",
+      "license": "Apache-2.0",
+      "authors": "Serilog Contributors",
+      "packageUrl": "https://www.nuget.org/packages/serilog/4.4.0",
+      "sourceRepository": "https://github.com/serilog/serilog",
+      "sourceCommit": "497f80fda4f9e8f98b9c13ba34b1f0530f8c4449",
+      "licenseSource": "https://raw.githubusercontent.com/serilog/serilog/497f80fda4f9e8f98b9c13ba34b1f0530f8c4449/LICENSE",
+      "licenseFile": "Serilog-LICENSE.txt",
+      "licenseSha256": "73ba74dfaa520b49a401b5d21459a8523a146f3b7518a833eea5efa85130bf68",
+      "upstreamNoticeFile": null,
+      "copyright": "Copyright \u00a9 Serilog Contributors"
+    },
+    {
+      "package": "serilog.sinks.file",
+      "version": "7.0.0",
+      "license": "Apache-2.0",
+      "authors": "Serilog Contributors",
+      "packageUrl": "https://www.nuget.org/packages/serilog.sinks.file/7.0.0",
+      "sourceRepository": "https://github.com/serilog/serilog-sinks-file",
+      "sourceCommit": "23c732a8658a0df2a5434fe69b0011800b14f0da",
+      "licenseSource": "https://raw.githubusercontent.com/serilog/serilog-sinks-file/23c732a8658a0df2a5434fe69b0011800b14f0da/LICENSE",
+      "licenseFile": "Apache-2.0.txt",
+      "licenseSha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
+      "upstreamNoticeFile": null
+    },
+    {
+      "package": "serilog.sinks.async",
+      "version": "2.1.0",
+      "license": "Apache-2.0",
+      "authors": "Jezz Santos,Serilog Contributors",
+      "packageUrl": "https://www.nuget.org/packages/serilog.sinks.async/2.1.0",
+      "sourceRepository": "https://github.com/serilog/serilog-sinks-async",
+      "sourceCommit": "5c6e5df7dffe5535978475c9ce8c5c6fb1cc9dca",
+      "licenseSource": "https://raw.githubusercontent.com/serilog/serilog-sinks-async/5c6e5df7dffe5535978475c9ce8c5c6fb1cc9dca/LICENSE",
+      "licenseFile": "Apache-2.0.txt",
+      "licenseSha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
+      "upstreamNoticeFile": null
+    },
+    {
+      "package": "serilog.formatting.compact",
+      "version": "3.0.0",
+      "license": "Apache-2.0",
+      "authors": "Serilog Contributors",
+      "packageUrl": "https://www.nuget.org/packages/serilog.formatting.compact/3.0.0",
+      "sourceRepository": "https://github.com/serilog/serilog-formatting-compact",
+      "sourceCommit": "8472ad8ccb97432ca7efbe78d8bc0eaf61db5356",
+      "licenseSource": "https://raw.githubusercontent.com/serilog/serilog-formatting-compact/8472ad8ccb97432ca7efbe78d8bc0eaf61db5356/LICENSE",
+      "licenseFile": "Apache-2.0.txt",
+      "licenseSha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
+      "upstreamNoticeFile": null
+    }
+  ]
+}

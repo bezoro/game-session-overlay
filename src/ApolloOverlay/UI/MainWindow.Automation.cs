@@ -299,7 +299,8 @@ public partial class MainWindow
         return new("", Environment.ProcessId, process.StartTime.ToUniversalTime().Ticks, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), automationRevision,
             view.Current.Route.ToString(), IsVisible, busy,
             AutomationWindows().Select(window => new AutomationTarget(TargetId(window), window.Handle.ToInt64(), window.Pid, window.Started, window.Generation, window.ProcessName)).ToArray(),
-            actions.DistinctBy(action => action.Id).ToArray(), "unknown", PendingRequestId: steamOwner?.Id ?? "", Phase: Controller.Operation?.State ?? "", TargetsAtUtc: automationTargetsAt);
+            actions.DistinctBy(action => action.Id).ToArray(), "unknown", PendingRequestId: steamOwner?.Id ?? "", Phase: Controller.Operation?.State ?? "", TargetsAtUtc: automationTargetsAt,
+            Diagnostics: LogDiagnosticsSnapshot());
     }
 
     internal async Task<AutomationReply> AutomationExecute(AutomationRequest request, CancellationToken token, Action<AutomationReply> phase, Func<bool> continuing)
@@ -468,14 +469,15 @@ public partial class MainWindow
         RefreshRows();
         try
         {
-            automationHost = new(new WindowAutomation(this), System.IO.Path.Combine(Controller.Diagnostics.Root, "automation", System.Diagnostics.Process.GetCurrentProcess().SessionId.ToString()), pipeName, grant);
+            automationHost = new(new WindowAutomation(this), System.IO.Path.Combine(Controller.Diagnostics.Root, "automation", System.Diagnostics.Process.GetCurrentProcess().SessionId.ToString()), pipeName, grant,
+                CommandLoggingEnabled ? Controller.Diagnostics.Commands : null);
         }
         catch (Exception error) when (error is System.IO.IOException or System.IO.InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException or System.Security.SecurityException)
         {
             // Never discard or replace an unreadable ledger: older effects may already have occurred.
             if (grant is not null)
                 throw new InvalidOperationException("Automation bridge unavailable; history preserved.", error);
-            Controller.Diagnostics.Log("automation-start", ResultKind.Unavailable);
+            LogCommandResult("automation-start", ResultKind.Unavailable, "automation-unavailable", error);
             RetainOperation("Unavailable", "Automation unavailable. History was preserved; the overlay remains available.");
         }
     }
@@ -505,7 +507,7 @@ public partial class MainWindow
 
             return window.AutomationSnapshot();
         }, DispatcherPriority.Normal, token);
-        public async Task<AutomationReply> Execute(AutomationRequest request, CancellationToken token, Action<AutomationReply> phase, Func<bool> continuing) => await await window.Dispatcher.InvokeAsync(() => window.AutomationExecute(request, token, phase, continuing), DispatcherPriority.Normal, token);
+        public async Task<AutomationReply> Execute(AutomationRequest request, CancellationToken token, Action<AutomationReply> phase, Func<bool> continuing) => await await window.Dispatcher.InvokeAsync(() => window.ExecuteLoggedAutomation(request, token, phase, continuing), DispatcherPriority.Normal, token);
         public async Task Shutdown(CancellationToken token, Func<bool> continuing) => await window.Dispatcher.InvokeAsync(() =>
         {
             token.ThrowIfCancellationRequested();

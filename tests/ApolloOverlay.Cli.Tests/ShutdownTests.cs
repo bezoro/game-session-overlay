@@ -54,6 +54,13 @@ internal static class ShutdownTests
             return failures == 0 ? 0 : 1;
         }
 
+        if (args is ["--log-tests"])
+        {
+            await CommandLogCommandTests.Run(Test);
+            Console.WriteLine($"TOTAL {total - failures}/{total}");
+            return failures == 0 ? 0 : 1;
+        }
+
         await Test("access denied observing acknowledged shutdown is Unknown without crash or retry", async () =>
         {
             var calls = 0;
@@ -175,6 +182,7 @@ internal static class ShutdownTests
             }
         });
         await UpdateCommandTests.Run(Test);
+        await CommandLogCommandTests.Run(Test);
         Console.WriteLine($"TOTAL {total - failures}/{total}");
         return failures == 0 ? 0 : 1;
     }

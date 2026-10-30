@@ -41,6 +41,7 @@ public partial class MainWindow
         AddRow("check-updates", "Check for updates", "Check versions published on GitHub", () => UpdateTask = CheckUpdatesAsync(), updateSource is not PreviewUpdateSource);
         AddRow("update-channel", "Channel · " + (updateChannel == "testing" ? "Testing" : "Stable"), updateChannel == "testing" ? "Validated preview builds · includes changes under evaluation" : "Versions published from the main branch", () =>
         {
+            using var command = BeginCommand("update-channel");
             var nextChannel = updateChannel == "testing" ? "stable" : "testing";
             try
             {
@@ -49,6 +50,7 @@ public partial class MainWindow
             }
             catch (Exception e) when (UpdateFailure(e))
             {
+                command?.Fail(e, "channel-write-failed");
                 ReportUpdateFailure("Could not save the channel.", e);
                 return;
             }
@@ -57,6 +59,7 @@ public partial class MainWindow
             updateGeneration++;
             updateCandidates = [];
             updateStatus = "Channel changed. Check for available versions.";
+            command?.Complete(Controller.Platform.IsPreview ? ResultKind.Simulated : ResultKind.Completed, "channel-changed");
             RefreshRows();
         });
         if (!VelopackInstallation.IsInstalled)
@@ -110,6 +113,7 @@ public partial class MainWindow
         }
         catch (Exception e) when (UpdateFailure(e))
         {
+            LogUpdateFault("update-history-read", e, "history-unavailable");
             Paragraph("The local version history could not be read. The current version was preserved.");
         }
 
@@ -145,7 +149,7 @@ public partial class MainWindow
             {
                 var target = await VelopackInstallation.PrepareRollbackAsync(old.BuildId);
                 await VelopackInstallation.ScheduleApplyAsync(target);
-            }), !Controller.SettingsDirty && !diagnostic && !Controller.Platform.IsPreview);
+            }, "update-rollback"), !Controller.SettingsDirty && !diagnostic && !Controller.Platform.IsPreview);
         }
         else if (updateReview is { } candidate)
         {
@@ -196,8 +200,12 @@ public partial class MainWindow
 
     private async Task CheckUpdatesAsync()
     {
+        using var command = BeginCommand("update-check");
         if (updateBusy || busy || diagnostic && updateSource is PreviewUpdateSource)
+        {
+            command?.Complete(ResultKind.Unavailable, "check-blocked");
             return;
+        }
         var generation = ++updateGeneration;
         using var cancellation = new CancellationTokenSource();
         updateCancellation = cancellation;
@@ -209,20 +217,31 @@ public partial class MainWindow
         {
             var releases = await updateSource.CheckAsync(updateChannel, cancellation.Token);
             if (exiting || generation != updateGeneration)
+            {
+                command?.Complete(ResultKind.Cancelled, "catalog-result-superseded");
                 return;
+            }
             updateCandidates = releases;
             updateStatus = releases.Count == 0 ? "No versions published to this channel. Builds appear only after passing validation." : releases[0].BuildId == AppBuild.Current.BuildId ? "You are using the latest version of this channel." : "Versions are available. Choose one to read the changes and update.";
+            command?.Complete(ResultKind.Completed, releases.Count == 0 ? "catalog-empty" : "catalog-checked");
             RequestCue(FeedbackCue.Completion);
         }
         catch (OperationCanceledException)
         {
+            command?.Complete(ResultKind.Cancelled, "check-cancelled");
             if (!exiting)
                 updateStatus = "Check cancelled. The installed version was preserved.";
         }
         catch (Exception e) when (UpdateFailure(e))
         {
+            command?.Fail(e, "catalog-check-failed");
             if (!exiting)
                 ReportUpdateFailure("Could not check for updates.", e);
+        }
+        catch (Exception e) when (e is not (OutOfMemoryException or AccessViolationException))
+        {
+            command?.Fail(e, "unexpected-check-failure");
+            throw;
         }
         finally
         {
@@ -246,8 +265,12 @@ public partial class MainWindow
 
     private async Task DownloadUpdateAsync(UpdateCandidate candidate)
     {
+        using var command = BeginCommand("update-download");
         if (updateBusy || busy)
+        {
+            command?.Complete(ResultKind.Unavailable, "download-blocked");
             return;
+        }
         var generation = ++updateGeneration;
         using var cancellation = new CancellationTokenSource();
         updateCancellation = cancellation;
@@ -271,23 +294,32 @@ public partial class MainWindow
             if (exiting || generation != updateGeneration || cancellation.IsCancellationRequested)
             {
                 updateSource.Discard(prepared);
+                command?.Complete(ResultKind.Cancelled, "prepared-package-discarded");
                 return;
             }
 
             preparedUpdate = prepared;
             updateStatus = "Download verified. Select Install and restart to finish.";
             navigation = new("apply-update");
+            command?.Complete(ResultKind.Completed, "download-verified");
             RequestCue(FeedbackCue.Completion);
         }
         catch (OperationCanceledException)
         {
+            command?.Complete(ResultKind.Cancelled, "download-cancelled");
             if (!exiting)
                 updateStatus = "Download cancelled. The installed version was preserved.";
         }
         catch (Exception e) when (UpdateFailure(e))
         {
+            command?.Fail(e, "download-failed");
             if (!exiting)
                 ReportUpdateFailure("Could not prepare the update.", e);
+        }
+        catch (Exception e) when (e is not (OutOfMemoryException or AccessViolationException))
+        {
+            command?.Fail(e, "unexpected-download-failure");
+            throw;
         }
         finally
         {
@@ -309,20 +341,23 @@ public partial class MainWindow
         }
     }
 
-    private void BeginUpdateCommit(Func<Task> prepare)
+    private void BeginUpdateCommit(Func<Task> prepare, string command = "update-apply")
     {
         if (Controller.SettingsDirty)
         {
+            using var rejected = BeginCommand(command);
+            rejected?.Complete(ResultKind.Unavailable, "unsaved-settings");
             FeedbackText("Save or discard your settings before changing versions.");
             RequestCue(FeedbackCue.Unavailable);
             return;
         }
 
-        QueueHandoff(() => UpdateTask = CommitUpdateAsync(prepare));
+        QueueHandoff(() => UpdateTask = CommitUpdateAsync(prepare, command));
     }
 
-    private async Task CommitUpdateAsync(Func<Task> prepare)
+    private async Task CommitUpdateAsync(Func<Task> prepare, string commandId = "update-apply", string? origin = null, string? correlation = null)
     {
+        using var command = BeginCommand(commandId, correlation: correlation, origin: origin);
         busy = updateBusy = updateCommitting = true;
         foreach (var button in new[]
         {
@@ -339,6 +374,7 @@ public partial class MainWindow
         try
         {
             await prepare();
+            command?.Complete(ResultKind.Requested, "restart-scheduled");
             if (!exiting)
             {
                 updateCloseAuthorized = true;
@@ -347,8 +383,14 @@ public partial class MainWindow
         }
         catch (Exception e) when (UpdateFailure(e))
         {
+            command?.Fail(e, "restart-scheduling-failed");
             if (!exiting)
                 ReportUpdateFailure("Could not restart into the selected version. The current installation was preserved.", e);
+        }
+        catch (Exception e) when (e is not (OutOfMemoryException or AccessViolationException))
+        {
+            command?.Fail(e, "unexpected-restart-failure");
+            throw;
         }
         finally
         {
@@ -387,8 +429,10 @@ public partial class MainWindow
     {
         if (!updateBusy)
             return false;
+        using var command = BeginCommand("update-cancel");
         if (updateCommitting)
         {
+            command?.Complete(ResultKind.Unavailable, "commit-already-started");
             FeedbackText("The version change is being prepared. Wait for the restart.");
             RequestCue(FeedbackCue.Unavailable);
             return true;
@@ -401,7 +445,14 @@ public partial class MainWindow
         // context. Publish the pending state first so it cannot overwrite the terminal one.
         SetUpdateStatus("Cancelling. The installed version will be preserved…");
         updateCancellation?.Cancel();
+        command?.Complete(ResultKind.Requested, "cancellation-requested");
         return true;
+    }
+
+    private void LogUpdateFault(string commandId, Exception error, string reason, string? correlation = null)
+    {
+        using var command = BeginCommand(commandId, origin: "system", correlation: correlation);
+        command?.Fail(error, reason);
     }
 
     private static bool UpdateFailure(Exception error) => error is IOException or InvalidDataException or UnauthorizedAccessException or HttpRequestException or JsonException or InvalidOperationException or ArgumentException or Win32Exception or TimeoutException or System.Security.SecurityException or ChecksumFailedException or AcquireLockFailedException or NotInstalledException;
@@ -434,6 +485,8 @@ public partial class MainWindow
 
     internal void ShowUpdateHistoryWarning()
     {
+        using var command = BeginCommand("update-history-retention", origin: "system");
+        command?.Complete(ResultKind.Unavailable, "current-package-not-retained");
         updateStatus = "Could not retain the current package for rollback. Repair the installation using Setup before updating.";
     }
 
@@ -444,6 +497,8 @@ public partial class MainWindow
             return;
         if (VelopackInstallation.ReadNotice() is { } notice)
         {
+            using var command = BeginCommand("update-settings-recovery", origin: "system");
+            command?.Complete(notice.StartsWith("Earlier version restored", StringComparison.Ordinal) ? ResultKind.Completed : ResultKind.Unknown, "settings-recovery-notice");
             updateStatus = notice;
             if (Controller.Operation is null or { Action: "update" })
             {

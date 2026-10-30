@@ -59,6 +59,11 @@ public partial class MainWindow
 
     private void RetainOperation(string state, string message, string action = "", WindowRef? target = null, bool dispatched = false, string? summary = null)
     {
+        var outcome = state == "Unconfirmed" ? ResultKind.Unknown
+            : state == "Pending" ? ResultKind.Requested
+            : Enum.TryParse<ResultKind>(state, out var parsed) ? parsed : ResultKind.Unknown;
+        LogCommandResult(action.Length > 0 ? action : navigation.Id, outcome,
+            dispatched ? "operation-status-after-dispatch" : "operation-status");
         Controller.SetOperation(state, message, action, target, dispatched, summary);
         UpdatePersistentState();
     }

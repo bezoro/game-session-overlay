@@ -73,6 +73,12 @@ static class Program
             return Finish(args[0]);
         }
 
+        if (args.Length == 2 && args[1] == "--command-log")
+        {
+            CommandLogTests.Run(Case);
+            return Finish(args[0]);
+        }
+
         if (args.Length == 2 && args[1] == "--settings-focus")
         {
             SettingsFocusTests.Run(Case);
@@ -906,6 +912,8 @@ static class Program
         UpdateInterfaceTests.Run(Case);
         UpdateSourceTests.Run(Case);
         LocalUpdateHistoryTests.Run(Case);
+        CommandLogTests.Run(Case);
+        CommandDiagnosticsTests.Run(Case);
         InterfaceFeedbackTests.Run(Case);
         AdaptiveInterfaceTests.Run(Case);
         SettingsFocusTests.Run(Case);

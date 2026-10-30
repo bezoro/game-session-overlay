@@ -2,15 +2,21 @@ using System.IO;
 
 namespace ApolloOverlay;
 
-public sealed class LocalDiagnostics
+public sealed class LocalDiagnostics : IDisposable
 {
+    private readonly Lazy<CommandLog> commands;
     public string Root
     {
         get;
     }
     public string SettingsPath => Path.Combine(Root, "settings.json");
+    public CommandLog Commands => commands.Value;
 
-    public LocalDiagnostics(string? root = null) => Root = root ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Bezoro", "GameSessionOverlay");
+    public LocalDiagnostics(string? root = null)
+    {
+        Root = root ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Bezoro", "GameSessionOverlay");
+        commands = new(() => new(Root));
+    }
     public UserSettings Load(out string status)
     {
         if (File.Exists(SettingsPath))
@@ -28,26 +34,10 @@ public sealed class LocalDiagnostics
     }
 
     public void Save(UserSettings settings) => UserSettings.Save(SettingsPath, settings);
-    public void Log(string category, ResultKind outcome)
+    public void Log(string category, ResultKind outcome) => Commands.Record(category, outcome);
+    public void Dispose()
     {
-        try
-        {
-            Directory.CreateDirectory(Root);
-            var path = Path.Combine(Root, "overlay.log");
-            if (File.Exists(path) && new FileInfo(path).Length >= 512 * 1024)
-            {
-                var old = path + ".2";
-                if (File.Exists(old))
-                    File.Delete(old);
-                if (File.Exists(path + ".1"))
-                    File.Move(path + ".1", old);
-                File.Move(path, path + ".1");
-            }
-
-            File.AppendAllText(path, $"{DateTime.UtcNow:O} {category} {outcome}{Environment.NewLine}");
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-        }
+        if (commands.IsValueCreated)
+            commands.Value.Dispose();
     }
 }

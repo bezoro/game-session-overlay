@@ -53,7 +53,8 @@ public partial class MainWindow
 
     internal void OpenOptions(WindowRef target) => OpenView(new(OverlayRoute.TargetOptions, target, "application-mute"));
     private void ChooseSession() => OpenView(new(OverlayRoute.Apps, SelectedId: Controller.Apps.FirstOrDefault() is { } w ? WindowId(w) : "refresh-apps", ChooseSession: true));
-    internal void Page(int index)
+    internal void Page(int index) => RunSemanticCommand("navigate-tab", () => PageCore(index));
+    private void PageCore(int index)
     {
         if (TransitionPending || Confirming || updateCommitting)
             return;
@@ -274,12 +275,14 @@ public partial class MainWindow
         }
         else if (!entry.Available)
         {
+            LogCommandResult(entry.Id, ResultKind.Unavailable, "entry-unavailable");
             FeedbackText("Unavailable · " + entry.Reason, important: true);
             RequestCue(FeedbackCue.Unavailable);
         }
     }
 
-    internal void Details()
+    internal void Details() => RunSemanticCommand("window-options", DetailsCore);
+    private void DetailsCore()
     {
         if (!NavigationAllowed || busy || TransitionPending || Confirming || view.Current.Route is not (OverlayRoute.Hub or OverlayRoute.Apps or OverlayRoute.Details))
             return;
@@ -295,7 +298,8 @@ public partial class MainWindow
     }
 
     internal void Back() => Back(false);
-    private void Back(bool trustedDismiss)
+    private void Back(bool trustedDismiss) => RunSemanticCommand("back", () => BackCore(trustedDismiss));
+    private void BackCore(bool trustedDismiss)
     {
         if (CancelUpdateInteraction())
             return;

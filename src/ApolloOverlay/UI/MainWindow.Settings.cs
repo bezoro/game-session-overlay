@@ -66,8 +66,11 @@ public partial class MainWindow
 
     private void Change(UserSettings settings)
     {
+        var before = Controller.Settings;
         var soundJustEnabled = settings.SoundFeedbackEnabled && !Controller.Settings.SoundFeedbackEnabled;
         Controller.Change(settings);
+        LogSettingsChanges(before, Controller.Settings);
+        LogCommandResult("settings-change", ResultKind.Completed, "draft-changed");
         ApplySettings();
         RefreshRows();
         if (soundJustEnabled)
@@ -77,11 +80,14 @@ public partial class MainWindow
 
     private void Save()
     {
+        using var command = BeginCommand("settings-save");
         var fromFooter = navigation.Id == "save-pending";
         var returnTo = lastContentSelection;
         try
         {
             Controller.Save();
+            command?.Complete(Controller.Platform.IsPreview ? ResultKind.Simulated : ResultKind.Completed,
+                Controller.Platform.IsPreview ? "preview-not-saved" : "settings-persisted");
             RetainOperation(Controller.Platform.IsPreview ? "Simulated" : "Completed", Controller.Status);
             if (fromFooter && !Controller.SettingsDirty)
                 navigation = new(entries.Any(entry => entry.Id == returnTo && !IsFooterAction(entry.Id)) ? returnTo : "settings");
@@ -89,6 +95,7 @@ public partial class MainWindow
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException)
         {
+            command?.Fail(e, "settings-save-failed");
             RetainOperation("Failed", "Could not save; previous settings preserved. Try saving again or discard your changes.");
             FeedbackText("Could not save; previous settings preserved.");
         }
@@ -109,6 +116,7 @@ public partial class MainWindow
 
     private async Task ConfigurePlayniteCore()
     {
+        using var command = BeginCommand("playnite-picker");
         if (Controller.Platform.IsPreview && PlayniteDialogFixture is null)
         {
             FeedbackText("Preview: no settings changed.");
@@ -135,16 +143,23 @@ public partial class MainWindow
             }
 
             if (path is not null && CurrentCycle(cycle))
+            {
                 Change(Controller.Settings with
                 {
                     PlaynitePath = path
                 });
+                command?.Complete(ResultKind.Completed, "playnite-path-selected");
+            }
+            else
+                command?.Complete(ResultKind.Cancelled, "picker-dismissed-or-superseded");
         }
         catch (OperationCanceledException)
         {
+            command?.Complete(ResultKind.Cancelled, "picker-cancelled");
         }
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
+            command?.Fail(e, "picker-failed");
             if (CurrentCycle(cycle))
                 FeedbackText("Could not select Playnite.");
         }

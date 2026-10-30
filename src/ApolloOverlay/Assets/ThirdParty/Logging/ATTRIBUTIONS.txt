@@ -1,0 +1,31 @@
+Logging dependencies used by Game Session Overlay
+
+All four packages are licensed under Apache License 2.0.
+The original LICENSE texts are included without modification.
+This attribution list is maintained by Game Session Overlay; it is not an upstream NOTICE file.
+The pinned upstream source trees and NuGet packages contain no separate NOTICE file.
+
+serilog 4.4.0
+Authors: Serilog Contributors
+Copyright © Serilog Contributors
+Package: https://www.nuget.org/packages/serilog/4.4.0
+Source: https://github.com/serilog/serilog/tree/497f80fda4f9e8f98b9c13ba34b1f0530f8c4449
+License file: Serilog-LICENSE.txt
+
+serilog.sinks.file 7.0.0
+Authors: Serilog Contributors
+Package: https://www.nuget.org/packages/serilog.sinks.file/7.0.0
+Source: https://github.com/serilog/serilog-sinks-file/tree/23c732a8658a0df2a5434fe69b0011800b14f0da
+License file: Apache-2.0.txt
+
+serilog.sinks.async 2.1.0
+Authors: Jezz Santos,Serilog Contributors
+Package: https://www.nuget.org/packages/serilog.sinks.async/2.1.0
+Source: https://github.com/serilog/serilog-sinks-async/tree/5c6e5df7dffe5535978475c9ce8c5c6fb1cc9dca
+License file: Apache-2.0.txt
+
+serilog.formatting.compact 3.0.0
+Authors: Serilog Contributors
+Package: https://www.nuget.org/packages/serilog.formatting.compact/3.0.0
+Source: https://github.com/serilog/serilog-formatting-compact/tree/8472ad8ccb97432ca7efbe78d8bc0eaf61db5356
+License file: Apache-2.0.txt

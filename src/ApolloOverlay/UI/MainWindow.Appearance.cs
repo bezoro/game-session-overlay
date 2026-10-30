@@ -106,15 +106,18 @@ public partial class MainWindow
     {
         if (appearanceDraft is not { } draft)
             return;
+        using var command = BeginCommand("appearance-save");
         try
         {
             var result = Controller.SaveAppearance(draft);
+            command?.Complete(result.Kind, "appearance-save-result");
             if (result.Kind is ResultKind.Completed or ResultKind.Simulated)
                 appearanceDraft = AppearanceCatalog.Normalize(Controller.Settings.Appearance);
             RecordResult(result, "appearance-save");
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException)
         {
+            command?.Fail(error, "appearance-save-failed");
             RecordResult(new(ResultKind.Failed, "Colors could not be saved. Your preview is still available; retry or discard it."), "appearance-save");
         }
         ApplyAppearanceTheme();

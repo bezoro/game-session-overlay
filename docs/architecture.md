@@ -59,3 +59,9 @@ Broad `catch` blocks remain at boundaries that must preserve cleanup or stop an 
 Legacy settings fields remain readable for data compatibility; this does not reactivate legacy shortcuts. Assembly and executable names remain stable for installation, startup and CLI compatibility. Proof tools do not maintain separate copies of application code. Their few required native contracts are linked explicitly and built with the solution.
 
 Focus does not isolate XInput from other processes. A streaming controller may be virtual and expose no battery information. These limits stay visible in the product and in [controller isolation](controller-isolation.md). Fixtures do not treat them as confirmed success.
+
+## Command diagnostics ownership
+
+`Diagnostics/CommandLog` owns the bounded Serilog pipeline and operation evidence. `LocalDiagnostics` lazily owns that journal alongside settings paths. A controller disposes diagnostics only when it created them; the application entry point owns an explicitly shared instance until WPF exits. Fatal observation records failures without swallowing exceptions or changing termination policy.
+
+`MainWindow.CommandDiagnostics` supplies safe semantic IDs and captures invocation source/correlation across dispatcher callbacks and deferred input release. Actual effect runners record terminal results before UI-generation guards. The automation host mirrors requests without weakening its separate durable safety ledger. The offline CLI reader has independent read/output bounds and no runtime or writer dependency. See [diagnostics](diagnostics.md).

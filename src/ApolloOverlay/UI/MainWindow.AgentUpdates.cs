@@ -116,6 +116,7 @@ public partial class MainWindow
             }
             catch (Exception error) when (UpdateFailure(error))
             {
+                LogUpdateFault("agent-update-history-read", error, "history-unavailable", request.RequestId);
                 return Task.FromResult(Reply("Unavailable", "The local version history could not be read."));
             }
 
@@ -149,6 +150,7 @@ public partial class MainWindow
         }
         catch (Exception error) when (UpdateFailure(error))
         {
+            LogUpdateFault("agent-update-receipt", error, "receipt-write-failed", request.RequestId);
             agentUpdateState = priorState;
             agentTargetCommit = priorCommit;
             agentTargetChannel = priorChannel;
@@ -171,7 +173,7 @@ public partial class MainWindow
         ClearPreviousUpdateResult();
         SetUpdateStatus(agentUpdateState.Message);
         UpdatePersistentState();
-        UpdateTask = RunAgentUpdateJob(request.Verb, candidate, previous, channel, generation, cancellation);
+        UpdateTask = RunAgentUpdateJob(request.Verb, candidate, previous, channel, generation, cancellation, request.RequestId);
         return Task.FromResult(Reply("Requested", "Operation started. Query update-status with the returned JobId.", false));
     }
 
@@ -183,17 +185,25 @@ public partial class MainWindow
             return;
         }
 
+        using var command = BeginCommand("agent-update-commit", origin: "cli", correlation: request.RequestId);
         var pin = agentUpdateApplyPin;
         if (pin is null || pin.RequestId != request.RequestId)
+        {
+            command?.Complete(ResultKind.Unavailable, "apply-pin-unavailable");
             return;
+        }
         agentUpdateApplyPin = null;
         if (!AgentClientAlive(token, continuing))
+        {
+            command?.Complete(ResultKind.Cancelled, "client-disconnected-before-commit");
             return;
+        }
         var error = ValidateAgentApply(request);
         if (error is not null || !AgentApplyPinMatches(pin.ExpiresUtc, pin.JobId, agentUpdateState?.JobId, pin.Generation, updateGeneration, pin.Prepared, preparedUpdate, pin.Signature))
         {
             SetAgentState("Failed", error?.Reason ?? "The package or context changed before confirmation. Prepare the version again.", true, persist: true);
             SetUpdateStatus(agentUpdateState!.Message);
+            command?.Complete(ResultKind.Unavailable, "prepared-context-changed");
             return;
         }
 
@@ -204,6 +214,7 @@ public partial class MainWindow
         }
         catch (Exception failure) when (UpdateFailure(failure))
         {
+            command?.Fail(failure, "receipt-write-failed");
             SetAgentState("Failed", "Could not retain the version-change receipt. Installation did not start.", true);
             SetUpdateStatus(agentUpdateState!.Message);
             return;
@@ -216,13 +227,15 @@ public partial class MainWindow
             {
                 await VelopackInstallation.ScheduleApplyAsync(pin.Prepared.Native!);
                 scheduled = true;
-            });
+            }, "update-apply", "cli", request.RequestId);
         }
         catch (Exception failure) when (UpdateFailure(failure))
         {
+            command?.Fail(failure, "restart-scheduling-failed");
             SetUpdateStatus("Could not start the version change. " + failure.Message);
         }
 
+        command?.Complete(scheduled ? ResultKind.Requested : ResultKind.Failed, scheduled ? "restart-scheduled" : "restart-not-scheduled");
         if (!scheduled && !exiting)
             SetAgentState("Failed", updateStatus, true, persist: true);
     }
@@ -242,21 +255,29 @@ public partial class MainWindow
         return null;
     }
 
-    private async Task RunAgentUpdateJob(string verb, UpdateCandidate? candidate, InstalledBuild? previous, string channel, long generation, CancellationTokenSource cancellation)
+    private async Task RunAgentUpdateJob(string verb, UpdateCandidate? candidate, InstalledBuild? previous, string channel, long generation, CancellationTokenSource cancellation, string requestId)
     {
+        using var command = BeginCommand(verb, origin: "cli", correlation: requestId);
         await Task.Yield();
         bool Current() => !exiting && !agentUpdateDisposed && generation == updateGeneration && ReferenceEquals(updateCancellation, cancellation) && !cancellation.IsCancellationRequested;
         try
         {
             if (!Current())
+            {
+                command?.Complete(ResultKind.Cancelled, "job-context-lost");
                 return;
+            }
             if (verb == "update-check")
             {
                 var catalog = await updateSource.CheckAsync(channel, cancellation.Token);
                 if (!Current())
+                {
+                    command?.Complete(ResultKind.Cancelled, "catalog-result-superseded");
                     return;
+                }
                 updateCandidates = catalog;
                 SetAgentState("Catalog", catalog.Count == 0 ? "No versions have been published to this channel." : "Catalog checked. Choose the exact BuildId to download.", true, persist: true);
+                command?.Complete(ResultKind.Completed, catalog.Count == 0 ? "catalog-empty" : "catalog-checked");
             }
             else if (verb == "update-download")
             {
@@ -265,6 +286,7 @@ public partial class MainWindow
                 if (!Current())
                 {
                     updateSource.Discard(prepared);
+                    command?.Complete(ResultKind.Cancelled, "prepared-package-discarded");
                     return;
                 }
 
@@ -278,30 +300,40 @@ public partial class MainWindow
                 agentTargetCommit = prepared.Build.Commit;
                 agentTargetChannel = prepared.Build.Channel;
                 SetAgentState("Ready", "Package verified. Explicitly apply it to install and restart; no restart has started.", true, progress: 100, persist: true);
+                command?.Complete(ResultKind.Completed, "download-verified");
             }
             else
             {
                 var target = await VelopackInstallation.PrepareRollbackAsync(previous!.BuildId, percent => AgentUpdateProgress(new("Verifying rollback", percent, 100), generation, cancellation), cancellation.Token);
                 if (!Current())
+                {
+                    command?.Complete(ResultKind.Cancelled, "rollback-result-superseded");
                     return;
+                }
                 var build = await LocalUpdateHistory.ReadBuildInfoAsync(target.PackagePath, cancellation.Token);
                 if (!Current())
+                {
+                    command?.Complete(ResultKind.Cancelled, "rollback-result-superseded");
                     return;
+                }
                 if (build.BuildId != previous.BuildId || build.Version != previous.Version || build.Commit != previous.Commit)
                     throw new InvalidDataException("The local package differs from the exact build requested.");
                 preparedUpdate = new(target.PackagePath, build, target);
                 agentTargetCommit = build.Commit;
                 agentTargetChannel = build.Channel;
                 SetAgentState("Ready", "Rollback verified. Explicitly apply it to return to the retained version.", true, progress: 100, persist: true);
+                command?.Complete(ResultKind.Completed, "rollback-verified");
             }
         }
         catch (OperationCanceledException)
         {
+            command?.Complete(ResultKind.Cancelled, "job-cancelled");
             if (Current() || ReferenceEquals(updateCancellation, cancellation) && !exiting && !agentUpdateDisposed && agentUpdateState?.Phase != "Cancelled")
                 SetAgentState("Cancelled", "Operation cancelled. The installed version was preserved.", true, persist: true);
         }
         catch (Exception error) when (error is not (OutOfMemoryException or AccessViolationException))
         {
+            command?.Fail(error, "update-job-failed");
             if (Current())
             {
                 ReportUpdateFailure("Could not complete the update operation.", error);
@@ -392,7 +424,7 @@ public partial class MainWindow
             }
             catch (Exception error) when (UpdateFailure(error))
             {
-                Controller.Diagnostics.Log("agent-update-receipt", ResultKind.Failed);
+                LogUpdateFault("agent-update-receipt", error, "receipt-write-failed", agentUpdateState?.JobId);
             }
     }
 
@@ -462,6 +494,7 @@ public partial class MainWindow
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or InvalidDataException or ArgumentException)
         {
+            LogUpdateFault("agent-update-receipt", error, "receipt-read-failed");
             return new()
             {
                 Phase = "Interrupted",

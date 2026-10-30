@@ -151,6 +151,7 @@ public partial class MainWindow
             }
             catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
             {
+                LogCommandResult("profile-save", ResultKind.Failed, "profile-save-failed", error);
                 RecordResult(new(ResultKind.Failed, "Could not save the profile. Existing profiles were preserved."), "profile-save");
             }
         });

@@ -65,6 +65,14 @@ if ($requested.Outcome -eq 'Requested') {
 
 `--timeout 5..600` limits CLI preparation in seconds; the default is 180. `--dry-run` validates a change request without executing it. Track or cancel an active preparation from another terminal with `update status` or `update cancel JOB_ID`. An `Unknown` result requires observing `version` and `update status` before deciding what to do next. The wrapper preserves the CLI exit code; zero can also accompany `Requested` and does not replace version confirmation.
 
+## Local command logs
+
+`gso logs [--tail 1..200]` returns a bounded JSON view of recent command records without contacting or starting the overlay. It works after exit or a crash. The default is 50 records; an absent journal returns `Empty` with exit code zero. The response includes inspected files, entries, skipped-record/file counts and limit indicators. The reader rejects linked directories and skips linked files. It does not write, elevate or mutate application state.
+
+When the overlay is available, `gso status` includes `Snapshot.Diagnostics` with queue/drop/write-failure counters and the last logger error type/HRESULT. CLI requests and dry runs can append diagnostic evidence; this is separate from state changes, updates or acceptance into the durable execution ledger. Individual virtual-keyboard characters and editor buffers are excluded.
+
+See [command diagnostics](diagnostics.md) for paths, correlation, coverage, retention and error handling.
+
 ## Session actions
 
 ```powershell

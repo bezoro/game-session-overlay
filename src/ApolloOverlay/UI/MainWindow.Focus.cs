@@ -41,7 +41,8 @@ public partial class MainWindow
     private long focusCycle;
     private bool focusConfirmed, navigationKeysArmed = true;
     internal void Toggle() => Toggle(false);
-    private void Toggle(bool trustedDismiss)
+    private void Toggle(bool trustedDismiss) => RunSemanticCommand("overlay-toggle", () => ToggleCore(trustedDismiss));
+    private void ToggleCore(bool trustedDismiss)
     {
         if (updateBusy)
         {
@@ -98,6 +99,7 @@ public partial class MainWindow
 
     private async Task OpenPanelCore()
     {
+        using var command = BeginCommand("overlay-open");
         var foreground = FocusForeground();
         var wasVisible = IsVisible;
         var reversingFade = fadingOut && wasVisible && IsActive && OwnForeground;
@@ -132,7 +134,12 @@ public partial class MainWindow
         UpdatePolling();
         audio.SetVisible(!Controller.Platform.IsPreview);
         RefreshRows();
-        if (!await AcquireFocus(cycle, foreground))
+        var acquired = await AcquireFocus(cycle, foreground, command);
+        // Refusal is recorded before hiding revokes this cycle. Remaining false
+        // results represent a cancelled or replaced opening.
+        command?.Complete(acquired ? ResultKind.Completed : ResultKind.Cancelled,
+            acquired ? "foreground-confirmed" : "opening-cancelled");
+        if (!acquired)
             return;
         try
         {
@@ -151,6 +158,7 @@ public partial class MainWindow
         }
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
+            LogCommandResult("refresh-windows", ResultKind.Failed, "refresh-after-open-failed", e);
             if (CurrentCycle(cycle))
                 FeedbackText("Could not refresh windows. Try opening again from the tray.");
         }
@@ -161,7 +169,7 @@ public partial class MainWindow
 
     private void TraceFocus(string checkpoint, ResultKind kind, string detail = "")
     {
-        if (Controller.Platform.IsPreview)
+        if (!CommandLoggingEnabled)
             return;
         var actual = FocusForeground();
         var window = new WindowInteropHelper(this).Handle;
@@ -206,7 +214,7 @@ public partial class MainWindow
         }
     }
 
-    private async Task<bool> AcquireFocus(long cycle, nint foreground)
+    private async Task<bool> AcquireFocus(long cycle, nint foreground, CommandLogOperation? command = null)
     {
         if (!CurrentCycle(cycle) || ownedDialog)
             return false;
@@ -249,6 +257,7 @@ public partial class MainWindow
                     TrackApplicationAudio();
                     ResumeSessionFeatures();
                     TraceFocus("confirmed", ResultKind.Completed);
+                    command?.Complete(ResultKind.Completed, "foreground-confirmed");
                     FeedbackText("Panel ready. Navigate with your preferred input.");
                     if (needsReveal)
                         AnimateOpen(revealFrom);
@@ -260,8 +269,9 @@ public partial class MainWindow
                 if (attempt == 6)
                 {
                     TraceFocus("unconfirmed", requested ? ResultKind.Unknown : ResultKind.Failed);
+                    command?.Complete(requested ? ResultKind.Unknown : ResultKind.Failed, "foreground-not-confirmed");
                     var refusal = ForegroundPrivilege.Inspect(FocusForeground());
-                    Controller.Diagnostics.Log("focus/refused/" + refusal.Diagnostic, ResultKind.Unavailable);
+                    LogCommandResult("focus/refused/" + refusal.Diagnostic, ResultKind.Unavailable, "foreground-refused");
                     FeedbackFocusUnavailable(refusal.Message);
                     // An unusable panel must not cover a game while its input still
                     // belongs to that game. A later explicit opening gets a fresh attempt.
