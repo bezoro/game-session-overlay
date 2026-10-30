@@ -21,6 +21,8 @@ public partial class MainWindow
     {
         if (exiting || busy)
             return;
+        using var command = BeginCommand(id, view.Current.Target ?? Controller.Session.Anchor);
+        Exception? commandError = null;
         var generation = ++operationGeneration;
         busy = true;
         var request = new CancellationTokenSource();
@@ -37,6 +39,7 @@ public partial class MainWindow
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception or System.Runtime.InteropServices.COMException)
         {
+            commandError = error;
             result = new(ResultKind.Failed, "Could not complete the operation. Check the device and try again.");
         }
         finally
@@ -47,6 +50,7 @@ public partial class MainWindow
             busy = false;
         }
 
+        command?.Complete(result.Kind, "session-action-result", commandError);
         if (exiting || generation != operationGeneration)
             return;
         RecordResult(result, id);

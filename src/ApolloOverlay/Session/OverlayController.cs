@@ -69,6 +69,7 @@ public sealed class OverlayController : IDisposable
         private set;
     }
 
+    private readonly bool ownsDiagnostics;
     private long revision;
     private bool disposed;
     private CancellationTokenSource? refresh;
@@ -94,6 +95,7 @@ public sealed class OverlayController : IDisposable
     {
         Platform = platform ?? new WindowsPlatform();
         Diagnostics = diagnostics ?? new();
+        ownsDiagnostics = diagnostics is null;
         if (Platform.IsPreview)
         {
             Settings = new();
@@ -292,7 +294,15 @@ public sealed class OverlayController : IDisposable
         refresh?.Dispose();
         steamLaunchAnchor = null;
         steamLaunchReturn = null;
-        Platform.Dispose();
+        try
+        {
+            Platform.Dispose();
+        }
+        finally
+        {
+            if (ownsDiagnostics)
+                Diagnostics.Dispose();
+        }
     }
 }
 

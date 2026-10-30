@@ -10,11 +10,13 @@ internal static class Program
 {
     public static async Task<int> Main(string[] args)
     {
+        if (args.Length > 0 && args[0] == "logs")
+            return LogCommands.Run(args);
         if (args.Length > 0 && args[0] is "version" or "update" or "history" or "rollback")
             return await UpdateCommands.Run(args);
         if (args.Length == 0 || args[0] is "--help" or "help")
         {
-            Console.WriteLine("gso version|history|update [install|check|status|cancel JOB_ID] [--build BUILD_ID] [--channel testing|stable] [--dry-run] [--timeout 5..600]|rollback BUILD_ID. gso status|targets|actions|trace|result ID|execute ACTION [--target ID] [--intent activate|left|right] [--revision N] [--dry-run]|cancel ID|shutdown [--bridge] [--pipe LOCAL_NAME]. JSON output; no implicit launch, elevation or retry. Confirm the version after updating with a fresh gso version invocation.");
+            Console.WriteLine("gso logs [--tail 1..200] reads local command logs even while the overlay is closed. gso version|history|update [install|check|status|cancel JOB_ID] [--build BUILD_ID] [--channel testing|stable] [--dry-run] [--timeout 5..600]|rollback BUILD_ID. gso status|targets|actions|trace|result ID|execute ACTION [--target ID] [--intent activate|left|right] [--revision N] [--dry-run]|cancel ID|shutdown [--bridge] [--pipe LOCAL_NAME]. JSON output; no implicit launch, elevation or retry. Confirm the version after updating with a fresh gso version invocation.");
             return 0;
         }
 

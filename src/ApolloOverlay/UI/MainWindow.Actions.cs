@@ -151,6 +151,8 @@ public partial class MainWindow
     {
         if (busy || exiting)
             return;
+        using var command = BeginCommand("close", target);
+        Exception? commandError = null;
         busy = true;
         pending = new();
         RetainOperation("Pending", "Waiting for closing confirmation…", "close", target, true);
@@ -165,6 +167,7 @@ public partial class MainWindow
         }
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
+            commandError = e;
             result = new(ResultKind.Failed, "Could not request closing.");
         }
         finally
@@ -174,6 +177,7 @@ public partial class MainWindow
             busy = false;
         }
 
+        command?.Complete(result.Kind, "window-close-result", commandError);
         if (exiting)
             return;
         RecordResult(result, "close", target);
@@ -196,8 +200,6 @@ public partial class MainWindow
             RequestCue(FeedbackCue.Completion);
         else if (result.Kind is ResultKind.Failed or ResultKind.Unknown or ResultKind.Partial or ResultKind.Unavailable)
             RequestCue(FeedbackCue.Unavailable);
-        if (!Controller.Platform.IsPreview)
-            Controller.Diagnostics.Log(action, result.Kind);
         if (!IsVisible && result.Kind is ResultKind.Failed or ResultKind.Unknown or ResultKind.Partial or ResultKind.Unavailable or ResultKind.Cancelled)
             RequestResultNotification(result.ToString());
     }
@@ -234,6 +236,8 @@ public partial class MainWindow
     {
         if (busy || exiting)
             return;
+        using var command = BeginCommand(action, target);
+        Exception? commandError = null;
         busy = true;
         input.Cancel();
         using var cancellation = new CancellationTokenSource();
@@ -297,6 +301,7 @@ public partial class MainWindow
         }
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
+            commandError = e;
             result = new(ResultKind.Failed, "The request could not be completed.");
         }
         finally
@@ -307,6 +312,7 @@ public partial class MainWindow
             busy = false;
         }
 
+        command?.Complete(result.Kind, "external-effect-result", commandError);
         if (exiting)
             return;
         RecordResult(result, action, target);
@@ -347,6 +353,8 @@ public partial class MainWindow
     {
         if (busy || exiting)
             return;
+        using var command = BeginCommand(action, target);
+        Exception? commandError = null;
         var generation = ++operationGeneration;
         busy = true;
         pending = new();
@@ -362,6 +370,7 @@ public partial class MainWindow
         }
         catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
+            commandError = error;
             result = new(ResultKind.Failed, "Could not confirm the operation; there will be no automatic retry.");
         }
         finally
@@ -371,6 +380,7 @@ public partial class MainWindow
             busy = false;
         }
 
+        command?.Complete(result.Kind, "in-place-effect-result", commandError);
         if (exiting || generation != operationGeneration)
             return;
         RecordResult(result, action, target);

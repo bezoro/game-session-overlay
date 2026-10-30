@@ -5,6 +5,7 @@ public partial class MainWindow
     private readonly ReleaseGate releaseGate = new();
     private readonly HeldInputTracker handoffInputs = new();
     private Action? handoff;
+    private CommandLogOperation? handoffCommand;
     private Func<bool>? handoffValid;
     private bool handoffDismiss, handoffDegraded, degradedExplicit, committing;
     private long? degradedSince;
@@ -18,7 +19,10 @@ public partial class MainWindow
     private void QueueHandoff(Action action, Func<bool>? valid = null, bool dismiss = false)
     {
         if (exiting || busy)
+        {
+            LogCommandResult("input-handoff", ResultKind.Unavailable, "busy-or-exiting");
             return;
+        }
         if (handoff is not null)
         {
             if (!dismiss || handoffDismiss)
@@ -26,7 +30,25 @@ public partial class MainWindow
             CancelHandoff();
         }
 
-        handoff = action;
+        var correlation = commandCorrelation ?? Guid.NewGuid().ToString("N");
+        var origin = CommandSource;
+        handoffCommand = BeginCommand(dismiss ? "dismiss-handoff" : "command-handoff", correlation: correlation);
+        handoff = () =>
+        {
+            var previousCorrelation = commandCorrelation;
+            var previousOrigin = commandOrigin;
+            commandCorrelation = correlation;
+            commandOrigin = origin;
+            try
+            {
+                action();
+            }
+            finally
+            {
+                commandCorrelation = previousCorrelation;
+                commandOrigin = previousOrigin;
+            }
+        };
         handoffValid = valid;
         handoffDismiss = dismiss;
         releaseGate.Reset();
@@ -46,6 +68,12 @@ public partial class MainWindow
 
     private void CancelHandoff(bool terminalize = true)
     {
+        if (terminalize)
+        {
+            handoffCommand?.Complete(ResultKind.Cancelled, "cancelled-before-dispatch");
+            handoffCommand?.Dispose();
+        }
+        handoffCommand = null;
         var cancelled = terminalize && handoff is not null && !handoffDismiss && Controller.Operation is { State: "Pending", Dispatched: false };
         handoff = null;
         handoffValid = null;
@@ -63,6 +91,8 @@ public partial class MainWindow
     {
         if (!handoffDismiss)
         {
+            handoffCommand?.Complete(ResultKind.Cancelled, "input-or-context-changed");
+            handoffCommand?.Dispose();
             CancelHandoff(false);
             input.Cancel();
             RetainOperation("Cancelled", message);
@@ -85,8 +115,7 @@ public partial class MainWindow
     {
         HideNow(false);
         FeedbackText("Panel hidden without requesting a return to the app.");
-        if (!Controller.Platform.IsPreview)
-            Controller.Diagnostics.Log("dismiss-without-focus-return", ResultKind.Cancelled);
+        LogCommandResult("dismiss-without-focus-return", ResultKind.Cancelled, "input-unavailable");
     }
 
     private bool PadHeld(PadFrame pad) => HeldInputTracker.IsHeld(pad, Controller.Settings.Deadzone);
@@ -125,11 +154,18 @@ public partial class MainWindow
     private void CommitHandoff()
     {
         var action = handoff;
+        using var command = handoffCommand;
         CancelHandoff(false);
         committing = true;
         try
         {
             action?.Invoke();
+            command?.Complete(ResultKind.Requested, "handoff-dispatched");
+        }
+        catch (Exception error)
+        {
+            command?.Fail(error, "handoff-dispatch-threw");
+            throw;
         }
         finally
         {

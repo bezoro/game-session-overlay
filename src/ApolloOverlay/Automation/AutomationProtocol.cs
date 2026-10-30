@@ -80,6 +80,9 @@ public sealed record AutomationRequest
 
 public sealed record AutomationTarget(string Id, long Handle, int Pid, long Started, long Generation, string Process);
 public sealed record AutomationAction(string Id, bool Available, string Reason, string Capability, string[] Intents);
+public sealed record AutomationDiagnosticsStatus(string Directory, int BufferedEvents, long DroppedEvents,
+    long WriteFailures, long UntrackedOperations, int ActiveOperations, bool DrainTimedOut,
+    string? LastErrorType, int? LastErrorHResult);
 public sealed record AutomationSnapshot(
     string Instance,
     int Pid,
@@ -95,7 +98,8 @@ public sealed record AutomationSnapshot(
     bool Truncated = false,
     string PendingRequestId = "",
     string Phase = "",
-    long TargetsAtUtc = 0
+    long TargetsAtUtc = 0,
+    AutomationDiagnosticsStatus? Diagnostics = null
 );
 public sealed record SteamKeyEvent(ushort Key, bool Up, bool Cleanup, long OffsetMs, bool Started, uint? Accepted);
 public sealed record SteamSequenceEvidence(string Configuration, int[] MinimumIntervals, int FocusMs, SteamKeyEvent[] Events, int PossiblyHeld, bool? Released);

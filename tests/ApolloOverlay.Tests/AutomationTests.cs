@@ -296,6 +296,7 @@ internal static class AutomationTests
             )
                 Require(!AutomationPipeSecurity.LocalChannel(code), "Unknown/remote locality accepted");
         });
+        test("automation journal records query denial success and failure without request secrets", () => Task.Run(JournalChecks).GetAwaiter().GetResult());
         test("automation owned pipe dry-run cancellation disconnect Busy and malformed input", () => Task.Run(PipeChecks).GetAwaiter().GetResult());
         test("automation independent update jobs do not exhaust the request ledger", () => Task.Run(UpdateAcceptanceLedger).GetAwaiter().GetResult());
         test("automation shutdown cancellation before Close terminalizes and remains evictable", () => Task.Run(ShutdownCancellation).GetAwaiter().GetResult());
@@ -323,6 +324,81 @@ internal static class AutomationTests
             };
         await AutomationFrames.Write(pipe, AutomationFrames.Encode(request), AutomationFrames.RequestLimit, CancellationToken.None);
         return JsonSerializer.Deserialize(await AutomationFrames.Read(pipe, AutomationFrames.ResponseLimit, CancellationToken.None), AutomationJson.Default.AutomationReply)!;
+    }
+
+    private static async Task JournalChecks()
+    {
+        var root = Temp();
+        var endpoint = "BezoroJournal." + Guid.NewGuid().ToString("N");
+        using var commands = new CommandLog(root);
+        var backend = new Backend();
+        using var host = new AutomationHost(backend, Path.Combine(root, "host"), endpoint, commands: commands);
+        using var restricted = new AutomationHost(new Backend(), Path.Combine(root, "restricted"), endpoint + ".restricted", new("fixed", false), commands);
+        var status = await Exchange(endpoint, new()
+        {
+            Verb = "status"
+        });
+        Require(status.Outcome == "Completed", "Read-only query failed");
+        const string privateText = "private-payload-and-untrusted-command";
+        var unsupported = await Exchange(endpoint, new()
+        {
+            Verb = "execute",
+            ActionId = privateText,
+            TargetId = privateText,
+            Preset = privateText
+        });
+        Require(unsupported.Outcome == "Unsupported", "Preset dispatch policy changed");
+        var denied = await Exchange(endpoint + ".restricted.bridge", new()
+        {
+            Verb = "execute",
+            ActionId = "launch",
+            TargetId = "fixed"
+        });
+        Require(denied.Outcome == "Denied", "Restricted capability was not denied");
+        var connection = await Connect(endpoint);
+        var ticket = connection.Hello.Ticket;
+        using (connection.Pipe)
+        {
+            await AutomationFrames.Write(connection.Pipe, AutomationFrames.Encode(new AutomationRequest
+            {
+                Verb = "execute",
+                ActionId = "effect",
+                RequestId = ticket,
+                DeadlineUtc = connection.Hello.ExpiresUtc
+            }), AutomationFrames.RequestLimit, CancellationToken.None);
+            var reply = JsonSerializer.Deserialize(await AutomationFrames.Read(connection.Pipe, AutomationFrames.ResponseLimit, CancellationToken.None), AutomationJson.Default.AutomationReply)!;
+            Require(reply.Outcome == "Completed" && backend.Effects == 1, "Journal changed successful dispatch");
+        }
+        backend.ExecuteFailure = new InvalidOperationException(privateText);
+        var failed = await Exchange(endpoint, new()
+        {
+            Verb = "execute",
+            ActionId = "effect"
+        });
+        Require(failed.Outcome == "Failed" && backend.Effects == 1, "Backend failure was not retained");
+        var waiting = Stopwatch.StartNew();
+        while (commands.Status.ActiveOperations > 0 && waiting.Elapsed < TimeSpan.FromSeconds(3))
+            await Task.Delay(10);
+        Require(commands.Status.ActiveOperations == 0 && await commands.FlushAsync(), "Command journal did not drain");
+        var text = string.Join("\n", Directory.EnumerateFiles(commands.DirectoryPath, "*.jsonl").Select(File.ReadAllText));
+        Require(!text.Contains(ticket, StringComparison.Ordinal) && !text.Contains(privateText, StringComparison.Ordinal), "Journal exposed ticket, target or exception text");
+        var records = text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => JsonDocument.Parse(line)).ToArray();
+        try
+        {
+            bool Finished(string command, string outcome, string reason) => records.Any(document =>
+                document.RootElement.TryGetProperty("Command", out var c) && c.GetString() == command
+                && document.RootElement.TryGetProperty("Outcome", out var o) && o.GetString() == outcome
+                && document.RootElement.TryGetProperty("Reason", out var r) && r.GetString() == reason);
+            Require(Finished("automation-status", "Completed", "reply-Completed"), "Query result missing");
+            Require(Finished("automation-execute", "Unavailable", "reply-Denied"), "Capability rejection missing");
+            Require(Finished("automation-execute", "Completed", "reply-Completed"), "Successful dispatch missing");
+            Require(Finished("automation-execute", "Failed", "reply-Failed") && text.Contains(nameof(InvalidOperationException), StringComparison.Ordinal), "Technical backend failure missing");
+        }
+        finally
+        {
+            foreach (var record in records)
+                record.Dispose();
+        }
     }
 
     private static async Task PipeChecks()
@@ -485,6 +561,7 @@ internal static class AutomationTests
     private sealed class Backend : IAutomationBackend
     {
         internal int Effects, UiCancelled, ShutdownCalls, UpdateJobs;
+        internal Exception? ExecuteFailure;
         internal readonly ManualResetEventSlim Entered = new(), Cancelled = new();
         public Task<AutomationReply> Update(AutomationRequest request, CancellationToken token, Func<bool> continuing)
         {
@@ -507,6 +584,8 @@ internal static class AutomationTests
         {
             if (request.DryRun)
                 return AutomationReply.Error("DryRun", "");
+            if (ExecuteFailure is { } failure)
+                throw failure;
             if (request.ActionId == "wait")
             {
                 Entered.Set();

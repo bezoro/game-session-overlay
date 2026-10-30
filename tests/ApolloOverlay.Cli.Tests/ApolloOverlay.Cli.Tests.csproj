@@ -14,6 +14,9 @@
       Include="../../tools/ApolloOverlay.Cli/UpdateCommands.cs"
       Link="UpdateCommands.cs" />
     <Compile
+      Include="../../tools/ApolloOverlay.Cli/LogCommands.cs"
+      Link="LogCommands.cs" />
+    <Compile
       Include="../../src/ApolloOverlay/Automation/AutomationProtocol.cs"
       Link="AutomationProtocol.cs" />
     <Compile

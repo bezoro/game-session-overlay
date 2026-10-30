@@ -69,6 +69,7 @@ public partial class MainWindow
     {
         if (exiting || closeRequested || busy || ownedDialog || updateBusy || updateCommitting)
             return;
+        using var command = BeginCommand("administrator-restart");
         var visible = IsVisible;
         var generation = ++operationGeneration;
         using var request = new CancellationTokenSource();
@@ -82,6 +83,7 @@ public partial class MainWindow
         try
         {
             result = await AdministratorRestart.RequestAsync(request.Token);
+            command?.Complete(result.Kind, "administrator-restart-result");
         }
         finally
         {

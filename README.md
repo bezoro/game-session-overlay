@@ -35,7 +35,7 @@ X opens window options through the controller or keyboard. Closing a window requ
 
 The installed version appears in the header. In **System → Version and updates**, choose a channel, read changes, install and restart, or restore a retained version. The installer and updates use Velopack and do not require GitHub sign-in.
 
-The installation includes `gso.cmd`, a JSON CLI for terminals and agents. See [commands, updates and rollback](docs/cli.md), [updater behavior](docs/updates.md) and [runtime behavior](docs/runtime-behavior.md).
+The installation includes `gso.cmd`, a JSON CLI for terminals and agents. Structured local command logs cover outcomes and technical failures; `gso logs` reads recent records even with the app closed. See [command diagnostics](docs/diagnostics.md). See [commands, updates and rollback](docs/cli.md), [updater behavior](docs/updates.md) and [runtime behavior](docs/runtime-behavior.md).
 
 ## Contribute
 
@@ -49,4 +49,4 @@ dotnet run --project src/ApolloOverlay -- --preview
 
 The solution includes the app, CLI, tests and diagnostic tools. CI builds with nullable checks and warnings as errors, verifies formatting, runs tests, renders WPF captures and checks Velopack packaging, installation, upgrades and rollback. Fixtures do not replace tests with a physical controller, game and TV.
 
-Sources, licenses and vector provenance are documented in [icons](docs/third-party-icons.md). Update dependencies are documented in [Velopack](docs/third-party-updates.md).
+Sources, licenses and vector provenance are documented in [icons](docs/third-party-icons.md). Update dependencies are documented in [Velopack](docs/third-party-updates.md); logging dependencies and licenses are documented in [Serilog](docs/third-party-logging.md).

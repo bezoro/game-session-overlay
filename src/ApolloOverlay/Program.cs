@@ -83,13 +83,21 @@ public static class Program
             return 2;
         }
 
+        using var diagnostics = new LocalDiagnostics(proofRoot);
+        using var failures = preview ? null : new UnhandledExceptionDiagnostics(diagnostics.Commands);
+        using var startupCommand = preview ? null : diagnostics.Commands.Begin("application-startup", "system");
+
         // An explicitly approved task is reusable without asking for UAC on each shell launch.
         // Its fixed action starts hidden; only this explicit launch asks it to open the panel.
         if (!startup && !preview && bridge is null && proofRoot is null && VelopackInstallation.IsInstalled
             && ScheduledStartup.TryRunElevated(VelopackInstallation.StartupExecutable))
         {
             if (SingleInstanceActivation.TryOpenExisting(timeoutMs: 10000))
+            {
+                startupCommand?.Complete(ResultKind.Requested, "elevated-session-requested");
                 return 0;
+            }
+            startupCommand?.Complete(ResultKind.Unavailable, "elevated-session-unavailable");
             MessageBox.Show("Windows started the configured administrator session, but the panel did not become available. Try Open overlay from its tray icon.", "Game Session Overlay");
             return 3;
         }
@@ -98,26 +106,33 @@ public static class Program
         if (!created)
         {
             if (!startup && SingleInstanceActivation.TryOpenExisting())
+            {
+                startupCommand?.Complete(ResultKind.Requested, "existing-instance-requested");
                 return 0;
+            }
+            startupCommand?.Complete(startup ? ResultKind.Completed : ResultKind.Unavailable, "existing-instance");
             if (!startup)
                 MessageBox.Show(AlreadyRunningMessage, "Game Session Overlay");
             return startup ? 0 : 3;
         }
 
-        if (!preview
-            && bridge is null
-            && proofRoot is null
-            && !StartupRegistration.TryEnsure(VelopackInstallation.IsInstalled ? VelopackInstallation.StartupExecutable : Environment.ProcessPath))
-            new LocalDiagnostics().Log("startup-registration", ResultKind.Unavailable);
-        if (!preview && bridge is null && proofRoot is null && VelopackInstallation.IsInstalled
-            && !StartMenuRegistration.TryEnsure(VelopackInstallation.StartupExecutable))
-            new LocalDiagnostics().Log("start-menu-registration", ResultKind.Unavailable);
+        if (!preview && bridge is null && proofRoot is null)
+        {
+            var registered = StartupRegistration.TryEnsure(VelopackInstallation.IsInstalled ? VelopackInstallation.StartupExecutable : Environment.ProcessPath);
+            diagnostics.Commands.Record("startup-registration", registered ? ResultKind.Completed : ResultKind.Unavailable, "system", "startup-registration-result");
+            if (VelopackInstallation.IsInstalled)
+            {
+                var searchable = StartMenuRegistration.TryEnsure(VelopackInstallation.StartupExecutable);
+                diagnostics.Commands.Record("start-menu-registration", searchable ? ResultKind.Completed : ResultKind.Unavailable, "system", "search-registration-result");
+            }
+        }
         var application = new Application
         {
             ShutdownMode = ShutdownMode.OnExplicitShutdown
         };
         ThemeSupport.FollowSystem(application);
-        var window = new MainWindow(platform: preview ? new PreviewPlatform() : null, diagnostics: proofRoot is null ? null : new LocalDiagnostics(proofRoot));
+        var window = new MainWindow(platform: preview ? new PreviewPlatform() : null, diagnostics: diagnostics);
+        application.DispatcherUnhandledException += (_, error) => failures?.DispatcherFailure(error.Exception);
         application.MainWindow = window;
         window.Closed += (_, _) => application.Shutdown();
         application.Startup += async (_, _) =>
@@ -140,6 +155,7 @@ public static class Program
                 }
                 catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
                 {
+                    diagnostics.Commands.Record("update-history", ResultKind.Failed, "system", "history-record-failed", e);
                     window.ShowUpdateHistoryWarning();
                 }
 
@@ -161,9 +177,11 @@ public static class Program
 
                 if (show || preview || !startup && bridge is null)
                     window.OpenPanel();
+                startupCommand?.Complete(ResultKind.Completed, startup ? "hidden-startup-ready" : "instance-ready");
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or FormatException)
             {
+                startupCommand?.Fail(error, "startup-failed");
                 if (proofRoot is not null)
                 {
                     try
@@ -179,25 +197,34 @@ public static class Program
                 application.Shutdown(1);
             }
         };
-        return application.Run();
+        var exitCode = application.Run();
+        if (!preview)
+            diagnostics.Commands.Record("application-exit", exitCode == 0 ? ResultKind.Completed : ResultKind.Failed, "system", "process-exit");
+        return exitCode;
     }
 
     private static void EnsureInstalledIntegration()
     {
         if (!VelopackInstallation.IsInstalled)
             return;
+        using var diagnostics = new LocalDiagnostics();
+        using var command = diagnostics.Commands.Begin("windows-integration-register", "system");
         var executable = VelopackInstallation.StartupExecutable;
         var startup = StartupRegistration.TryEnsure(executable);
         var shortcut = StartMenuRegistration.TryEnsure(executable);
+        command.Complete(startup && shortcut ? ResultKind.Completed : ResultKind.Unavailable, "registration-result");
         if (!startup || !shortcut)
             throw new InvalidOperationException($"Windows integration could not be registered. Startup: {startup}; Start menu: {shortcut}.");
     }
 
     private static void RemoveInstalledIntegration()
     {
+        using var diagnostics = new LocalDiagnostics();
+        using var command = diagnostics.Commands.Begin("windows-integration-remove", "system");
         var executable = VelopackInstallation.StartupExecutable;
         StartupRegistration.TryRemoveMatching(executable);
         StartMenuRegistration.TryRemoveMatching(executable);
+        command.Complete(ResultKind.Requested, "matching-registration-removal-requested");
     }
 
     private static string? ReadProofArguments(ref string[] args)

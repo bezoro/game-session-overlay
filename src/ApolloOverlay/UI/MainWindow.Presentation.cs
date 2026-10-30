@@ -184,6 +184,7 @@ public partial class MainWindow
             CancelSteamOwner("Panel hidden; previous request cancelled.");
         if (!IsVisible || fadingOut)
             return;
+        using var command = BeginCommand("overlay-hide");
         var wasForeground = Native.GetForegroundWindow() == new WindowInteropHelper(this).Handle;
         var closingOpacity = Math.Clamp(Opacity, 0, 1);
         RevokeFocus("hide");
@@ -224,7 +225,10 @@ public partial class MainWindow
             BeginAnimation(OpacityProperty, animation);
             await Task.Delay(duration.TimeSpan);
             if (exiting || generation != fadeGeneration)
+            {
+                command?.Complete(ResultKind.Cancelled, "hide-superseded");
                 return;
+            }
             // Recheck at the handoff itself: the timer may have been delayed on the UI thread.
             guideBackend?.PollForOverlay(IsVisible, focusCycle, Environment.TickCount64, Controller.Settings.GuideOpenMaxHoldMs);
             fadeInterrupted |= !FadeInputsNeutral(FadeFramesFixture?.Invoke() ?? Enumerable.Range(0, 4).Select(i => Native.ReadPad((uint)i)).ToArray());
@@ -234,22 +238,24 @@ public partial class MainWindow
         var stillForeground = Native.GetForegroundWindow() == new WindowInteropHelper(this).Handle;
         if (stillForeground && fadeInterrupted)
         {
+            command?.Complete(ResultKind.Cancelled, "input-during-fade");
             OpenPanel();
             FeedbackText("Input detected while closing. Release the controls and try again.");
             return;
         }
 
         Hide();
+        command?.Complete(ResultKind.Completed, "panel-hidden");
         CancelOpenAnimation();
         audio.SetVisible(false);
         UpdatePolling();
         if (restore && wasForeground && stillForeground && !fadeInterrupted && PhysicalKeysNeutral() && returnTarget is { } target && Controller.Platform.Valid(target))
         {
+            using var returning = BeginCommand("focus-return", target);
             var result = await Controller.Platform.Switch(target);
+            returning?.Complete(result.Kind, "focus-return-result");
             if (result.Kind != ResultKind.Completed && result.Kind != ResultKind.Simulated && !exiting)
             {
-                if (!Controller.Platform.IsPreview)
-                    Controller.Diagnostics.Log("focus-return", result.Kind);
                 FeedbackText(result.Message);
             }
         }

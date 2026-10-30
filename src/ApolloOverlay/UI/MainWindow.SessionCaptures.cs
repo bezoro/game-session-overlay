@@ -40,6 +40,7 @@ public partial class MainWindow
         var display = Native.GetMonitorInfo(monitor, ref info) ? Controller.RefreshDisplays().FirstOrDefault(item => item.Id == info.Device) : null;
         if (display is null)
         {
+            LogCommandResult("capture", ResultKind.Unavailable, "display-unavailable");
             FeedbackText("The capture display is unavailable.");
             return;
         }
@@ -80,6 +81,7 @@ public partial class MainWindow
 
     private async Task LoadCaptures()
     {
+        using var command = BeginCommand("captures-load", origin: commandCorrelation is null ? "system" : CommandSource);
         captureListRequest?.Cancel();
         using var request = new CancellationTokenSource();
         captureListRequest = request;
@@ -87,7 +89,11 @@ public partial class MainWindow
         {
             var loaded = await screenCaptures.ListAsync(request.Token);
             if (exiting || request.IsCancellationRequested || !ReferenceEquals(captureListRequest, request))
+            {
+                command?.Complete(ResultKind.Cancelled, "gallery-load-superseded");
                 return;
+            }
+            command?.Complete(ResultKind.Completed, "gallery-list-loaded");
             captureItems = loaded.ToArray();
             if (IsVisible && view.Current.Route == OverlayRoute.Captures)
             {
@@ -99,9 +105,11 @@ public partial class MainWindow
         }
         catch (OperationCanceledException) when (request.IsCancellationRequested)
         {
+            command?.Complete(ResultKind.Cancelled, "gallery-load-cancelled");
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
+            command?.Fail(error, "gallery-load-failed");
             if (!exiting && ReferenceEquals(captureListRequest, request))
                 FeedbackText("Could not open the gallery. Check the captures folder.");
         }

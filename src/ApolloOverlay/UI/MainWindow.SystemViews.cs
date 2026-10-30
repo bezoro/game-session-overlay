@@ -111,10 +111,12 @@ public partial class MainWindow
         };
         slider.ValueChanged += (_, _) =>
         {
+            var previous = Controller.Settings;
             Controller.Change(Controller.Settings with
             {
                 GuideOpenMaxHoldMs = (int)Math.Round(slider.Value / 100) * 100
             });
+            LogSettingsChanges(previous, Controller.Settings);
             SetEntryText("guide-limit", GuideLimitTitle());
             UpdatePersistentState();
             FeedbackText("Unsaved change · Save settings to keep it.");

@@ -46,6 +46,8 @@ public partial class MainWindow
 
     internal void ExitFromTray()
     {
+        LogCommandResult("application-exit", updateCommitting && !updateCloseAuthorized ? ResultKind.Unavailable : ResultKind.Requested,
+            updateCommitting && !updateCloseAuthorized ? "update-commit-in-progress" : "exit-requested");
         if (updateCommitting && !updateCloseAuthorized)
         {
             FeedbackText("The version change is being prepared. Wait for the restart.");
@@ -147,6 +149,7 @@ public partial class MainWindow
     {
         if (exiting)
             return;
+        LogCommandResult("application-shutdown", ResultKind.Requested, "cleanup-started");
         DisposeSessionFeatures();
         DisposeUpdates();
         effectCancellation?.Cancel();

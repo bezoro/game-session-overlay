@@ -1,5 +1,6 @@
 using System.IO;
 using System.Net.Http;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -121,6 +122,45 @@ internal static class UpdateInterfaceTests
 
     internal static void Run(Action<string, Action> test)
     {
+        test("updates journal records verified downloads and technical failures without payloads", () =>
+        {
+            using var host = new Host(logging: true);
+            host.Review();
+            Click(host.Window, "prepare-update");
+            Complete(host.Window.UpdateTask);
+            var rows = JournalRows(host);
+            Require(JournalResult(rows, "update-check", "Completed", "catalog-checked")
+                && JournalResult(rows, "update-download", "Completed", "download-verified"), "Successful updater commands are not journaled");
+            host.Window.Back();
+            const string privateText = "private-account-or-folder";
+            host.Source.CheckFailure = new HttpRequestException(privateText);
+            Click(host.Window, "check-updates");
+            Complete(host.Window.UpdateTask);
+            rows = JournalRows(host);
+            Require(JournalResult(rows, "update-check", "Failed", "catalog-check-failed"), "Updater error did not retain its outcome");
+            var json = string.Join("\n", rows.Select(row => row.GetRawText()));
+            Require(json.Contains(nameof(HttpRequestException), StringComparison.Ordinal) && !json.Contains(privateText, StringComparison.Ordinal), "Technical failure was lost or included exception payload");
+        });
+        test("updates journal retains cancelled and late failed query outcomes", () =>
+        {
+            foreach (var failsLate in new[] { false, true })
+            {
+                using var host = new Host(logging: true);
+                host.Source.CheckCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                host.Open();
+                Click(host.Window, "check-updates");
+                var pending = host.Window.UpdateTask;
+                host.Window.Back();
+                if (failsLate)
+                    host.Source.CheckCompletion.SetException(new HttpRequestException("private-late-payload"));
+                else
+                    host.Source.CheckCompletion.SetResult([Next]);
+                Complete(pending);
+                var rows = JournalRows(host);
+                Require(JournalResult(rows, "update-check", failsLate ? "Failed" : "Cancelled", failsLate ? "catalog-check-failed" : "catalog-result-superseded"), "Late completion lost its real diagnostic outcome");
+                Require(!string.Join("\n", rows.Select(row => row.GetRawText())).Contains("private-late-payload", StringComparison.Ordinal), "Late exception payload was written");
+            }
+        });
         test("updates UI identifies its build without making a passive network request", () =>
         {
             using var host = new Host();
@@ -450,6 +490,24 @@ internal static class UpdateInterfaceTests
             throw new Exception(reason);
     }
 
+    private static JsonElement[] JournalRows(Host host)
+    {
+        var journal = host.Window.Controller.Diagnostics.Commands;
+        var flush = journal.FlushAsync();
+        Complete(flush);
+        Require(flush.Result, "Updater journal did not drain");
+        return Directory.EnumerateFiles(journal.DirectoryPath, "*.jsonl").SelectMany(File.ReadLines).Select(line =>
+        {
+            using var document = JsonDocument.Parse(line);
+            return document.RootElement.Clone();
+        }).ToArray();
+    }
+
+    private static bool JournalResult(JsonElement[] rows, string command, string outcome, string reason) => rows.Any(row =>
+        row.TryGetProperty("Command", out var c) && c.GetString() == command
+        && row.TryGetProperty("Outcome", out var o) && o.GetString() == outcome
+        && row.TryGetProperty("Reason", out var r) && r.GetString() == reason);
+
     private static void Complete(Task task) => ReviewFixTests.Complete(task);
     private static bool ResultVisible(MainWindow window) => ((Border)window.FindName("OperationPanel")).Visibility == Visibility.Visible;
     private static PreparedUpdate PreparedFixture() => new("fixture-only-never-installed", new(Next.Version, Next.BuildId, Next.Commit, Next.Channel));
@@ -466,13 +524,14 @@ internal static class UpdateInterfaceTests
     private sealed class Host : IDisposable
     {
         private readonly SynchronizationContext? previous = SynchronizationContext.Current;
+        private readonly LocalDiagnostics? diagnostics;
         internal readonly SourceFake Source = new();
         internal MainWindow Window
         {
             get;
         }
 
-        internal Host(bool useDefaultSource = false)
+        internal Host(bool useDefaultSource = false, bool logging = false)
         {
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
             var app = Application.Current ?? new Application
@@ -481,7 +540,9 @@ internal static class UpdateInterfaceTests
             };
             if (app.TryFindResource(ThemeSupport.Card) is null)
                 ThemeSupport.ForceForValidation(app, false);
-            Window = new MainWindow(renderOnly: true, platform: new PreviewPlatform(new(101, 42, 100, "Fixture game", "fixture")), updates: useDefaultSource ? null : Source);
+            diagnostics = logging ? new LocalDiagnostics(Path.Combine(Path.GetTempPath(), "BezoroUpdateJournal", Guid.NewGuid().ToString("N"))) : null;
+            Window = new MainWindow(renderOnly: true, platform: new PreviewPlatform(new(101, 42, 100, "Fixture game", "fixture")), diagnostics: diagnostics, updates: useDefaultSource ? null : Source);
+            Window.CommandLoggingFixture = logging;
             Window.InputContextReader = () => new(true, true, true, true);
             Window.PhysicalKeyReader = _ => 0;
             Window.Controller.CaptureReturn();
@@ -511,7 +572,14 @@ internal static class UpdateInterfaceTests
             }
             finally
             {
-                SynchronizationContext.SetSynchronizationContext(previous);
+                try
+                {
+                    diagnostics?.Dispose();
+                }
+                finally
+                {
+                    SynchronizationContext.SetSynchronizationContext(previous);
+                }
             }
         }
     }

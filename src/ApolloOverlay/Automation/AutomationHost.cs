@@ -146,6 +146,7 @@ public sealed class AutomationHost : IDisposable
     private readonly AutomationLedger ledger;
     private readonly string root, source;
     private readonly AutomationGrant? grant;
+    private readonly CommandLog? commands;
     private readonly CancellationTokenSource stopping = new();
     private readonly object gate = new();
     private readonly List<NamedPipeServerStream> servers = [];
@@ -160,11 +161,12 @@ public sealed class AutomationHost : IDisposable
     }
     public string? BridgeName => grant is null ? null : PipeName + ".bridge";
 
-    public AutomationHost(IAutomationBackend backend, string root, string? name = null, AutomationGrant? grant = null)
+    public AutomationHost(IAutomationBackend backend, string root, string? name = null, AutomationGrant? grant = null, CommandLog? commands = null)
     {
         this.backend = backend;
         this.root = root;
         this.grant = grant;
+        this.commands = commands;
         ledger = new(root);
         PipeName = name ?? AutomationPipeSecurity.DefaultName;
         source = FileVersionInfo.GetVersionInfo(Path.Combine(AppContext.BaseDirectory, "ApolloOverlay.dll")).ProductVersion ?? "unknown";
@@ -257,9 +259,14 @@ public sealed class AutomationHost : IDisposable
             lock (gate)
                 servers.Remove(pipe);
             pipe.Dispose();
+            commands?.Record("automation-connection", ResultKind.Unavailable, "cli", reason: "connection-limit");
             return;
         }
 
+        CommandLogOperation? journal = null;
+        var journalOutcome = ResultKind.Unknown;
+        var journalReason = "request-interrupted";
+        Exception? journalError = null;
         var connection = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(12));
         string ticket = "";
         var expires = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 10000;
@@ -273,6 +280,11 @@ public sealed class AutomationHost : IDisposable
             try
             {
                 await AutomationFrames.Write(pipe, AutomationFrames.Encode(value), AutomationFrames.ResponseLimit, life.Token);
+                if (value.Outcome != "Handshake")
+                {
+                    journalOutcome = JournalOutcome(value.Outcome);
+                    journalReason = JournalReason(value.Outcome);
+                }
             }
             finally
             {
@@ -283,7 +295,10 @@ public sealed class AutomationHost : IDisposable
         try
         {
             if (!AutomationPipeSecurity.ClientAllowed(pipe))
+            {
+                commands?.Record("automation-connection", ResultKind.Unavailable, "cli", reason: "peer-denied");
                 return;
+            }
             lock (gate)
                 ticket = ledger.Issue(connection);
             var process = Process.GetCurrentProcess();
@@ -297,6 +312,7 @@ public sealed class AutomationHost : IDisposable
                 ExpiresUtc = expires
             });
             var request = JsonSerializer.Deserialize(await AutomationFrames.Read(pipe, AutomationFrames.RequestLimit, life.Token), AutomationJson.Default.AutomationRequest);
+            journal = commands?.Begin(JournalCommand(request?.Verb), restricted ? "bridge" : "cli", targetId: request?.TargetId, requestId: request?.RequestId);
             if (request is null || !Valid(request))
             {
                 await Reply(AutomationReply.Error("Rejected", "Invalid protocol or intent."));
@@ -580,6 +596,7 @@ public sealed class AutomationHost : IDisposable
             }
             catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception)
             {
+                journalError = e;
                 result = AutomationReply.Error("Failed", e.GetType().Name, request.RequestId);
             }
 
@@ -598,10 +615,24 @@ public sealed class AutomationHost : IDisposable
         }
         catch (Exception e) when (e is IOException or JsonException or InvalidDataException or OperationCanceledException or UnauthorizedAccessException or ObjectDisposedException)
         {
+            journalOutcome = e is OperationCanceledException ? ResultKind.Cancelled : ResultKind.Unknown;
+            journalReason = e is JsonException or InvalidDataException ? "invalid-request" : "transport-interrupted";
+            journalError = e;
+            if (journal is null)
+                commands?.Record("automation-request", journalOutcome, restricted ? "bridge" : "cli", reason: journalReason, error: e);
             life.Cancel();
+        }
+        catch (Exception e) when (e is not (OutOfMemoryException or AccessViolationException))
+        {
+            journalOutcome = ResultKind.Failed;
+            journalReason = "unexpected-request-failure";
+            journalError = e;
+            throw;
         }
         finally
         {
+            journal?.Complete(journalOutcome, journalReason, journalError);
+            journal?.Dispose();
             life.Cancel();
             lock (gate)
             {
@@ -718,7 +749,37 @@ public sealed class AutomationHost : IDisposable
             stream.Write(bytes);
             stream.Flush(true);
         }
+
+        commands?.Record("automation-phase", JournalOutcome(result.Outcome), phase.StartsWith("UI-", StringComparison.Ordinal) ? "ui" : "cli", reason: phase, requestId: request.RequestId);
     }
+
+    private static string JournalCommand(string? verb) => verb switch
+    {
+        "status" or "targets" or "actions" or "trace" or "result" or "execute" or "cancel" or "shutdown"
+            or "update-status" or "update-check" or "update-download" or "update-rollback" or "update-cancel" or "update-apply" => "automation-" + verb,
+        _ => "automation-invalid-request"
+    };
+
+    private static ResultKind JournalOutcome(string outcome) => outcome switch
+    {
+        "Completed" or "Snapshot" => ResultKind.Completed,
+        "Requested" or "Pending" or "UpdateApplyRequested" or "ShutdownRequested" => ResultKind.Requested,
+        "Simulated" or "DryRun" => ResultKind.Simulated,
+        "Failed" => ResultKind.Failed,
+        "Partial" => ResultKind.Partial,
+        "Cancelled" => ResultKind.Cancelled,
+        "Unknown" => ResultKind.Unknown,
+        _ => ResultKind.Unavailable
+    };
+
+    private static string JournalReason(string outcome) => outcome switch
+    {
+        "Completed" or "Snapshot" or "Requested" or "Pending" or "UpdateApplyRequested" or "ShutdownRequested"
+            or "Simulated" or "DryRun" or "Failed" or "Partial" or "Cancelled" or "Unknown" or "Unavailable"
+            or "Rejected" or "Denied" or "Busy" or "Unsupported" or "RequiresGesture" or "RequiresInteractive"
+            or "Conflict" or "Invalid" or "Duplicate" => "reply-" + outcome,
+        _ => "unrecognized-reply"
+    };
 
     public void Dispose()
     {

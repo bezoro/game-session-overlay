@@ -53,13 +53,23 @@ public partial class MainWindow
         if (interfaceActionDepth == 0 && cue is { } signal)
             RequestCue(signal);
         PulseActivation(button);
+        var previousCorrelation = commandCorrelation;
+        commandCorrelation ??= Guid.NewGuid().ToString("N");
+        using var command = BeginCommand(button.Tag as string ?? "interface-action", view.Current.Target ?? Controller.Session.Anchor);
         interfaceActionDepth++;
         try
         {
             action();
+            command?.Complete(ResultKind.Requested, "interface-handler-returned");
+        }
+        catch (Exception error)
+        {
+            command?.Fail(error, "interface-handler-threw");
+            throw;
         }
         finally
         {
+            commandCorrelation = previousCorrelation;
             interfaceActionDepth--;
             // Settings rebuild their row. Keep the acknowledgement on the replacement too.
             if (button.Tag is string id && entries.FirstOrDefault(e => e.Id == id)?.Button is { } current && current != button)
