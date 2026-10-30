@@ -32,6 +32,10 @@ Use the installer and [test checklist](docs/pilot-checklist.md) to exercise real
 
 Run `./scripts/format.ps1` before submitting. CI verifies C# and XML formatting, builds with nullable checks and warnings as errors, tests behavior, renders captures and checks Velopack packaging and installation. Inspect light/dark and compact captures for layout changes.
 
+To conserve GitHub Actions minutes, the Windows pipeline runs automatically on pushes to `main`, normally after merging. Feature-branch pushes and PR updates do not run it. Use local checks during development and request one deliberate `validate` or `testing` dispatch when Windows evidence is needed before merge. A Testing dispatch includes full validation; do not run both modes for the same candidate. Documentation-only and metadata-only changes do not need the Windows pipeline. Stable publication remains conditional on successful validation and an application version change. The lightweight title check runs when a PR opens or its title changes.
+
+Keep CI-skip markers out of the final merge commit message, including markers copied from intermediate commit messages, so the automatic main-branch validation can run.
+
 In the PR, describe the resulting behavior, validation performed and untested limits. Keep extensive formatting changes in a separate commit from behavior changes.
 
 ## Commits and versions
