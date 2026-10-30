@@ -496,7 +496,7 @@ internal static class UpdateInterfaceTests
         var flush = journal.FlushAsync();
         Complete(flush);
         Require(flush.Result, "Updater journal did not drain");
-        return Directory.EnumerateFiles(journal.DirectoryPath, "*.jsonl").SelectMany(File.ReadLines).Select(line =>
+        return Directory.EnumerateFiles(journal.DirectoryPath, "*.jsonl").SelectMany(JournalFiles.ReadLines).Select(line =>
         {
             using var document = JsonDocument.Parse(line);
             return document.RootElement.Clone();

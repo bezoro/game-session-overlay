@@ -279,7 +279,7 @@ internal static class CommandLogTests
     private static string Hash(string value) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
     private static string Field(JsonElement value, string property) => value.TryGetProperty(property, out var result) ? result.GetString() ?? "" : "";
     private static JsonElement[] Read(string root) => Directory.GetFiles(Path.Combine(root, "logs"), "commands-*.jsonl")
-        .OrderBy(path => path, StringComparer.Ordinal).SelectMany(File.ReadLines).Where(line => line.Length > 0)
+        .OrderBy(path => path, StringComparer.Ordinal).SelectMany(JournalFiles.ReadLines).Where(line => line.Length > 0)
         .Select(line => JsonSerializer.Deserialize<JsonElement>(line)).ToArray();
     private static void Require(bool condition, string message)
     {

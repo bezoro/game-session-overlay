@@ -380,7 +380,7 @@ internal static class AutomationTests
         while (commands.Status.ActiveOperations > 0 && waiting.Elapsed < TimeSpan.FromSeconds(3))
             await Task.Delay(10);
         Require(commands.Status.ActiveOperations == 0 && await commands.FlushAsync(), "Command journal did not drain");
-        var text = string.Join("\n", Directory.EnumerateFiles(commands.DirectoryPath, "*.jsonl").Select(File.ReadAllText));
+        var text = string.Join("\n", Directory.EnumerateFiles(commands.DirectoryPath, "*.jsonl").SelectMany(JournalFiles.ReadLines));
         Require(!text.Contains(ticket, StringComparison.Ordinal) && !text.Contains(privateText, StringComparison.Ordinal), "Journal exposed ticket, target or exception text");
         var records = text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => JsonDocument.Parse(line)).ToArray();
         try

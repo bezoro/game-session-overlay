@@ -148,7 +148,7 @@ internal static class CommandDiagnosticsTests
         {
             Require(diagnostics.Commands.FlushAsync().GetAwaiter().GetResult(), "Journal did not drain");
             return Directory.EnumerateFiles(diagnostics.Commands.DirectoryPath, "*.jsonl").Order()
-                .SelectMany(File.ReadLines).Select(line =>
+                .SelectMany(JournalFiles.ReadLines).Select(line =>
                 {
                     using var document = JsonDocument.Parse(line);
                     return document.RootElement.Clone();

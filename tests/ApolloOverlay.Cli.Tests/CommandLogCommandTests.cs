@@ -52,7 +52,7 @@ internal static class CommandLogCommandTests
         {
             using var fixture = new LogsFixture();
             var path = fixture.Write("commands-20261030.jsonl", Entry(1));
-            using var writer = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
+            using var writer = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
             writer.Write(Encoding.UTF8.GetBytes("{\"unfinished\":"));
             writer.Flush();
             var reply = LogCommands.Read(["logs"], fixture.Root);
