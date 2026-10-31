@@ -29,13 +29,15 @@ Dispatch requires a branch in the repository. Publication verifies the commit, a
 
 ## Identify the version
 
-The displayed version comes from compiled executable metadata. GitVersion 6.8.2 calculates `MAJOR.MINOR.PATCH` from commits and tags; CI adds the preview label and commit. Examples:
+The displayed version comes from compiled executable metadata. GitVersion 6.8.2 calculates `MAJOR.MINOR.PATCH` from commits and tags. Stable uses that exact version; Testing adds the preview label and commit. Examples:
 
 - `0.48.0-preview.55.1+abc1234`: preview of 0.48.0, run 55, attempt 1.
-- `0.48.0+abc1234`: stable release; run number does not change its meaning.
+- `0.48.0`: stable release, without a preview label or build suffix.
 - `0.2.0-dev+local`: local build without publication identity.
 
-`ci-55-a1-abc1234` tracks the run separately from the version. Velopack's NuGet version uses the portion before `+`; the commit remains in the executable and metadata. Historical tags, including `0.47.1`, remain valid and establish migration ordering.
+`ci-55-a1-abc1234` tracks the run separately from the version. Both channels retain the full source commit, build ID and channel in compiled assembly metadata, `build-info.json`, diagnostics and the CLI. Stable release tags and titles use the plain version, such as `v0.48.0` and `Game Session Overlay 0.48.0`. Velopack's NuGet version uses the portion before `+` when a Testing version includes it.
+
+Historical tags, including `0.47.1` and stable versions with `+COMMIT`, remain valid and reserve the same semantic version. Existing releases, packages and rollback identities stay intact. A version-format correction ships as a new patch rather than replacing an already-published package.
 
 `feat` increments MINOR; `fix`, `perf`, `refactor`, `build` and `revert` increment PATCH. `!` or `BREAKING CHANGE:` increments MAJOR. `docs`, `style`, `test`, `ci` and `chore` alone do not create a stable release. The [contributor convention](../CONTRIBUTING.md#commits-and-versions) explains titles and examples.
 
