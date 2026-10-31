@@ -151,13 +151,17 @@ internal static class UpdateSourceTests
                 Throws<InvalidDataException>(() => Done(() => source.CheckAsync("testing", CancellationToken.None)));
             }
         });
-        test("updates SDK adapter supports an explicitly selected stable channel", () =>
+        foreach (var stableVersion in new[] { "0.2.42", "0.2.42+1111111" })
         {
-            var sdk = new SourceFake(Asset("0.2.42+1111111", channel: "stable"));
-            using var source = new GitHubUpdateSource(_ => sdk);
-            var values = Done(() => source.CheckAsync("stable", CancellationToken.None));
-            Require(values.Single().Channel == "stable" && sdk.Channel == "stable", "Stable channel did not reach the SDK source");
-        });
+            test("updates SDK adapter preserves plain and legacy stable identities " + stableVersion, () =>
+            {
+                var sdk = new SourceFake(Asset(stableVersion, channel: "stable"));
+                using var source = new GitHubUpdateSource(_ => sdk);
+                var candidate = Done(() => source.CheckAsync("stable", CancellationToken.None)).Single();
+                Require(candidate.Channel == "stable" && sdk.Channel == "stable", "Stable channel did not reach the SDK source");
+                Require(candidate.Version == stableVersion && candidate.BuildId == BuildId && candidate.Commit == Commit, "Plain or legacy stable version lost its separate build identity");
+            });
+        }
         foreach (var badAsset in new[]
         {
             Asset()with

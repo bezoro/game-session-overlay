@@ -57,7 +57,7 @@ feat(api)!: change the automation contract
 | `!` or a `BREAKING CHANGE:` footer | MAJOR |
 | `docs`, `style`, `test`, `ci`, `chore` | No independent increment |
 
-Use `build(deps)` for dependencies that change the installed application. Reserve `chore` for maintenance that does not need an application update. Versions follow [Semantic Versioning](https://semver.org/) and use the GitVersion pinned in the tool manifest. Previews use `-preview.RUN.ATTEMPT`; `+COMMIT` metadata and the build ID identify the source and do not determine ordering. Commits and tags published before this policy remain intact.
+Use `build(deps)` for dependencies that change the installed application. Reserve `chore` for maintenance that does not need an application update. Versions follow [Semantic Versioning](https://semver.org/) and use the GitVersion pinned in the tool manifest. Stable versions are plain `MAJOR.MINOR.PATCH`. Previews use `MAJOR.MINOR.PATCH-preview.RUN.ATTEMPT+COMMIT`. Both channels keep the full commit and build ID in separate diagnostic metadata; those fields do not determine version ordering. Commits and tags published before this policy remain intact.
 
 To check the policy against temporary repositories using the actual GitVersion tool:
 

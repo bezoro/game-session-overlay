@@ -38,7 +38,7 @@ try {
     }
     $short = $calculated.Sha.Substring(0, 7)
     $version = if ($Channel -eq 'stable') {
-        "$core+$short"
+        $core
     }
     else {
         "$core-preview.$BuildNumber.$Attempt+$short"
