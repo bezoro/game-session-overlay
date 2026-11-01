@@ -20,6 +20,7 @@ public partial class MainWindow
     {
         Section("Application");
         AddRow("updates", "Version and updates", AppBuild.Current.Display + " · update or restore an earlier version", OpenUpdates);
+        AddRow("copy-diagnostics", "Copy diagnostics", "All retained logs · paste into chat", () => RequestDiagnosticsCopy(), DiagnosticsAvailable);
         AddStartup();
         if (Controller.Operation is { } result)
             AddRow("last-operation", "Last result", result.State + " · " + result.Message, OpenOperation);

@@ -13,6 +13,78 @@ internal static class CommandDiagnosticsTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        test("diagnostics controls and copy feedback have actual WPF review captures", () =>
+        {
+            using var host = new Host();
+            var window = host.Window;
+            string? copied = null;
+            window.DiagnosticsClipboardWriter = value => copied = value;
+            window.Page(2);
+            window.OpenPanel();
+            ReviewFixTests.Complete(window.OpeningTask);
+            Invoke(window, "SetInputMethod", "mouse");
+            var copy = ReviewFixTests.Button(window, "copy-diagnostics");
+            copy.Focus();
+            ReviewFixTests.Complete(Task.Delay(350));
+            var scroll = (System.Windows.Controls.ScrollViewer)window.FindName("ContentScroll");
+            scroll.ScrollToTop();
+            Capture(window, "diagnostics-system");
+            copy.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            ReviewFixTests.Complete(window.DiagnosticsCopyTask);
+            ReviewFixTests.Complete(Task.Delay(200));
+            scroll.ScrollToTop();
+            Capture(window, "diagnostics-copied");
+            Require(copied is not null && copied.Contains("Game Session Overlay diagnostics"), "Capture action did not produce a complete report");
+        });
+        test("copy diagnostics works while hidden and preserves all retained events", () =>
+        {
+            using var host = new Host();
+            var window = host.Window;
+            window.Controller.Diagnostics.Commands.Record("export-first", ResultKind.Completed);
+            for (var index = 0; index < 260; index++)
+                window.Controller.Diagnostics.Commands.Record("export-event-" + index, ResultKind.Completed);
+            window.Controller.Diagnostics.Commands.Record("export-last", ResultKind.Failed);
+            string? copied = null;
+            var foreground = Native.GetForegroundWindow();
+            window.DiagnosticsClipboardWriter = value => copied = value;
+            window.RequestDiagnosticsCopy(fromTray: true);
+            ReviewFixTests.Complete(window.DiagnosticsCopyTask);
+            Require(copied is not null && copied.Contains("export-first") && copied.Contains("export-last")
+                && copied.Contains("guide-enabled=") && copied.Contains(AppBuild.Current.BuildId), "Clipboard lost older retained evidence or current state");
+            Require(!window.IsVisible && Native.GetForegroundWindow() == foreground, "Copying from the tray opened or activated the overlay");
+            Require(host.Read().Any(entry => Field(entry, "Command") == "copy-diagnostics" && Field(entry, "Outcome") == "Completed"), "Clipboard completion was not journaled");
+        });
+        test("clipboard refusal retains a failed command and never exposes the private error message", () =>
+        {
+            using var host = new Host();
+            host.Window.DiagnosticsClipboardWriter = _ => throw new System.Runtime.InteropServices.ExternalException("private-clipboard-payload");
+            host.Window.RequestDiagnosticsCopy();
+            ReviewFixTests.Complete(host.Window.DiagnosticsCopyTask);
+            var rows = host.Read();
+            Require(rows.Any(entry => Field(entry, "Command") == "copy-diagnostics" && Field(entry, "Outcome") == "Failed")
+                && !string.Join("", rows.Select(entry => entry.GetRawText())).Contains("private-clipboard-payload"), "Clipboard failure was lost or leaked private error text");
+        });
+        test("preview diagnostics copy performs no real clipboard operation", () =>
+        {
+            using var host = new Host();
+            host.Window.CommandLoggingFixture = false;
+            host.Window.DiagnosticsClipboardWriter = _ => throw new Exception("Preview touched the real clipboard");
+            host.Window.Page(2);
+            Require(!ReviewFixTests.Button(host.Window, "copy-diagnostics").IsEnabled, "Preview enabled real diagnostic export");
+            host.Window.RequestDiagnosticsCopy();
+            Require(host.Window.DiagnosticsCopyTask.IsCompletedSuccessfully, "Preview launched a diagnostic export");
+        });
+        test("tray diagnostics dispatch copies without requesting overlay activation", () =>
+        {
+            using var host = new Host();
+            var opened = 0;
+            var copied = 0;
+            using var tray = new TrayHost(host.Window.Dispatcher, () => opened++, () => { }, visible: false,
+                copyDiagnostics: () => copied++);
+            tray.Menu.Items.Cast<System.Windows.Forms.ToolStripItem>().Single(item => item.Text == "Copy diagnostics").PerformClick();
+            ReviewFixTests.Complete(Task.Delay(30));
+            Require(copied == 1 && opened == 0 && !host.Window.IsVisible, "Tray copy invoked the overlay open command");
+        });
         test("CLI setting execution retains its source and request correlation in semantic results", () =>
         {
             using var host = new Host();
@@ -116,6 +188,23 @@ internal static class CommandDiagnosticsTests
     private static object? Invoke(MainWindow window, string name, params object?[] args) =>
         typeof(MainWindow).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, args);
     private static string Field(JsonElement entry, string name) => entry.TryGetProperty(name, out var value) ? value.GetString() ?? "" : "";
+
+    private static void Capture(MainWindow window, string name)
+    {
+        window.UpdateLayout();
+        Require(window.IsVisible && window.IsActive && window.Opacity > .95
+            && Native.GetForegroundWindow() == new System.Windows.Interop.WindowInteropHelper(window).Handle,
+            "The review capture did not have a revealed, foreground-owned WPF window");
+        var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth),
+            (int)Math.Ceiling(window.ActualHeight), 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+        bitmap.Render(window);
+        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
+        var directory = Path.GetFullPath("artifacts/check-native-v1");
+        Directory.CreateDirectory(directory);
+        using var output = File.Create(Path.Combine(directory, name + ".png"));
+        encoder.Save(output);
+    }
     private static void Require(bool condition, string message)
     {
         if (!condition)

@@ -31,7 +31,7 @@ internal static class ActionIconCatalog
         "speaker" or "mute" or "microphone" or "play" or "pause" or "next" or "previous" => ThemeSupport.IconAudio,
         "controller" or "gamebar" or "playnite" or "window" or "save" or "check" or "power" => ThemeSupport.IconGame,
         "camera" or "gallery" or "folder" => ThemeSupport.IconCapture,
-        "settings" or "options" or "timer" or "resize" or "pulse" or "book" or "edit" or "profile" or "panel-left" or "panel-right" or "backspace" => ThemeSupport.IconTools,
+        "settings" or "options" or "timer" or "resize" or "pulse" or "book" or "edit" or "profile" or "panel-left" or "panel-right" or "backspace" or "copy" => ThemeSupport.IconTools,
         "delete" => ThemeSupport.Critical,
         _ => ThemeSupport.IconNavigation
     };
@@ -106,6 +106,7 @@ internal static class ActionIconCatalog
             "updates" or "prepare-update" or "apply-update" => "download",
             "apply-rollback" or "history-previous" or "history-next" or "last-operation" => "history",
             "update-notes" or "operation-details" or "details" or "window-information" => "info",
+            "copy-diagnostics" => "copy",
             "side" or "profile-side" => rightSide ? "panel-right" : "panel-left",
             "ui-scale" or "profile-scale" => "resize",
             "deadzone" or "customize" or "options" => "options",

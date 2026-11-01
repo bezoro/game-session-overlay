@@ -2,6 +2,8 @@
 
 `gso.cmd` and `ApolloOverlay.Cli.exe` ship with the installed app and communicate with the running instance, including while it is hidden. They do not start or elevate the GUI, retry requests, or accept arbitrary keys, executable paths or scripts.
 
+For a complete report to paste into chat, use **Copy diagnostics** in the tray menu or System page. `gso logs --tail 200` remains a bounded, offline query of recent records; it is not a complete export of retained logs. Both paths share the same safe file-opening and rotation reader. See [diagnostics](diagnostics.md).
+
 ## Update from a terminal or agent
 
 Install the current Setup once to obtain the CLI and update API. An older installation without those components needs this initial step. Subsequent commands use the same Velopack updater as the interface. Public release lookup and download require no GitHub login or token.

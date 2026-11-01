@@ -18,6 +18,7 @@ public partial class MainWindow
     private XInputGuideBackend? guideBackend;
     private GuideConnection? guideConnection;
     private bool guideToggleRequested;
+    private GuideDiagnosticTracker guideDiagnostics = new();
     private void UpdatePolling(bool connected = true) => timer.Interval = TimeSpan.FromMilliseconds(steamOwner is not null || effectFocusTransferred ? 16 : GuidePolling.Interval(guideBackend?.Active == true, IsVisible, connected));
     private void ConfigureGuide()
     {
@@ -35,14 +36,31 @@ public partial class MainWindow
             guideConnection.Start(RequestGuideToggle);
         }
 
+        guideDiagnostics = new();
+        if (CommandLoggingEnabled)
+            Controller.Diagnostics.Commands.Record("guide-monitor", guideBackend?.Active == true ? ResultKind.Completed
+                : Controller.Settings.GuideXInputEnabled ? ResultKind.Unavailable : ResultKind.Completed, CommandSource,
+                !Controller.Settings.GuideXInputEnabled ? "disabled" : guideBackend?.Active == true ? "active" : "backend-unavailable");
+
         UpdatePolling();
     }
 
-    internal void RequestGuideToggle() => guideToggleRequested = true;
+    internal void RequestGuideToggle()
+    {
+        guideToggleRequested = true;
+        if (CommandLoggingEnabled)
+            Controller.Diagnostics.Commands.Record("guide-toggle-request", ResultKind.Requested, "controller",
+                IsVisible ? "dismiss-requested" : "open-qualified-after-release");
+    }
 
     internal void PollGuideStatus(XInputGuideBackend backend)
     {
-        backend.PollForOverlay(IsVisible, focusCycle, Environment.TickCount64, Controller.Settings.GuideOpenMaxHoldMs);
+        var now = Environment.TickCount64;
+        backend.PollForOverlay(IsVisible, focusCycle, now, Controller.Settings.GuideOpenMaxHoldMs);
+        if (CommandLoggingEnabled)
+            foreach (var entry in guideDiagnostics.Observe(backend.SnapshotValid, backend.Connections, backend.Held,
+                IsVisible, focusCycle, now, Controller.Settings.GuideOpenMaxHoldMs))
+                Controller.Diagnostics.Commands.Record(entry.Command, entry.Outcome, "controller", entry.Reason);
         if (!IsVisible || (subpage != "integrations" && page != 2))
             return;
         UpdateGuideStatus(backend.Status);
@@ -136,6 +154,10 @@ public partial class MainWindow
 
         if (!NavigationAllowed)
         {
+            var refusedButtons = events.Pressed & ~PadButtons.B;
+            if (!ownedDialog && (refusedButtons != 0 || events.Direction != 0) && CommandLoggingEnabled)
+                Controller.Diagnostics.Commands.Record("controller-input-refused/buttons-" + (ushort)refusedButtons + "/direction-" + events.Direction,
+                    ResultKind.Unavailable, "controller", opening ? "activation-pending" : focusConfirmed ? "foreground-lost" : "foreground-unconfirmed");
             if (!ownedDialog && events.Pressed.HasFlag(PadButtons.B))
                 Back();
             return;

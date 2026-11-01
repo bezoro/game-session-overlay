@@ -25,6 +25,10 @@ public partial class MainWindow
         private get;
         set;
     }
+    internal Func<nint, nint, CancellationToken, Task<bool>>? FocusAcquisitionRequest
+    {
+        private get; set;
+    }
 
     private CancellationTokenSource? activationCancellation;
     internal Func<Task>? RefreshFocusFixture
@@ -121,9 +125,11 @@ public partial class MainWindow
         {
             if (!wasVisible)
             {
+                TraceFocus("show-start", ResultKind.Requested);
                 Place();
                 PrepareOpenAnimation();
                 Show();
+                TraceFocus("show-ready", ResultKind.Completed);
             }
         }
         finally
@@ -132,8 +138,12 @@ public partial class MainWindow
         }
 
         UpdatePolling();
+        TraceFocus("audio-start", ResultKind.Requested);
         audio.SetVisible(!Controller.Platform.IsPreview);
+        TraceFocus("audio-ready", ResultKind.Completed);
+        TraceFocus("rows-start", ResultKind.Requested);
         RefreshRows();
+        TraceFocus("rows-ready", ResultKind.Completed);
         var acquired = await AcquireFocus(cycle, foreground, command);
         // Refusal is recorded before hiding revokes this cycle. Remaining false
         // results represent a cancelled or replaced opening.
@@ -227,8 +237,19 @@ public partial class MainWindow
             PrepareOpenAnimation();
         try
         {
-            var activated = Activate();
-            var requested = FocusRequest(new WindowInteropHelper(this).Handle);
+            var window = new WindowInteropHelper(this).Handle;
+            var activated = false;
+            var requested = false;
+            if (FocusAcquisitionRequest is { } isolated)
+            {
+                TraceFocus("isolated-request", ResultKind.Requested);
+                requested = OwnForeground || await isolated(window, foreground, activation.Token);
+            }
+            else
+            {
+                activated = Activate();
+                requested = FocusRequest(window);
+            }
 
             // An accepted request can still be awaiting delivery to WPF. Observe it
             // before deciding whether this explicit opening needs the broker.
@@ -236,7 +257,7 @@ public partial class MainWindow
                 await Task.Delay(50, activation.Token);
             if (!CurrentCycle(cycle) || ownedDialog || activation.IsCancellationRequested)
                 return false;
-            if (!OwnForeground && FocusForeground() == foreground && FocusFallbackRequest is { } fallback)
+            if (FocusAcquisitionRequest is null && !OwnForeground && FocusForeground() == foreground && FocusFallbackRequest is { } fallback)
             {
                 requested = await fallback(new WindowInteropHelper(this).Handle, foreground, activation.Token);
                 if (!CurrentCycle(cycle) || ownedDialog || activation.IsCancellationRequested)

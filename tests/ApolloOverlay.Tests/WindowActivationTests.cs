@@ -18,6 +18,43 @@ internal static class WindowActivationTests
                 && api.Foreground == 20 && api.Requests == 1);
             Require(api.Attachments.SequenceEqual(new[] { true, false }) && !api.Attached);
         });
+        test("native broker obtains its own foreground before transferring to the parent", () =>
+        {
+            var api = new Fake { Accepted = false, BrokerAllowed = true, AcceptAfterBroker = true };
+            Require(new WindowActivation(api).Execute(10, 20, 1, CancellationToken.None));
+            Require(api.RequestedWindows.SequenceEqual(new nint[] { 10, 40, 10 })
+                && api.Foreground == 10 && api.BrokerDestroyed && !api.Attached);
+        });
+        test("native broker refusal cleans up without claiming parent ownership", () =>
+        {
+            var api = new Fake { Accepted = false, BrokerAllowed = true, BrokerAccepted = false };
+            Require(!new WindowActivation(api).Execute(10, 20, 1, CancellationToken.None));
+            Require(api.Foreground == 20 && api.BrokerDestroyed && !api.Attached);
+        });
+        test("native broker yields back after a refused parent transfer", () =>
+        {
+            var api = new Fake { Accepted = false, BrokerAllowed = true };
+            Require(!new WindowActivation(api).Execute(10, 20, 1, CancellationToken.None));
+            Require(api.RequestedWindows.SequenceEqual(new nint[] { 10, 40, 10, 20 })
+                && api.Foreground == 20 && api.BrokerDestroyed && !api.Attached);
+        });
+        test("native broker cannot redirect a newly selected foreground window", () =>
+        {
+            var api = new Fake { Accepted = false, BrokerAllowed = true };
+            api.OnBrokerCreated = () => api.ForegroundWindow = 30;
+            Require(!new WindowActivation(api).Execute(10, 20, 1, CancellationToken.None));
+            Require(api.RequestedWindows.SequenceEqual(new nint[] { 10 })
+                && api.Foreground == 30 && api.BrokerDestroyed && !api.Attached);
+        });
+        test("native broker cancellation prevents a stale parent transfer", () =>
+        {
+            using var cancellation = new CancellationTokenSource();
+            var api = new Fake { Accepted = false, BrokerAllowed = true, AcceptAfterBroker = true };
+            api.OnActivationWait = () => cancellation.Cancel();
+            Require(!new WindowActivation(api).Execute(10, 20, 1, cancellation.Token));
+            Require(api.RequestedWindows.SequenceEqual(new nint[] { 10, 40, 20 })
+                && api.Foreground == 20 && api.BrokerDestroyed && !api.Attached);
+        });
         test("native activation observes asynchronous delivery before detaching", () =>
         {
             var api = new Fake { DeferredActivation = true };
@@ -146,27 +183,32 @@ internal static class WindowActivationTests
 
         internal bool Accepted = true, AttachAllowed = true, ThrowOnRequest, QueueCreated;
         internal bool DeferredActivation, ActivateOnWait = true, Acknowledged = true, Attached;
+        internal bool BrokerAllowed, BrokerAccepted = true, AcceptAfterBroker, BrokerDestroyed;
         internal int Requests, ActivationWaits;
         internal Action? OnActivationWait;
+        internal Action? OnBrokerCreated;
         internal Action<Fake>? OnAttach;
         internal List<bool> Attachments = [];
-        public uint WindowThread(nint window) => window == 10 ? TargetThread : window == 20 ? ForegroundThread : 4;
+        internal List<nint> RequestedWindows = [];
+        public uint WindowThread(nint window) => window == 10 ? TargetThread : window == 20 ? ForegroundThread : window == 40 ? CurrentThread : 4;
         public void EnsureQueue() => QueueCreated = true;
 
         public bool SetForeground(nint window)
         {
-            Require(CurrentThread == 2 && WindowThread(window) == 1 && Attached && QueueCreated);
+            Require(CurrentThread == 2 && window is 10 or 20 or 40 && Attached && QueueCreated);
             Requests++;
+            RequestedWindows.Add(window);
             if (ThrowOnRequest)
                 throw new InvalidOperationException("fixture");
-            if (Accepted && !DeferredActivation)
+            var accepted = window == 20 || window == 40 && BrokerAccepted || window == 10 && (Accepted || AcceptAfterBroker && ForegroundWindow == 40);
+            if (accepted && !DeferredActivation)
                 ForegroundWindow = window;
-            return Accepted;
+            return accepted;
         }
 
         public bool AwaitActivation(nint window, int timeoutMs)
         {
-            Require(CurrentThread == 2 && Attached && window == 10 && timeoutMs is > 0 and <= 100);
+            Require(CurrentThread == 2 && Attached && window is 10 or 40 && timeoutMs is > 0 and <= 100);
             ActivationWaits++;
             OnActivationWait?.Invoke();
             if (DeferredActivation && ActivateOnWait && Acknowledged)
@@ -184,6 +226,17 @@ internal static class WindowActivationTests
             if (attach)
                 OnAttach?.Invoke(this);
             return true;
+        }
+
+        public nint CreateBrokerWindow()
+        {
+            OnBrokerCreated?.Invoke();
+            return BrokerAllowed ? 40 : 0;
+        }
+        public void DestroyBrokerWindow(nint window)
+        {
+            Require(window == 40);
+            BrokerDestroyed = true;
         }
     }
 }

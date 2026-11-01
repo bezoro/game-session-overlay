@@ -35,6 +35,17 @@ public sealed class LocalDiagnostics : IDisposable
 
     public void Save(UserSettings settings) => UserSettings.Save(SettingsPath, settings);
     public void Log(string category, ResultKind outcome) => Commands.Record(category, outcome);
+    internal async Task<DiagnosticReport> ExportAsync(string state, CancellationToken cancellation)
+    {
+        var journal = Commands;
+        var drained = await journal.FlushAsync(cancellation).ConfigureAwait(false);
+        return await Task.Run(() =>
+        {
+            var documents = CommandLogReader.ReadAll(Root, cancellation);
+            cancellation.ThrowIfCancellationRequested();
+            return DiagnosticReport.Create(AppBuild.Current, journal.Status, documents, drained, state);
+        }, cancellation).ConfigureAwait(false);
+    }
     public void Dispose()
     {
         if (commands.IsValueCreated)

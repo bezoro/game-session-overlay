@@ -22,7 +22,7 @@ internal static class CommandLogCommandTests
             using var fixture = new LogsFixture();
             var reply = LogCommands.Read(["logs"], fixture.Root);
             Require(reply is { Outcome: "Empty", Count: 0 } && !Directory.Exists(fixture.Root), "Offline inspection created data or failed for a new user");
-            var json = JsonSerializer.Serialize(reply, CommandLogJson.Default.CommandLogReply);
+            var json = JsonSerializer.Serialize(reply, CommandLogJson.Default.CommandLogSnapshot);
             using var parsed = JsonDocument.Parse(json);
             Require(parsed.RootElement.GetProperty("Entries").GetArrayLength() == 0, "Reflection-free log response is invalid");
         });
@@ -64,7 +64,7 @@ internal static class CommandLogCommandTests
             fixture.Write("commands-20261030.jsonl", "not json", "[]", "{\"Message\":\"hello\\u001b[31m\\nnext\"}", "{broken");
             var reply = LogCommands.Read(["logs"], fixture.Root);
             Require(reply is { Count: 1, SkippedRecords: 3 }, "Malformed data was accepted or complete JSON discarded");
-            var encoded = JsonSerializer.Serialize(reply, CommandLogJson.Default.CommandLogReply);
+            var encoded = JsonSerializer.Serialize(reply, CommandLogJson.Default.CommandLogSnapshot);
             Require(!encoded.Contains('\u001b') && encoded.Contains("\\u001B", StringComparison.OrdinalIgnoreCase), "Log content could inject a terminal escape");
             using var roundtrip = JsonDocument.Parse(encoded);
             Require(roundtrip.RootElement.GetProperty("Entries")[0].GetProperty("Message").GetString()!.Contains('\n'), "JSON response did not preserve the safely encoded record");
@@ -101,7 +101,7 @@ internal static class CommandLogCommandTests
             fixture.Write("commands-20261030.jsonl", Enumerable.Repeat(record, 40).ToArray());
             var reply = LogCommands.Read(["logs", "--tail", "200"], fixture.Root);
             Require(reply.LimitReached && reply.Count is > 0 and < 40, "Response byte budget was not enforced");
-            var output = JsonSerializer.Serialize(reply, CommandLogJson.Default.CommandLogReply);
+            var output = JsonSerializer.Serialize(reply, CommandLogJson.Default.CommandLogSnapshot);
             Require(Encoding.UTF8.GetByteCount(output) < 1024 * 1024, "Serialized response exceeded the bounded output allowance");
         });
         await Check("CLI logs limits retained files and ignores unrelated filenames", () =>

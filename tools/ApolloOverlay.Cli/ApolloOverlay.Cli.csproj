@@ -7,6 +7,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile
+      Include="../../src/ApolloOverlay/Diagnostics/CommandLogReader.cs"
+      Link="CommandLogReader.cs" />
+    <Compile
       Include="../../src/ApolloOverlay/Automation/AutomationProtocol.cs"
       Link="AutomationProtocol.cs" />
     <Compile

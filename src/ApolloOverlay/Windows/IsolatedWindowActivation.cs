@@ -26,9 +26,21 @@ internal sealed class IsolatedWindowActivation
 
     internal async Task<bool> RequestAsync(nint window, nint foreground, CancellationToken cancellation, int timeoutMs = 900)
     {
-        if (cancellation.IsCancellationRequested || window == 0 || foreground == 0
-            || Native.GetForegroundWindow() != foreground || Interlocked.CompareExchange(ref pending, 1, 0) != 0)
+        if (cancellation.IsCancellationRequested || window == 0 || foreground == 0)
+        {
+            trace?.Invoke("focus-host/rejected/cancelled-or-empty-window", ResultKind.Cancelled);
             return false;
+        }
+        if (Native.GetForegroundWindow() != foreground)
+        {
+            trace?.Invoke("focus-host/rejected/foreground-changed", ResultKind.Cancelled);
+            return false;
+        }
+        if (Interlocked.CompareExchange(ref pending, 1, 0) != 0)
+        {
+            trace?.Invoke("focus-host/rejected/helper-busy", ResultKind.Unavailable);
+            return false;
+        }
         Process? child = null;
         ActivationProcessJob? job = null;
         try
@@ -46,6 +58,7 @@ internal sealed class IsolatedWindowActivation
             var encoded = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(request));
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
             deadline.CancelAfter(timeoutMs);
+            trace?.Invoke("focus-host/spawn-request", ResultKind.Requested);
             child = Process.Start(startInfo(encoded));
             if (child is null)
                 return false;
@@ -69,7 +82,7 @@ internal sealed class IsolatedWindowActivation
             trace?.Invoke("focus-host/start/pid=" + child.Id, ResultKind.Requested);
             // Deadline cleanup must run even if the WPF dispatcher stops pumping.
             await child.WaitForExitAsync(deadline.Token).ConfigureAwait(false);
-            trace?.Invoke($"focus-host/exit/code={child.ExitCode}/stage={ExitStage(child.ExitCode)}/foreground=0x{Native.GetForegroundWindow():X}", child.ExitCode == 0 ? ResultKind.Completed : ResultKind.Failed);
+            trace?.Invoke($"focus-host/exit/code={child.ExitCode}/stage={ExitStage(child.ExitCode)}/foreground=0x{Native.GetForegroundWindow():X}", child.ExitCode is 0 or WindowActivation.BrokerConfirmed ? ResultKind.Completed : ResultKind.Failed);
             // The host can finish just before Windows delivers its posted
             // activation. Its exit code is diagnostic, not input ownership.
             var observed = Native.GetForegroundWindow();
@@ -114,13 +127,17 @@ internal sealed class IsolatedWindowActivation
         0 => "confirmed",
         1 => "native-guard-or-observation",
         2 => "foreground-request-refused",
+        WindowActivation.BrokerConfirmed => "broker-confirmed",
         4 => "invalid-envelope-or-peer-read",
         5 => "target-or-original-foreground-changed",
         6 => "owning-job-unavailable",
         7 => "parent-process-mismatch",
         8 => "parent-identity-mismatch",
+        10 => "broker-foreground-request-refused",
+        12 => "broker-target-request-refused",
         >= 0x10000 and < 0x20000 => "queue-attachment-failed",
         >= 0x20000 and < 0x30000 => "activation-acknowledgement-failed",
+        >= 0x30000 and < 0x40000 => "broker-window-creation-failed",
         _ => "host-error"
     };
 
@@ -138,7 +155,7 @@ internal sealed class IsolatedWindowActivation
         return info;
     }
 
-    internal static int RunHost(string encoded)
+    internal static int RunHost(string encoded, Func<nint, nint, uint, int>? activate = null)
     {
         try
         {
@@ -166,7 +183,7 @@ internal sealed class IsolatedWindowActivation
             if (pid != actualParent.Pid || owner != request.Owner || other != request.Other || otherPid != request.OtherPid
                 || Native.GetForegroundWindow() != (nint)request.Foreground)
                 return 5;
-            return WindowActivation.ExecuteNative((nint)request.Window, (nint)request.Foreground, owner);
+            return (activate ?? WindowActivation.ExecuteNative)((nint)request.Window, (nint)request.Foreground, owner);
         }
         catch (Exception error) when (error is FormatException or JsonException or ArgumentException or Win32Exception or UnauthorizedAccessException or InvalidOperationException or OverflowException)
         {
