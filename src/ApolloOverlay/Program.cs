@@ -160,6 +160,8 @@ public static class Program
                 }
 
                 window.ScheduleUpdateNotice();
+                if (proofRoot is null && !preview && bridge is null)
+                    window.StartAutomaticUpdateDiscovery();
                 if (proofRoot is not null)
                 {
                     Directory.CreateDirectory(proofRoot);

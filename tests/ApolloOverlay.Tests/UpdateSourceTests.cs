@@ -253,6 +253,88 @@ internal static class UpdateSourceTests
             sdk.Pending.SetResult(new VelopackAssetFeed { Assets = [Asset()] });
             Require(check.IsCanceled && sdk.Downloads == 0, "Late SDK completion changed the cancelled query");
         });
+        test("updates catalog queries remain serialized until a cancelled SDK request actually settles", () =>
+        {
+            var pending = new TaskCompletionSource<VelopackAssetFeed>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var sdk = new SourceFake { Pending = pending };
+            using var source = new GitHubUpdateSource(_ => sdk);
+            using var cancellation = new CancellationTokenSource();
+            var first = source.CheckAsync("testing", cancellation.Token);
+            cancellation.Cancel();
+            Throws<OperationCanceledException>(() => Complete(first));
+            var second = source.CheckAsync("stable", CancellationToken.None);
+            Require(sdk.Feeds == 1 && !second.IsCompleted, "Cancelling the caller released a still-running physical SDK query");
+            sdk.Pending = null;
+            pending.SetResult(new VelopackAssetFeed { Assets = [Asset()] });
+            Complete(second);
+            Require(sdk.Feeds == 2 && sdk.Channel == "stable" && first.IsCanceled && second.Result.Count == 0,
+                "The queued channel did not start cleanly after the earlier physical query completed");
+        });
+        test("updates queued catalog cancellation does not contact the SDK or occupy the next query", () =>
+        {
+            var pending = new TaskCompletionSource<VelopackAssetFeed>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var sdk = new SourceFake { Pending = pending };
+            using var source = new GitHubUpdateSource(_ => sdk);
+            var first = source.CheckAsync("testing", CancellationToken.None);
+            using var cancellation = new CancellationTokenSource();
+            var waiting = source.CheckAsync("stable", cancellation.Token);
+            cancellation.Cancel();
+            Throws<OperationCanceledException>(() => Complete(waiting));
+            Require(sdk.Feeds == 1, "A cancelled gate waiter contacted the SDK");
+            var next = source.CheckAsync("testing", CancellationToken.None);
+            sdk.Pending = null;
+            pending.SetResult(new VelopackAssetFeed { Assets = [Asset()] });
+            Complete(first);
+            Complete(next);
+            Require(first.Result.Count == 1 && next.Result.Count == 0 && sdk.Feeds == 2 && waiting.IsCanceled,
+                "A cancelled waiter consumed a query or prevented the next caller from proceeding");
+        });
+        test("updates a late SDK fault releases the catalog gate without poisoning a fresh query", () =>
+        {
+            var pending = new TaskCompletionSource<VelopackAssetFeed>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var sdk = new SourceFake { Pending = pending };
+            using var source = new GitHubUpdateSource(_ => sdk);
+            using var cancellation = new CancellationTokenSource();
+            var first = source.CheckAsync("testing", cancellation.Token);
+            cancellation.Cancel();
+            Throws<OperationCanceledException>(() => Complete(first));
+            var next = source.CheckAsync("testing", CancellationToken.None);
+            Require(sdk.Feeds == 1 && !next.IsCompleted, "The next query started before the abandoned SDK request settled");
+            sdk.Pending = null;
+            pending.SetException(new HttpRequestException("Fixture late transport failure"));
+            Complete(next);
+            Require(first.IsCanceled && next.Result.Count == 0 && sdk.Feeds == 2,
+                "A late fault escaped into a fresh query or left catalog access locked");
+        });
+        test("updates disposal fences queued catalog callers before creating another SDK source", () =>
+        {
+            var pending = new TaskCompletionSource<VelopackAssetFeed>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var sdk = new SourceFake { Pending = pending };
+            var factories = 0;
+            using var source = new GitHubUpdateSource(_ =>
+            {
+                Interlocked.Increment(ref factories);
+                return sdk;
+            });
+            var first = source.CheckAsync("testing", CancellationToken.None);
+            var queued = source.CheckAsync("stable", CancellationToken.None);
+            source.Dispose();
+            pending.SetResult(new VelopackAssetFeed { Assets = [Asset()] });
+            Throws<ObjectDisposedException>(() => Complete(first));
+            Throws<ObjectDisposedException>(() => Complete(queued));
+            Require(factories == 1 && sdk.Feeds == 1 && sdk.Downloads == 0,
+                "A disposed queued caller created a source or started another physical request");
+        });
+        test("updates a synchronous source factory failure releases the catalog gate", () =>
+        {
+            var factories = 0;
+            var sdk = new SourceFake(Asset());
+            using var source = new GitHubUpdateSource(_ => Interlocked.Increment(ref factories) == 1
+                ? throw new IOException("Fixture source initialization failed") : sdk);
+            Throws<IOException>(() => Done(() => source.CheckAsync("testing", CancellationToken.None)));
+            Require(Done(() => source.CheckAsync("testing", CancellationToken.None)).Count == 1 && factories == 2 && sdk.Feeds == 1,
+                "A source creation failure permanently occupied catalog access");
+        });
         test("updates SDK adapter disposal fences a pending feed and rejects new work", () =>
         {
             var sdk = new SourceFake

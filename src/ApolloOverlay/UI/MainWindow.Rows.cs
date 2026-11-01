@@ -130,10 +130,7 @@ public partial class MainWindow
     {
         automationRevision++;
         NoteAutomationTargets();
-        HeaderIdentity.Text = "v" + AppBuild.Current.Version.Split('+')[0];
-        HeaderBrand.Visibility = (narrow || compactChrome) && view.Current.Route != OverlayRoute.Hub ? Visibility.Collapsed : Visibility.Visible;
-        HeaderBrand.FontSize = ResourceNumber(compactChrome || narrow ? "SessionType.Caption" : "SessionType.CompactBody", compactChrome || narrow ? 13 : 14);
-        HeaderIdentity.ToolTip = AppBuild.Current.Display + " · " + AppBuild.Current.BuildId + " · " + AppBuild.Current.Commit;
+        RefreshUpdateIndicator(register: false);
         if (Confirming)
         {
             UpdatePersistentState();
@@ -149,6 +146,7 @@ public partial class MainWindow
         entries.Clear();
         operationText = null;
         entries.Add(new("settings", SettingsGear, () => Page(2), true, "Open System"));
+        RefreshUpdateIndicator();
         ContextCard.Visibility = view.Current.Route == OverlayRoute.Hub ? Visibility.Visible : Visibility.Collapsed;
         var target = Controller.Session.Anchor;
         var valid = target is not null && Controller.Platform.Valid(target);
@@ -184,7 +182,7 @@ public partial class MainWindow
             var selected = pair.Item2 == 2 ? view.Current.Route == OverlayRoute.WindowsAudio : pair.Item2 == page && view.Current.Route != OverlayRoute.WindowsAudio;
             pair.Item1.BorderThickness = new(0, 0, 0, 2);
             if (selected)
-                pair.Item1.SetResourceReference(BorderBrushProperty, ThemeSupport.Focus);
+                pair.Item1.SetResourceReference(BorderBrushProperty, ThemeSupport.Accent);
             else
                 pair.Item1.BorderBrush = Brushes.Transparent;
             pair.Item1.Background = Brushes.Transparent;
@@ -223,6 +221,8 @@ public partial class MainWindow
         if (SessionFeatureTitle is { } featureTitle)
             PageTitle.Text = featureTitle;
         BuildCurrentView();
+        RefreshUpdateIndicator(register: false);
+        SuppressDuplicateUpdateFeedback();
         UpdateHints();
         renderedFeatureShape = FeatureViewShape();
         UpdatePersistentState();
@@ -241,10 +241,12 @@ public partial class MainWindow
     private bool QuickAccessAction(string id) => view.Current.Route == OverlayRoute.Hub && SessionHubSettings.Catalog.Contains(id);
     private bool CompactAction(string id) => view.Current.Route == OverlayRoute.OperationResult
         || narrow && (view.Current.Route == OverlayRoute.Hub && SessionHubSettings.Catalog.Contains(id) || view.Current.Route == OverlayRoute.Media && id is "media-previous" or "media-next");
-    private string ActionDescription(string id, string description, bool available) => QuickAccessAction(id) && !available ? id switch
+    private string ActionDescription(string id, string description, bool available) => QuickAccessAction(id) ? id switch
     {
-        "playnite" => "Set up in System",
-        "steam-overlay" => "Unavailable here",
+        "playnite" when !available => narrow ? "Needs setup" : "Set up in System",
+        "steam" when !available && narrow => "Not found",
+        "steam-overlay" when !available => narrow ? "Unavailable" : "Unavailable here",
+        "audio" when narrow && !audio.Current.Available => "No output",
         _ => description
     } : description;
     private Button MakeButton(string id, string title, string description, Action action, bool available, bool danger)

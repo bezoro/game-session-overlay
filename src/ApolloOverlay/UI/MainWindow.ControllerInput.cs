@@ -223,6 +223,15 @@ public partial class MainWindow
         {
             if (events.Pressed.HasFlag(PadButtons.B))
                 Back();
+            else if (CancelDownloadSelected && events.Pressed.HasFlag(PadButtons.A) && events.Direction == 0)
+            {
+                dispatchSource = current.Slot + 1;
+                try
+                {
+                    ActivateEntry();
+                }
+                finally { dispatchSource = null; }
+            }
             return;
         }
 

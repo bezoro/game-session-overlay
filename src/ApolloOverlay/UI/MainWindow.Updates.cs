@@ -17,11 +17,11 @@ public partial class MainWindow
     private InstalledBuild? rollbackReview;
     private PreparedUpdate? preparedUpdate;
     private CancellationTokenSource? updateCancellation;
-    private bool updateBusy, updateCommitting, updateCloseAuthorized;
+    private bool updateBusy, updateDownloading, updateCommitting, updateCloseAuthorized;
     private int updateHistoryPage;
     private long updateGeneration, nextUpdateProgress;
     private string updateChannel = AppBuild.Current.Channel == "stable" ? "stable" : "testing";
-    private string updateStatus = "Check for versions published after project validation.";
+    private string updateStatus = "Updates are checked automatically every 15 minutes.";
     private TextBlock? updateProgressLabel;
     private TextBox? updateNotesText;
     internal Task UpdateTask
@@ -38,7 +38,7 @@ public partial class MainWindow
         FeatureFact("Commit", AppBuild.Current.ShortCommit);
         updateProgressLabel = Paragraph(updateStatus);
         AutomationProperties.SetLiveSetting(updateProgressLabel, AutomationLiveSetting.Polite);
-        AddRow("check-updates", "Check for updates", "Check versions published on GitHub", () => UpdateTask = CheckUpdatesAsync(), updateSource is not PreviewUpdateSource);
+        AddRow("check-updates", "Check for updates", "Check again now · automatic checks run in the background", () => UpdateTask = CheckUpdatesAsync(), updateSource is not PreviewUpdateSource);
         AddRow("update-channel", "Channel · " + (updateChannel == "testing" ? "Testing" : "Stable"), updateChannel == "testing" ? "Validated preview builds · includes changes under evaluation" : "Versions published from the main branch", () =>
         {
             using var command = BeginCommand("update-channel");
@@ -56,11 +56,13 @@ public partial class MainWindow
             }
 
             updateChannel = nextChannel;
+            UpdateDiscoveryChannelChanged();
             updateGeneration++;
             updateCandidates = [];
-            updateStatus = "Channel changed. Check for available versions.";
+            updateStatus = "Channel changed. New versions will be checked automatically.";
             command?.Complete(Controller.Platform.IsPreview ? ResultKind.Simulated : ResultKind.Completed, "channel-changed");
             RefreshRows();
+            PollAutomaticUpdates();
         });
         if (!VelopackInstallation.IsInstalled)
             Paragraph("To enable updates, install Game Session Overlay using Setup.");
@@ -134,8 +136,8 @@ public partial class MainWindow
         updateStatus = preparedUpdate is null
             ? "Ready to download. The installed version has not changed."
             : "Download verified. The installed version has not changed.";
-        SetUpdateStatus(updateStatus);
         OpenView(new(OverlayRoute.UpdateReview, SelectedId: preparedUpdate is null ? "prepare-update" : "apply-update"));
+        SetUpdateStatus(updateStatus);
     }
 
     private void BuildUpdateReview()
@@ -160,7 +162,10 @@ public partial class MainWindow
             updateProgressLabel = Paragraph(preparedUpdate is null ? updateStatus : "Download verified. The installed version has not changed.");
             AutomationProperties.SetLiveSetting(updateProgressLabel, AutomationLiveSetting.Polite);
             if (preparedUpdate is null)
+            {
                 AddRow("prepare-update", "Download update", UpdateActionContext(candidate), () => UpdateTask = DownloadUpdateAsync(candidate), updateSource is not PreviewUpdateSource);
+                RefreshDownloadAction();
+            }
             else
                 AddRow("apply-update", "Install and restart", UpdateActionContext(candidate) + " · verified", () =>
                 {
@@ -170,7 +175,7 @@ public partial class MainWindow
                     BeginUpdateCommit(() => VelopackInstallation.ScheduleApplyAsync(staged.Native ?? throw new InvalidDataException("Check and download the selected version again.")));
                 }, !Controller.SettingsDirty && !diagnostic && !Controller.Platform.IsPreview && VelopackInstallation.IsInstalled);
             if (!VelopackInstallation.IsInstalled)
-                Paragraph("Use the Setup installer to enable updates on this computer.");
+                Paragraph("Install the app with Setup before applying updates.");
             if (candidate.Notes.Length > 0)
             {
                 AddRow("update-notes", "Read changes", "A / Enter to read · arrows scroll · ← / → returns to actions", () => updateNotesText?.Focus());
@@ -207,6 +212,7 @@ public partial class MainWindow
             return;
         }
         var generation = ++updateGeneration;
+        CancelAutomaticUpdateCheck();
         using var cancellation = new CancellationTokenSource();
         updateCancellation = cancellation;
         busy = updateBusy = true;
@@ -221,7 +227,7 @@ public partial class MainWindow
                 command?.Complete(ResultKind.Cancelled, "catalog-result-superseded");
                 return;
             }
-            updateCandidates = releases;
+            AcceptUpdateCatalog(releases);
             updateStatus = releases.Count == 0 ? "No versions published to this channel. Builds appear only after passing validation." : releases[0].BuildId == AppBuild.Current.BuildId ? "You are using the latest version of this channel." : "Versions are available. Choose one to read the changes and update.";
             command?.Complete(ResultKind.Completed, releases.Count == 0 ? "catalog-empty" : "catalog-checked");
             RequestCue(FeedbackCue.Completion);
@@ -272,9 +278,11 @@ public partial class MainWindow
             return;
         }
         var generation = ++updateGeneration;
+        CancelAutomaticUpdateCheck();
         using var cancellation = new CancellationTokenSource();
         updateCancellation = cancellation;
         busy = updateBusy = true;
+        updateDownloading = true;
         ClearPreviousUpdateResult();
         updateStatus = "Preparing download…";
         SetUpdateStatus(updateStatus);
@@ -282,7 +290,7 @@ public partial class MainWindow
         {
             var progress = new Progress<UpdateProgress>(value =>
             {
-                if (exiting || generation != updateGeneration || updateCancellation != cancellation)
+                if (exiting || generation != updateGeneration || updateCancellation != cancellation || cancellation.IsCancellationRequested)
                     return;
                 var now = Environment.TickCount64;
                 if (value.Total > 0 && now < nextUpdateProgress)
@@ -326,7 +334,7 @@ public partial class MainWindow
             if (ReferenceEquals(updateCancellation, cancellation))
             {
                 updateCancellation = null;
-                busy = updateBusy = false;
+                busy = updateBusy = updateDownloading = false;
                 if (cancellation.IsCancellationRequested && !exiting)
                     updateStatus = "Download cancelled. The installed version was preserved.";
             }
@@ -358,6 +366,7 @@ public partial class MainWindow
     private async Task CommitUpdateAsync(Func<Task> prepare, string commandId = "update-apply", string? origin = null, string? correlation = null)
     {
         using var command = BeginCommand(commandId, correlation: correlation, origin: origin);
+        CancelAutomaticUpdateCheck();
         busy = updateBusy = updateCommitting = true;
         foreach (var button in new[]
         {
@@ -365,6 +374,7 @@ public partial class MainWindow
             AppsTab,
             SettingsTab,
             SettingsGear,
+            UpdateAvailableButton,
             BackButton
         }
 
@@ -401,6 +411,7 @@ public partial class MainWindow
                 AppsTab,
                 SettingsTab,
                 SettingsGear,
+                UpdateAvailableButton,
                 BackButton
             }
 
@@ -419,11 +430,55 @@ public partial class MainWindow
         updateStatus = message;
         if (updateProgressLabel is not null)
             updateProgressLabel.Text = message;
-        FeedbackText(message);
+        RefreshDownloadAction();
+        if (view.Current.Route is OverlayRoute.Updates or OverlayRoute.UpdateReview)
+            SuppressDuplicateUpdateFeedback();
+        else
+            FeedbackText(message);
+    }
+
+    private void SuppressDuplicateUpdateFeedback()
+    {
+        if (view.Current.Route is OverlayRoute.Updates or OverlayRoute.UpdateReview
+            && StatusLabel.Text == updateStatus)
+            FeedbackText("");
     }
 
     private static string UpdateActionContext(UpdateCandidate candidate) => candidate.Version + " · "
         + (candidate.Channel == "stable" ? "Stable" : "Testing");
+
+    private bool DownloadCancellationAvailable => updateDownloading && updateBusy && !updateCommitting
+        && updateCancellation is { IsCancellationRequested: false };
+    private bool CancelDownloadSelected => navigation.Id == "prepare-update" && view.Current.Route == OverlayRoute.UpdateReview
+        && DownloadCancellationAvailable;
+
+    private string DownloadActionDescription(UpdateCandidate candidate) => UpdateActionContext(candidate)
+        + (DownloadCancellationAvailable ? InputHint(" · {B} also cancels", " · {Esc} also cancels", "") : "");
+
+    private void RefreshDownloadAction()
+    {
+        var index = entries.FindIndex(entry => entry.Id == "prepare-update");
+        if (index < 0 || updateReview is not { } candidate)
+            return;
+        var entry = entries[index];
+        var downloading = updateDownloading && updateBusy && !updateCommitting;
+        var cancelling = downloading && updateCancellation?.IsCancellationRequested == true;
+        var title = downloading ? cancelling ? "Cancelling…" : "Cancel download" : "Download update";
+        if (entry.Button.Content is ActionButtonContent content && content.Title.Text != title)
+        {
+            SetEntryText(entry.Id, title);
+            content.ReplaceIcon(ActionIcon(downloading ? "dismiss-operation" : "prepare-update"));
+        }
+        var available = !cancelling && updateSource is not PreviewUpdateSource;
+        entry.Button.IsEnabled = available;
+        entries[index] = entry with
+        {
+            Available = available
+        };
+        SetEntryPrompt(entry.Id, DownloadActionDescription(candidate));
+        if (entry.Available != available)
+            SetSelection(restoreFocus: false);
+    }
 
     private bool CancelUpdateInteraction()
     {
@@ -438,13 +493,21 @@ public partial class MainWindow
             return true;
         }
 
+        if (updateCancellation?.IsCancellationRequested == true)
+        {
+            command?.Complete(ResultKind.Unavailable, "cancellation-already-requested");
+            return true;
+        }
+
         if (interfaceActionDepth == 0)
             RequestCue(FeedbackCue.Cancellation);
         updateGeneration++;
+        CancelOwnedAgentUpdateReceipt(updateCancellation);
         // Cancellation can synchronously run the awaiting operation's finally on this UI
         // context. Publish the pending state first so it cannot overwrite the terminal one.
         SetUpdateStatus("Cancelling. The installed version will be preserved…");
         updateCancellation?.Cancel();
+        RefreshDownloadAction();
         command?.Complete(ResultKind.Requested, "cancellation-requested");
         return true;
     }
@@ -510,6 +573,7 @@ public partial class MainWindow
 
     private void DisposeUpdates()
     {
+        DisposeAutomaticUpdateDiscovery();
         DisposeAgentUpdates();
         updateGeneration++;
         updateCancellation?.Cancel();

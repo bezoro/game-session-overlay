@@ -11,6 +11,7 @@ internal static class AppearanceTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        AppearancePaletteTests.Run(test);
         foreach (var light in new[] { false, true })
             test("unsafe color explanation stays beside pinned commands light=" + light, () =>
             {
@@ -96,17 +97,6 @@ internal static class AppearanceTests
                 ThemeSupport.ApplyAppearance(app, null);
                 ThemeSupport.ForceForValidation(app, false);
             }
-        });
-        test("every appearance preset resolves a complete readable dark and light palette", () =>
-        {
-            foreach (var preset in AppearanceCatalog.Presets)
-                foreach (var light in new[] { false, true })
-                {
-                    var palette = AppearanceCatalog.Resolve(new(Preset: preset.Id), light);
-                    Require(AppearanceCatalog.TryValidate(palette, out var reason), preset.Id + " has unreadable contrast: " + reason);
-                    foreach (var role in AppearanceCatalog.Roles)
-                        Require(AppearanceCatalog.TryColor(palette.Get(role.Role), out _), "A preset has no actual color for " + role.Name);
-                }
         });
         foreach (var compact in new[] { false, true })
             test("edge feedback preserves text glyph and slider contrast in a custom palette compact=" + compact, () =>
