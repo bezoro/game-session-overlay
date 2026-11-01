@@ -17,6 +17,18 @@ internal static class AutomaticUpdateTests
     private static UpdateCandidate Release(string build = "automatic-next", string version = "9.9.9", string? channel = null) =>
         new(0, version, build, new string('a', 40), channel ?? AppBuild.Current.Channel, DateTimeOffset.UnixEpoch,
             "Improved session controls and update discovery.", 0, "fixture-full.nupkg", 12345, new string('b', 64));
+    private static UpdateCandidate VisualRelease()
+    {
+        var current = Version.Parse(AppBuild.Current.Version.Split('-', '+')[0]);
+        var version = $"{current.Major}.{current.Minor + 1}.0-preview.1.1";
+        return Release("visual-next-preview", version) with
+        {
+            Commit = "9f83c6b2a14d507e9cb82a6d8f745b1020d9c3e6",
+            PackageName = $"GameSessionOverlay-{version}-full.nupkg",
+            Size = 92_903_834,
+            Notes = "New releases now appear automatically in the overlay. Background checks preserve your current selection and session controls.\n\nThis preview also refines the warm charcoal theme, update guidance, and controller navigation."
+        };
+    }
 
     internal static void Run(Action<string, Action> test)
     {
@@ -210,18 +222,41 @@ internal static class AutomaticUpdateTests
             foreach (var width in new[] { 572, 360 })
             {
                 using var host = new Host();
-                host.Source.Releases = [Release()];
+                var release = VisualRelease();
+                Require(UpdateAvailability.Newer([release], AppBuild.Current, release.Channel) is not null,
+                    "The representative visual release is not newer than the running capture build");
+                host.Source.Releases = [release];
                 host.Poll(15_000);
                 host.FinishAutomatic();
                 host.Open(width, width == 360 ? 480 : 940);
+                if (width == 360)
+                    Require(((TextBlock)host.Window.FindName("HeaderBrand")).Visibility == Visibility.Collapsed,
+                        "The compact update header retained a truncated brand fragment");
                 Capture(host.Window, $"automatic-update-dark-{width}x{(width == 360 ? 480 : 940)}-available");
                 if (width != 572)
                     continue;
                 Click(host.Badge);
                 ReviewFixTests.Complete(Task.Delay(200));
+                RequireNoRepeatedUpdateStatus(host.Window);
                 Capture(host.Window, "automatic-update-dark-572x940-download");
                 Require(host.Source.Stages == 0, "Review capture downloaded or installed a package");
+                host.Source.StageCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                Click(ReviewFixTests.Button(host.Window, "prepare-update"));
+                Require(host.Source.Stages == 1 && !host.Window.UpdateTask.IsCompleted && host.Source.StageProgress is not null,
+                    "The active-download capture did not reach a real pending staging operation");
+                host.Source.StageProgress!.Report(new("Downloading update", 57, 100));
+                ReviewFixTests.Complete(Task.Delay(200));
+                Require(((TextBlock)ReadField(host.Window, "updateProgressLabel")!).Text.Contains("57%", StringComparison.Ordinal)
+                    && host.Window.AutomationSnapshot().Busy && !host.Window.TransitionPending,
+                    "Download progress was not published or crossed the restart boundary");
+                RequireNoRepeatedUpdateStatus(host.Window);
+                Capture(host.Window, "automatic-update-dark-572x940-progress");
             }
+            using var audio = new Host();
+            audio.Open(572, 940);
+            Invoke(audio.Window, "OpenPrimaryAudio");
+            ReviewFixTests.Complete(Task.Delay(200));
+            Capture(audio.Window, "automatic-update-dark-572x940-audio");
         });
     }
 
@@ -239,6 +274,15 @@ internal static class AutomaticUpdateTests
             throw new Exception(message);
     }
 
+    private static void RequireNoRepeatedUpdateStatus(MainWindow window)
+    {
+        var detail = (TextBlock)ReadField(window, "updateProgressLabel")!;
+        var footer = (TextBlock)window.FindName("StatusLabel");
+        Require(detail.IsVisible && !string.IsNullOrWhiteSpace(detail.Text), "The update status paragraph was not visible");
+        Require(!footer.IsVisible || footer.Text != detail.Text,
+            "The update status was repeated in both the page and global footer");
+    }
+
     private static void Capture(MainWindow window, string name)
     {
         window.UpdateLayout();
@@ -253,6 +297,7 @@ internal static class AutomaticUpdateTests
         Directory.CreateDirectory(directory);
         using var output = File.Create(Path.Combine(directory, name + ".png"));
         encoder.Save(output);
+        Console.WriteLine($"CAPTURE {name}; actual={window.ActualWidth}x{window.ActualHeight}; foreground=True; fixture=True; installed={VelopackInstallation.IsInstalled}");
     }
 
     private sealed class Host : IDisposable
@@ -305,12 +350,17 @@ internal static class AutomaticUpdateTests
             Window.OpenPanel();
             ReviewFixTests.Complete(Window.OpeningTask);
             Window.Left = Window.Top = -12000;
+            Window.MaxWidth = width;
+            Window.MaxHeight = height;
             Window.Width = width;
             Window.Height = height;
             ((FrameworkElement)Window.Content).LayoutTransform = Transform.Identity;
             Window.UpdateLayout();
             ReviewFixTests.Complete(Task.Delay(350));
             ((ScrollViewer)Window.FindName("ContentScroll")).ScrollToTop();
+            Window.UpdateLayout();
+            Require(Math.Abs(Window.ActualWidth - width) < .1 && Math.Abs(Window.ActualHeight - height) < .1,
+                $"The WPF capture fixture requested {width}x{height} but measured {Window.ActualWidth}x{Window.ActualHeight}");
         }
         internal JsonElement[] Logs()
         {
@@ -348,6 +398,8 @@ internal static class AutomaticUpdateTests
         internal CancellationToken LastToken;
         internal Exception? Failure;
         internal IReadOnlyList<UpdateCandidate> Releases = [];
+        internal TaskCompletionSource<PreparedUpdate>? StageCompletion;
+        internal IProgress<UpdateProgress>? StageProgress;
         internal TaskCompletionSource<IReadOnlyList<UpdateCandidate>> DelayNext()
         {
             var value = new TaskCompletionSource<IReadOnlyList<UpdateCandidate>>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -368,12 +420,14 @@ internal static class AutomaticUpdateTests
         public Task<PreparedUpdate> StageAsync(UpdateCandidate candidate, IProgress<UpdateProgress>? progress, CancellationToken cancellation)
         {
             Stages++;
-            return Task.FromResult(new PreparedUpdate("fixture-never-installed.nupkg", new(candidate.Version, candidate.BuildId, candidate.Commit, candidate.Channel)));
+            StageProgress = progress;
+            return StageCompletion?.Task ?? Task.FromResult(new PreparedUpdate("fixture-never-installed.nupkg", new(candidate.Version, candidate.BuildId, candidate.Commit, candidate.Channel)));
         }
         internal void CancelPending()
         {
             foreach (var value in pending)
                 value.TrySetCanceled();
+            StageCompletion?.TrySetCanceled();
         }
         public void Dispose() => Disposed = true;
     }

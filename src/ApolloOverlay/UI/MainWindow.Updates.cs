@@ -136,8 +136,8 @@ public partial class MainWindow
         updateStatus = preparedUpdate is null
             ? "Ready to download. The installed version has not changed."
             : "Download verified. The installed version has not changed.";
-        SetUpdateStatus(updateStatus);
         OpenView(new(OverlayRoute.UpdateReview, SelectedId: preparedUpdate is null ? "prepare-update" : "apply-update"));
+        SetUpdateStatus(updateStatus);
     }
 
     private void BuildUpdateReview()
@@ -172,7 +172,7 @@ public partial class MainWindow
                     BeginUpdateCommit(() => VelopackInstallation.ScheduleApplyAsync(staged.Native ?? throw new InvalidDataException("Check and download the selected version again.")));
                 }, !Controller.SettingsDirty && !diagnostic && !Controller.Platform.IsPreview && VelopackInstallation.IsInstalled);
             if (!VelopackInstallation.IsInstalled)
-                Paragraph("Use the Setup installer to enable updates on this computer.");
+                Paragraph("Install the app with Setup before applying updates.");
             if (candidate.Notes.Length > 0)
             {
                 AddRow("update-notes", "Read changes", "A / Enter to read · arrows scroll · ← / → returns to actions", () => updateNotesText?.Focus());
@@ -426,7 +426,17 @@ public partial class MainWindow
         updateStatus = message;
         if (updateProgressLabel is not null)
             updateProgressLabel.Text = message;
-        FeedbackText(message);
+        if (view.Current.Route is OverlayRoute.Updates or OverlayRoute.UpdateReview)
+            SuppressDuplicateUpdateFeedback();
+        else
+            FeedbackText(message);
+    }
+
+    private void SuppressDuplicateUpdateFeedback()
+    {
+        if (view.Current.Route is OverlayRoute.Updates or OverlayRoute.UpdateReview
+            && StatusLabel.Text == updateStatus)
+            FeedbackText("");
     }
 
     private static string UpdateActionContext(UpdateCandidate candidate) => candidate.Version + " · "

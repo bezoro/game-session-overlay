@@ -393,8 +393,7 @@ public partial class MainWindow
         if (pointerDown)
             CancelHold();
         HeaderIdentity.Visibility = Visibility.Visible;
-        HeaderBrand.Visibility = (compact || narrow) && view.Current.Route != OverlayRoute.Hub ? Visibility.Collapsed : Visibility.Visible;
-        HeaderBrand.FontSize = ResourceNumber(compact || narrow ? "SessionType.Caption" : "SessionType.CompactBody", compact || narrow ? 13 : 14);
+        RefreshUpdateIndicator(register: false);
         ControllerStatusLabel.Visibility = Visibility.Collapsed;
         DirtyLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         HeaderArea.Margin = new(0, 0, 0, compact ? 4 : 12);

@@ -651,6 +651,7 @@
               <StackPanel
                 x:Name="HeaderVersionGroup"
                 Grid.Column="1"
+                Margin="0,0,8,0"
                 Orientation="Horizontal"
                 VerticalAlignment="Center">
                 <Border

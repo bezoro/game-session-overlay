@@ -184,7 +184,7 @@ internal static class UpdateInterfaceTests
             Click(w, "check-updates");
             Complete(w.UpdateTask);
             Require(host.Source.Checks == 1 && host.Source.Stages == 0 && w.ActionIds.Contains("release:" + Next.BuildId), "Catalog query downloaded or lost the release");
-            Require(w.Feedback.Contains("Versions are available"), "Footer retained an in-progress message after the query completed");
+            Require(StatusShownOnce(w, "Versions are available"), "Completed query status was missing from the page or repeated in the footer");
             Click(w, "release:" + Next.BuildId);
             Require(host.Source.Stages == 0 && w.ActionIds.Contains("prepare-update") && !w.ActionIds.Contains("apply-update"), "Review changed the installation or skipped download");
             Require(Text(w).Contains(Next.Version) && Text(w).Contains(Next.Commit[..7]), "Review does not identify the proposed version");
@@ -197,7 +197,7 @@ internal static class UpdateInterfaceTests
             host.Open();
             Click(w, "check-updates");
             Complete(w.UpdateTask);
-            Require(w.Feedback.Contains("Could not check for updates") && !w.Feedback.Contains("latest"), "Authentication refusal became an up-to-date result");
+            Require(StatusShownOnce(w, "Could not check for updates") && !PrimaryText(w).Contains("latest") && !w.Feedback.Contains("latest"), "Authentication refusal became an up-to-date result or repeated its status");
             Require(w.Controller.Operation is { State: "Unconfirmed", Action: "update" } && !w.ActionIds.Any(id => id.StartsWith("release:")), "Failure has no visible result or offers an unverified release");
             Require(w.IsLoaded == false && host.Source.Stages == 0, "Failed check initiated UI activation or installation");
         });
@@ -217,7 +217,7 @@ internal static class UpdateInterfaceTests
             Require(!pending.IsCompleted && w.Controller.Operation is null && !ResultVisible(w), "Retry still presents its old failure as a current result");
             host.Source.CheckCompletion.SetResult([Next]);
             Complete(pending);
-            Require(w.Controller.Operation is null && !ResultVisible(w) && w.Feedback.Contains("Versions are available"), "Successful query kept the old failure card");
+            Require(w.Controller.Operation is null && !ResultVisible(w) && StatusShownOnce(w, "Versions are available"), "Successful query kept the old failure card or repeated its status");
         });
         test("updates UI distinguishes an empty channel from a confirmed current version", () =>
         {
@@ -243,7 +243,7 @@ internal static class UpdateInterfaceTests
             w.Back();
             Require(host.Source.LastCheckCancellation.IsCancellationRequested, "Back did not cancel query");
             Complete(pending);
-            Require(Text(w).Contains("Check cancelled") && w.Feedback.Contains("Check cancelled") && !w.ActionIds.Any(id => id.StartsWith("release:")), "Cancelled query produced candidates or lost terminal cancellation feedback");
+            Require(StatusShownOnce(w, "Check cancelled") && !w.ActionIds.Any(id => id.StartsWith("release:")), "Cancelled query produced candidates, lost its page status, or repeated it in the footer");
             w.Back();
             Require(w.ActionIds.Contains("updates"), "Back could not leave the cancelled query page");
         });
@@ -258,7 +258,7 @@ internal static class UpdateInterfaceTests
             w.Back();
             host.Source.CheckCompletion.SetResult([Next]);
             Complete(pending);
-            Require(!w.ActionIds.Any(id => id.StartsWith("release:")) && w.Feedback.Contains("Check cancelled"), "Late query replaced terminal cancellation with success or a pending message");
+            Require(!w.ActionIds.Any(id => id.StartsWith("release:")) && StatusShownOnce(w, "Check cancelled"), "Late query replaced terminal cancellation or duplicated its status");
             Require(host.Source.Stages == 0, "Cancelled query started download");
         });
         test("updates UI channel changes clear the old catalog without polling", () =>
@@ -302,7 +302,7 @@ internal static class UpdateInterfaceTests
             Complete(w.UpdateTask);
             Require(host.Source.Stages == 1 && host.Source.Staged?.BuildId == Next.BuildId, "Wrong release downloaded");
             Require(w.ActionIds.Contains("apply-update") && !w.ActionIds.Contains("prepare-update") && Text(w).Contains("Download verified"), "Verified payload has no distinct ready state");
-            Require(w.Feedback.Contains("Download verified"), "Footer retained an in-progress message after download verification");
+            Require(StatusShownOnce(w, "Download verified"), "Verified download status was missing from the page or repeated in the footer");
             Require(!ReviewFixTests.Button(w, "apply-update").IsEnabled && !w.TransitionPending, "Diagnostic fixture allowed native installation");
             Click(w, "apply-update");
             Require(!w.TransitionPending && w.IsLoaded == false && host.Source.Stages == 1, "Disabled install queued a native operation");
@@ -320,7 +320,7 @@ internal static class UpdateInterfaceTests
             w.Back();
             Require(host.Source.LastStageCancellation.IsCancellationRequested, "Back did not cancel download");
             Complete(pending);
-            Require(w.ActionIds.Contains("prepare-update") && !w.ActionIds.Contains("apply-update") && Text(w).Contains("Download cancelled") && w.Feedback.Contains("Download cancelled"), "Cancelled download exposed install or lost retry/terminal feedback");
+            Require(w.ActionIds.Contains("prepare-update") && !w.ActionIds.Contains("apply-update") && StatusShownOnce(w, "Download cancelled"), "Cancelled download exposed install, lost its page status, or repeated it in the footer");
             Require(!w.TransitionPending, "Cancelled download queued a restart");
         });
         test("updates UI download refusal cannot produce a verified or installed state", () =>
@@ -331,7 +331,7 @@ internal static class UpdateInterfaceTests
             host.Review();
             Click(w, "prepare-update");
             Complete(w.UpdateTask);
-            Require(w.Feedback.Contains("Could not prepare") && w.ActionIds.Contains("prepare-update") && !w.ActionIds.Contains("apply-update"), "Download refusal became a prepared installation");
+            Require(StatusShownOnce(w, "Could not prepare") && w.ActionIds.Contains("prepare-update") && !w.ActionIds.Contains("apply-update"), "Download refusal became a prepared installation or repeated its status");
             Require(w.Controller.Operation is { State: "Unconfirmed" } && !w.TransitionPending, "Download failure has no honest result");
         });
         foreach (var (failure, explanation) in new (Exception, string)[]
@@ -353,14 +353,15 @@ internal static class UpdateInterfaceTests
                 host.Review();
                 Click(w, "prepare-update");
                 Complete(w.UpdateTask);
-                Require(w.UpdateTask.IsCompletedSuccessfully && w.Feedback.Contains(expected) && Text(w).Contains(expected), "SDK failure escaped the operation or left progress feedback behind");
+                Require(w.UpdateTask.IsCompletedSuccessfully && StatusShownOnce(w, expected), "SDK failure escaped the operation, lost its page explanation, or repeated it in the footer");
                 Require(w.Controller.Operation is { State: "Unconfirmed", Action: "update" } && ResultVisible(w), "SDK failure has no visible retained result");
                 Require(w.ActionIds.Contains("prepare-update") && !w.ActionIds.Contains("apply-update") && !w.TransitionPending, "Rejected SDK download exposed installation or queued restart");
-                Require(!w.Feedback.Contains("private-fixture") && !w.Feedback.Contains("Fixture SHA-256"), "SDK internals leaked into user feedback");
+                Require(!PrimaryText(w).Contains("private-fixture") && !PrimaryText(w).Contains("Fixture SHA-256")
+                    && !w.Feedback.Contains("private-fixture") && !w.Feedback.Contains("Fixture SHA-256"), "SDK internals leaked into page or footer feedback");
                 host.Source.StageFailure = null;
                 Click(w, "prepare-update");
                 Complete(w.UpdateTask);
-                Require(host.Source.Stages == 2 && w.ActionIds.Contains("apply-update") && w.Feedback.Contains("Download verified") && w.Controller.Operation is null, "User could not recover after the SDK refusal");
+                Require(host.Source.Stages == 2 && w.ActionIds.Contains("apply-update") && StatusShownOnce(w, "Download verified") && w.Controller.Operation is null, "User could not recover after the SDK refusal or its status was duplicated");
             });
         }
 
@@ -380,7 +381,7 @@ internal static class UpdateInterfaceTests
             Require(!pending.IsCompleted && w.Controller.Operation is null && !ResultVisible(w), "Download retry still presents its old failure as current");
             host.Source.StageCompletion.SetResult(PreparedFixture());
             Complete(pending);
-            Require(w.Controller.Operation is null && !ResultVisible(w) && w.Feedback.Contains("Download verified") && w.ActionIds.Contains("apply-update"), "Verified retry kept the old failure card");
+            Require(w.Controller.Operation is null && !ResultVisible(w) && StatusShownOnce(w, "Download verified") && w.ActionIds.Contains("apply-update"), "Verified retry kept the old failure card or repeated its status");
         });
         foreach (var download in new[]
         {
@@ -480,7 +481,7 @@ internal static class UpdateInterfaceTests
             host.Open();
             Click(w, "check-updates");
             Complete(w.UpdateTask);
-            Require(Text(w).Contains("latest") && w.Feedback.Contains("latest") && !ReviewFixTests.Button(w, "release:" + AppBuild.Current.BuildId).IsEnabled, "Current version is offered as an update or footer still claims a pending check");
+            Require(StatusShownOnce(w, "latest") && !ReviewFixTests.Button(w, "release:" + AppBuild.Current.BuildId).IsEnabled, "Current version is offered as an update or its completed status was missing or repeated");
         });
     }
 
@@ -519,6 +520,10 @@ internal static class UpdateInterfaceTests
     }
 
     private static void Click(MainWindow window, string id) => ReviewFixTests.Button(window, id).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+    private static string PrimaryText(MainWindow window) => PremiumInterfaceTests.Descendants<TextBlock>((DependencyObject)window.FindName("Rows"))
+        .Single(block => AutomationProperties.GetLiveSetting(block) == AutomationLiveSetting.Polite).Text;
+    private static bool StatusShownOnce(MainWindow window, string expected) => PrimaryText(window).Contains(expected, StringComparison.Ordinal)
+        && !window.Feedback.Contains(expected, StringComparison.Ordinal);
     private static string Text(MainWindow window) => string.Join("\n", PremiumInterfaceTests.Descendants<TextBlock>((DependencyObject)window.FindName("Rows")).Select(t => t.Text));
     private static TextBox Notes(MainWindow window) => PremiumInterfaceTests.Descendants<TextBox>((DependencyObject)window.FindName("Rows")).Single(t => AutomationProperties.GetName(t).StartsWith("Changes in version", StringComparison.Ordinal));
     private sealed class Host : IDisposable

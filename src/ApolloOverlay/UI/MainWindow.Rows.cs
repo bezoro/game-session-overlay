@@ -130,8 +130,6 @@ public partial class MainWindow
     {
         automationRevision++;
         NoteAutomationTargets();
-        HeaderBrand.Visibility = (narrow || compactChrome) && view.Current.Route != OverlayRoute.Hub ? Visibility.Collapsed : Visibility.Visible;
-        HeaderBrand.FontSize = ResourceNumber(compactChrome || narrow ? "SessionType.Caption" : "SessionType.CompactBody", compactChrome || narrow ? 13 : 14);
         RefreshUpdateIndicator(register: false);
         if (Confirming)
         {
@@ -224,6 +222,7 @@ public partial class MainWindow
             PageTitle.Text = featureTitle;
         BuildCurrentView();
         RefreshUpdateIndicator(register: false);
+        SuppressDuplicateUpdateFeedback();
         UpdateHints();
         renderedFeatureShape = FeatureViewShape();
         UpdatePersistentState();
@@ -242,10 +241,12 @@ public partial class MainWindow
     private bool QuickAccessAction(string id) => view.Current.Route == OverlayRoute.Hub && SessionHubSettings.Catalog.Contains(id);
     private bool CompactAction(string id) => view.Current.Route == OverlayRoute.OperationResult
         || narrow && (view.Current.Route == OverlayRoute.Hub && SessionHubSettings.Catalog.Contains(id) || view.Current.Route == OverlayRoute.Media && id is "media-previous" or "media-next");
-    private string ActionDescription(string id, string description, bool available) => QuickAccessAction(id) && !available ? id switch
+    private string ActionDescription(string id, string description, bool available) => QuickAccessAction(id) ? id switch
     {
-        "playnite" => "Set up in System",
-        "steam-overlay" => "Unavailable here",
+        "playnite" when !available => narrow ? "Needs setup" : "Set up in System",
+        "steam" when !available && narrow => "Not found",
+        "steam-overlay" when !available => narrow ? "Unavailable" : "Unavailable here",
+        "audio" when narrow && !audio.Current.Available => "No output",
         _ => description
     } : description;
     private Button MakeButton(string id, string title, string description, Action action, bool available, bool danger)

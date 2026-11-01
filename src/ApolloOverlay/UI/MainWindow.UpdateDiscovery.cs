@@ -129,6 +129,7 @@ public partial class MainWindow
         HeaderIdentity.Text = "v" + AppBuild.Current.Version.Split('+')[0];
         HeaderIdentity.ToolTip = AppBuild.Current.Display + " · " + AppBuild.Current.BuildId + " · " + AppBuild.Current.Commit;
         var compact = narrow || compactChrome;
+        HeaderBrand.FontSize = ResourceNumber(compact ? "SessionType.Caption" : "SessionType.CompactBody", compact ? 13 : 14);
         var stacked = compact && view.Depth > 0;
         HeaderVersionGroup.Orientation = stacked ? Orientation.Vertical : Orientation.Horizontal;
         UpdateAvailableButton.Margin = stacked ? new(0, 4, 0, 0) : new(6, 0, 0, 0);
