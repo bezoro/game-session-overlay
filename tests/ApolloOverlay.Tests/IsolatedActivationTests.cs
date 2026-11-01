@@ -16,10 +16,64 @@ internal static class IsolatedActivationTests
     internal const string ParentExitArgument = "--activation-test-parent-exit";
     internal const string PassiveArgument = "--activation-test-passive";
     internal const string BrokerArgument = "--activation-test-broker";
+    internal const string ForegroundArgument = "--activation-test-foreground";
 
-    internal static int RunBrokerHost(string encoded) => IsolatedWindowActivation.RunHost(encoded,
-        (window, foreground, owner) => new WindowActivation(new BrokerRequiredNative(window))
-            .Execute(window, foreground, owner, CancellationToken.None) ? WindowActivation.BrokerConfirmed : 1);
+    internal static int RunBrokerHost(string encoded, string receiptPath)
+    {
+        using var current = Process.GetCurrentProcess();
+        var stages = new List<NativeStage>();
+        var code = 1;
+        try
+        {
+            code = IsolatedWindowActivation.RunHost(encoded, (window, foreground, owner) =>
+            {
+                var native = new BrokerRequiredNative(window, stages);
+                return new WindowActivation(native).Execute(window, foreground, owner, CancellationToken.None)
+                    ? WindowActivation.BrokerConfirmed : native.FailureCode;
+            });
+            return code;
+        }
+        finally
+        {
+            File.WriteAllText(receiptPath, JsonSerializer.Serialize(new BrokerReceipt(current.Id,
+                current.StartTime.ToUniversalTime().Ticks, code, stages)));
+        }
+    }
+
+    internal static int RunForegroundHost(string readyName, string identityPath)
+    {
+        using var current = Process.GetCurrentProcess();
+        using var ready = EventWaitHandle.OpenExisting(readyName);
+        var app = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
+        var window = new Window { Title = "Activation separate-process foreground fixture", Width = 180, Height = 100, Left = -12000, Top = -12000 };
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(10) };
+        var deadline = new Stopwatch();
+        nint handle = 0;
+        window.Loaded += (_, _) =>
+        {
+            handle = new WindowInteropHelper(window).Handle;
+            Native.SetForegroundWindow(handle);
+            deadline.Start();
+            timer.Start();
+        };
+        timer.Tick += (_, _) =>
+        {
+            var confirmed = Native.GetForegroundWindow() == handle && window.IsActive;
+            if (!confirmed && deadline.Elapsed < TimeSpan.FromSeconds(3))
+                return;
+            timer.Stop();
+            File.WriteAllText(identityPath, JsonSerializer.Serialize(new ForegroundIdentity(current.Id,
+                current.StartTime.ToUniversalTime().Ticks, handle.ToInt64(), confirmed)));
+            ready.Set();
+            if (!confirmed)
+                app.Shutdown(3);
+        };
+        try
+        {
+            return app.Run(window);
+        }
+        finally { timer.Stop(); }
+    }
 
     internal static int Hang(string readyName, string identityPath)
     {
@@ -50,17 +104,40 @@ internal static class IsolatedActivationTests
     {
         test("isolated native broker transfers real foreground after direct parent requests are refused", () =>
         {
-            using var windows = new Windows();
-            var brokerCompleted = false;
-            var client = new IsolatedWindowActivation(encoded => ProbeStart(BrokerArgument, encoded), (message, outcome) =>
+            using var windows = new Windows(separateProcessForeground: true);
+            using var proof = new Probe();
+            var brokerCompleted = 0;
+            var brokerHelperPid = 0;
+            var client = new IsolatedWindowActivation(encoded => ProbeStart(BrokerArgument, encoded, proof.ReceiptPath), (message, outcome) =>
             {
                 Trace(message, outcome);
-                brokerCompleted |= message.Contains("stage=broker-confirmed", StringComparison.Ordinal) && outcome == ResultKind.Completed;
+                if (message.Contains("stage=broker-confirmed", StringComparison.Ordinal) && outcome == ResultKind.Completed)
+                    Interlocked.Exchange(ref brokerCompleted, 1);
+                const string startPrefix = "focus-host/start/pid=";
+                if (message.StartsWith(startPrefix, StringComparison.Ordinal) && int.TryParse(message.AsSpan(startPrefix.Length), out var pid))
+                    Interlocked.Exchange(ref brokerHelperPid, pid);
             });
-            Require(Complete(client.RequestAsync(windows.TargetHandle, windows.ForegroundHandle, CancellationToken.None, timeoutMs: 3000)),
+            var acquired = Complete(client.RequestAsync(windows.TargetHandle, windows.ForegroundHandle, CancellationToken.None, timeoutMs: 3000));
+            Require(File.Exists(proof.ReceiptPath) && new FileInfo(proof.ReceiptPath).Length <= 65536, "The bounded broker-native receipt was not produced");
+            var receiptText = File.ReadAllText(proof.ReceiptPath);
+            Console.WriteLine("ACTIVATION broker-native-receipt " + receiptText);
+            var receipt = JsonSerializer.Deserialize<BrokerReceipt>(receiptText) ?? throw new Exception("The broker receipt was empty");
+            Require(acquired,
                 "The real helper-owned broker did not transfer foreground after direct refusal");
             windows.RequireTargetActivation();
-            Require(brokerCompleted, "The broker's actual completion was not identified in diagnostics");
+            Require(receipt.Pid != Environment.ProcessId && receipt.Pid == Volatile.Read(ref brokerHelperPid) && receipt.Started > 0,
+                "The broker receipt did not identify the exact separate helper");
+            var broker = receipt.Stages.SingleOrDefault(stage => stage.Name == "broker-created")?.Window ?? 0;
+            Require(receipt.Stages.Any(stage => stage.Name == "direct-target-refused" && stage.Window == windows.TargetHandle && stage.Accepted == false)
+                && broker != 0
+                && receipt.Stages.Any(stage => stage.Name == "broker-acknowledged" && stage.Window == broker && stage.Foreground == broker && stage.Accepted == true)
+                && receipt.Stages.Any(stage => stage.Name == "target-transfer-request" && stage.Window == windows.TargetHandle && stage.PreviousForeground == broker && stage.Accepted == true),
+                "The receipt did not prove direct refusal, real broker acquisition, and native target transfer");
+            // The helper may finish before its cross-queue acknowledgement. Its
+            // native stages and the parent's actual WPF ownership prove the path;
+            // an unsuccessful helper result keeps its honest failure diagnostic.
+            Require(Volatile.Read(ref brokerCompleted) == (receipt.Code == WindowActivation.BrokerConfirmed ? 1 : 0),
+                "The broker's native completion diagnostic disagreed with its exact receipt");
         });
         test("isolated activation transfers real native and WPF focus across GUI threads", () =>
         {
@@ -300,12 +377,12 @@ internal static class IsolatedActivationTests
     }
     private static void Complete(Task task) => ReviewFixTests.Complete(task);
 
-    private static void PumpUntil(Func<bool> condition, string failure)
+    private static void PumpUntil(Func<bool> condition, string failure, int timeoutMs = 3000)
     {
         var deadline = Stopwatch.StartNew();
         while (!condition())
         {
-            Require(deadline.Elapsed < TimeSpan.FromSeconds(3), failure);
+            Require(deadline.ElapsedMilliseconds < timeoutMs, failure);
             Complete(Task.Delay(10));
         }
     }
@@ -332,27 +409,79 @@ internal static class IsolatedActivationTests
     }
 
     private sealed record ChildIdentity(int Pid, long Started);
+    private sealed record ForegroundIdentity(int Pid, long Started, long Window, bool Confirmed);
+    private sealed record NativeStage(string Name, long Window, long PreviousForeground, long Foreground, bool? Accepted, int FailureCode, uint Thread = 0);
+    private sealed record BrokerReceipt(int Pid, long Started, int Code, List<NativeStage> Stages);
 
-    private sealed class BrokerRequiredNative(nint target) : IWindowActivationNative
+    private sealed class BrokerRequiredNative(nint target, List<NativeStage> stages) : IWindowActivationNative
     {
         private readonly WindowActivation.Win32Activation native = new();
         private nint broker;
+        internal int FailureCode => native.FailureCode;
         public uint CurrentThread => native.CurrentThread;
-        public nint Foreground => native.Foreground;
-        public uint WindowThread(nint window) => native.WindowThread(window);
-        public void EnsureQueue() => native.EnsureQueue();
-        public bool Attach(uint current, uint foreground, bool attach) => native.Attach(current, foreground, attach);
-        public bool AwaitActivation(nint window, int timeoutMs) => native.AwaitActivation(window, timeoutMs);
+        public nint Foreground
+        {
+            get
+            {
+                var observed = native.Foreground;
+                stages.Add(new("foreground-observed", 0, observed.ToInt64(), observed.ToInt64(), null, native.FailureCode));
+                return observed;
+            }
+        }
+        public uint WindowThread(nint window)
+        {
+            var thread = native.WindowThread(window);
+            Record("window-thread", window, native.Foreground, thread: thread);
+            return thread;
+        }
+        public void EnsureQueue()
+        {
+            native.EnsureQueue();
+            Record("queue-created", 0, native.Foreground);
+        }
+        public bool Attach(uint current, uint foreground, bool attach)
+        {
+            var previous = native.Foreground;
+            var accepted = native.Attach(current, foreground, attach);
+            Record(attach ? "queue-attached" : "queue-detached", 0, previous, accepted, current);
+            return accepted;
+        }
+        public bool AwaitActivation(nint window, int timeoutMs)
+        {
+            var previous = native.Foreground;
+            var accepted = native.AwaitActivation(window, timeoutMs);
+            Record(window == broker ? "broker-acknowledged" : "target-acknowledged", window, previous, accepted);
+            return accepted;
+        }
         public bool SetForeground(nint window)
         {
+            var previous = native.Foreground;
             // Model the observed refusal while preserving every real native call
             // needed to acquire the broker and complete the parent's WPF activation.
-            if (window == target && (broker == 0 || Foreground != broker))
+            if (window == target && (broker == 0 || previous != broker))
+            {
+                Record("direct-target-refused", window, previous, false);
                 return false;
-            return native.SetForeground(window);
+            }
+            var accepted = native.SetForeground(window);
+            Record(window == broker ? "broker-request" : window == target ? "target-transfer-request" : "foreground-restore-request", window, previous, accepted);
+            return accepted;
         }
-        public nint CreateBrokerWindow() => broker = native.CreateBrokerWindow();
-        public void DestroyBrokerWindow(nint window) => native.DestroyBrokerWindow(window);
+        public nint CreateBrokerWindow()
+        {
+            var previous = native.Foreground;
+            broker = native.CreateBrokerWindow();
+            Record("broker-created", broker, previous, broker != 0, native.CurrentThread);
+            return broker;
+        }
+        public void DestroyBrokerWindow(nint window)
+        {
+            var previous = native.Foreground;
+            native.DestroyBrokerWindow(window);
+            Record("broker-destroyed", window, previous);
+        }
+        private void Record(string name, nint window, nint previous, bool? accepted = null, uint thread = 0) =>
+            stages.Add(new(name, window.ToInt64(), previous.ToInt64(), native.Foreground.ToInt64(), accepted, native.FailureCode, thread));
     }
 
     private sealed class Probe : IDisposable
@@ -364,6 +493,7 @@ internal static class IsolatedActivationTests
             get;
         }
         internal string IdentityPath => Path.Combine(root, "child.json");
+        internal string ReceiptPath => Path.Combine(root, "broker.json");
         internal Probe()
         {
             Directory.CreateDirectory(root);
@@ -384,6 +514,11 @@ internal static class IsolatedActivationTests
         private Thread? foregroundThread;
         private Dispatcher? foregroundDispatcher;
         private Action? closeForeground;
+        private ActivationProcessJob? foregroundJob;
+        private Process? foregroundProcess;
+        private Probe? foregroundProbe;
+        private ChildIdentity? foregroundIdentity;
+        private bool foregroundAttached;
         internal Window Target
         {
             get;
@@ -397,7 +532,7 @@ internal static class IsolatedActivationTests
             get; private set;
         }
 
-        internal Windows()
+        internal Windows(bool separateProcessForeground = false)
         {
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
             _ = Application.Current ?? new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
@@ -407,7 +542,8 @@ internal static class IsolatedActivationTests
                 Width = 180,
                 Height = 100,
                 Left = -12000,
-                Top = -12000
+                Top = -12000,
+                ShowActivated = !separateProcessForeground
             };
             try
             {
@@ -417,6 +553,11 @@ internal static class IsolatedActivationTests
                 Native.SetForegroundWindow(TargetHandle);
                 PumpUntil(() => Native.GetForegroundWindow() == TargetHandle && Target.IsActive,
                     "The initial target fixture did not obtain real foreground ownership");
+                if (separateProcessForeground)
+                {
+                    StartForegroundProcess();
+                    return;
+                }
                 var ready = new TaskCompletionSource<(Dispatcher Dispatcher, nint Handle, Action Close)>(TaskCreationOptions.RunContinuationsAsynchronously);
                 foregroundThread = new Thread(() =>
                 {
@@ -469,10 +610,45 @@ internal static class IsolatedActivationTests
             () => Native.GetForegroundWindow() == TargetHandle && Target.IsActive,
             "Native foreground ownership did not complete its WPF activation");
 
+        private void StartForegroundProcess()
+        {
+            foregroundProbe = new();
+            foregroundJob = new();
+            foregroundProcess = Process.Start(ProbeStart(ForegroundArgument, foregroundProbe.ReadyName, foregroundProbe.IdentityPath))
+                ?? throw new Exception("The separate foreground process did not start");
+            foregroundIdentity = new(foregroundProcess.Id, foregroundProcess.StartTime.ToUniversalTime().Ticks);
+            foregroundJob.Attach(foregroundProcess);
+            foregroundAttached = true;
+            PumpUntil(() => foregroundProbe.Ready.WaitOne(0), "The separate foreground process never published its native identity", timeoutMs: 5000);
+            Require(new FileInfo(foregroundProbe.IdentityPath).Length <= 4096, "The separate foreground identity exceeded its fixture bound");
+            var identity = JsonSerializer.Deserialize<ForegroundIdentity>(File.ReadAllText(foregroundProbe.IdentityPath))
+                ?? throw new Exception("The separate foreground identity was empty");
+            Require(identity.Pid == foregroundIdentity.Pid && identity.Started == foregroundIdentity.Started && identity.Confirmed
+                && identity.Pid != Environment.ProcessId && identity.Window != 0 && !foregroundProcess.HasExited,
+                "The separate foreground fixture did not confirm its exact live process");
+            ForegroundHandle = (nint)identity.Window;
+            Require(Native.GetWindowThreadProcessId(ForegroundHandle, out var pid) != 0 && pid == identity.Pid,
+                "The foreground fixture handle belonged to a different process");
+            PumpUntil(() => Native.GetForegroundWindow() == ForegroundHandle && !Target.IsActive,
+                "The separate foreground process did not retain real foreground ownership");
+            Console.WriteLine($"ACTIVATION separate-process-fixture/target=0x{TargetHandle:X}/foreground=0x{ForegroundHandle:X}/foreground-pid={identity.Pid}/foreground-started={identity.Started}");
+        }
+
         private void Cleanup(bool requireStopped)
         {
             try
             {
+                foregroundJob?.Dispose();
+                if (foregroundProcess is { } process)
+                {
+                    // The Process returned by Start owns the exact child handle;
+                    // never reacquire an arbitrary PID when terminating a fixture.
+                    if (!foregroundAttached && !process.HasExited)
+                        process.Kill(entireProcessTree: true);
+                    Complete(process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(3)));
+                    if (requireStopped && foregroundIdentity is { } identity)
+                        RequireStopped(identity);
+                }
                 var dispatcher = foregroundDispatcher ?? (foregroundThread is null ? null : Dispatcher.FromThread(foregroundThread));
                 if (dispatcher is { HasShutdownStarted: false })
                     dispatcher.BeginInvoke(DispatcherPriority.Normal, closeForeground ?? (() => dispatcher.BeginInvokeShutdown(DispatcherPriority.Background)));
@@ -488,6 +664,8 @@ internal static class IsolatedActivationTests
             }
             finally
             {
+                foregroundProcess?.Dispose();
+                foregroundProbe?.Dispose();
                 Target.Close();
                 SynchronizationContext.SetSynchronizationContext(previous);
             }
