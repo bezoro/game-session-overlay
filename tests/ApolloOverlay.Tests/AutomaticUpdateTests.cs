@@ -349,7 +349,10 @@ internal static class AutomaticUpdateTests
         {
             Window.OpenPanel();
             ReviewFixTests.Complete(Window.OpeningTask);
-            Window.Left = Window.Top = -12000;
+            // Fixed capture viewports must override WPF's native tracking limit
+            // with a matching minimum as well as a maximum.
+            Window.MinWidth = width;
+            Window.MinHeight = height;
             Window.MaxWidth = width;
             Window.MaxHeight = height;
             Window.Width = width;
