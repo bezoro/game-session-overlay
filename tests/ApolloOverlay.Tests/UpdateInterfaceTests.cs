@@ -323,6 +323,80 @@ internal static class UpdateInterfaceTests
             Require(w.ActionIds.Contains("prepare-update") && !w.ActionIds.Contains("apply-update") && StatusShownOnce(w, "Download cancelled"), "Cancelled download exposed install, lost its page status, or repeated it in the footer");
             Require(!w.TransitionPending, "Cancelled download queued a restart");
         });
+        foreach (var input in new[] { "mouse", "keyboard", "controller" })
+            test("updates primary download action cancels once through actual " + input + " input", () =>
+            {
+                using var host = new Host();
+                var w = host.Window;
+                host.Source.StageCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                host.Review();
+                w.ShowDiagnostic();
+                var primary = ReviewFixTests.Button(w, "prepare-update");
+                Require(AutomationProperties.GetName(primary) == "Download update"
+                    && !AutomationProperties.GetHelpText(primary).Contains("cancel", StringComparison.OrdinalIgnoreCase),
+                    "Idle download guidance promises a cancellation that has not started");
+                if (input == "controller")
+                {
+                    Pad(w, PadButtons.None);
+                    Pad(w, PadButtons.None);
+                    Pad(w, PadButtons.A);
+                    Pad(w, PadButtons.A);
+                    Require(host.Source.Stages == 1 && !host.Source.LastStageCancellation.IsCancellationRequested,
+                        "Holding the same A press that started a download immediately cancelled it");
+                    Pad(w, PadButtons.None);
+                    Pad(w, PadButtons.None);
+                }
+                else
+                    Click(w, "prepare-update");
+                var pending = w.UpdateTask;
+                Require(!pending.IsCompleted && host.Source.Stages == 1 && AutomationProperties.GetName(primary) == "Cancel download",
+                    "The active transfer did not expose an actual cancel action");
+                w.RefreshRows();
+                primary = ReviewFixTests.Button(w, "prepare-update");
+                Require(AutomationProperties.GetName(primary) == "Cancel download" && primary.IsEnabled,
+                    "Rebuilding the download view restored an idle action during an active transfer");
+                var cancellations = 0;
+                using var observation = host.Source.LastStageCancellation.Register(() => cancellations++);
+                primary.Focus();
+                if (input == "keyboard")
+                {
+                    SendKey(w, Key.Enter, true);
+                    SendKey(w, Key.Enter, false);
+                }
+                else if (input == "controller")
+                    Pad(w, PadButtons.A);
+                else
+                    Click(w, "prepare-update");
+                Require(cancellations == 1 && !pending.IsCompleted && !primary.IsEnabled
+                    && AutomationProperties.GetName(primary) == "Cancelling…" && host.Source.Stages == 1,
+                    "The primary action failed to cancel once or remained actionable while its source was draining");
+                Click(w, "prepare-update");
+                Require(cancellations == 1 && host.Source.Stages == 1, "Repeated activation restarted or repeated a pending cancellation");
+                host.Source.StageCompletion.SetResult(PreparedFixture());
+                Complete(pending);
+                Require(host.Source.Discards == 1 && !w.ActionIds.Contains("apply-update") && !w.TransitionPending
+                    && AutomationProperties.GetName(ReviewFixTests.Button(w, "prepare-update")) == "Download update",
+                    "Late cancellation exposed install, retained its payload, or failed to restore the download action");
+            });
+        test("updates active download cancellation exception does not admit other busy actions", () =>
+        {
+            using var host = new Host();
+            var w = host.Window;
+            host.Source.StageCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            host.Review();
+            w.ShowDiagnostic();
+            Click(w, "prepare-update");
+            var pending = w.UpdateTask;
+            var route = w.AutomationSnapshot().Route;
+            Click(w, "update-notes");
+            Require(!Notes(w).IsKeyboardFocusWithin && !host.Source.LastStageCancellation.IsCancellationRequested
+                && host.Source.Stages == 1 && w.AutomationSnapshot().Route == route,
+                "Allowing the cancel action also admitted a different busy action");
+            Click(w, "prepare-update");
+            host.Source.StageCompletion.SetResult(PreparedFixture());
+            Complete(pending);
+            Require(!w.ActionIds.Contains("apply-update") && !w.TransitionPending, "A blocked busy action escaped into installation");
+        });
         test("updates UI download refusal cannot produce a verified or installed state", () =>
         {
             using var host = new Host();
@@ -520,6 +594,15 @@ internal static class UpdateInterfaceTests
     }
 
     private static void Click(MainWindow window, string id) => ReviewFixTests.Button(window, id).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+    private static void Pad(MainWindow window, PadButtons buttons) => window.ReviewTick([new(true, buttons), default, default, default]);
+    private static void SendKey(MainWindow window, Key key, bool down)
+    {
+        var source = PresentationSource.FromVisual(window) ?? throw new Exception("The keyboard fixture has no WPF presentation source");
+        window.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, key)
+        {
+            RoutedEvent = down ? Keyboard.PreviewKeyDownEvent : Keyboard.PreviewKeyUpEvent
+        });
+    }
     private static string PrimaryText(MainWindow window) => PremiumInterfaceTests.Descendants<TextBlock>((DependencyObject)window.FindName("Rows"))
         .Single(block => AutomationProperties.GetLiveSetting(block) == AutomationLiveSetting.Polite).Text;
     private static bool StatusShownOnce(MainWindow window, string expected) => PrimaryText(window).Contains(expected, StringComparison.Ordinal)
@@ -591,7 +674,7 @@ internal static class UpdateInterfaceTests
 
     private sealed class SourceFake : IUpdateSource
     {
-        internal int Checks, Stages;
+        internal int Checks, Stages, Discards;
         internal bool Disposed, ObserveCancellation;
         internal readonly List<string> Channels = [];
         internal IReadOnlyList<UpdateCandidate> Releases = [Next];
@@ -626,5 +709,6 @@ internal static class UpdateInterfaceTests
         }
 
         public void Dispose() => Disposed = true;
+        public void Discard(PreparedUpdate prepared) => Discards++;
     }
 }

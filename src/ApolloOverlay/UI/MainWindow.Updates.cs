@@ -17,7 +17,7 @@ public partial class MainWindow
     private InstalledBuild? rollbackReview;
     private PreparedUpdate? preparedUpdate;
     private CancellationTokenSource? updateCancellation;
-    private bool updateBusy, updateCommitting, updateCloseAuthorized;
+    private bool updateBusy, updateDownloading, updateCommitting, updateCloseAuthorized;
     private int updateHistoryPage;
     private long updateGeneration, nextUpdateProgress;
     private string updateChannel = AppBuild.Current.Channel == "stable" ? "stable" : "testing";
@@ -162,7 +162,10 @@ public partial class MainWindow
             updateProgressLabel = Paragraph(preparedUpdate is null ? updateStatus : "Download verified. The installed version has not changed.");
             AutomationProperties.SetLiveSetting(updateProgressLabel, AutomationLiveSetting.Polite);
             if (preparedUpdate is null)
+            {
                 AddRow("prepare-update", "Download update", UpdateActionContext(candidate), () => UpdateTask = DownloadUpdateAsync(candidate), updateSource is not PreviewUpdateSource);
+                RefreshDownloadAction();
+            }
             else
                 AddRow("apply-update", "Install and restart", UpdateActionContext(candidate) + " · verified", () =>
                 {
@@ -279,6 +282,7 @@ public partial class MainWindow
         using var cancellation = new CancellationTokenSource();
         updateCancellation = cancellation;
         busy = updateBusy = true;
+        updateDownloading = true;
         ClearPreviousUpdateResult();
         updateStatus = "Preparing download…";
         SetUpdateStatus(updateStatus);
@@ -286,7 +290,7 @@ public partial class MainWindow
         {
             var progress = new Progress<UpdateProgress>(value =>
             {
-                if (exiting || generation != updateGeneration || updateCancellation != cancellation)
+                if (exiting || generation != updateGeneration || updateCancellation != cancellation || cancellation.IsCancellationRequested)
                     return;
                 var now = Environment.TickCount64;
                 if (value.Total > 0 && now < nextUpdateProgress)
@@ -330,7 +334,7 @@ public partial class MainWindow
             if (ReferenceEquals(updateCancellation, cancellation))
             {
                 updateCancellation = null;
-                busy = updateBusy = false;
+                busy = updateBusy = updateDownloading = false;
                 if (cancellation.IsCancellationRequested && !exiting)
                     updateStatus = "Download cancelled. The installed version was preserved.";
             }
@@ -426,6 +430,7 @@ public partial class MainWindow
         updateStatus = message;
         if (updateProgressLabel is not null)
             updateProgressLabel.Text = message;
+        RefreshDownloadAction();
         if (view.Current.Route is OverlayRoute.Updates or OverlayRoute.UpdateReview)
             SuppressDuplicateUpdateFeedback();
         else
@@ -442,6 +447,39 @@ public partial class MainWindow
     private static string UpdateActionContext(UpdateCandidate candidate) => candidate.Version + " · "
         + (candidate.Channel == "stable" ? "Stable" : "Testing");
 
+    private bool DownloadCancellationAvailable => updateDownloading && updateBusy && !updateCommitting
+        && updateCancellation is { IsCancellationRequested: false };
+    private bool CancelDownloadSelected => navigation.Id == "prepare-update" && view.Current.Route == OverlayRoute.UpdateReview
+        && DownloadCancellationAvailable;
+
+    private string DownloadActionDescription(UpdateCandidate candidate) => UpdateActionContext(candidate)
+        + (DownloadCancellationAvailable ? InputHint(" · {B} also cancels", " · {Esc} also cancels", "") : "");
+
+    private void RefreshDownloadAction()
+    {
+        var index = entries.FindIndex(entry => entry.Id == "prepare-update");
+        if (index < 0 || updateReview is not { } candidate)
+            return;
+        var entry = entries[index];
+        var downloading = updateDownloading && updateBusy && !updateCommitting;
+        var cancelling = downloading && updateCancellation?.IsCancellationRequested == true;
+        var title = downloading ? cancelling ? "Cancelling…" : "Cancel download" : "Download update";
+        if (entry.Button.Content is ActionButtonContent content && content.Title.Text != title)
+        {
+            SetEntryText(entry.Id, title);
+            content.ReplaceIcon(ActionIcon(downloading ? "dismiss-operation" : "prepare-update"));
+        }
+        var available = !cancelling && updateSource is not PreviewUpdateSource;
+        entry.Button.IsEnabled = available;
+        entries[index] = entry with
+        {
+            Available = available
+        };
+        SetEntryPrompt(entry.Id, DownloadActionDescription(candidate));
+        if (entry.Available != available)
+            SetSelection(restoreFocus: false);
+    }
+
     private bool CancelUpdateInteraction()
     {
         if (!updateBusy)
@@ -455,13 +493,21 @@ public partial class MainWindow
             return true;
         }
 
+        if (updateCancellation?.IsCancellationRequested == true)
+        {
+            command?.Complete(ResultKind.Unavailable, "cancellation-already-requested");
+            return true;
+        }
+
         if (interfaceActionDepth == 0)
             RequestCue(FeedbackCue.Cancellation);
         updateGeneration++;
+        CancelOwnedAgentUpdateReceipt(updateCancellation);
         // Cancellation can synchronously run the awaiting operation's finally on this UI
         // context. Publish the pending state first so it cannot overwrite the terminal one.
         SetUpdateStatus("Cancelling. The installed version will be preserved…");
         updateCancellation?.Cancel();
+        RefreshDownloadAction();
         command?.Complete(ResultKind.Requested, "cancellation-requested");
         return true;
     }

@@ -12,6 +12,8 @@ Installed sessions check the selected channel automatically, starting about 15 s
 
 When a strictly newer version is found, **Update available** appears beside the version. Select it with a controller, keyboard or mouse to open that release's changes and download action directly. Download and installation remain explicit. A channel switch clears the old notice and schedules a check of the new channel. An older Stable version is not advertised as an upgrade over a newer Testing build. Automatic, manual and CLI catalog queries share the same source gate, including while a canceled SDK request finishes; quiet outcomes are retained in the command log.
 
+During a transfer, the primary action becomes **Cancel download**. Click it, press Enter or make a fresh A press to stop that transfer; B/Esc also cancel. It changes to a disabled **Cancelling…** while the source finishes, then restores the download action. Cancellation preserves the installed version and discards any payload returned late. Other commands and installation remain blocked during the transfer.
+
 | Channel | Source | Publication |
 | --- | --- | --- |
 | Stable | Push to `main` | Normal release |

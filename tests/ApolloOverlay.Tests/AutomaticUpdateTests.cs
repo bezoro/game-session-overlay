@@ -176,6 +176,35 @@ internal static class AutomaticUpdateTests
             Require(!host.Window.IsVisible && host.Badge.Visibility == Visibility.Collapsed && host.Source.Checks == 1 && host.Source.Stages == 0,
                 "A late source completion reopened the overlay, republished an indicator, or restarted discovery");
         });
+        test("local cancellation of a CLI-owned transfer preserves its exact terminal receipt and discards a late payload", () =>
+        {
+            using var host = new Host();
+            var release = Release();
+            host.Source.Releases = [release];
+            host.Poll(15_000);
+            host.FinishAutomatic();
+            host.Open(572, 940);
+            Click(host.Badge);
+            host.Source.StageCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            var request = Request("update-download", release.BuildId);
+            Require(host.Send(request).Outcome == "Requested", "The identified CLI transfer did not start");
+            ReviewFixTests.Complete(host.Window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background).Task);
+            Require(host.Source.Stages == 1 && !host.Window.UpdateTask.IsCompleted,
+                "The CLI transfer did not reach its pending source");
+            var primary = ReviewFixTests.Button(host.Window, "prepare-update");
+            Require(System.Windows.Automation.AutomationProperties.GetName(primary) == "Cancel download",
+                "The current CLI-owned download was not represented by the cancel action");
+            Click(primary);
+            var state = host.Status();
+            Require(host.Source.StageToken.IsCancellationRequested && state is { Phase: "Cancelled", Terminal: true }
+                && state.JobId == request.RequestId, "Local cancellation lost or falsely completed the exact CLI job receipt");
+            host.Source.StageCompletion.SetResult(new("fixture-never-installed.nupkg",
+                new(release.Version, release.BuildId, release.Commit, release.Channel)));
+            ReviewFixTests.Complete(host.Window.UpdateTask);
+            Require(host.Status() is { Phase: "Cancelled", Terminal: true } && host.Source.Discards == 1
+                && !host.Window.TransitionPending && ReadField(host.Window, "preparedUpdate") is null,
+                "Late CLI staging retained a payload or replaced terminal cancellation");
+        });
         foreach (var cli in new[] { false, true })
             test("explicit update checks fence obsolete automatic results and preserve the prepared package pin cli=" + cli, () =>
             {
@@ -249,6 +278,8 @@ internal static class AutomaticUpdateTests
                 Require(((TextBlock)ReadField(host.Window, "updateProgressLabel")!).Text.Contains("57%", StringComparison.Ordinal)
                     && host.Window.AutomationSnapshot().Busy && !host.Window.TransitionPending,
                     "Download progress was not published or crossed the restart boundary");
+                Require(System.Windows.Automation.AutomationProperties.GetName(ReviewFixTests.Button(host.Window, "prepare-update")) == "Cancel download",
+                    "The progress capture still presented a download action while cancellation was the real action");
                 RequireNoRepeatedUpdateStatus(host.Window);
                 Capture(host.Window, "automatic-update-dark-572x940-progress");
             }
@@ -395,7 +426,7 @@ internal static class AutomaticUpdateTests
     {
         private readonly Queue<TaskCompletionSource<IReadOnlyList<UpdateCandidate>>> queued = new();
         private readonly List<TaskCompletionSource<IReadOnlyList<UpdateCandidate>>> pending = [];
-        internal int Checks, Stages;
+        internal int Checks, Stages, Discards;
         internal bool Disposed;
         internal string LastChannel = "";
         internal CancellationToken LastToken;
@@ -403,6 +434,7 @@ internal static class AutomaticUpdateTests
         internal IReadOnlyList<UpdateCandidate> Releases = [];
         internal TaskCompletionSource<PreparedUpdate>? StageCompletion;
         internal IProgress<UpdateProgress>? StageProgress;
+        internal CancellationToken StageToken;
         internal TaskCompletionSource<IReadOnlyList<UpdateCandidate>> DelayNext()
         {
             var value = new TaskCompletionSource<IReadOnlyList<UpdateCandidate>>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -424,6 +456,7 @@ internal static class AutomaticUpdateTests
         {
             Stages++;
             StageProgress = progress;
+            StageToken = cancellation;
             return StageCompletion?.Task ?? Task.FromResult(new PreparedUpdate("fixture-never-installed.nupkg", new(candidate.Version, candidate.BuildId, candidate.Commit, candidate.Channel)));
         }
         internal void CancelPending()
@@ -433,6 +466,7 @@ internal static class AutomaticUpdateTests
             StageCompletion?.TrySetCanceled();
         }
         public void Dispose() => Disposed = true;
+        public void Discard(PreparedUpdate prepared) => Discards++;
     }
 
     private sealed class FeedbackFake : IFeedbackService

@@ -19,6 +19,7 @@ public partial class MainWindow
     private AgentUpdateApplyPin? agentUpdateApplyPin;
     private string agentTargetCommit = "", agentTargetChannel = "";
     private bool agentUpdateDisposed;
+    private CancellationTokenSource? agentUpdateCancellationOwner;
     private long agentReceiptAt;
     private string AgentReceiptPath => Path.Combine(Controller.Diagnostics.Root, "agent-update-receipt.json");
     private bool AgentSourceAvailable => updateSource is not PreviewUpdateSource;
@@ -66,6 +67,7 @@ public partial class MainWindow
             SetAgentState("Cancelled", "Operation cancelled. The installed version was preserved.", true, persist: true);
             SetUpdateStatus(agentUpdateState!.Message);
             updateCancellation.Cancel();
+            RefreshDownloadAction();
             return Task.FromResult(Reply("Cancelled", agentUpdateState.Message));
         }
 
@@ -173,8 +175,10 @@ public partial class MainWindow
 
         var cancellation = new CancellationTokenSource();
         updateCancellation = cancellation;
+        agentUpdateCancellationOwner = cancellation;
         var generation = ++updateGeneration;
         busy = updateBusy = true;
+        updateDownloading = request.Verb == "update-download";
         ClearPreviousUpdateResult();
         SetUpdateStatus(agentUpdateState.Message);
         UpdatePersistentState();
@@ -350,8 +354,10 @@ public partial class MainWindow
             if (ReferenceEquals(updateCancellation, cancellation))
             {
                 updateCancellation = null;
-                busy = updateBusy = false;
+                busy = updateBusy = updateDownloading = false;
             }
+            if (ReferenceEquals(agentUpdateCancellationOwner, cancellation))
+                agentUpdateCancellationOwner = null;
 
             cancellation.Dispose();
             if (!exiting && !agentUpdateDisposed)
@@ -360,6 +366,15 @@ public partial class MainWindow
                 UpdatePersistentState();
             }
         }
+    }
+
+    private void CancelOwnedAgentUpdateReceipt(CancellationTokenSource? cancellation)
+    {
+        if (cancellation is null || !ReferenceEquals(agentUpdateCancellationOwner, cancellation)
+            || agentUpdateState is not { Terminal: false })
+            return;
+        agentUpdateApplyPin = null;
+        SetAgentState("Cancelled", "Operation cancelled. The installed version was preserved.", true, persist: true);
     }
 
     private void AgentUpdateProgress(UpdateProgress value, long generation, CancellationTokenSource cancellation)

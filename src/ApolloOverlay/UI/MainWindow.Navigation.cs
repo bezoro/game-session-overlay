@@ -269,6 +269,11 @@ public partial class MainWindow
         var entry = entries.FirstOrDefault(e => e.Id == navigation.Id);
         if (entry is null)
             return;
+        if (CancelDownloadSelected && !Confirming && entry.Available)
+        {
+            RunInterfaceAction(entry.Button, () => CancelUpdateInteraction(), FeedbackCue.Cancellation);
+            return;
+        }
         if (Navigation.CanActivate(busy, Confirming, entry.Available))
         {
             RunInterfaceAction(entry.Button, entry.Run, entry.Id == "test-feedback" ? null : entry.Id is "back" or "back-header" or "confirm-cancel" ? FeedbackCue.Cancellation : FeedbackCue.Confirmation);
