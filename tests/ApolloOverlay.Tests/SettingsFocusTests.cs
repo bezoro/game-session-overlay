@@ -9,6 +9,51 @@ internal static class SettingsFocusTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        test("isolated primary activation never calls the synchronous UI foreground request", () =>
+        {
+            using var host = new Host();
+            var window = host.Window;
+            window.ShowActivated = false;
+            host.FocusOther();
+            var calls = 0;
+            window.FocusRequest = _ => throw new Exception("The UI thread entered the blocking native request");
+            window.FocusAcquisitionRequest = (handle, previous, token) =>
+            {
+                calls++;
+                Require(previous == host.OtherHandle && !token.IsCancellationRequested, "Primary activation lost its explicit context");
+                return Task.FromResult(Native.SetForegroundWindow(handle));
+            };
+            window.OpenPanel();
+            Complete(window.OpeningTask);
+            host.RequireOwnedFocus();
+            Require(calls == 1, "Primary acquisition was not used exactly once");
+            Neutral(window);
+            var selected = window.SelectedAction;
+            Frame(window, PadButtons.Down);
+            Require(window.SelectedAction != selected, "Confirmed primary activation did not enable navigation");
+        });
+        test("a pending isolated primary request leaves the dispatcher responsive and accepts dismissal", () =>
+        {
+            using var host = new Host();
+            var window = host.Window;
+            window.ShowActivated = false;
+            host.FocusOther();
+            var delayed = new TaskCompletionSource<bool>();
+            CancellationToken token = default;
+            window.FocusRequest = _ => throw new Exception("The UI thread entered the blocking native request");
+            window.FocusAcquisitionRequest = (_, _, cancellation) => { token = cancellation; return delayed.Task; };
+            window.OpenPanel();
+            var opening = window.OpeningTask;
+            var responsive = false;
+            window.Dispatcher.BeginInvoke(() => responsive = true);
+            Pump(60);
+            Require(responsive && !opening.IsCompleted && window.Opacity == 0, "Primary native wait blocked or revealed the UI");
+            window.Close();
+            Require(token.IsCancellationRequested, "Closing did not cancel primary acquisition");
+            delayed.SetResult(true);
+            Complete(opening);
+            Require(!window.IsVisible, "A late primary result reopened the closed overlay");
+        });
         foreach (var nativeAccepted in new[] { false, true })
         {
             test("Guide fallback verifies real WPF/native foreground after request return " + nativeAccepted, () =>

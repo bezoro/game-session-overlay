@@ -446,5 +446,11 @@
     "sha256": "4b0d20b7ee578b0cd06b5c862530324dc70ad1bf8a2f8fd82943252729164e94",
     "license": "CC0-1.0",
     "transformation": "Original paths retained. Vector bounds provide consistent optical height; application colors follow the active theme."
+  },
+  {
+    "name": "copy",
+    "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Copy/SVG/ic_fluent_copy_24_regular.svg",
+    "commit": "a347af95478f989038cccbf085978865264c048a",
+    "sha256": "ae4268eef9bc6cae4c77a8a2b3b8607861594e0e834e4ed0730667f92e73609e"
   }
 ]

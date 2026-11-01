@@ -31,6 +31,8 @@ The wait prevents ordinary handoff while the triggering gesture is still pressed
 
 **Guide/Xbox polling is experimental and enabled for new settings.** It uses an undocumented legacy XInput API. Existing `GuideXInputEnabled:false` stays disabled until explicitly changed in System.
 
+Production opening uses `ShowActivated=false` and sends native focus work to the authenticated activation child. A background controller request can use the child's own off-screen native broker before transferring foreground to the overlay. The WPF dispatcher remains free to process cancellation while native calls are pending. Both native foreground and WPF activation must still be confirmed before reveal. See [activation and isolation](controller-isolation.md) for ownership, timeout and cleanup rules.
+
 While hidden, opening requires a valid short press released after a baseline release. The default maximum hold is 2.0 seconds. Holding longer, disconnecting or failing a read does not open the panel. System offers a 0.5–3.0-second slider in 0.1-second steps; the limit is captured at the beginning of each press and persists only after saving.
 
 Every opening first tries ordinary activation. The provisional window stays transparent, and navigation remains disabled, until native foreground ownership and WPF activation are both observed. A guarded disposable child performs the native fallback with a 900 ms request deadline and a kernel kill-on-close job. Cancellation and cleanup are independent of the WPF dispatcher. Child exit is diagnostic evidence; the exact target HWND, owner thread/PID and WPF activation determine admission.

@@ -17,7 +17,7 @@ internal sealed class TrayHost : IDisposable
         get;
     }
 
-    internal TrayHost(Dispatcher dispatcher, Action open, Action exit, bool visible = true, Action? restartAdministrator = null)
+    internal TrayHost(Dispatcher dispatcher, Action open, Action exit, bool visible = true, Action? restartAdministrator = null, Action? copyDiagnostics = null)
     {
         this.dispatcher = dispatcher;
         this.open = open;
@@ -26,6 +26,8 @@ internal sealed class TrayHost : IDisposable
         artwork = new Drawing.Icon(resource);
         Menu = new Forms.ContextMenuStrip();
         Menu.Items.Add("Open overlay", null, (_, _) => Dispatch(open));
+        if (copyDiagnostics is not null)
+            Menu.Items.Add("Copy diagnostics", null, (_, _) => Dispatch(copyDiagnostics));
         if (restartAdministrator is not null)
             Menu.Items.Add("Restart as administrator…", null, (_, _) => Dispatch(restartAdministrator));
         Menu.Items.Add("Quit", null, (_, _) => Dispatch(exit));
@@ -52,6 +54,11 @@ internal sealed class TrayHost : IDisposable
         if (disposed || !icon.Visible)
             return;
         icon.ShowBalloonTip(5000, "Game Session Overlay · command result", message, Forms.ToolTipIcon.Warning);
+    }
+    internal void NotifyInformation(string message)
+    {
+        if (!disposed && icon.Visible)
+            icon.ShowBalloonTip(2500, "Game Session Overlay", message, Forms.ToolTipIcon.Info);
     }
 
     private void Dispatch(Action action)

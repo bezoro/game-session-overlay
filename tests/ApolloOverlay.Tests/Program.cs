@@ -56,6 +56,8 @@ static class Program
         }
         if (args is [IsolatedWindowActivation.HostArgument, var activation])
             return IsolatedWindowActivation.RunHost(activation);
+        if (args is [IsolatedActivationTests.BrokerArgument, var brokerActivation])
+            return IsolatedActivationTests.RunBrokerHost(brokerActivation);
         if (args is [IsolatedActivationTests.HangArgument, var ready, var identity])
             return IsolatedActivationTests.Hang(ready, identity);
         if (args is [IsolatedActivationTests.ParentExitArgument, var parentReady, var parentIdentity])
@@ -76,6 +78,8 @@ static class Program
         if (args.Length == 2 && args[1] == "--command-log")
         {
             CommandLogTests.Run(Case);
+            DiagnosticReportTests.Run(Case);
+            GuideDiagnosticTrackerTests.Run(Case);
             return Finish(args[0]);
         }
 
@@ -919,6 +923,8 @@ static class Program
         SettingsFocusTests.Run(Case);
         WindowActivationTests.Run(Case);
         IsolatedActivationTests.Run(Case);
+        DiagnosticReportTests.Run(Case);
+        GuideDiagnosticTrackerTests.Run(Case);
         AdministratorCompatibilityTests.Run(Case);
         MouseKeyboardTests.Run(Case);
         AgentUpdateTests.Run(Case);

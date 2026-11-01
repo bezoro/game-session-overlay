@@ -32,7 +32,11 @@ public partial class MainWindow : Window
             if (CommandLoggingEnabled)
                 Controller.Diagnostics.Log(category, outcome);
         });
-        FocusFallbackRequest = renderOnly ? null : (window, foreground, token) => activation.RequestAsync(window, foreground, token);
+        if (!renderOnly)
+        {
+            ShowActivated = false;
+            FocusAcquisitionRequest = (window, foreground, token) => activation.RequestAsync(window, foreground, token);
+        }
         appliedSettings = Controller.Settings;
         input = new(Controller.Settings);
         if (!diagnostic && !Controller.Platform.IsPreview)

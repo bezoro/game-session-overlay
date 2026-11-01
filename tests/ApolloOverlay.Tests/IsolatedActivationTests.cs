@@ -15,6 +15,11 @@ internal static class IsolatedActivationTests
     internal const string HangArgument = "--activation-test-hang";
     internal const string ParentExitArgument = "--activation-test-parent-exit";
     internal const string PassiveArgument = "--activation-test-passive";
+    internal const string BrokerArgument = "--activation-test-broker";
+
+    internal static int RunBrokerHost(string encoded) => IsolatedWindowActivation.RunHost(encoded,
+        (window, foreground, owner) => new WindowActivation(new BrokerRequiredNative(window))
+            .Execute(window, foreground, owner, CancellationToken.None) ? WindowActivation.BrokerConfirmed : 1);
 
     internal static int Hang(string readyName, string identityPath)
     {
@@ -43,6 +48,20 @@ internal static class IsolatedActivationTests
 
     internal static void Run(Action<string, Action> test)
     {
+        test("isolated native broker transfers real foreground after direct parent requests are refused", () =>
+        {
+            using var windows = new Windows();
+            var brokerCompleted = false;
+            var client = new IsolatedWindowActivation(encoded => ProbeStart(BrokerArgument, encoded), (message, outcome) =>
+            {
+                Trace(message, outcome);
+                brokerCompleted |= message.Contains("stage=broker-confirmed", StringComparison.Ordinal) && outcome == ResultKind.Completed;
+            });
+            Require(Complete(client.RequestAsync(windows.TargetHandle, windows.ForegroundHandle, CancellationToken.None, timeoutMs: 3000)),
+                "The real helper-owned broker did not transfer foreground after direct refusal");
+            windows.RequireTargetActivation();
+            Require(brokerCompleted, "The broker's actual completion was not identified in diagnostics");
+        });
         test("isolated activation transfers real native and WPF focus across GUI threads", () =>
         {
             using var windows = new Windows();
@@ -313,6 +332,28 @@ internal static class IsolatedActivationTests
     }
 
     private sealed record ChildIdentity(int Pid, long Started);
+
+    private sealed class BrokerRequiredNative(nint target) : IWindowActivationNative
+    {
+        private readonly WindowActivation.Win32Activation native = new();
+        private nint broker;
+        public uint CurrentThread => native.CurrentThread;
+        public nint Foreground => native.Foreground;
+        public uint WindowThread(nint window) => native.WindowThread(window);
+        public void EnsureQueue() => native.EnsureQueue();
+        public bool Attach(uint current, uint foreground, bool attach) => native.Attach(current, foreground, attach);
+        public bool AwaitActivation(nint window, int timeoutMs) => native.AwaitActivation(window, timeoutMs);
+        public bool SetForeground(nint window)
+        {
+            // Model the observed refusal while preserving every real native call
+            // needed to acquire the broker and complete the parent's WPF activation.
+            if (window == target && (broker == 0 || Foreground != broker))
+                return false;
+            return native.SetForeground(window);
+        }
+        public nint CreateBrokerWindow() => broker = native.CreateBrokerWindow();
+        public void DestroyBrokerWindow(nint window) => native.DestroyBrokerWindow(window);
+    }
 
     private sealed class Probe : IDisposable
     {

@@ -19,6 +19,14 @@ The reader bounds enumeration, files, byte windows, record size and output. It s
 
 While the overlay is running, `gso status` also reports `Snapshot.Diagnostics`: directory, buffered events, dropped events, write failures, active/untracked operations, drain timeout and the last error type/HRESULT. This makes an unwritable log location distinguishable from a quiet application. The normal CLI identity/session/elevation checks still apply to `status`.
 
+## Copy a complete report
+
+Choose **Copy diagnostics** from the tray menu or **System → Copy diagnostics**. The tray action works while the overlay is hidden and does not try to activate it. Paste the resulting text into chat. It includes version, build, commit, channel, current Guide/focus state, logger health and every retained structured command-log file, in chronological order. It preserves malformed and torn lines as evidence. It does not use the CLI's recent-record, 200-entry or output-byte limits.
+
+The exporter drains the asynchronous queue, opens and pins retained file identities, and reads their captured lengths on a background worker. Damaged UTF-8 or NUL-containing data is explicitly encoded as base64 so its bytes survive copying. New records appended after that snapshot belong to the next report. Known logging losses and an incomplete drain are visible in the report. Existing retention still applies; records already deleted or never written cannot be recovered.
+
+Export refuses unsafe paths, more than 64 candidate files or more than 64 MiB of retained text. It reports failure rather than copying a silently truncated report. Clipboard contention also fails promptly, with no delayed retry or later clipboard overwrite. Preview fixtures cannot access the real clipboard. No upload occurs automatically.
+
 ## Read an operation
 
 Each JSON line has a schema version, UTC timestamp, application version/build/commit/channel, process ID and a random logging session ID. `Command`, `Source` and `Route` identify the semantic action and origin. Sources distinguish controller, keyboard, mouse, system and CLI/bridge requests.
@@ -32,6 +40,7 @@ Coverage includes:
 - Startup, existing-instance requests, Windows startup/search integration, exit and unhandled exceptions.
 - Action activation, semantic Back/options/tab commands, settings draft changes and saving. Sound, vibration and Guide changes record their safe on/off values; scale, deadzone and Guide-limit changes record numeric settings without user paths.
 - Overlay opening and actual focus confirmation/refusal, hide interruption, return-focus results, deferred dispatch and cancellation before sending.
+- Guide monitor state, connection masks, valid/invalid readings, button edges, qualified activation requests and opening holds exceeding the configured limit. Controller commands refused during visible, unconfirmed activation include their input flags and reason. Idle polling is not journaled.
 - Actual window/system effects, app/system audio changes, session utilities, profile/appearance saves, capture/gallery operations and failures, including results suppressed from an already-closed or superseded interface.
 - Update lookup, download, verification, rollback preparation, application request, cancellation and late failures. Progress polling does not emit an event for each percentage.
 - CLI requests, validation refusal, dry runs, transport/backend faults and asynchronous update jobs. Dry runs may append diagnostic evidence but do not mutate game/settings/update state or consume an execution-ledger entry.

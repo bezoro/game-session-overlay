@@ -152,6 +152,7 @@ public partial class MainWindow
         LogCommandResult("application-shutdown", ResultKind.Requested, "cleanup-started");
         DisposeSessionFeatures();
         DisposeUpdates();
+        diagnosticsCopyCancellation?.Cancel();
         effectCancellation?.Cancel();
         fadeGeneration++;
         fadingOut = false;
@@ -222,7 +223,8 @@ public partial class MainWindow
                 {
                     SetInputMethod("mouse");
                     OpenPanel();
-                }, ExitFromTray, restartAdministrator: Controller.Platform.IsPreview || ApolloOverlay.Automation.AutomationPipeSecurity.Elevated() ? null : RestartAdministratorFromTray);
+                }, ExitFromTray, restartAdministrator: Controller.Platform.IsPreview || ApolloOverlay.Automation.AutomationPipeSecurity.Elevated() ? null : RestartAdministratorFromTray,
+                copyDiagnostics: Controller.Platform.IsPreview ? null : () => RequestDiagnosticsCopy(fromTray: true));
             }
         };
         Closing += OnClosing;
