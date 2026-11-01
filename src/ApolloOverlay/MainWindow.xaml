@@ -627,7 +627,8 @@
               x:Name="HeaderIdentityRow"
               Margin="0">
               <Grid.ColumnDefinitions>
-                <ColumnDefinition />
+                <ColumnDefinition
+                  MinWidth="28" />
                 <ColumnDefinition
                   Width="Auto" />
               </Grid.ColumnDefinitions>
@@ -647,18 +648,32 @@
                 TextTrimming="CharacterEllipsis"
                 Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                 VerticalAlignment="Center" />
-              <Border
-                x:Name="HeaderIdentityBadge"
+              <StackPanel
+                x:Name="HeaderVersionGroup"
                 Grid.Column="1"
-                Background="{DynamicResource ControlFillColorDefaultBrush}"
-                CornerRadius="5"
-                Padding="6,3">
-                <TextBlock
-                  x:Name="HeaderIdentity"
-                  Text="v0.2"
-                  FontSize="12"
-                  Foreground="{DynamicResource SessionMutedTextBrush}" />
-              </Border>
+                Orientation="Horizontal"
+                VerticalAlignment="Center">
+                <Border
+                  x:Name="HeaderIdentityBadge"
+                  Background="{DynamicResource ControlFillColorDefaultBrush}"
+                  CornerRadius="5"
+                  Padding="6,3"
+                  VerticalAlignment="Center">
+                  <TextBlock
+                    x:Name="HeaderIdentity"
+                    Text="v0.2"
+                    FontSize="12"
+                    Foreground="{DynamicResource SessionMutedTextBrush}" />
+                </Border>
+                <Button
+                  x:Name="UpdateAvailableButton"
+                  Visibility="Collapsed"
+                  Padding="6,3"
+                  MinHeight="26"
+                  VerticalAlignment="Center"
+                  Foreground="{DynamicResource SessionAccentBrush}"
+                  AutomationProperties.Name="Update available" />
+              </StackPanel>
             </Grid>
             <TextBlock
               x:Name="PageTitle"

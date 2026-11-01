@@ -21,7 +21,7 @@ public partial class MainWindow
     private int updateHistoryPage;
     private long updateGeneration, nextUpdateProgress;
     private string updateChannel = AppBuild.Current.Channel == "stable" ? "stable" : "testing";
-    private string updateStatus = "Check for versions published after project validation.";
+    private string updateStatus = "Updates are checked automatically every 15 minutes.";
     private TextBlock? updateProgressLabel;
     private TextBox? updateNotesText;
     internal Task UpdateTask
@@ -38,7 +38,7 @@ public partial class MainWindow
         FeatureFact("Commit", AppBuild.Current.ShortCommit);
         updateProgressLabel = Paragraph(updateStatus);
         AutomationProperties.SetLiveSetting(updateProgressLabel, AutomationLiveSetting.Polite);
-        AddRow("check-updates", "Check for updates", "Check versions published on GitHub", () => UpdateTask = CheckUpdatesAsync(), updateSource is not PreviewUpdateSource);
+        AddRow("check-updates", "Check for updates", "Check again now · automatic checks run in the background", () => UpdateTask = CheckUpdatesAsync(), updateSource is not PreviewUpdateSource);
         AddRow("update-channel", "Channel · " + (updateChannel == "testing" ? "Testing" : "Stable"), updateChannel == "testing" ? "Validated preview builds · includes changes under evaluation" : "Versions published from the main branch", () =>
         {
             using var command = BeginCommand("update-channel");
@@ -56,11 +56,13 @@ public partial class MainWindow
             }
 
             updateChannel = nextChannel;
+            UpdateDiscoveryChannelChanged();
             updateGeneration++;
             updateCandidates = [];
-            updateStatus = "Channel changed. Check for available versions.";
+            updateStatus = "Channel changed. New versions will be checked automatically.";
             command?.Complete(Controller.Platform.IsPreview ? ResultKind.Simulated : ResultKind.Completed, "channel-changed");
             RefreshRows();
+            PollAutomaticUpdates();
         });
         if (!VelopackInstallation.IsInstalled)
             Paragraph("To enable updates, install Game Session Overlay using Setup.");
@@ -207,6 +209,7 @@ public partial class MainWindow
             return;
         }
         var generation = ++updateGeneration;
+        CancelAutomaticUpdateCheck();
         using var cancellation = new CancellationTokenSource();
         updateCancellation = cancellation;
         busy = updateBusy = true;
@@ -221,7 +224,7 @@ public partial class MainWindow
                 command?.Complete(ResultKind.Cancelled, "catalog-result-superseded");
                 return;
             }
-            updateCandidates = releases;
+            AcceptUpdateCatalog(releases);
             updateStatus = releases.Count == 0 ? "No versions published to this channel. Builds appear only after passing validation." : releases[0].BuildId == AppBuild.Current.BuildId ? "You are using the latest version of this channel." : "Versions are available. Choose one to read the changes and update.";
             command?.Complete(ResultKind.Completed, releases.Count == 0 ? "catalog-empty" : "catalog-checked");
             RequestCue(FeedbackCue.Completion);
@@ -272,6 +275,7 @@ public partial class MainWindow
             return;
         }
         var generation = ++updateGeneration;
+        CancelAutomaticUpdateCheck();
         using var cancellation = new CancellationTokenSource();
         updateCancellation = cancellation;
         busy = updateBusy = true;
@@ -358,6 +362,7 @@ public partial class MainWindow
     private async Task CommitUpdateAsync(Func<Task> prepare, string commandId = "update-apply", string? origin = null, string? correlation = null)
     {
         using var command = BeginCommand(commandId, correlation: correlation, origin: origin);
+        CancelAutomaticUpdateCheck();
         busy = updateBusy = updateCommitting = true;
         foreach (var button in new[]
         {
@@ -365,6 +370,7 @@ public partial class MainWindow
             AppsTab,
             SettingsTab,
             SettingsGear,
+            UpdateAvailableButton,
             BackButton
         }
 
@@ -401,6 +407,7 @@ public partial class MainWindow
                 AppsTab,
                 SettingsTab,
                 SettingsGear,
+                UpdateAvailableButton,
                 BackButton
             }
 
@@ -510,6 +517,7 @@ public partial class MainWindow
 
     private void DisposeUpdates()
     {
+        DisposeAutomaticUpdateDiscovery();
         DisposeAgentUpdates();
         updateGeneration++;
         updateCancellation?.Cancel();

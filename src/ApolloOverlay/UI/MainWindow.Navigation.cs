@@ -371,6 +371,8 @@ public partial class MainWindow
         AppsTab.Click += (_, _) => ClickTab(AppsTab, 1);
         SettingsTab.Click += (_, _) => OpenPrimaryAudio();
         SettingsGear.Click += (_, _) => ActivatePointerEntry(SettingsGear);
+        UpdateAvailableButton.Click += (_, _) => ActivatePointerEntry(UpdateAvailableButton);
+        UpdateAvailableButton.Content = new IconLabel(this, "updates", "Update available", 12, 14);
         BackButton.Click += (_, _) => ActivatePointerEntry(BackButton);
         HomeTab.Content = new IconLabel(this, "session", "Session", 16, 16);
         AppsTab.Content = new IconLabel(this, "apps", "Apps", 16, 16);
@@ -422,6 +424,7 @@ public partial class MainWindow
         OperationDetailsButton.Click += (_, _) => ActivatePointerEntry(OperationDetailsButton);
         foreach (var fixedEntry in new[]
         {
+            (UpdateAvailableButton, "update-available"),
             (OperationDetailsButton, "operation-details"),
             (DismissOperationButton, "dismiss-operation"),
             (SaveSettingsButton, "save-pending"),

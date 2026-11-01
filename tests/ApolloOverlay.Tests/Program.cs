@@ -73,7 +73,15 @@ static class Program
         if (args.Length == 2 && args[1] == "--updates")
         {
             UpdateSourceTests.Run(Case);
+            UpdateDiscoveryTests.Run(Case);
             LocalUpdateHistoryTests.Run(Case);
+            return Finish(args[0]);
+        }
+
+        if (args.Length == 2 && args[1] == "--automatic-updates")
+        {
+            UpdateDiscoveryTests.Run(Case);
+            AutomaticUpdateTests.Run(Case);
             return Finish(args[0]);
         }
 
@@ -917,6 +925,8 @@ static class Program
         GuideAbiTests.GuideSettingsChecks(Case, Path.GetDirectoryName(Path.GetFullPath(args[0]))!);
         UpdateInterfaceTests.Run(Case);
         UpdateSourceTests.Run(Case);
+        UpdateDiscoveryTests.Run(Case);
+        AutomaticUpdateTests.Run(Case);
         LocalUpdateHistoryTests.Run(Case);
         CommandLogTests.Run(Case);
         CommandDiagnosticsTests.Run(Case);

@@ -130,10 +130,9 @@ public partial class MainWindow
     {
         automationRevision++;
         NoteAutomationTargets();
-        HeaderIdentity.Text = "v" + AppBuild.Current.Version.Split('+')[0];
         HeaderBrand.Visibility = (narrow || compactChrome) && view.Current.Route != OverlayRoute.Hub ? Visibility.Collapsed : Visibility.Visible;
         HeaderBrand.FontSize = ResourceNumber(compactChrome || narrow ? "SessionType.Caption" : "SessionType.CompactBody", compactChrome || narrow ? 13 : 14);
-        HeaderIdentity.ToolTip = AppBuild.Current.Display + " · " + AppBuild.Current.BuildId + " · " + AppBuild.Current.Commit;
+        RefreshUpdateIndicator(register: false);
         if (Confirming)
         {
             UpdatePersistentState();
@@ -149,6 +148,7 @@ public partial class MainWindow
         entries.Clear();
         operationText = null;
         entries.Add(new("settings", SettingsGear, () => Page(2), true, "Open System"));
+        RefreshUpdateIndicator();
         ContextCard.Visibility = view.Current.Route == OverlayRoute.Hub ? Visibility.Visible : Visibility.Collapsed;
         var target = Controller.Session.Anchor;
         var valid = target is not null && Controller.Platform.Valid(target);
@@ -184,7 +184,7 @@ public partial class MainWindow
             var selected = pair.Item2 == 2 ? view.Current.Route == OverlayRoute.WindowsAudio : pair.Item2 == page && view.Current.Route != OverlayRoute.WindowsAudio;
             pair.Item1.BorderThickness = new(0, 0, 0, 2);
             if (selected)
-                pair.Item1.SetResourceReference(BorderBrushProperty, ThemeSupport.Focus);
+                pair.Item1.SetResourceReference(BorderBrushProperty, ThemeSupport.Accent);
             else
                 pair.Item1.BorderBrush = Brushes.Transparent;
             pair.Item1.Background = Brushes.Transparent;
@@ -223,6 +223,7 @@ public partial class MainWindow
         if (SessionFeatureTitle is { } featureTitle)
             PageTitle.Text = featureTitle;
         BuildCurrentView();
+        RefreshUpdateIndicator(register: false);
         UpdateHints();
         renderedFeatureShape = FeatureViewShape();
         UpdatePersistentState();

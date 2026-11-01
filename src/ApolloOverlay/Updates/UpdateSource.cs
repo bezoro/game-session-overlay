@@ -40,6 +40,9 @@ public sealed class GitHubUpdateSource : IUpdateSource
     public const string Repository = "bezoro/game-session-overlay";
     public const string RepositoryUrl = "https://github.com/" + Repository;
     private readonly Func<string, SdkUpdateSource> createSource;
+    // SDK feed requests have no cancellation token. Their actual completion owns
+    // this async-only gate, including after a caller cancels or disposes the source.
+    private readonly SemaphoreSlim catalogGate = new(1, 1);
     private int disposed;
     public GitHubUpdateSource(Func<string, SdkUpdateSource>? sourceFactory = null) => createSource = sourceFactory ?? (channel => new ProjectGithubSource(channel));
     public async Task<IReadOnlyList<UpdateCandidate>> CheckAsync(string channel, CancellationToken cancellation)
@@ -47,17 +50,20 @@ public sealed class GitHubUpdateSource : IUpdateSource
         ThrowIfDisposed();
         ValidateChannel(channel);
         cancellation.ThrowIfCancellationRequested();
-        var source = createSource(channel);
-        var request = source.GetReleaseFeed(NullVelopackLogger.Instance, VelopackInstallation.PackageId, channel);
+        await catalogGate.WaitAsync(cancellation).ConfigureAwait(false);
+        Task<VelopackAssetFeed>? request = null;
         VelopackAssetFeed feed;
         try
         {
+            ThrowIfDisposed();
+            cancellation.ThrowIfCancellationRequested();
+            var source = createSource(channel);
+            request = source.GetReleaseFeed(NullVelopackLogger.Instance, VelopackInstallation.PackageId, channel);
             feed = await request.WaitAsync(TimeSpan.FromSeconds(75), cancellation).ConfigureAwait(false);
         }
-        catch
+        finally
         {
-            ObserveLateFault(request);
-            throw;
+            ReleaseCatalogWhenSettled(request);
         }
 
         ThrowIfDisposed();
@@ -197,7 +203,21 @@ public sealed class GitHubUpdateSource : IUpdateSource
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
-    private static void ObserveLateFault(Task task) => _ = task.ContinueWith(t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+    private void ReleaseCatalogWhenSettled(Task? request)
+    {
+        if (request is null)
+        {
+            catalogGate.Release();
+            return;
+        }
+        _ = request.ContinueWith(completed =>
+        {
+            _ = completed.Exception;
+            catalogGate.Release();
+        }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+    }
+
+    // Keep the gate valid for any SDK completion still pending after disposal.
     public void Dispose() => Interlocked.Exchange(ref disposed, 1);
     /// <summary>Keep SDK asset/download behavior; only expand/filter the repository release listing.</summary>
     private sealed class ProjectGithubSource(string channel) : GithubSource(RepositoryUrl, null, channel == "testing", new BoundedMetadataDownloader())

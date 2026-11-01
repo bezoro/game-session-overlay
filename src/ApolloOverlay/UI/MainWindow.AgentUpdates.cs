@@ -157,7 +157,12 @@ public partial class MainWindow
             return Task.FromResult(Reply("Unavailable", "Could not retain the operation receipt. Check permissions and available disk space."));
         }
 
-        updateChannel = channel;
+        CancelAutomaticUpdateCheck();
+        if (updateChannel != channel)
+        {
+            updateChannel = channel;
+            UpdateDiscoveryChannelChanged();
+        }
         if (request.Verb == "update-check")
             updateCandidates = [];
         if (preparedUpdate is { } obsolete)
@@ -275,7 +280,7 @@ public partial class MainWindow
                     command?.Complete(ResultKind.Cancelled, "catalog-result-superseded");
                     return;
                 }
-                updateCandidates = catalog;
+                AcceptUpdateCatalog(catalog);
                 SetAgentState("Catalog", catalog.Count == 0 ? "No versions have been published to this channel." : "Catalog checked. Choose the exact BuildId to download.", true, persist: true);
                 command?.Complete(ResultKind.Completed, catalog.Count == 0 ? "catalog-empty" : "catalog-checked");
             }

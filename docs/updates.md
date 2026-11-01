@@ -8,6 +8,10 @@ Download `GameSessionOverlay-testing-Setup.exe` or `GameSessionOverlay-stable-Se
 
 Open **System → Version and updates** to inspect the installed build, check for updates or choose an earlier version. The new package downloads before the overlay is asked to close. Official Velopack machinery applies it after the process exits and restarts the app.
 
+Installed sessions check the selected channel automatically, starting about 15 seconds after initialization and then every 15 minutes. Failed checks retry after 5, 10 and then 15 minutes. Checks only fetch release metadata; they do not show the panel, move selection, play a sound, download packages or restart a game session. Preview, diagnostic and isolated installation-proof runs do not start background checks.
+
+When a strictly newer version is found, **Update available** appears beside the version. Select it with a controller, keyboard or mouse to open that release's changes and download action directly. Download and installation remain explicit. A channel switch clears the old notice and schedules a check of the new channel. An older Stable version is not advertised as an upgrade over a newer Testing build. Automatic, manual and CLI catalog queries share the same source gate, including while a canceled SDK request finishes; quiet outcomes are retained in the command log.
+
 | Channel | Source | Publication |
 | --- | --- | --- |
 | Stable | Push to `main` | Normal release |
