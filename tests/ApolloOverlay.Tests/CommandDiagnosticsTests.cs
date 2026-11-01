@@ -22,11 +22,17 @@ internal static class CommandDiagnosticsTests
             window.Page(2);
             window.OpenPanel();
             ReviewFixTests.Complete(window.OpeningTask);
+            Invoke(window, "SetInputMethod", "mouse");
+            var copy = ReviewFixTests.Button(window, "copy-diagnostics");
+            copy.Focus();
             ReviewFixTests.Complete(Task.Delay(350));
+            var scroll = (System.Windows.Controls.ScrollViewer)window.FindName("ContentScroll");
+            scroll.ScrollToTop();
             Capture(window, "diagnostics-system");
-            ReviewFixTests.Button(window, "copy-diagnostics").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            copy.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             ReviewFixTests.Complete(window.DiagnosticsCopyTask);
             ReviewFixTests.Complete(Task.Delay(200));
+            scroll.ScrollToTop();
             Capture(window, "diagnostics-copied");
             Require(copied is not null && copied.Contains("Game Session Overlay diagnostics"), "Capture action did not produce a complete report");
         });

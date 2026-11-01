@@ -42,6 +42,8 @@ public partial class MainWindow
                 return;
             DiagnosticsClipboardWriter(report.Text);
             command?.Complete(report.Incomplete ? ResultKind.Partial : ResultKind.Completed, "diagnostics-copied");
+            if (exiting)
+                return;
             var message = report.Incomplete ? "All retained logs copied. The report identifies logging gaps. Paste into chat." : "All retained logs copied. Paste into chat.";
             if (fromTray)
                 tray?.NotifyInformation(message);

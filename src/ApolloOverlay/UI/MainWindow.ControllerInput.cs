@@ -154,8 +154,9 @@ public partial class MainWindow
 
         if (!NavigationAllowed)
         {
-            if (!ownedDialog && (events.Pressed != 0 || events.Direction != 0) && CommandLoggingEnabled)
-                Controller.Diagnostics.Commands.Record("controller-input-refused/buttons-" + (ushort)events.Pressed + "/direction-" + events.Direction,
+            var refusedButtons = events.Pressed & ~PadButtons.B;
+            if (!ownedDialog && (refusedButtons != 0 || events.Direction != 0) && CommandLoggingEnabled)
+                Controller.Diagnostics.Commands.Record("controller-input-refused/buttons-" + (ushort)refusedButtons + "/direction-" + events.Direction,
                     ResultKind.Unavailable, "controller", opening ? "activation-pending" : focusConfirmed ? "foreground-lost" : "foreground-unconfirmed");
             if (!ownedDialog && events.Pressed.HasFlag(PadButtons.B))
                 Back();

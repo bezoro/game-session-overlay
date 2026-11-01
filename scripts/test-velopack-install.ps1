@@ -106,6 +106,39 @@ function Owned-Apps {
             }
         })
 }
+function Verify-SingleInstance([int]$ExpectedPid, [long]$ExpectedStarted, [string]$ExpectedPath, [string]$Label) {
+    $watch = [Diagnostics.Stopwatch]::StartNew()
+    $observations = [Collections.Generic.List[object]]::new()
+    try {
+        do {
+            $apps = @(Owned-Apps)
+            $processes = @(
+                foreach ($app in $apps) {
+                    try {
+                        @{ pid = $app.Id; started = $app.StartTime.ToUniversalTime().Ticks; path = $app.Path }
+                    }
+                    catch {
+                        @{ pid = $app.Id; identityError = $_.Exception.GetType().Name }
+                    }
+                }
+            )
+            $observations.Add(@{ atUtc = [DateTimeOffset]::UtcNow; elapsedMs = $watch.ElapsedMilliseconds; processes = $processes })
+            $expected = @($processes | Where-Object { $_.pid -eq $ExpectedPid -and $_.started -eq $ExpectedStarted -and $_.path -eq $ExpectedPath })
+            Require ($expected.Count -eq 1) 'The original installed instance exited or changed identity after the shortcut launch.'
+            # Shell forwarding and isolated foreground acquisition use transient copies of
+            # the same executable. Count every process and require them all to exit.
+            if ($apps.Count -eq 1) {
+                return
+            }
+            Start-Sleep -Milliseconds 100
+        } while ($watch.Elapsed.TotalSeconds -lt 10)
+        throw 'Searchable shortcut left additional installed processes after the forwarding and focus helpers should have exited.'
+    }
+    finally {
+        @{ expected = @{ pid = $ExpectedPid; started = $ExpectedStarted; path = $ExpectedPath }; observations = $observations } |
+            ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $evidence "processes-$Label.json") -Encoding utf8NoBOM
+    }
+}
 function Stop-Owned([Diagnostics.Process]$Process) {
     $path = $Process.Path
     $created = $Process.StartTime.ToUniversalTime().Ticks
@@ -402,7 +435,7 @@ try {
     $cases.Add(@{ name = 'registered hidden-startup command initializes the exact installed instance without showing its panel'; passed = $true; pid = $hidden.Process.Id })
     Start-Process -FilePath $startMenuShortcut | Out-Null
     Verify-Visibility $hidden.Process $true 'shortcut-existing-instance'
-    Require ((Owned-Apps).Count -eq 1 -and (Owned-Apps)[0].Id -eq $hidden.Process.Id) 'Searchable shortcut created a duplicate installed instance.'
+    Verify-SingleInstance $hidden.Ready.pid $hidden.Ready.started $expectedApp 'shortcut-existing-instance'
     $cases.Add(@{ name = 'Start-menu shortcut opens the existing hidden instance instead of creating a duplicate or modal warning'; passed = $true; pid = $hidden.Process.Id })
     Stop-Owned $hidden.Process
     $initial = Start-VerifiedApp $release $hashA 'A-initial'
@@ -555,7 +588,7 @@ finally {
         }
     }
     if (Test-Path -LiteralPath $dataRoot) {
-        $proofFiles = @(Get-ChildItem -LiteralPath $dataRoot -File -Recurse | Where-Object { $_.Length -le 2097152 -and $_.Extension -in @('.json', '.log') } | Select-Object -First 16)
+        $proofFiles = @(Get-ChildItem -LiteralPath $dataRoot -File -Recurse | Where-Object { $_.Length -le 2097152 -and $_.Extension -in @('.json', '.jsonl', '.log') } | Select-Object -First 16)
         $index = 0
         foreach ($file in $proofFiles) {
             Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $evidence ("proof-$index-" + $file.Name))
