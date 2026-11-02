@@ -1,11 +1,17 @@
-## Comportamento
+<!-- Start with a concise summary of the problem and resulting user experience. Include a before-and-after example when useful. -->
 
-Descreva o problema e o resultado para o usuário, com um exemplo antes/depois quando útil.
+## Changes
 
-## Validação
+<!-- List all meaningful changes in the final implementation. -->
 
-Informe os testes e a inspeção visual executados. Diferencie fixtures de testes com Windows, controle, jogo e TV reais.
+## Verification
 
-## Limitações
+<!-- List each completed check and its result. Distinguish fixtures and rendered screenshots from real Windows, controller, game and TV tests. -->
 
-Registre apenas riscos ou compatibilidades relevantes que ainda não foram verificados.
+## Pending verification
+
+<!-- Record pending or unperformed checks and explain why. Remove this section if none remain. -->
+
+## Limitations
+
+<!-- Record relevant risks, unverified compatibility and any migration steps. Remove this section if none remain. -->

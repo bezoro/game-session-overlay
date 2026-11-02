@@ -1,6 +1,6 @@
 # Runtime behavior and diagnostics
 
-For contribution, start with [CONTRIBUTING.md](../CONTRIBUTING.md) and the [architecture map](architecture.md). Installation, TV setup and common recovery steps are in the [user guide](<../Guia de uso.md>).
+For contribution, start with [CONTRIBUTING.md](../CONTRIBUTING.md) and the [architecture map](architecture.md). Installation, TV setup and common recovery steps are in the [user guide](../USER_GUIDE.md).
 
 Game Session Overlay is a native WPF/.NET 10 application for Windows 11. Its self-contained build needs neither the SDK nor administrator privileges for ordinary use. Apollo is optional; a controller connected directly to the PC uses the same interface.
 
