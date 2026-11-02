@@ -25,6 +25,8 @@ Use the installer and [test checklist](docs/pilot-checklist.md) to exercise real
 
 ## Changes
 
+- Design service and automation APIs around the caller's intent. Use clear names and parameters, and make ownership, lifecycle, cancellation, side effects and failure behavior explicit. Keep justified optimization complexity internal and document its invariants.
+- Prefer the simplest cohesive implementation. Each dependency and abstraction must justify its cost across integration and maintenance. A readable API should not add unnecessary allocations, processing or background work.
 - Put domain rules and system access in their respective modules. The interface coordinates services and displays snapshots; services must not search for WPF controls or depend on `MainWindow`.
 - Use the existing contracts where tests need substitutes for audio, platforms, controllers, media and updates. Do not add interfaces for local calculations that need no substitution.
 - Preserve cancellation, target identity and checks immediately before external effects. Sending a request does not mean the action completed; report what was observed.
@@ -38,9 +40,11 @@ To conserve GitHub Actions minutes, the Windows pipeline runs automatically on p
 
 Keep CI-skip markers out of the final merge commit message, including markers copied from intermediate commit messages, so the automatic main-branch validation can run.
 
-In the PR, describe the resulting behavior, validation performed and untested limits. Keep extensive formatting changes in a separate commit from behavior changes.
+Open a draft PR after the first coherent implementation is pushed so progress is visible. Keep the title, scope, description and verification status current, and mark it ready when implementation and relevant checks are complete. Start the description with a concise summary, followed by `## Changes` listing all changes and `## Verification` listing every completed check and its result. Keep pending or unperformed checks separate and state relevant limits. The [PR template](.github/PULL_REQUEST_TEMPLATE.md) follows this structure. Describe the final implementation rather than the conversation history. Keep extensive formatting changes in a separate commit from behavior changes.
 
 ## Commits and versions
+
+Commit cohesive, validated increments. Release builds resolve their version through [scripts/get-build-version.ps1](scripts/get-build-version.ps1), the pinned GitVersion tool and [GitVersion.yml](GitVersion.yml). Pass the stamped identity through [Directory.Build.props](Directory.Build.props) so the GUI, CLI, installer and update feed agree. Build-identity overrides are for explicit local builds or the workflow's stamped values; do not invent a separate release version in a project or package.
 
 Use [Conventional Commits](https://www.conventionalcommits.org/) for new commits and PR titles. CI validates the title, which also becomes the merge commit title:
 
@@ -58,6 +62,8 @@ feat(api)!: change the automation contract
 | `fix`, `perf`, `refactor`, `build`, `revert` | PATCH |
 | `!` or a `BREAKING CHANGE:` footer | MAJOR |
 | `docs`, `style`, `test`, `ci`, `chore` | No independent increment |
+
+Breaking changes are acceptable when they materially improve the design. Prefer a clearer, simpler implementation over keeping obsolete compatibility machinery. Document affected contracts and migration or recovery steps, including changes to settings, CLI protocols, installed identity or update/rollback history. Mark intentional breaking changes with `!` or a `BREAKING CHANGE:` footer. Presentation-only changes must preserve those contracts.
 
 Use `build(deps)` for dependencies that change the installed application. Reserve `chore` for maintenance that does not need an application update. Versions follow [Semantic Versioning](https://semver.org/) and use the GitVersion pinned in the tool manifest. Stable versions are plain `MAJOR.MINOR.PATCH`. Previews use `MAJOR.MINOR.PATCH-preview.RUN.ATTEMPT+COMMIT`. Both channels keep the full commit and build ID in separate diagnostic metadata; those fields do not determine version ordering. Commits and tags published before this policy remain intact.
 
