@@ -1,11 +1,11 @@
-## Comportamento
+## Behavior
 
-Descreva o problema e o resultado para o usuário, com um exemplo antes/depois quando útil.
+Describe the problem and the resulting user experience. Include a before-and-after example when useful.
 
-## Validação
+## Validation
 
-Informe os testes e a inspeção visual executados. Diferencie fixtures de testes com Windows, controle, jogo e TV reais.
+List the tests and visual reviews performed. Distinguish fixtures from tests with a real Windows session, controller, game and TV.
 
-## Limitações
+## Limitations
 
-Registre apenas riscos ou compatibilidades relevantes que ainda não foram verificados.
+Record relevant risks or compatibility that remains unverified.

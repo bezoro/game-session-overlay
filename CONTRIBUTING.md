@@ -4,6 +4,8 @@ The application uses WPF/.NET 10 for Windows 11 x64. Install the SDK specified i
 
 Start with [architecture](docs/architecture.md), which maps modules, native-resource ownership and the action flow. [README](README.md) describes the product; [docs/cli.md](docs/cli.md) covers automation.
 
+Use English for application copy, accessibility text, code, comments, documentation, commit messages, pull requests and reviews. Name new files in English. Preserve installed settings schemas, command IDs and machine-readable protocol values. Unicode test data may include other characters to verify text handling.
+
 ```powershell
 dotnet build ApolloOverlay.sln -c Release
 ./scripts/format.ps1 -Verify

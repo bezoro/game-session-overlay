@@ -8,7 +8,7 @@ Download Setup for your preferred channel from [Releases](https://github.com/bez
 
 Press the **Guide/Xbox button**, **double-click the tray icon** or choose **Open overlay** in the tray menu. Guide uses a legacy XInput API and remains experimental. The tray provides an alternative that works without a controller.
 
-Normal use does not require administrator privileges. The [user guide](<Guia de uso.md>) explains optional elevated startup, monitor selection and TV setup.
+Normal use does not require administrator privileges. The [user guide](USER_GUIDE.md) explains optional elevated startup, monitor selection and TV setup.
 
 ## During a game
 

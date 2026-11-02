@@ -272,8 +272,8 @@ internal static class SessionUtilityTests
                 DelayReads = 2
             };
             var service = new SessionTextEntry(effects);
-            var result = Complete(service.InsertAsync(Game, "Olá 🎮", () => true));
-            Require(result.Kind == ResultKind.Requested && effects.FocusCalls == 1 && new string(effects.Characters.ToArray()) == "Olá 🎮" && effects.Characters.All(c => !char.IsControl(c)), "Unicode changed or implicit submit/focus retry occurred");
+            var result = Complete(service.InsertAsync(Game, "Unicode: \u00E9 🎮", () => true));
+            Require(result.Kind == ResultKind.Requested && effects.FocusCalls == 1 && new string(effects.Characters.ToArray()) == "Unicode: \u00E9 🎮" && effects.Characters.All(c => !char.IsControl(c)), "Unicode changed or implicit submit/focus retry occurred");
             Require(effects.Elapsed.ElapsedMilliseconds >= 500, "Text was sent before continuous foreground qualification");
         });
         test("text entry loss of foreground during qualification prevents all input", () =>

@@ -303,12 +303,12 @@ internal static class SessionInterfaceTests
             w.ActivateEntry();
             Require(Keyboard.FocusedElement is TextBox { IsReadOnly: false }, "Editable local buffer did not receive focus");
             var editor = (TextBox)Keyboard.FocusedElement;
-            editor.Text = "Olá 👩‍🚀";
+            editor.Text = "Hello 👩‍🚀";
             TapKey(editor, Key.Tab);
             Pick(w, "keyboard-delete");
             w.ActivateEntry();
             var buffer = PremiumInterfaceTests.Descendants<TextBox>((DependencyObject)w.FindName("Rows")).Single();
-            Require(buffer.Text == "Olá ", "Virtual backspace split a visible character");
+            Require(buffer.Text == "Hello ", "Virtual backspace split a visible character");
             Pick(w, "keyboard-insert");
             w.ActivateEntry();
             Require(w.Controller.Operation?.State == "Simulated", "Diagnostic keyboard attempted native input");
