@@ -205,7 +205,11 @@ public sealed class GuardedActions(IWindowEffects effects, Action<SteamSequenceE
                     return false;
                 }
 
-                await effects.Wait((int)Math.Min(10, until - effects.ShortcutTime));
+                var remaining = until - effects.ShortcutTime;
+                if (remaining <= 0)
+                    break;
+
+                await effects.Wait((int)Math.Min(10, remaining));
                 if (!Allowed())
                 {
                     interrupted = true;
