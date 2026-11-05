@@ -3,6 +3,11 @@ using ApolloOverlay.Automation;
 namespace ApolloOverlay;
 
 public readonly record struct SteamKeyReceipt(bool Started, uint? Accepted);
+internal enum ClosePost
+{
+    Rejected, AccessDenied, Accepted, Cancelled
+}
+
 public interface IWindowEffects
 {
     bool Valid(WindowRef window);
@@ -355,14 +360,33 @@ public sealed class GuardedActions(IWindowEffects effects, Action<SteamSequenceE
         return Outcome.Keys(effects.SendKeys(keys), 4);
     }
 
-    public async Task<ActionResult> Close(WindowRef window, CancellationToken cancellation)
+    public Task<ActionResult> Close(WindowRef window, CancellationToken cancellation) =>
+        Close(window, cancellation, (target, token) => token.IsCancellationRequested ? ClosePost.Cancelled
+            : effects.PostClose(target) ? ClosePost.Accepted : ClosePost.Rejected);
+
+    internal async Task<ActionResult> Close(WindowRef window, CancellationToken cancellation,
+        Func<WindowRef, CancellationToken, ClosePost> post,
+        Func<WindowRef, CancellationToken, Task<ActionResult>>? requestElevation = null)
     {
         if (cancellation.IsCancellationRequested)
             return new(ResultKind.Cancelled, "Cancelled before dispatch.");
         if (!window.CanClose || !effects.Valid(window))
             return new(ResultKind.Failed, "Invalid identity or protected window; closing was blocked.");
-        if (!effects.PostClose(window))
+        var disposition = post(window, cancellation);
+        ActionResult? elevated = null;
+        if (disposition == ClosePost.Cancelled)
+            return new(ResultKind.Cancelled, "Cancelled before dispatch.");
+        if (disposition == ClosePost.AccessDenied && requestElevation is not null)
+        {
+            if (cancellation.IsCancellationRequested)
+                return new(ResultKind.Cancelled, "Cancelled before administrator authorization.");
+            elevated = await requestElevation(window, cancellation);
+            if (elevated.Kind is not (ResultKind.Requested or ResultKind.Unknown))
+                return elevated;
+        }
+        else if (disposition != ClosePost.Accepted)
             return new(ResultKind.Failed, "Windows rejected WM_CLOSE; no escalation was attempted.");
+
         for (var i = 0; i < 20; i++)
         {
             if (effects.ObserveWindow(window) == WindowObservation.GoneOrReplaced)
@@ -372,6 +396,9 @@ public sealed class GuardedActions(IWindowEffects effects, Action<SteamSequenceE
             await effects.Wait(100);
         }
 
-        return Outcome.Closure(false, true);
+        if (elevated is null)
+            return Outcome.Closure(false, true);
+        return elevated.Kind == ResultKind.Unknown ? elevated
+            : new(ResultKind.Unknown, "The window is still open. Check for a save dialog or a refusal.");
     }
 }

@@ -82,6 +82,33 @@ public sealed class WindowsPlatform : IPlatform, IWindowEffects, IWindowIconNoti
 
     private WindowRef? ReadCore(nint hwnd)
     {
+        if (ReadWindow(hwnd, allowOwnedFixture) is not { } current)
+            return null;
+        if (current.Started == 0)
+            return current.Reference(hwnd, 0);
+        if (!generations.ContainsKey(hwnd))
+        {
+            if (generations.Count >= 256)
+            {
+                foreach (var stale in generations.Keys.Where(h => !Native.IsWindow(h)).ToArray())
+                    generations.Remove(stale);
+                if (generations.Count >= 256)
+                    return null;
+            }
+
+            generations[hwnd] = ++sequence;
+        }
+
+        return current.Reference(hwnd, generations[hwnd]);
+    }
+
+    private readonly record struct WindowDetails(int Pid, long Started, string Title, string ProcessName, bool Protected)
+    {
+        internal WindowRef Reference(nint handle, long generation) => new(handle, Pid, Started, Title, ProcessName, Protected, generation);
+    }
+
+    private static WindowDetails? ReadWindow(nint hwnd, bool allowOwnedFixture, bool requireClassName = false)
+    {
         if (hwnd == 0 || !Native.IsWindow(hwnd))
             return null;
         Native.GetWindowThreadProcessId(hwnd, out var pid);
@@ -90,30 +117,18 @@ public sealed class WindowsPlatform : IPlatform, IWindowEffects, IWindowIconNoti
         if (title.Length == 0)
             return null;
         var className = new StringBuilder(128);
-        Native.GetClassName(hwnd, className, className.Capacity);
+        if (Native.GetClassName(hwnd, className, className.Capacity) == 0 && requireClassName)
+            return null;
         try
         {
             using var process = Process.GetProcessById((int)pid);
             var name = process.ProcessName;
             var protectedTarget = pid == Environment.ProcessId && !allowOwnedFixture || ProtectedProcesses.Contains(name) || className.ToString() is "Progman" or "WorkerW" or "Shell_TrayWnd";
-            if (!generations.ContainsKey(hwnd))
-            {
-                if (generations.Count >= 256)
-                {
-                    foreach (var stale in generations.Keys.Where(h => !Native.IsWindow(h)).ToArray())
-                        generations.Remove(stale);
-                    if (generations.Count >= 256)
-                        return null;
-                }
-
-                generations[hwnd] = ++sequence;
-            }
-
-            return new(hwnd, (int)pid, process.StartTime.ToUniversalTime().Ticks, title.ToString(), name, protectedTarget, generations.GetValueOrDefault(hwnd));
+            return new((int)pid, process.StartTime.ToUniversalTime().Ticks, title.ToString(), name, protectedTarget);
         }
         catch (Exception e) when (e is Win32Exception or InvalidOperationException or ArgumentException)
         {
-            return new(hwnd, (int)pid, 0, title.ToString(), "identity unavailable", true);
+            return new((int)pid, 0, title.ToString(), "identity unavailable", true);
         }
     }
 
@@ -130,7 +145,9 @@ public sealed class WindowsPlatform : IPlatform, IWindowEffects, IWindowIconNoti
         return windows;
     }
 
-    private bool Relevant(nint hwnd)
+    private bool Relevant(nint hwnd) => Relevant(hwnd, allowOwnedFixture);
+
+    private static bool Relevant(nint hwnd, bool allowOwnedFixture)
     {
         if (!Native.IsWindowVisible(hwnd) || Native.GetWindow(hwnd, 4) != 0 || (Native.GetWindowLongPtr(hwnd, -20).ToInt64() & 0x80) != 0)
             return false;
@@ -235,7 +252,17 @@ public sealed class WindowsPlatform : IPlatform, IWindowEffects, IWindowIconNoti
     public bool HasSteamLaunchContext(WindowRef? window) => window is not null && SteamLaunchContext.Observe(window, Valid);
     public Task<ActionResult> Switch(WindowRef window) => new GuardedActions(this).Switch(window);
     public ImageSource? Icon(WindowRef window) => icons.Get(window);
-    public Task<ActionResult> Close(WindowRef window, CancellationToken cancellation) => new GuardedActions(this).Close(window, cancellation);
+    public Task<ActionResult> Close(WindowRef window, CancellationToken cancellation) =>
+        new GuardedActions(this).Close(window, cancellation, TryPostClose);
+
+    public Task<ActionResult> CloseConfirmed(WindowRef window, CancellationToken cancellation, Func<bool> prepareForConsent)
+    {
+        var thread = Native.GetWindowThreadProcessId(window.Handle, out _);
+        return new GuardedActions(this).Close(window, cancellation,
+            (target, token) => TryPostClose(target, thread, token),
+            (target, token) => ElevatedWindowClose.RequestAsync(target, thread, prepareForConsent,
+                () => CanPostClose(target) && HasOwner(target.Handle, target.Pid, thread), token));
+    }
     public Task<ActionResult> Minimize(WindowRef window, CancellationToken cancellation) => new GuardedActions(this).Minimize(window, cancellation);
     public bool SupportsMinimize => true;
 
@@ -277,12 +304,42 @@ public sealed class WindowsPlatform : IPlatform, IWindowEffects, IWindowIconNoti
         return !disposed && Native.SetForegroundWindow(window.Handle);
     }
 
-    public bool PostClose(WindowRef window)
+    public bool PostClose(WindowRef window) => TryPostClose(window, CancellationToken.None) == ClosePost.Accepted;
+
+    private ClosePost TryPostClose(WindowRef window, CancellationToken cancellation) =>
+        TryPostClose(window, Native.GetWindowThreadProcessId(window.Handle, out _), cancellation);
+
+    private ClosePost TryPostClose(WindowRef window, uint thread, CancellationToken cancellation)
     {
-        if (disposed)
+        if (!CanPostClose(window) || !HasOwner(window.Handle, window.Pid, thread))
+            return ClosePost.Rejected;
+        return cancellation.IsCancellationRequested ? ClosePost.Cancelled : PostCloseMessage(window.Handle);
+    }
+
+    private bool CanPostClose(WindowRef window)
+    {
+        if (Volatile.Read(ref disposed))
             return false;
         var current = Read(window.Handle);
-        return current is not null && current.CanClose && window.Same(current) && Valid(current) && Native.PostMessage(window.Handle, 0x10, 0, 0);
+        return current is not null && current.CanClose && window.Same(current) && Relevant(window.Handle) && hook != 0;
+    }
+
+    internal static bool HasOwner(nint handle, int pid, uint thread) =>
+        thread != 0 && Native.GetWindowThreadProcessId(handle, out var currentPid) == thread && currentPid == pid;
+
+    internal static bool CanPostElevatedClose(nint handle, int pid, uint thread, long started) =>
+        ReadWindow(handle, allowOwnedFixture: false, requireClassName: true) is { } current
+        && current.Pid == pid && current.Started == started && current.Reference(handle, 0).CanClose
+        && Relevant(handle, allowOwnedFixture: false)
+        && HasOwner(handle, pid, thread);
+
+    internal static ClosePost PostCloseMessage(nint handle)
+    {
+        const uint closeMessage = 0x10;
+        const int accessDenied = 5;
+        if (Native.PostMessage(handle, closeMessage, 0, 0))
+            return ClosePost.Accepted;
+        return Marshal.GetLastPInvokeError() == accessDenied ? ClosePost.AccessDenied : ClosePost.Rejected;
     }
 
     public Task Wait(int milliseconds) => Task.Delay(milliseconds);

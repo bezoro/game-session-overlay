@@ -12,6 +12,7 @@ public partial class MainWindow
     }
 
     private long operationGeneration;
+    private bool closePending;
     private readonly CloseHold closeHold = new();
     private bool pointerDown, pointerCaptured;
     private int? closeSource, dispatchSource;
@@ -153,13 +154,26 @@ public partial class MainWindow
             return;
         using var command = BeginCommand("close", target);
         Exception? commandError = null;
+        long? consentCycle = null;
         busy = true;
-        pending = new();
-        RetainOperation("Pending", "Waiting for closing confirmation…", "close", target, true);
+        closePending = true;
+        using var request = new CancellationTokenSource();
+        pending = request;
+        RetainOperation("Pending", "Waiting for closing confirmation…", "close", target);
+        bool PrepareForConsent()
+        {
+            if (exiting || closeRequested || !IsVisible || !IsActive || !OwnForeground || request.IsCancellationRequested)
+                return false;
+            consentCycle = focusCycle;
+            ownedDialog = true;
+            RevokeFocus("administrator-close", supersede: false);
+            return true;
+        }
+
         ActionResult result;
         try
         {
-            result = await Controller.Platform.Close(target, pending.Token);
+            result = await Controller.Platform.CloseConfirmed(target, request.Token, PrepareForConsent);
         }
         catch (OperationCanceledException)
         {
@@ -172,15 +186,22 @@ public partial class MainWindow
         }
         finally
         {
-            pending.Dispose();
             pending = null;
+            if (consentCycle.HasValue)
+                ownedDialog = false;
+            closePending = false;
             busy = false;
         }
 
         command?.Complete(result.Kind, "window-close-result", commandError);
         if (exiting)
             return;
-        RecordResult(result, "close", target);
+        if (consentCycle is { } cycle && CurrentCycle(cycle) && IsActive && OwnForeground && !closeRequested)
+            await AcquireFocus(cycle, FocusForeground());
+        if (exiting)
+            return;
+        RecordOperationResult(result, "close", target,
+            dispatched: result.Kind is ResultKind.Requested or ResultKind.Unknown or ResultKind.Completed or ResultKind.Simulated);
         try
         {
             await Controller.Refresh();
@@ -192,9 +213,12 @@ public partial class MainWindow
         }
     }
 
-    private void RecordResult(ActionResult result, string action, WindowRef? target = null)
+    private void RecordResult(ActionResult result, string action, WindowRef? target = null) =>
+        RecordOperationResult(result, action, target, dispatched: true);
+
+    private void RecordOperationResult(ActionResult result, string action, WindowRef? target, bool dispatched)
     {
-        RetainOperation(result.ToString().Split(" · ")[0], result.Message, action, target, true, result.Summary);
+        RetainOperation(result.ToString().Split(" · ")[0], result.Message, action, target, dispatched, result.Summary);
         FeedbackText(result.ToString());
         if (result.Kind == ResultKind.Completed)
             RequestCue(FeedbackCue.Completion);

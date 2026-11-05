@@ -26,6 +26,8 @@ Release the buttons and sticks when returning to the game. The panel waits for r
 
 **Resume** returns to the selected session window. If that window has closed, choose another one. Window options include application audio, minimize, details and close. To close a window, choose **Close window…**, release A, then make a new 1.5-second hold. Releasing early or pressing B cancels.
 
+If Windows blocks the request because the app runs as administrator, it may ask you to approve closing that window. The overlay keeps running in standard mode. The app can still ask you to save before it closes.
+
 Controller input may still reach the game while the panel is open. Foreground focus does not block every other application's controller reads. Pause the game before navigating if an unintended action could disrupt play.
 
 ## Set up your TV
@@ -82,7 +84,7 @@ The installation also includes a [CLI for agents and terminals](docs/cli.md) to 
 
 Normal startup does not require administrator privileges. Toggle **Start with Windows** in System, or disable it under **Windows Settings → Apps → Startup**. If you move the app folder, run it once from the new location to refresh its existing registration.
 
-For an elevated game, **Restart as administrator** requests Windows consent for this session only. After an approved restart, **Administrator startup** separately configures the current user's highest-privilege startup task. Startup Off and Windows opt-outs remain respected. Elevation does not isolate controller input.
+If Windows prevents the overlay from taking focus over an elevated game, **Restart as administrator** requests Windows consent for this session only. After an approved restart, **Administrator startup** separately configures the current user's highest-privilege startup task. Startup Off and Windows opt-outs remain respected. Elevation does not isolate controller input.
 
 The installed `startup-task.ps1` is also available for explicit administrative setup. From PowerShell running as the intended user with administrator privileges, run `./startup-task.ps1 -Action Install` in the permanent installation folder. `./startup-task.ps1 -Action Uninstall` removes that task and disables its startup. Test the real sign-in session after configuring it.
 

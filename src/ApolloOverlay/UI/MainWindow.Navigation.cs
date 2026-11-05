@@ -347,7 +347,8 @@ public partial class MainWindow
         {
             effectCancellation?.Cancel();
             pending?.Cancel();
-            RetainOperation("Unconfirmed", "Observation interrupted; the command already sent cannot be undone. Check the window.", dispatched: true);
+            if (!closePending)
+                RetainOperation("Unconfirmed", "Observation interrupted; the command already sent cannot be undone. Check the window.", dispatched: true);
             return;
         }
 

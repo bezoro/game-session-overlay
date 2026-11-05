@@ -130,6 +130,19 @@ static class Program
             return Finish(args[0]);
         }
 
+        if (args.Length == 2 && args[1] == "--elevated-close")
+        {
+            Case("confirmed access-denied close offers one elevated request for the verified target", ConfirmedAccessDeniedClose);
+            ElevatedWindowCloseTests.Run(Case);
+            return Finish(args[0]);
+        }
+
+        if (args.Length == 2 && args[1] == "--interface-feedback")
+        {
+            InterfaceFeedbackTests.Run(Case);
+            return Finish(args[0]);
+        }
+
         if (args.Length == 2 && args[1] == "--mouse-keyboard")
         {
             MouseKeyboardTests.Run(Case);
@@ -958,6 +971,8 @@ static class Program
         DiagnosticReportTests.Run(Case);
         GuideDiagnosticTrackerTests.Run(Case);
         AdministratorCompatibilityTests.Run(Case);
+        Case("confirmed access-denied close offers one elevated request for the verified target", ConfirmedAccessDeniedClose);
+        ElevatedWindowCloseTests.Run(Case);
         MouseKeyboardTests.Run(Case);
         AgentUpdateTests.Run(Case);
         MotionAndControllerTests.Run(Case);
@@ -989,11 +1004,37 @@ static class Program
         return failed == 0 ? 0 : 1;
     }
 
+    private static void ConfirmedAccessDeniedClose()
+    {
+        var fixture = new FakeEffects
+        {
+            CloseAllowed = false,
+            StillExists = false
+        };
+        var result = Run(new GuardedActions(fixture).Close(Game, CancellationToken.None,
+            (target, _) => fixture.PostClose(target) ? ClosePost.Accepted : ClosePost.AccessDenied, fixture.OfferElevation));
+        Equal(1, fixture.Closes);
+        True(Game.Same(fixture.Closed));
+        Equal(1, fixture.ElevationOffers);
+        Equal(ResultKind.Completed, result.Kind);
+    }
+
     private sealed class FakeEffects : IWindowEffects
     {
         public bool IsValid = true, Foreground = true, FocusAllowed = true, InvalidateOnFocus, StillExists = true, CloseAllowed = true;
         public uint Sent = 4;
         public int Sends, Closes, Waits;
+        public int ElevationOffers
+        {
+            get; private set;
+        }
+        public Task<ActionResult> OfferElevation(WindowRef target, CancellationToken cancellation)
+        {
+            True(Game.Same(target));
+            True(!cancellation.IsCancellationRequested);
+            ElevationOffers++;
+            return Task.FromResult(new ActionResult(ResultKind.Requested, "Fixture accepted WM_CLOSE."));
+        }
         public WindowRef? Closed;
         public Action? OnWait;
         public WindowProbe? Probe;
