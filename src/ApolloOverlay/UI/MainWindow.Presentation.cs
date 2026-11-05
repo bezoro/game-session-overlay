@@ -34,6 +34,11 @@ public partial class MainWindow
     internal bool FadePending => fadingOut;
 
     internal void BeginFadeFixture() => HideNow(false);
+    internal Func<nint, string?> WindowDisplayReader { private get; set; } = ActiveDisplay.ReadWindow;
+    internal Func<string?> CursorDisplayReader { private get; set; } = ActiveDisplay.ReadCursor;
+    // Stable throughout this opening, including settings/layout changes while
+    // the overlay itself owns foreground. Never substitute the session anchor.
+    private string? activeDisplayId;
     private bool placing;
     private bool importantStatus;
     private string automaticScaleDescription = "Automatically adjusted to the monitor and Windows scaling";
@@ -105,17 +110,7 @@ public partial class MainWindow
             var screens = Controller.RefreshDisplays();
             if (screens.Count == 0)
                 return;
-            var foreground = Controller.ReturnTarget;
-            var anchor = Controller.Session.Anchor;
-            var target = foreground is { Protected: false } ? foreground : anchor is not null && Controller.Platform.Valid(anchor) ? anchor : foreground;
-            var monitor = target is null ? 0 : Native.MonitorFromWindow(target.Handle, 2);
-            var info = new Native.MonitorInfo
-            {
-                Size = System.Runtime.InteropServices.Marshal.SizeOf<Native.MonitorInfo>(),
-                Device = ""
-            };
-            var active = monitor != 0 && Native.GetMonitorInfo(monitor, ref info) ? screens.FirstOrDefault(d => d.Id == info.Device) : null;
-            var chosen = screens.FirstOrDefault(d => d.Id == Controller.Settings.DisplayId) ?? active ?? screens.FirstOrDefault(d => d.Primary) ?? screens[0];
+            var chosen = DisplayRef.Choose(screens, Controller.Settings.DisplayId, activeDisplayId);
             var hwnd = new WindowInteropHelper(this).Handle;
             if (hwnd != 0)
                 Native.SetWindowPos(hwnd, 0, chosen.X + 16, chosen.Y + 16, 0, 0, 0x15);

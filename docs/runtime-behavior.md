@@ -61,7 +61,7 @@ Recent stores at most five verified identities for this run. Previous window ret
 
 ## Layout, appearance and metadata
 
-Automatic monitor selection follows the active window and uses the preserved session window when the tray is foreground. Explicit monitor, left/right side and 100/115/130/150% scale remain available. Effective scaling combines automatic density (1.0–1.5) with the chosen scale. Text is not reduced merely to fit. Bounds use the monitor work area, DIP/DPI conversion and scrolling. Compact Save/Discard and other critical actions remain pinned.
+Automatic monitor selection captures the external foreground window's monitor before the panel opens, including launchers and windows protected from actions. Desktop, taskbar and unavailable foreground windows use the cursor's monitor at that moment. Layout and settings changes retain that captured monitor while the panel is open. An explicit monitor selection takes precedence; disconnected selections fall back to the captured monitor or an available display. Explicit monitor, left/right side and 100/115/130/150% scale remain available. Effective scaling combines automatic density (1.0–1.5) with the chosen scale. Text is not reduced merely to fit. Bounds use the monitor work area, DIP/DPI conversion and scrolling. Compact Save/Discard and other critical actions remain pinned.
 
 The default palette is slightly warm charcoal with restrained amber and warm off-white text. Light mode has its own palette; Windows high contrast uses SystemColors. All semantic colors are editable through presets, RGB and local hexadecimal entry. Unsafe intermediate drafts remain editable while chrome retains its last readable palette. Saving colors preserves unrelated settings drafts.
 

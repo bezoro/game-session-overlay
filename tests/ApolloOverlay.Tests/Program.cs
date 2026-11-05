@@ -70,6 +70,19 @@ static class Program
             return 2;
         }
 
+        if (args.Length == 2 && args[1] == "--active-display")
+        {
+            ActiveDisplayTests.Run(Case);
+            return Finish(args[0]);
+        }
+
+        if (args.Length == 2 && args[1] == "--active-display-related")
+        {
+            AdaptiveInterfaceTests.Run(Case);
+            SessionUtilityTests.Run(Case);
+            return Finish(args[0]);
+        }
+
         if (args.Length == 2 && args[1] == "--updates")
         {
             UpdateSourceTests.Run(Case);
@@ -932,6 +945,7 @@ static class Program
         CommandDiagnosticsTests.Run(Case);
         InterfaceFeedbackTests.Run(Case);
         AdaptiveInterfaceTests.Run(Case);
+        ActiveDisplayTests.Run(Case);
         SettingsFocusTests.Run(Case);
         WindowActivationTests.Run(Case);
         IsolatedActivationTests.Run(Case);

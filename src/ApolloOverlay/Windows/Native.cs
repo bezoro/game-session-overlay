@@ -14,6 +14,12 @@ internal static class Native
         public int Left, Top, Right, Bottom;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct Point
+    {
+        public int X, Y;
+    }
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     internal struct MonitorInfo
     {
@@ -88,6 +94,10 @@ internal static class Native
     internal static extern bool IsIconic(nint hwnd);
     [DllImport("user32.dll")]
     internal static extern nint MonitorFromWindow(nint hwnd, uint flags);
+    [DllImport("user32.dll")]
+    internal static extern bool GetCursorPos(out Point point);
+    [DllImport("user32.dll")]
+    internal static extern nint MonitorFromPoint(Point point, uint flags);
     [DllImport("user32.dll")]
     internal static extern uint GetDpiForWindow(nint hwnd);
     [DllImport("dwmapi.dll")]

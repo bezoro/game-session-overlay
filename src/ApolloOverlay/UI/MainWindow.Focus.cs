@@ -106,6 +106,7 @@ public partial class MainWindow
         using var command = BeginCommand("overlay-open");
         var foreground = FocusForeground();
         var wasVisible = IsVisible;
+        var captureActivation = !wasVisible || foreground != new WindowInteropHelper(this).Handle;
         var reversingFade = fadingOut && wasVisible && IsActive && OwnForeground;
         var interruptedOpacity = reversingFade ? Math.Clamp(Opacity, 0, 1) : 0;
         fadeGeneration++;
@@ -118,18 +119,25 @@ public partial class MainWindow
         CancelHandoff();
         CancelHold();
         input.Cancel();
-        if (!wasVisible)
+        if (captureActivation)
+        {
+            activeDisplayId = ActiveDisplay.Capture(foreground, new WindowInteropHelper(this).Handle, WindowDisplayReader, CursorDisplayReader);
             Controller.CaptureReturn();
+        }
         opening = true;
         try
         {
-            if (!wasVisible)
+            if (captureActivation)
             {
-                TraceFocus("show-start", ResultKind.Requested);
+                if (!wasVisible)
+                    TraceFocus("show-start", ResultKind.Requested);
                 Place();
-                PrepareOpenAnimation();
-                Show();
-                TraceFocus("show-ready", ResultKind.Completed);
+                if (!wasVisible)
+                {
+                    PrepareOpenAnimation();
+                    Show();
+                    TraceFocus("show-ready", ResultKind.Completed);
+                }
             }
         }
         finally
