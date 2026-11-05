@@ -292,7 +292,8 @@ public partial class MainWindow
         if (!NavigationAllowed || busy || TransitionPending || Confirming || view.Current.Route is not (OverlayRoute.Hub or OverlayRoute.Apps or OverlayRoute.Details))
             return;
         RequestCue(FeedbackCue.Confirmation);
-        var target = Controller.Apps.FirstOrDefault(w => WindowId(w) == navigation.Id || "options:" + WindowId(w) == navigation.Id) ?? Controller.Recent.Items.FirstOrDefault(w => "recent:" + WindowId(w) == navigation.Id || "options:recent:" + WindowId(w) == navigation.Id) ?? view.Current.Target ?? Controller.Session.Anchor;
+        var target = navigation.Id == "session-card" ? Controller.Session.CardTarget
+            : Controller.Apps.FirstOrDefault(w => WindowId(w) == navigation.Id || "options:" + WindowId(w) == navigation.Id) ?? Controller.Recent.Items.FirstOrDefault(w => "recent:" + WindowId(w) == navigation.Id || "options:recent:" + WindowId(w) == navigation.Id) ?? view.Current.Target ?? Controller.Session.Anchor;
         if (target is null)
         {
             ChooseSession();
@@ -402,7 +403,7 @@ public partial class MainWindow
             navigation = new("session-card");
             SetSelection(restoreFocus: false);
             args.Handled = true;
-            var target = Controller.Session.Anchor;
+            var target = Controller.Session.CardTarget;
             RunInterfaceAction(SessionCardButton, () =>
             {
                 if (target is null)

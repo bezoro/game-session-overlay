@@ -37,11 +37,20 @@ public partial class MainWindow
     }
 
     private static string VolumeRange(ApplicationAudioSnapshot state) => state.VolumeMaximum - state.VolumeMinimum > .01f ? $"{state.VolumeMinimum:P0}–{state.VolumeMaximum:P0}" : $"{state.VolumeMaximum:P0}";
-    private string GameVolumeTitle => appAudio.CanSetMute ? "Game · " + (appAudio.MuteState == ApplicationMuteState.Muted ? "muted" : appAudio.MuteState == ApplicationMuteState.Mixed ? "mixed audio" : appAudio.CanSetVolume ? VolumeRange(appAudio) : "sound on") : "Game audio";
-    private string GameVolumeDescription => (appAudio.Availability == ApplicationAudioAvailability.Partial ? "Partial audio · " : "") + (appAudio.CanSetVolume
-        ? InputHint("← / → volume · A toggles mute", "Arrow keys adjust · Enter toggles mute", "Drag volume · click to toggle mute")
-        : appAudio.CanSetMute ? InputHint("A toggles mute · volume unavailable", "Enter toggles mute · volume unavailable", "Click to toggle mute · volume unavailable")
-        : "Start audio in the game to adjust it");
+    private string GameVolumeTitle => HubAudioSnapshot is { CanSetMute: true } state
+        ? "Game · " + (state.MuteState == ApplicationMuteState.Muted ? "muted" : state.MuteState == ApplicationMuteState.Mixed ? "mixed audio" : state.CanSetVolume ? VolumeRange(state) : "sound on")
+        : "Game audio";
+    private string GameVolumeDescription
+    {
+        get
+        {
+            var state = HubAudioSnapshot;
+            return (state?.Availability == ApplicationAudioAvailability.Partial ? "Partial audio · " : "") + (state?.CanSetVolume == true
+                ? InputHint("← / → volume · A toggles mute", "Arrow keys adjust · Enter toggles mute", "Drag volume · click to toggle mute")
+                : state?.CanSetMute == true ? InputHint("A toggles mute · volume unavailable", "Enter toggles mute · volume unavailable", "Click to toggle mute · volume unavailable")
+                : "Start audio in the game to adjust it");
+        }
+    }
     private string WindowsVolumeTitle => audio.Current.Available ? audio.Current.Muted ? "Output · muted" : $"Output · {audio.Current.Volume:P0}" : "Output unavailable";
     private string MicrophoneTitle => systemAudio.Current.MicrophoneMuted switch
     {
@@ -52,11 +61,12 @@ public partial class MainWindow
 
     private void UpdateSessionFeatureLabels()
     {
-        SetFeatureEntry("session-volume", GameVolumeTitle, GameVolumeDescription, appAudio.CanSetMute);
+        var gameAudio = HubAudioSnapshot;
+        SetFeatureEntry("session-volume", GameVolumeTitle, GameVolumeDescription, gameAudio?.CanSetMute == true);
         SetFeatureEntry("windows-volume", WindowsVolumeTitle, systemAudio.Current.OutputName, audio.Current.Available);
         SetFeatureEntry("microphone", MicrophoneTitle, systemAudio.Current.MicrophoneName, systemAudio.Current.MicrophoneMuted is not null);
         var media = CurrentMedia;
-        SyncSessionSlider("session-volume", appAudio.VolumeMaximum);
+        SyncSessionSlider("session-volume", gameAudio?.VolumeMaximum);
         SyncSessionSlider("windows-volume", audio.Current.Available ? audio.Current.Volume : null);
         SetEntryDescription("session-media", media is null ? "Playback in supported apps" : (media.Playing ? "Playing · " : "Paused · ") + (media.Title.Length > 0 ? media.Title : "Media playback"));
     }
@@ -81,7 +91,7 @@ public partial class MainWindow
 
     private void ToggleGameAudio()
     {
-        if (Controller.Session.Anchor is { } target)
+        if (HubAudioTarget is { } target)
             MuteApplication(target);
     }
 
@@ -104,16 +114,15 @@ public partial class MainWindow
             return true;
         }
 
-        if (navigation.Id == "session-volume" && Controller.Session.Anchor is { } target)
+        if (navigation.Id == "session-volume" && HubAudioTarget is not null)
         {
-            if (!appAudio.CanSetVolume)
+            if (HubAudioSnapshot is not { CanSetVolume: true } state)
             {
                 FeedbackText(InputHint("Volume unconfirmed. Press A to mute.", "Volume unconfirmed. Press Enter to mute.", "Volume unconfirmed. Click to mute."));
                 return true;
             }
 
-            var desired = Math.Clamp(appAudio.VolumeMaximum!.Value + delta, 0, 1);
-            var context = audioGeneration;
+            var desired = Math.Clamp(state.VolumeMaximum!.Value + delta, 0, 1);
             SetGameVolume(desired);
             return true;
         }
@@ -191,7 +200,7 @@ public partial class MainWindow
 
     private void SetGameVolume(float value)
     {
-        if (!NavigationAllowed || busy || TransitionPending || Controller.Session.Anchor is not { } target || !appAudio.CanSetVolume)
+        if (!NavigationAllowed || busy || TransitionPending || HubAudioTarget is not { } target || !AudioFor(target) || !appAudio.CanSetVolume)
             return;
         var context = audioGeneration;
         OperationTask = RunInPlaceCore(target, async token =>

@@ -157,6 +157,42 @@ public sealed class WindowsPlatform : IPlatform, IWindowEffects, IWindowIconNoti
             && hook != 0;
     }
 
+    public IReadOnlyList<SessionTargetCandidate> ScanSessionTargets(string? displayId, WindowRef? foreground, CancellationToken token,
+        Action<IReadOnlyList<SessionTargetCandidate>> reportVerified)
+    {
+        bool OnDisplay(WindowRef window) => displayId is null || OnSessionDisplay(window, displayId);
+
+        var live = new List<WindowRef>();
+        foreach (var window in Windows())
+        {
+            token.ThrowIfCancellationRequested();
+            if (!window.Protected && OnDisplay(window) && Valid(window))
+                live.Add(window);
+        }
+
+        var candidates = live.Select(window => new SessionTargetCandidate(window)).ToList();
+        if (foreground is not null && OnDisplay(foreground) && CanSteamMenu(foreground))
+            candidates.Add(new(foreground, ResumeOnly: true));
+        reportVerified(candidates);
+        token.ThrowIfCancellationRequested();
+        var games = SteamLaunchContext.LauncherDescendants(live, SteamLaunchContext.Capture(), SteamLaunchContext.ReadIdentity, token);
+        token.ThrowIfCancellationRequested();
+        for (var i = 0; i < live.Count; i++)
+            if (games.Contains(live[i]))
+                candidates[i] = new(live[i], LauncherDescendant: true);
+        return candidates;
+    }
+
+    public bool OnSessionDisplay(WindowRef window, string displayId)
+    {
+        var monitor = Native.MonitorFromWindow(window.Handle, 0);
+        var info = new Native.MonitorInfo { Size = Marshal.SizeOf<Native.MonitorInfo>(), Device = "" };
+        return monitor != 0 && Native.GetMonitorInfo(monitor, ref info) && info.Device.Equals(displayId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public Task<ActionResult> ResumeBigPicture(WindowRef window, CancellationToken token) =>
+        new GuardedActions(this).ResumeBigPicture(window, token, () => CanSteamMenu(window));
+
     public IReadOnlyList<DisplayRef> Displays()
     {
         var displays = new List<DisplayRef>();

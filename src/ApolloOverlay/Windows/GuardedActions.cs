@@ -61,9 +61,15 @@ public sealed class GuardedActions(IWindowEffects effects, Action<SteamSequenceE
         return new(ResultKind.Unknown, "Minimizing requested; the state was not confirmed within one second. The panel remains available.");
     }
 
-    public async Task<ActionResult> Switch(WindowRef window)
+    public Task<ActionResult> Switch(WindowRef window) => Switch(window, () => effects.Valid(window), CancellationToken.None);
+
+    internal Task<ActionResult> ResumeBigPicture(WindowRef window, CancellationToken token, Func<bool> canResume) => Switch(window, canResume, token);
+
+    private async Task<ActionResult> Switch(WindowRef window, Func<bool> valid, CancellationToken token)
     {
-        if (!effects.Valid(window))
+        if (token.IsCancellationRequested)
+            return new(ResultKind.Cancelled, "Activation cancelled before dispatch.");
+        if (!valid())
             return new(ResultKind.Failed, "The window identity changed or could not be verified. Select it again.")
             {
                 Summary = "Select window again."
@@ -72,7 +78,9 @@ public sealed class GuardedActions(IWindowEffects effects, Action<SteamSequenceE
             return new(ResultKind.Failed, "Windows rejected window activation.");
         for (var i = 0; i < 6; i++)
         {
-            if (!effects.Valid(window))
+            if (token.IsCancellationRequested)
+                return new(ResultKind.Unknown, "Activation observation cancelled after dispatch.");
+            if (!valid())
                 return new(ResultKind.Failed, "The window was replaced during activation.");
             if (effects.IsForeground(window))
                 return new(ResultKind.Completed, "The selected window is in the foreground.");

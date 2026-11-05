@@ -41,6 +41,17 @@ public partial class MainWindow
     private void AdjustVolume(float delta) => AudioAction(audio.Set(audio.Current.Volume + delta));
     private void AudioAction(ActionResult result) => RecordResult(result, "audio");
     private bool AudioFor(WindowRef target) => audioTarget?.Same(target) == true && appAudio.Target?.Same(target) == true && appAudio.Generation == audioGeneration;
+    private WindowRef? HubAudioTarget => view.Current.Route == OverlayRoute.Hub && !Controller.Session.CardPending
+        && Controller.Session.CardTarget is { Protected: false } target && Controller.CardTargetAvailable(target) ? target : null;
+    private ApplicationAudioSnapshot? HubAudioSnapshot => HubAudioTarget is { } target && AudioFor(target) ? appAudio : null;
+    private WindowRef? ApplicationAudioTarget => view.Current.Target ?? (view.Current.Route == OverlayRoute.Hub ? HubAudioTarget : Controller.Session.Anchor);
+    private void UpdateSessionCardAudioLabel()
+    {
+        var target = Controller.Session.CardTarget;
+        SessionAudioLabel.Text = target is null ? "Select a window to view its audio"
+            : !Controller.CardTargetAvailable(target) ? "Window unavailable"
+            : AudioFor(target) ? AudioBadge() : "Status unconfirmed";
+    }
     private string AudioBadge() => appAudio.Availability switch
     {
         ApplicationAudioAvailability.Partial => "Audio partially available",
@@ -73,7 +84,7 @@ public partial class MainWindow
             return;
         }
 
-        var target = view.Current.Target ?? Controller.Session.Anchor;
+        var target = ApplicationAudioTarget;
         if (target is null || !Controller.Platform.Valid(target))
         {
             if (audioTarget is not null)
@@ -92,7 +103,7 @@ public partial class MainWindow
         audioGeneration++;
         audioRevision = -1;
         appAudio = new(target, audioGeneration, 0, ApplicationAudioAvailability.Unknown, ApplicationMuteState.Unknown, 0, 0, "Checking app audio sessions…");
-        SessionAudioLabel.Text = AudioBadge();
+        UpdateSessionCardAudioLabel();
         applicationAudio.Track(target, true, audioGeneration);
     }
 
@@ -106,11 +117,12 @@ public partial class MainWindow
             return;
         }
 
-        if (!InputContext.Visible || snapshot.Generation != audioGeneration || audioTarget is null || !audioTarget.Same(snapshot.Target) || snapshot.Revision <= audioRevision)
+        if (!InputContext.Visible || snapshot.Generation != audioGeneration || audioTarget is null || !audioTarget.Same(snapshot.Target)
+            || ApplicationAudioTarget?.Same(snapshot.Target) != true || snapshot.Revision <= audioRevision)
             return;
         audioRevision = snapshot.Revision;
         appAudio = snapshot;
-        SessionAudioLabel.Text = AudioBadge();
+        UpdateSessionCardAudioLabel();
         UpdateSessionFeatureLabels();
         var index = entries.FindIndex(e => e.Id == "application-mute");
         if (index >= 0)
@@ -147,7 +159,7 @@ public partial class MainWindow
 
     private void MuteApplication(WindowRef target)
     {
-        if (!AudioFor(target) || !appAudio.CanSetMute)
+        if (ApplicationAudioTarget?.Same(target) != true || !AudioFor(target) || !appAudio.CanSetMute)
         {
             FeedbackText("No audio session identified; nothing was sent.");
             return;
@@ -161,6 +173,6 @@ public partial class MainWindow
             if (!exiting)
                 ApplicationAudioChanged(change.Snapshot);
             return change.Result;
-        }, "application-mute");
+        }, "application-mute", () => generation == audioGeneration && ApplicationAudioTarget?.Same(target) == true && AudioFor(target));
     }
 }

@@ -38,7 +38,7 @@ public partial class MainWindow
     }
 
     private static string TargetId(WindowRef target) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"{target.Handle}:{target.Pid}:{target.Started}:{target.Generation}")))[..32];
-    private WindowRef[] AutomationWindows() => Controller.Apps.Concat(new[] { Controller.Session.Anchor, Controller.ReturnTarget }.OfType<WindowRef>()).DistinctBy(TargetId).Where(Controller.Platform.Valid).Take(64).ToArray();
+    private WindowRef[] AutomationWindows() => Controller.Apps.Concat(new[] { Controller.Session.CardTarget, Controller.Session.Anchor, Controller.ReturnTarget }.OfType<WindowRef>()).DistinctBy(TargetId).Where(Controller.Platform.Valid).Take(64).ToArray();
     private ReleaseSample SteamSample()
     {
         var owned = steamOwner?.OwnedKeys ?? 0;
@@ -392,8 +392,8 @@ public partial class MainWindow
         {
             if (view.Current.Route != OverlayRoute.Hub)
                 return AutomationReply.Error("Unavailable", "Session options are available from the session page.");
-            var session = Controller.Session.Anchor;
-            if (session is not null && !Controller.Platform.Valid(session))
+            var session = Controller.Session.CardTarget;
+            if (session is not null && !Controller.CardTargetAvailable(session))
                 return AutomationReply.Error("Unavailable", "The session window changed.");
             if (request.DryRun)
                 return AutomationReply.Error("DryRun", "Session options available; no route change requested.");
@@ -438,7 +438,7 @@ public partial class MainWindow
         else
             entry.Run();
         if (selected is not null)
-            return AutomationReply.Error(selected.Same(Controller.Session.Anchor) ? "Completed" : "Failed", "Selection result observed.");
+            return AutomationReply.Error(selected.Same(Controller.Session.CardTarget) ? "Completed" : "Failed", "Selection result observed.");
         if (!ReferenceEquals(previousOperation, Controller.Operation) && Controller.Operation is { } operation)
             return new()
             {

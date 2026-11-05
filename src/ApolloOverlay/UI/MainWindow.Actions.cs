@@ -222,7 +222,7 @@ public partial class MainWindow
     private void RunEffect(Func<CancellationToken, Func<bool>, Task<ActionResult>> effect, Func<bool>? valid = null, WindowRef? focusTarget = null)
     {
         var action = navigation.Id;
-        var target = view.Current.Target ?? Controller.Session.Anchor;
+        var target = action == "session-card" ? Controller.Session.CardTarget : view.Current.Target ?? Controller.Session.Anchor;
         QueueHandoff(() => OperationTask = BeginEffectCore(effect, action, target, focusTarget), valid);
     }
 
@@ -348,7 +348,9 @@ public partial class MainWindow
             RunEffect((c, keep) => Controller.Platform.Shortcut(target, keys, c, keep), () => Controller.Platform.Valid(target), target);
     }
 
-    private void RunInPlace(WindowRef target, Func<CancellationToken, Task<ActionResult>> effect, string action) => QueueHandoff(() => OperationTask = RunInPlaceCore(target, effect, action), () => Controller.Platform.Valid(target) && (view.Current.Target ?? Controller.Session.Anchor)?.Same(target) == true);
+    private void RunInPlace(WindowRef target, Func<CancellationToken, Task<ActionResult>> effect, string action, Func<bool>? stillCurrent = null) =>
+        QueueHandoff(() => OperationTask = RunInPlaceCore(target, effect, action), () => Controller.Platform.Valid(target)
+            && (stillCurrent?.Invoke() ?? (view.Current.Target ?? Controller.Session.Anchor)?.Same(target) == true));
     private async Task RunInPlaceCore(WindowRef target, Func<CancellationToken, Task<ActionResult>> effect, string action)
     {
         if (busy || exiting)

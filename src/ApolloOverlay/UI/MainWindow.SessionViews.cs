@@ -57,17 +57,17 @@ public partial class MainWindow
 
     private void BuildHub()
     {
-        var target = Controller.Session.Anchor;
-        var valid = target is not null && Controller.Platform.Valid(target);
+        var target = Controller.Session.CardTarget;
+        var canResume = Controller.CardTargetAvailable(target) && !Controller.Session.CardPending;
         RegisterFixed("session-card", SessionCardButton, () =>
         {
-            if (target is null || !valid)
+            if (target is null || !canResume)
                 ChooseSession();
             else
-                RunEffect(() => Controller.Switch(target), () => Controller.Platform.Valid(target));
-        }, true, valid ? target!.Title : "Choose a window in Apps");
-        AutomationProperties.SetName(SessionCardButton, valid ? target!.Title + " · Resume window" : "Choose window");
-        AutomationProperties.SetHelpText(SessionCardButton, valid ? "A / Enter resumes this window. X or right-click opens options." : "Choose a window in Apps");
+                RunEffect((token, _) => Controller.ResumeCard(target, token), () => Controller.CanResumeCard(target));
+        }, true, canResume ? target!.Title : "Choose a window in Apps");
+        AutomationProperties.SetName(SessionCardButton, canResume ? target!.Title + " · Resume window" : "Choose window");
+        AutomationProperties.SetHelpText(SessionCardButton, canResume ? "A / Enter resumes this window. X or right-click opens options." : "Choose a window in Apps");
         var windowCount = Controller.Apps.Count;
         var windowSummary = windowCount switch
         {
@@ -139,7 +139,7 @@ public partial class MainWindow
     private void AddWindowRow(WindowRef target, string prefix, bool chooser)
     {
         var id = prefix + WindowId(target);
-        var eligible = !chooser || !target.Protected && !target.Launcher;
+        var eligible = !chooser || !target.Protected && (!target.Launcher || target.SessionLauncher);
         var button = AddRow(id, target.Title, eligible ? target.ProcessName + (chooser ? " · Use for this session" : " · Switch window") : "This window cannot be the session reference", () =>
         {
             if (chooser)
@@ -233,6 +233,13 @@ public partial class MainWindow
 
         var valid = Controller.Platform.Valid(target);
         Paragraph(target.Title, 20);
+        if (Controller.Session.CardResumeOnly && target.Same(Controller.Session.CardTarget))
+        {
+            Paragraph("Use Resume on the session card to return to Big Picture.");
+            AddRow("choose-session", "Choose another window", "Choose what to resume", ChooseSession);
+            AddRow("back", "Back", "", Back);
+            return;
+        }
         if (!valid)
             Paragraph("This window is no longer available. Choose another window.");
         AddRow("application-mute", MuteActionTitle(), valid ? AppAudioDescription() : "This window is no longer available.", () => MuteApplication(target), valid && AudioFor(target) && appAudio.CanSetMute);

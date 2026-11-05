@@ -214,6 +214,12 @@ static class Program
             return 0;
         }
 
+        if (args.Length == 2 && args[1] == "--session-target")
+        {
+            SessionHubTests.SessionTargetRegression(Case);
+            return Finish(args[0]);
+        }
+
         if (args.Length == 2 && args[1] == "--session-hub")
         {
             SessionHubTests.Run(Case);

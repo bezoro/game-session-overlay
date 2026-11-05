@@ -145,6 +145,9 @@ public partial class MainWindow
             opening = false;
         }
 
+        if (captureActivation)
+            _ = ResolveOpeningCard(cycle, placedDisplayId);
+
         UpdatePolling();
         TraceFocus("audio-start", ResultKind.Requested);
         audio.SetVisible(!Controller.Platform.IsPreview);
@@ -180,6 +183,14 @@ public partial class MainWindow
             if (CurrentCycle(cycle))
                 FeedbackText("Could not refresh windows. Try opening again from the tray.");
         }
+    }
+
+    private async Task ResolveOpeningCard(long cycle, string? displayId)
+    {
+        var profileKeys = sessionProfiles.Items.Select(profile => profile.GameKey).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
+        await Controller.ResolveCardTarget(displayId, profileKeys);
+        if (CurrentCycle(cycle))
+            RefreshRows();
     }
 
     private bool CurrentCycle(long cycle) => cycle == focusCycle && !exiting && IsVisible;

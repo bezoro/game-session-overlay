@@ -12,6 +12,15 @@ public interface IPlatform : IDisposable
 
     WindowRef? Foreground();
     IReadOnlyList<WindowRef> Windows();
+    // Called off the dispatcher. Results include only identity-verified windows
+    // eligible on the supplied display. Report verified windows synchronously
+    // before potentially slower ancestry reads so the caller can retain a launcher.
+    IReadOnlyList<SessionTargetCandidate> ScanSessionTargets(string? displayId, WindowRef? foreground, CancellationToken token,
+        Action<IReadOnlyList<SessionTargetCandidate>> reportVerified) =>
+        Windows().Where(Valid).Select(window => new SessionTargetCandidate(window)).ToArray();
+    bool OnSessionDisplay(WindowRef window, string displayId) => true;
+    Task<ActionResult> ResumeBigPicture(WindowRef window, CancellationToken token) =>
+        Task.FromResult(new ActionResult(ResultKind.Unavailable, "Big Picture activation is unavailable on this platform."));
     bool Valid(WindowRef window);
     ImageSource? Icon(WindowRef window) => null;
     IReadOnlyList<DisplayRef> Displays();

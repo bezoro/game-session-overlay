@@ -148,8 +148,8 @@ public partial class MainWindow
         entries.Add(new("settings", SettingsGear, () => Page(2), true, "Open System"));
         RefreshUpdateIndicator();
         ContextCard.Visibility = view.Current.Route == OverlayRoute.Hub ? Visibility.Visible : Visibility.Collapsed;
-        var target = Controller.Session.Anchor;
-        var valid = target is not null && Controller.Platform.Valid(target);
+        var target = Controller.Session.CardTarget;
+        var valid = Controller.CardTargetAvailable(target);
         _ = UpdateSessionArtwork();
         SessionKicker.Visibility = Visibility.Collapsed;
         ApplySessionCardDensity();
@@ -157,15 +157,15 @@ public partial class MainWindow
         TargetLabel.ToolTip = target?.Title;
         AutomationProperties.SetName(ContextCard, target?.Title ?? "No window selected");
         SessionEvidence.Text = target?.ProcessName ?? "Apps";
-        ContextStatus.Text = target is null ? "No selection" : valid ? "Available" : "Window unavailable";
+        ContextStatus.Text = Controller.Session.CardPending ? "Finding a window" : target is null ? "No selection" : valid ? "Available" : "Window unavailable";
         ContextStatusDot.Opacity = valid ? 1 : .3;
         ContextIcon.Source = target is null ? null : Controller.Platform.Icon(target);
         ContextIcon.Visibility = ContextIcon.Source is null ? Visibility.Collapsed : Visibility.Visible;
         ContextGlyph.Visibility = ContextIcon.Source is null ? Visibility.Visible : Visibility.Collapsed;
-        ContextStatus.Visibility = valid ? Visibility.Collapsed : Visibility.Visible;
+        ContextStatus.Visibility = valid && !Controller.Session.CardPending ? Visibility.Collapsed : Visibility.Visible;
         ContextStatusDot.Visibility = Visibility.Collapsed;
         SessionEvidence.Visibility = compactChrome || target is not null && string.Concat(target.Title.Where(char.IsLetterOrDigit)).Equals(string.Concat(target.ProcessName.Where(char.IsLetterOrDigit)), StringComparison.OrdinalIgnoreCase) ? Visibility.Collapsed : Visibility.Visible;
-        SessionAudioLabel.Text = target is null ? "Select a window to view its audio" : !valid ? "Window unavailable" : AudioFor(target) ? AudioBadge() : "Status unconfirmed";
+        UpdateSessionCardAudioLabel();
         ControllerStatusLabel.Text = controllerStatus.Replace(" · waiting for input", "");
         BackButton.Visibility = view.Depth > 0 ? Visibility.Visible : Visibility.Collapsed;
         if (view.Depth > 0)
