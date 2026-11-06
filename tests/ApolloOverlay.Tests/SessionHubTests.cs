@@ -307,13 +307,20 @@ internal static class SessionHubTests
         test("session card resumes exact Big Picture without generic protected window access", () =>
         {
             var window = Fixture(out var platform, out _, out _, out _);
-            var other = new Window { Title = "Big Picture handoff fixture", Width = 260, Height = 140, ShowInTaskbar = false };
+            var other = new Window { Title = "Big Picture handoff fixture", Width = 260, Height = 140, ShowActivated = false };
             try
             {
+                // A resumable Big Picture window is already visible and has no owner.
+                other.Show();
                 platform.BigPicture = platform.BigPicture with
                 {
                     Handle = new WindowInteropHelper(other).EnsureHandle()
                 };
+                Check(Native.IsWindowVisible(platform.BigPicture.Handle) && Native.GetWindow(platform.BigPicture.Handle, 4) == 0,
+                    "PRECONDITION: the Big Picture fixture is not an eligible visible unowned window");
+                Native.SetForegroundWindow(platform.BigPicture.Handle);
+                Check(other.IsActive && Native.GetForegroundWindow() == platform.BigPicture.Handle,
+                    "PRECONDITION: Big Picture was not foreground before opening the overlay");
                 var controller = window.Controller;
                 platform.ForegroundWindow = platform.BigPicture;
                 platform.CardScan = (_, foreground) => platform.CanSteamMenu(foreground) ? [new(platform.BigPicture, ResumeOnly: true)] : [];
@@ -327,6 +334,7 @@ internal static class SessionHubTests
                 window.Back();
                 Pick(window, "session-card");
                 window.EffectFramesFixture = () => new PadFrame[4];
+                window.InputContextReader = null;
                 window.ShowDiagnostic();
                 Check(window.IsActive && Native.GetForegroundWindow() == new WindowInteropHelper(window).Handle,
                     "PRECONDITION: the overlay does not own real foreground focus");
@@ -334,12 +342,12 @@ internal static class SessionHubTests
                 window.ResultNotificationRequest = notifications.Add;
                 platform.OnBigPictureResume = (target, token) =>
                 {
-                    other.Show();
-                    other.Activate();
+                    string? cancelledAt = null;
+                    using var registration = token.Register(() => cancelledAt = $"foreground=0x{Native.GetForegroundWindow():X}, target=0x{target.Handle:X}, active={window.IsActive}, visible={window.IsVisible}");
                     Native.SetForegroundWindow(target.Handle);
                     Check(!window.IsActive && Native.GetForegroundWindow() == target.Handle,
                         "PRECONDITION: Big Picture did not receive real foreground focus");
-                    Check(!token.IsCancellationRequested, "The expected Big Picture handoff cancelled observation");
+                    Check(!token.IsCancellationRequested, "The expected Big Picture handoff cancelled observation: " + cancelledAt);
                     return Task.FromResult(new ActionResult(ResultKind.Completed, "Fixture Big Picture focus observed"));
                 };
                 window.ActivateEntry();
