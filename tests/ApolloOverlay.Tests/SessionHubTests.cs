@@ -307,6 +307,8 @@ internal static class SessionHubTests
         foreach (var handoff in new[] { "confirmed", "other-window", "replaced-target" })
             test("session card Big Picture handoff observes " + handoff + " without generic protected window access", () =>
             {
+                var previousContext = SynchronizationContext.Current;
+                SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
                 var window = Fixture(out var platform, out _, out _, out _);
                 var other = new Window { Title = "Big Picture handoff fixture", Width = 260, Height = 140, ShowActivated = false };
                 var unrelated = new Window { Title = "Unrelated handoff fixture", Width = 260, Height = 140, ShowActivated = false };
@@ -349,10 +351,16 @@ internal static class SessionHubTests
                     {
                         string? cancelledAt = null;
                         using var registration = token.Register(() => cancelledAt = $"foreground=0x{Native.GetForegroundWindow():X}, target=0x{target.Handle:X}, overlay=0x{new WindowInteropHelper(window).Handle:X}, active={window.IsActive}, visible={window.IsVisible}");
-                        var destination = handoff == "other-window" ? unrelatedHandle : target.Handle;
-                        Native.SetForegroundWindow(destination);
-                        Check(!window.IsActive && Native.GetForegroundWindow() == destination,
-                            "PRECONDITION: the requested window did not receive real foreground focus");
+                        var requested = Native.SetForegroundWindow(target.Handle);
+                        Check(!window.IsActive && Native.GetForegroundWindow() == target.Handle,
+                            $"PRECONDITION: native request={requested}, foreground=0x{Native.GetForegroundWindow():X}, destination=0x{target.Handle:X}, active={window.IsActive}");
+                        if (handoff == "other-window")
+                        {
+                            // Another app takes foreground before the pending observation completes.
+                            Native.SetForegroundWindow(unrelatedHandle);
+                            Check(Native.GetForegroundWindow() == unrelatedHandle,
+                                "PRECONDITION: the unrelated window did not receive real foreground focus");
+                        }
                         if (handoff == "replaced-target")
                             platform.BigPicture = platform.BigPicture with
                             {
@@ -376,7 +384,13 @@ internal static class SessionHubTests
                         && notifications.Count == (handoff == "confirmed" ? 0 : 1),
                         "Big Picture observation left the panel visible or reported the wrong result");
                 }
-                finally { window.Close(); other.Close(); unrelated.Close(); }
+                finally
+                {
+                    window.Close();
+                    other.Close();
+                    unrelated.Close();
+                    SynchronizationContext.SetSynchronizationContext(previousContext);
+                }
             });
     }
 
