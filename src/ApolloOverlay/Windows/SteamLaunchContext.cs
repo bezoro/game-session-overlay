@@ -31,13 +31,47 @@ internal static class SteamLaunchContext
 
     internal static bool Matches(WindowRef target, SteamProcessSnapshot snapshot, Func<uint, SteamProcessIdentity?> read)
     {
-        if (!snapshot.Complete || snapshot.Entries.Count > ProcessLimit || target.Pid <= 0)
-            return false;
+        var entries = Index(snapshot);
+        return entries is not null && Matches(target, entries, read, name => name.Equals("steam.exe", StringComparison.OrdinalIgnoreCase));
+    }
+
+    internal static HashSet<WindowRef> LauncherDescendants(IReadOnlyList<WindowRef> windows, SteamProcessSnapshot snapshot,
+        Func<uint, SteamProcessIdentity?> read, CancellationToken token)
+    {
+        var result = new HashSet<WindowRef>();
+        var entries = Index(snapshot);
+        if (entries is null)
+            return result;
+        var identities = new Dictionary<uint, SteamProcessIdentity?>();
+        SteamProcessIdentity? ReadOnce(uint pid)
+        {
+            token.ThrowIfCancellationRequested();
+            if (!identities.TryGetValue(pid, out var identity))
+                identities.Add(pid, identity = read(pid));
+            return identity;
+        }
+
+        foreach (var window in windows)
+            if (SessionTracker.PossibleGame(window) && Matches(window, entries, ReadOnce, name => name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && WindowRef.IsSessionLauncher(name[..^4])))
+                result.Add(window);
+        return result;
+    }
+
+    private static Dictionary<uint, SteamProcessEntry>? Index(SteamProcessSnapshot snapshot)
+    {
+        if (!snapshot.Complete || snapshot.Entries.Count > ProcessLimit)
+            return null;
         var entries = new Dictionary<uint, SteamProcessEntry>();
         foreach (var entry in snapshot.Entries)
             if (!entries.TryAdd(entry.Pid, entry))
-                return false;
-        if (!entries.TryGetValue((uint)target.Pid, out var child))
+                return null;
+        return entries;
+    }
+
+    private static bool Matches(WindowRef target, Dictionary<uint, SteamProcessEntry> entries,
+        Func<uint, SteamProcessIdentity?> read, Func<string, bool> launcher)
+    {
+        if (target.Pid <= 0 || !entries.TryGetValue((uint)target.Pid, out var child))
             return false;
         var identity = read(child.Pid);
         if (!Coherent(child, identity) || identity!.Started != target.Started || !string.Equals(identity.Name, target.ProcessName + ".exe", StringComparison.OrdinalIgnoreCase))
@@ -54,7 +88,7 @@ internal static class SteamLaunchContext
             var parentIdentity = read(parent.Pid);
             if (!Coherent(parent, parentIdentity) || parentIdentity!.SessionId != session || parentIdentity.Started > identity.Started)
                 return false;
-            if (string.Equals(parent.Name, "steam.exe", StringComparison.OrdinalIgnoreCase))
+            if (launcher(parent.Name))
                 return true;
             child = parent;
             identity = parentIdentity;

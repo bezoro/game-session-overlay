@@ -106,10 +106,23 @@ public static class AutomationPipeSecurity
     }
 
     public static bool Alive(PipeStream stream) => stream.IsConnected && PeekNamedPipe(stream.SafePipeHandle, 0, 0, 0, 0, 0);
+    internal static bool IsClientProcess(NamedPipeServerStream pipe, int expectedPid) =>
+        GetNamedPipeClientProcessId(pipe.SafePipeHandle, out var pid) && pid == expectedPid;
+
+    internal static bool IsServerProcess(NamedPipeClientStream pipe, int expectedPid) =>
+        GetNamedPipeServerProcessId(pipe.SafePipeHandle, out var pid) && pid == expectedPid;
+
+    internal static NamedPipeServerStream CreateOneShot(string name) => CreateRestricted(name, first: true, instances: 1);
+
     internal static NamedPipeServerStream Create(string name, bool bridge, bool first)
     {
         if (!bridge)
             return new(name, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly | (first ? PipeOptions.FirstPipeInstance : 0));
+        return CreateRestricted(name, first, instances: 255);
+    }
+
+    private static NamedPipeServerStream CreateRestricted(string name, bool first, uint instances)
+    {
         var sid = Current().Logon;
         var sddl = $"D:P(A;;GRGW;;;{sid})S:(ML;;NW;;;ME)";
         if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, 1, out var descriptor, out _))
@@ -121,7 +134,8 @@ public static class AutomationPipeSecurity
                 Length = Marshal.SizeOf<SecurityAttributes>(),
                 Descriptor = descriptor
             };
-            var handle = CreateNamedPipeW(@"\\.\pipe\" + name, 3 | 0x40000000u | (first ? 0x80000u : 0), 8, 255, 65536, 16384, 0, ref security);
+            const uint rejectRemoteClients = 8;
+            var handle = CreateNamedPipeW(@"\\.\pipe\" + name, 3 | 0x40000000u | (first ? 0x80000u : 0), rejectRemoteClients, instances, 65536, 16384, 0, ref security);
             if (handle.IsInvalid)
             {
                 handle.Dispose();

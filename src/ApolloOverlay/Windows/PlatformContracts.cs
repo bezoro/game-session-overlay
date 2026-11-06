@@ -12,6 +12,15 @@ public interface IPlatform : IDisposable
 
     WindowRef? Foreground();
     IReadOnlyList<WindowRef> Windows();
+    // Called off the dispatcher. Results include only identity-verified windows
+    // eligible on the supplied display. Report verified windows synchronously
+    // before potentially slower ancestry reads so the caller can retain a launcher.
+    IReadOnlyList<SessionTargetCandidate> ScanSessionTargets(string? displayId, WindowRef? foreground, CancellationToken token,
+        Action<IReadOnlyList<SessionTargetCandidate>> reportVerified) =>
+        Windows().Where(Valid).Select(window => new SessionTargetCandidate(window)).ToArray();
+    bool OnSessionDisplay(WindowRef window, string displayId) => true;
+    Task<ActionResult> ResumeBigPicture(WindowRef window, CancellationToken token) =>
+        Task.FromResult(new ActionResult(ResultKind.Unavailable, "Big Picture activation is unavailable on this platform."));
     bool Valid(WindowRef window);
     ImageSource? Icon(WindowRef window) => null;
     IReadOnlyList<DisplayRef> Displays();
@@ -19,6 +28,9 @@ public interface IPlatform : IDisposable
     bool HasSteamLaunchContext(WindowRef? window) => false;
     Task<ActionResult> Switch(WindowRef window);
     Task<ActionResult> Close(WindowRef window, CancellationToken cancellation);
+    // Gesture only. The callback runs on the caller's context before requesting Windows consent.
+    Task<ActionResult> CloseConfirmed(WindowRef window, CancellationToken cancellation, Func<bool> prepareForConsent) =>
+        Close(window, cancellation);
     Task<ActionResult> Minimize(WindowRef window, CancellationToken cancellation) => Task.FromResult(new ActionResult(ResultKind.Unavailable, "Minimizing is unavailable on this platform."));
     Task<ActionResult> Shortcut(WindowRef window, string keys);
     Task<ActionResult> Shortcut(WindowRef window, string keys, CancellationToken cancellation, Func<bool> continuing) => cancellation.IsCancellationRequested || !continuing() ? Task.FromResult(new ActionResult(ResultKind.Cancelled, "Cancelled before dispatch.")) : IsPreview ? Shortcut(window, keys) : Task.FromResult(new ActionResult(ResultKind.Unavailable, "This platform does not support cancellable shortcuts."));

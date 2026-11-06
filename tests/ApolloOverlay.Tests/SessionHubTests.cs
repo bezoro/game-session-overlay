@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -19,6 +20,7 @@ internal static class SessionHubTests
 
     internal static void Run(Action<string, Action> test)
     {
+        SessionTargetRegression(test);
         SelectionAudioRegressions(test);
         test("hub settings v1 v2 migrate and optional fields recover independently", () =>
         {
@@ -162,6 +164,234 @@ internal static class SessionHubTests
         BusyControllerChecks(test);
         TelemetryFailures(test);
         RunViews(test);
+    }
+
+    internal static void SessionTargetRegression(Action<string, Action> test)
+    {
+        SessionTargetTests.Run(test);
+        test("foreground Playnite replaces the ordinary session card and resumes its exact window", () =>
+        {
+            var window = Fixture(out var platform, out var audio, out _, out _);
+            try
+            {
+                platform.ForegroundWindow = platform.A with
+                {
+                    Title = "ChatGPT",
+                    ProcessName = "ChatGPT"
+                };
+                window.Controller.CaptureReturn();
+                var previousAudioGeneration = audio.Generation;
+                platform.ForegroundWindow = platform.Playnite;
+                window.Controller.CaptureReturn();
+                window.RefreshRows();
+                var title = ((TextBlock)window.FindName("TargetLabel")).Text;
+                var card = (Button)window.FindName("SessionCardButton");
+                Check(System.Windows.Automation.AutomationProperties.GetName(card).StartsWith("Playnite ·", StringComparison.Ordinal), "Card accessibility named the wrong window");
+                var audioLabel = (TextBlock)window.FindName("SessionAudioLabel");
+                Check(audio.Target?.Same(platform.Playnite) == true && audioLabel.Text == "Sound on",
+                    $"Expected Playnite audio and Sound on; got HWND {audio.Target?.Handle} and '{audioLabel.Text}'.");
+                audio.Raise(new(platform.A, previousAudioGeneration, long.MaxValue, ApplicationAudioAvailability.Available, ApplicationMuteState.Muted, 1, 0, "Late historical audio"));
+                Check(audioLabel.Text == "Sound on", "A late historical audio callback changed the Playnite card");
+                Pick(window, "session-volume");
+                window.ActivateEntry();
+                Release(window);
+                Complete(window.OperationTask);
+                Check(audio.LastTarget?.Same(platform.Playnite) == true && audio.LastDesired, "Hub mute did not target Playnite");
+                Pick(window, "session-card");
+                window.Details();
+                Check(((Panel)window.FindName("Rows")).Children.OfType<TextBlock>().Any(text => text.Text == "Playnite"), "Card options opened for another window");
+                window.Back();
+                Pick(window, "session-card");
+                window.ActivateEntry();
+                Release(window);
+                Complete(window.OperationTask);
+                Check(title == platform.Playnite.Title && platform.LastSwitch?.Same(platform.Playnite) == true,
+                    $"Expected Playnite card and HWND {platform.Playnite.Handle}; got '{title}' and HWND {platform.LastSwitch?.Handle}.");
+                Check(window.Controller.Session.Anchor?.Title == "ChatGPT", "Resume changed the independent session reference");
+            }
+            finally { window.Close(); }
+        });
+        test("session target retains a verified launcher when game ancestry times out", () =>
+        {
+            var window = Fixture(out var platform, out _, out _, out _);
+            using var entered = new ManualResetEventSlim();
+            using var finish = new ManualResetEventSlim();
+            using var exited = new ManualResetEventSlim();
+            try
+            {
+                var controller = window.Controller;
+                platform.VerifiedLaunchers = [new(platform.Playnite)];
+                platform.CardScan = (_, _) =>
+                {
+                    entered.Set();
+                    finish.Wait(TimeSpan.FromSeconds(5));
+                    exited.Set();
+                    return [new(platform.B, LauncherDescendant: true)];
+                };
+                var resolving = controller.ResolveCardTarget("fixture", new HashSet<string>());
+                Check(entered.Wait(TimeSpan.FromSeconds(2)), "Fixture did not reach the blocked ancestry read");
+                Complete(resolving);
+                Check(!controller.Session.CardPending && controller.Session.CardTarget?.Same(platform.Playnite) == true,
+                    $"Timed-out ancestry discarded the verified launcher; got HWND {controller.Session.CardTarget?.Handle}.");
+                finish.Set();
+                Check(exited.Wait(TimeSpan.FromSeconds(2)) && controller.Session.CardTarget?.Same(platform.Playnite) == true,
+                    "A late game result replaced the timed-out opening's launcher");
+            }
+            finally
+            {
+                finish.Set();
+                if (entered.IsSet)
+                    _ = exited.Wait(TimeSpan.FromSeconds(2));
+                window.Close();
+            }
+        });
+        test("session target rejects wrong display and changed identity before resume", () =>
+        {
+            var window = Fixture(out var platform, out _, out _, out _);
+            try
+            {
+                var controller = window.Controller;
+                platform.CardScan = (display, _) => display == "fixture" ? [new(platform.Playnite)] : [];
+                Complete(controller.ResolveCardTarget("other", new HashSet<string>()));
+                Check(controller.Session.CardTarget?.Same(platform.A) == true, "Wrong-display launcher displaced foreground");
+                Complete(controller.ResolveCardTarget("fixture", new HashSet<string>()));
+                Check(controller.Session.CardTarget?.Same(platform.Playnite) == true, "Available launcher did not displace ordinary foreground");
+                window.RefreshRows();
+                Pick(window, "session-card");
+                window.ActivateEntry();
+                platform.InvalidCard = platform.Playnite;
+                Release(window);
+                Complete(window.OperationTask);
+                Check(platform.Switches == 0, "Stale card dispatched a switch after release");
+                Complete(controller.Refresh());
+                Check(controller.Session.CardTarget?.Same(platform.A) == true, "Stale card did not fall back to foreground history");
+            }
+            finally { window.Close(); }
+        });
+        test("session target timeout, reopening, explicit selection and clear reject late results", () =>
+        {
+            var window = Fixture(out var platform, out _, out _, out _);
+            using var entered = new ManualResetEventSlim();
+            using var finish = new ManualResetEventSlim();
+            try
+            {
+                var controller = window.Controller;
+                var scans = 0;
+                platform.CardScan = (_, _) =>
+                {
+                    Interlocked.Increment(ref scans);
+                    entered.Set();
+                    finish.Wait(TimeSpan.FromSeconds(5));
+                    return [new(platform.Playnite)];
+                };
+                var old = controller.ResolveCardTarget("fixture", new HashSet<string>());
+                Check(entered.Wait(TimeSpan.FromSeconds(2)) && !controller.CanResumeCard(platform.A), "Pending scan allowed automatic Resume");
+                controller.CaptureReturn();
+                Complete(controller.ResolveCardTarget("fixture", new HashSet<string>()));
+                Check(scans == 1 && !controller.Session.CardPending && controller.Session.CardTarget?.Same(platform.A) == true,
+                    "Timed-out opening failed to retain foreground or started a concurrent scan");
+                controller.Select(platform.B);
+                finish.Set();
+                Complete(old);
+                Check(controller.Session.CardTarget?.Same(platform.B) == true, "Late scan overwrote explicit selection");
+                controller.CaptureReturn();
+                platform.CardScan = (_, _) => throw new InvalidOperationException("fixture scan failure");
+                Complete(controller.ResolveCardTarget("fixture", new HashSet<string>()));
+                Check(!controller.Session.CardPending && controller.Session.CardTarget?.Same(platform.A) == true, "Scan failure did not settle foreground fallback");
+                controller.ClearSelection();
+                Complete(controller.ResolveCardTarget("fixture", new HashSet<string>()));
+                Check(controller.Session.CardTarget is null, "Automatic resolution overrode explicit clear");
+            }
+            finally { finish.Set(); window.Close(); }
+        });
+        foreach (var handoff in new[] { "confirmed", "other-window", "replaced-target" })
+            test("session card Big Picture handoff observes " + handoff + " without generic protected window access", () =>
+            {
+                var previousContext = SynchronizationContext.Current;
+                SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+                var window = Fixture(out var platform, out _, out _, out _);
+                var other = new Window { Title = "Big Picture handoff fixture", Width = 260, Height = 140, ShowActivated = false };
+                var unrelated = new Window { Title = "Unrelated handoff fixture", Width = 260, Height = 140, ShowActivated = false };
+                try
+                {
+                    // A resumable Big Picture window is already visible and has no owner.
+                    other.Show();
+                    unrelated.Show();
+                    var unrelatedHandle = new WindowInteropHelper(unrelated).EnsureHandle();
+                    platform.BigPicture = platform.BigPicture with
+                    {
+                        Handle = new WindowInteropHelper(other).EnsureHandle()
+                    };
+                    var originalTarget = platform.BigPicture;
+                    Check(Native.IsWindowVisible(originalTarget.Handle) && Native.GetWindow(originalTarget.Handle, 4) == 0,
+                        "PRECONDITION: the Big Picture fixture is not an eligible visible unowned window");
+                    Native.SetForegroundWindow(originalTarget.Handle);
+                    Check(other.IsActive && Native.GetForegroundWindow() == originalTarget.Handle,
+                        "PRECONDITION: Big Picture was not foreground before opening the overlay");
+                    var controller = window.Controller;
+                    platform.ForegroundWindow = originalTarget;
+                    platform.CardScan = (_, foreground) => platform.CanSteamMenu(foreground) ? [new(platform.BigPicture, ResumeOnly: true)] : [];
+                    controller.CaptureReturn();
+                    Complete(controller.ResolveCardTarget("fixture", new HashSet<string>()));
+                    Check(controller.Session.CardResumeOnly && !platform.Valid(originalTarget), "Big Picture leaked into generic window permission");
+                    window.RefreshRows();
+                    Pick(window, "session-card");
+                    window.Details();
+                    Check(!window.ActionIds.Contains("close") && !window.ActionIds.Contains("minimize"), "Resume-only window exposed a protected action");
+                    window.Back();
+                    Pick(window, "session-card");
+                    window.EffectFramesFixture = () => new PadFrame[4];
+                    window.InputContextReader = null;
+                    window.ShowDiagnostic();
+                    Check(window.IsActive && Native.GetForegroundWindow() == new WindowInteropHelper(window).Handle,
+                        "PRECONDITION: the overlay does not own real foreground focus");
+                    var notifications = new List<string>();
+                    window.ResultNotificationRequest = notifications.Add;
+                    platform.OnBigPictureResume = async (target, token) =>
+                    {
+                        string? cancelledAt = null;
+                        using var registration = token.Register(() => cancelledAt = $"foreground=0x{Native.GetForegroundWindow():X}, target=0x{target.Handle:X}, overlay=0x{new WindowInteropHelper(window).Handle:X}, active={window.IsActive}, visible={window.IsVisible}");
+                        var requested = Native.SetForegroundWindow(target.Handle);
+                        Check(!window.IsActive && Native.GetForegroundWindow() == target.Handle,
+                            $"PRECONDITION: native request={requested}, foreground=0x{Native.GetForegroundWindow():X}, destination=0x{target.Handle:X}, active={window.IsActive}");
+                        if (handoff == "other-window")
+                        {
+                            // Another app takes foreground before the pending observation completes.
+                            Native.SetForegroundWindow(unrelatedHandle);
+                            Check(Native.GetForegroundWindow() == unrelatedHandle,
+                                "PRECONDITION: the unrelated window did not receive real foreground focus");
+                        }
+                        if (handoff == "replaced-target")
+                            platform.BigPicture = platform.BigPicture with
+                            {
+                                Started = platform.BigPicture.Started + 1
+                            };
+                        // Keep observation alive until the queued native-foreground check executes.
+                        await Dispatcher.Yield(DispatcherPriority.Background);
+                        window.ReviewTick(new PadFrame[4]);
+                        Check(token.IsCancellationRequested == (handoff != "confirmed"),
+                            "The Big Picture handoff cancellation did not match actual ownership: " + cancelledAt);
+                        return new ActionResult(token.IsCancellationRequested ? ResultKind.Unknown : ResultKind.Completed,
+                            "Fixture Big Picture focus observation");
+                    };
+                    window.ActivateEntry();
+                    Release(window);
+                    Complete(window.OperationTask);
+                    Check(platform.BigPictureResumes == 1 && platform.Switches == 0 && platform.LastSwitch?.Same(originalTarget) == true,
+                        "Resume did not use the exact protected Big Picture capability");
+                    Check(!window.IsVisible && controller.Operation is { Action: "session-card" } operation
+                        && operation.State == (handoff == "confirmed" ? "Completed" : "Unconfirmed")
+                        && notifications.Count == (handoff == "confirmed" ? 0 : 1),
+                        "Big Picture observation left the panel visible or reported the wrong result");
+                }
+                finally
+                {
+                    window.Close();
+                    other.Close();
+                    unrelated.Close();
+                    SynchronizationContext.SetSynchronizationContext(previousContext);
+                }
+            });
     }
 
     internal static void BusyControllerChecks(Action<string, Action> test)
@@ -1151,7 +1381,10 @@ internal static class SessionHubTests
                     });
                 w.RefreshRows();
                 if (state == "card-options")
-                    Pick(w, "session-card");
+                {
+                    w.OpenOptions(w.Controller.Session.CardTarget!);
+                    Check(w.ActionIds.Contains("close"), "The card-options capture did not reach window options");
+                }
                 var root = (FrameworkElement)w.Content;
                 w.Content = null;
                 root.Resources.MergedDictionaries.Add(w.Resources);
@@ -1423,6 +1656,13 @@ internal static class SessionHubTests
     {
         internal readonly WindowRef A = new(101, 42, 100, "Project document · demonstration window with a complete title", "fixture");
         internal readonly WindowRef B = new(102, 52, 200, "Session notes", "fixture-notes");
+        internal readonly WindowRef Playnite = new(103, 62, 300, "Playnite", "Playnite.FullscreenApp");
+        internal WindowRef BigPicture = new(104, 72, 400, "Steam Big Picture Mode", "steamwebhelper", true);
+        internal Func<WindowRef, CancellationToken, Task<ActionResult>>? OnBigPictureResume;
+        internal Func<string?, WindowRef?, IReadOnlyList<SessionTargetCandidate>>? CardScan;
+        internal IReadOnlyList<SessionTargetCandidate> VerifiedLaunchers = [];
+        internal WindowRef? InvalidCard;
+        internal int BigPictureResumes;
         internal bool Stale, Empty;
         internal int Switches, Minimizes;
         internal WindowRef? LastSwitch, ForegroundWindow;
@@ -1430,7 +1670,20 @@ internal static class SessionHubTests
 
         public WindowRef? Foreground() => Empty ? null : ForegroundWindow ?? A;
         public IReadOnlyList<WindowRef> Windows() => Empty ? [] : [A, B];
-        public bool Valid(WindowRef target) => !Empty && !(Stale && target.Same(A)) && (target.Same(A) || target.Same(B));
+        public bool Valid(WindowRef target) => !Empty && !target.Same(InvalidCard) && !(Stale && target.Same(A)) && (target.Same(A) || target.Same(B) || target.Same(Playnite));
+        public IReadOnlyList<SessionTargetCandidate> ScanSessionTargets(string? display, WindowRef? foreground, CancellationToken token,
+            Action<IReadOnlyList<SessionTargetCandidate>> reportVerified)
+        {
+            reportVerified(VerifiedLaunchers);
+            return CardScan?.Invoke(display, foreground) ?? [];
+        }
+        public bool CanSteamMenu(WindowRef? target) => BigPicture.Same(target);
+        public Task<ActionResult> ResumeBigPicture(WindowRef target, CancellationToken token)
+        {
+            BigPictureResumes++;
+            LastSwitch = target;
+            return OnBigPictureResume?.Invoke(target, token) ?? Task.FromResult(new ActionResult(ResultKind.Completed, "Fixture Big Picture focus observed"));
+        }
         public IReadOnlyList<DisplayRef> Displays() => [new("fixture", -12000, -12000, 1920, 1080, true)];
         public ModuleEvidence SteamEvidence(WindowRef? window) => ModuleEvidence.Unknown;
         public Task<ActionResult> Switch(WindowRef target)

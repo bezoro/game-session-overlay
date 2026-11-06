@@ -26,9 +26,10 @@ public partial class MainWindow
     private void BuildSessionDashboard()
     {
         Section("Session audio");
-        var gameVolume = AddRow("session-volume", GameVolumeTitle, GameVolumeDescription, ToggleGameAudio, appAudio.CanSetMute);
-        AddSessionSlider(gameVolume, appAudio.VolumeMaximum ?? 0, value => SetGameVolume(value));
-        SyncSessionSlider("session-volume", appAudio.VolumeMaximum);
+        var gameAudio = HubAudioSnapshot;
+        var gameVolume = AddRow("session-volume", GameVolumeTitle, GameVolumeDescription, ToggleGameAudio, gameAudio?.CanSetMute == true);
+        AddSessionSlider(gameVolume, gameAudio?.VolumeMaximum ?? 0, value => SetGameVolume(value));
+        SyncSessionSlider("session-volume", gameAudio?.VolumeMaximum);
         var outputVolume = AddRow("windows-volume", WindowsVolumeTitle, systemAudio.Current.OutputName, () => AudioAction(audio.Set(muted: !audio.Current.Muted, expectedEndpoint: audio.Current.EndpointId)), audio.Current.Available);
         if (audio.Current.Available)
             AddSessionSlider(outputVolume, audio.Current.Volume, value => AudioAction(audio.Set(value, expectedEndpoint: audio.Current.EndpointId)));

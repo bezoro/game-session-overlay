@@ -34,6 +34,12 @@ public partial class MainWindow
     internal bool FadePending => fadingOut;
 
     internal void BeginFadeFixture() => HideNow(false);
+    internal Func<nint, string?> WindowDisplayReader { private get; set; } = ActiveDisplay.ReadWindow;
+    internal Func<string?> CursorDisplayReader { private get; set; } = ActiveDisplay.ReadCursor;
+    // Stable throughout this opening, including settings/layout changes while
+    // the overlay itself owns foreground. Never substitute the session anchor.
+    private string? activeDisplayId;
+    private string? placedDisplayId;
     private bool placing;
     private bool importantStatus;
     private string automaticScaleDescription = "Automatically adjusted to the monitor and Windows scaling";
@@ -104,18 +110,12 @@ public partial class MainWindow
         {
             var screens = Controller.RefreshDisplays();
             if (screens.Count == 0)
-                return;
-            var foreground = Controller.ReturnTarget;
-            var anchor = Controller.Session.Anchor;
-            var target = foreground is { Protected: false } ? foreground : anchor is not null && Controller.Platform.Valid(anchor) ? anchor : foreground;
-            var monitor = target is null ? 0 : Native.MonitorFromWindow(target.Handle, 2);
-            var info = new Native.MonitorInfo
             {
-                Size = System.Runtime.InteropServices.Marshal.SizeOf<Native.MonitorInfo>(),
-                Device = ""
-            };
-            var active = monitor != 0 && Native.GetMonitorInfo(monitor, ref info) ? screens.FirstOrDefault(d => d.Id == info.Device) : null;
-            var chosen = screens.FirstOrDefault(d => d.Id == Controller.Settings.DisplayId) ?? active ?? screens.FirstOrDefault(d => d.Primary) ?? screens[0];
+                placedDisplayId = null;
+                return;
+            }
+            var chosen = DisplayRef.Choose(screens, Controller.Settings.DisplayId, activeDisplayId);
+            placedDisplayId = chosen.Id;
             var hwnd = new WindowInteropHelper(this).Handle;
             if (hwnd != 0)
                 Native.SetWindowPos(hwnd, 0, chosen.X + 16, chosen.Y + 16, 0, 0, 0x15);
@@ -187,6 +187,7 @@ public partial class MainWindow
         using var command = BeginCommand("overlay-hide");
         var wasForeground = Native.GetForegroundWindow() == new WindowInteropHelper(this).Handle;
         var closingOpacity = Math.Clamp(Opacity, 0, 1);
+        Controller.CancelCardResolution();
         RevokeFocus("hide");
         CancelHandoff();
         heldKeys.Clear();
@@ -280,8 +281,7 @@ public partial class MainWindow
         }
 
         UpdateSessionActionHint();
-        var sessionTarget = Controller.Session.Anchor;
-        var details = page == 1 || subpage == "details" || view.Current.Route == OverlayRoute.Hub && sessionTarget is not null && Controller.Platform.Valid(sessionTarget);
+        var details = page == 1 || subpage == "details" || view.Current.Route == OverlayRoute.Hub && Controller.CardTargetAvailable(Controller.Session.CardTarget);
         var prompt = inputMethod switch
         {
             "mouse" => "{MouseLeft} Select · {MouseScroll} Scroll" + (details ? " · {MouseRight} Options" : ""),
@@ -293,8 +293,7 @@ public partial class MainWindow
 
     private void UpdateSessionActionHint()
     {
-        var target = Controller.Session.Anchor;
-        var label = target is null || !Controller.Platform.Valid(target) ? "Choose window" : "Resume";
+        var label = Controller.Session.CardPending || !Controller.CardTargetAvailable(Controller.Session.CardTarget) ? "Choose window" : "Resume";
         var glyph = navigation.Id != "session-card" ? "" : inputMethod switch
         {
             "controller" => "{A} ",

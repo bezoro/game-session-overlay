@@ -106,6 +106,7 @@ public partial class MainWindow
         using var command = BeginCommand("overlay-open");
         var foreground = FocusForeground();
         var wasVisible = IsVisible;
+        var captureActivation = !wasVisible || foreground != new WindowInteropHelper(this).Handle;
         var reversingFade = fadingOut && wasVisible && IsActive && OwnForeground;
         var interruptedOpacity = reversingFade ? Math.Clamp(Opacity, 0, 1) : 0;
         fadeGeneration++;
@@ -118,24 +119,34 @@ public partial class MainWindow
         CancelHandoff();
         CancelHold();
         input.Cancel();
-        if (!wasVisible)
+        if (captureActivation)
+        {
+            activeDisplayId = ActiveDisplay.Capture(foreground, new WindowInteropHelper(this).Handle, WindowDisplayReader, CursorDisplayReader);
             Controller.CaptureReturn();
+        }
         opening = true;
         try
         {
-            if (!wasVisible)
+            if (captureActivation)
             {
-                TraceFocus("show-start", ResultKind.Requested);
+                if (!wasVisible)
+                    TraceFocus("show-start", ResultKind.Requested);
                 Place();
-                PrepareOpenAnimation();
-                Show();
-                TraceFocus("show-ready", ResultKind.Completed);
+                if (!wasVisible)
+                {
+                    PrepareOpenAnimation();
+                    Show();
+                    TraceFocus("show-ready", ResultKind.Completed);
+                }
             }
         }
         finally
         {
             opening = false;
         }
+
+        if (captureActivation)
+            _ = ResolveOpeningCard(cycle, placedDisplayId);
 
         UpdatePolling();
         TraceFocus("audio-start", ResultKind.Requested);
@@ -174,8 +185,48 @@ public partial class MainWindow
         }
     }
 
+    private async Task ResolveOpeningCard(long cycle, string? displayId)
+    {
+        var profileKeys = sessionProfiles.Items.Select(profile => profile.GameKey).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
+        await Controller.ResolveCardTarget(displayId, profileKeys);
+        if (CurrentCycle(cycle))
+            RefreshRows();
+    }
+
     private bool CurrentCycle(long cycle) => cycle == focusCycle && !exiting && IsVisible;
     private bool OwnForeground => FocusForeground() == new WindowInteropHelper(this).Handle;
+
+    private bool PreserveEffectOnDeactivation()
+    {
+        var cancellation = effectCancellation;
+        var target = effectFocusTarget;
+        if (cancellation is null || target is null || cancellation.IsCancellationRequested || !EffectTargetValid(target))
+            return false;
+        var foreground = FocusForeground();
+        if (foreground == target.Handle)
+        {
+            effectFocusTransferred = true;
+            return true;
+        }
+        if (effectFocusTransferred || foreground != 0 && foreground != new WindowInteropHelper(this).Handle)
+            return false;
+
+        // Synchronous activation can deliver WPF Deactivated before Win32 updates foreground.
+        // Observe once after that native call unwinds; this never authorizes input dispatch.
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (effectCancellation != cancellation || cancellation.IsCancellationRequested)
+                return;
+            if (FocusForeground() == target.Handle && EffectTargetValid(target))
+            {
+                effectFocusTransferred = true;
+                UpdatePolling();
+            }
+            else
+                cancellation.Cancel();
+        });
+        return true;
+    }
 
     private void TraceFocus(string checkpoint, ResultKind kind, string detail = "")
     {

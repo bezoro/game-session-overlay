@@ -15,6 +15,8 @@ public static class Program
     public static int Main(string[] args)
     {
         // This private child performs no installation hooks, WPF or singleton work.
+        if (ElevatedWindowClose.Bootstrap(args) is { } closeCode)
+            return closeCode;
         if (args is [IsolatedWindowActivation.HostArgument, var activation])
             return IsolatedWindowActivation.RunHost(activation);
         var culture = CultureInfo.GetCultureInfo("en-US");

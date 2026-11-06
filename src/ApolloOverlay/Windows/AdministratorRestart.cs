@@ -17,6 +17,7 @@ internal static class AdministratorRestart
     private const string EventPrefix = @"Local\Bezoro.GameSessionOverlay.Admin.";
     private const int ReadyTimeoutMilliseconds = 30_000;
     private const int ParentExitTimeoutMilliseconds = 15_000;
+    private static int promptReserved;
     internal sealed record Request(AutomationPipeSecurity.Peer Parent, string Nonce);
 
     internal static Task<ActionResult> RequestAsync(CancellationToken cancellation = default) =>
@@ -38,17 +39,21 @@ internal static class AdministratorRestart
             using var accepted = new EventWaitHandle(false, EventResetMode.ManualReset, EventPrefix + request.Nonce + ".accepted", out var acceptedCreated);
             if (!created || !acceptedCreated)
                 return new(ResultKind.Failed, "The restart handshake could not be created. This overlay remains open.");
-            var start = new ProcessStartInfo(executable)
+            if (!TryReservePrompt())
+                return new(ResultKind.Unavailable, "A Windows administrator approval request is already open.");
+            Process? launched;
+            try
             {
-                UseShellExecute = true,
-                Verb = "runas",
-                WorkingDirectory = Path.GetDirectoryName(executable)!,
-                WindowStyle = ProcessWindowStyle.Hidden
-            };
-            start.ArgumentList.Add(HostArgument);
-            start.ArgumentList.Add(Encode(request));
-            // This is the only UAC request. Guide, focus recovery and sign-in never use this path.
-            using var child = Process.Start(start);
+                if (cancellation.IsCancellationRequested)
+                    return Cancelled();
+                launched = StartElevated(executable, HostArgument, Encode(request));
+            }
+            finally
+            {
+                ReleasePrompt();
+            }
+
+            using var child = launched;
             if (child is null)
                 return new(ResultKind.Failed, "Windows did not start the administrator session. This overlay remains open.");
             var expected = AutomationPipeSecurity.ReadPeer(child.Id);
@@ -145,7 +150,25 @@ internal static class AdministratorRestart
         }
     }
 
-    private static bool OwnExecutable(out string executable)
+    internal static bool TryReservePrompt() => Interlocked.CompareExchange(ref promptReserved, 1, 0) == 0;
+    internal static void ReleasePrompt() => Volatile.Write(ref promptReserved, 0);
+
+    // The caller reserves the shared prompt until ShellExecute returns, even if its operation times out.
+    internal static Process? StartElevated(string executable, string verb, string payload)
+    {
+        var start = new ProcessStartInfo(executable)
+        {
+            UseShellExecute = true,
+            Verb = "runas",
+            WorkingDirectory = Path.GetDirectoryName(executable)!,
+            WindowStyle = ProcessWindowStyle.Hidden
+        };
+        start.ArgumentList.Add(verb);
+        start.ArgumentList.Add(payload);
+        return Process.Start(start);
+    }
+
+    internal static bool OwnExecutable(out string executable)
     {
         executable = Environment.ProcessPath ?? "";
         return Path.IsPathFullyQualified(executable)
@@ -153,7 +176,7 @@ internal static class AdministratorRestart
             && File.Exists(executable);
     }
 
-    private static string ProcessImage(int pid)
+    internal static string ProcessImage(int pid)
     {
         using var process = OpenProcess(0x1000, false, checked((uint)pid));
         var image = new StringBuilder(32768);
@@ -163,7 +186,7 @@ internal static class AdministratorRestart
         return image.ToString();
     }
 
-    private static bool RestartError(Exception error) => error is IOException or UnauthorizedAccessException
+    internal static bool RestartError(Exception error) => error is IOException or UnauthorizedAccessException
         or Win32Exception or InvalidOperationException or ArgumentException or System.Security.SecurityException;
     private static ActionResult Cancelled() => new(ResultKind.Cancelled, "Administrator restart was cancelled. This overlay remains open.");
 

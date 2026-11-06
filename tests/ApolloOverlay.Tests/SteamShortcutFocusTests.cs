@@ -150,6 +150,29 @@ internal static class SteamShortcutFocusTests
             Require(e.Events.Select(x => x.OffsetMs).SequenceEqual(new long[] { 0, 20, 80, 100 }) && e.Elapsed == 600, "Dwell/focus minima changed");
             Require(task.Result.Kind == ResultKind.Requested && e.Dispatch?.Sequence is { Released: true, PossiblyHeld: 0 }, "False Requested or missing release evidence");
         });
+        foreach (var guardDelay in new[] { 20, 25 })
+            test("Steam guard can consume the remaining Shift dwell " + guardDelay + " ms", () =>
+            {
+                var e = new Effects();
+                var delayed = false;
+                var task = new GuardedActions(e).Shortcut(Game, "Shift+Tab", CancellationToken.None, () =>
+                {
+                    if (!delayed && e.NativeHeld == 1)
+                    {
+                        delayed = true;
+                        e.Elapsed += guardDelay;
+                    }
+
+                    return true;
+                });
+                Complete(task, e);
+                Require(delayed && e.NonpositiveWait is null && task.Result.Kind == ResultKind.Requested,
+                    $"Guard consumed dwell and requested Wait({e.NonpositiveWait}); result {task.Result.Kind}");
+                Require(e.Events.Select(x => (x.Key, x.Up, x.OffsetMs)).SequenceEqual(new (ushort, bool, long)[]
+                {
+                    (16, false, 0), (9, false, guardDelay), (9, true, guardDelay + 60), (16, true, guardDelay + 80)
+                }) && e.Dispatch?.Sequence is { Released: true, PossiblyHeld: 0 }, "Remaining dwell or release changed after the delayed guard");
+            });
         foreach (var cut in new[]
         {
             0,
@@ -1108,6 +1131,7 @@ internal static class SteamShortcutFocusTests
     {
         internal readonly List<int> NativeCalls = [];
         internal int Sends, FocusRequests, Elapsed;
+        internal int? NonpositiveWait;
         internal bool ValidIdentity = true, Foreground = true, FocusAccepted = true;
         internal Action? AfterWait = null;
         private TaskCompletionSource? wait;
@@ -1171,6 +1195,12 @@ internal static class SteamShortcutFocusTests
         public bool PostClose(WindowRef w) => false;
         public Task Wait(int milliseconds)
         {
+            if (milliseconds <= 0)
+            {
+                NonpositiveWait = milliseconds;
+                throw new ArgumentOutOfRangeException(nameof(milliseconds));
+            }
+
             Elapsed += milliseconds;
             AfterWait?.Invoke();
             var next = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

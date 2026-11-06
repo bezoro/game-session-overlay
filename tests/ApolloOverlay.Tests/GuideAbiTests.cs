@@ -663,7 +663,7 @@ internal static unsafe class GuideAbiTests
                 w.Close();
             }
         });
-        test("WPF return uses Anchor while Steam tile uses captured BigPicture context", () =>
+        test("WPF session card resumes the selected game while Steam tile uses captured Big Picture context", () =>
         {
             using var p = new HandoffPlatform
             {
@@ -673,19 +673,27 @@ internal static unsafe class GuideAbiTests
             var w = Host(p);
             try
             {
+                w.InputContextReader = () => new(Confirmed: true, Visible: w.IsVisible, Active: true, OwnForeground: true);
+                w.PhysicalKeyReader = _ => 0;
+                w.Controller.Select(p.Game);
+                w.RefreshRows();
+                Require(w.Controller.Session.CardTarget?.Same(p.Game) == true, "Expected the explicitly selected game on the session card");
+                Require(w.Controller.ReturnTarget?.Same(p.BigPicture) == true, "Expected captured Big Picture context before Resume");
                 Button(w, "session-card").RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                Require(w.TransitionPending && p.Switches == 0, "Expected Resume to wait for input release before switching");
                 Commit(w);
-                Require(p.LastTarget?.Same(p.Game) == true);
+                Require(p.Switches == 1 && p.LastTarget?.Same(p.Game) == true, "Expected Resume to switch to the selected game once");
                 w.ShowDiagnostic();
                 w.Controller.CaptureReturn();
                 w.RefreshRows();
+                Require(w.Controller.ReturnTarget?.Same(p.BigPicture) == true, "Expected captured Big Picture context before the Steam action");
                 var tile = Button(w, "steam-overlay");
                 var labels = (System.Windows.Controls.StackPanel)((System.Windows.Controls.Grid)tile.Content).Children[1];
-                Require(((System.Windows.Controls.TextBlock)labels.Children[0]).Text == "Steam Big Picture menu");
+                Require(((System.Windows.Controls.TextBlock)labels.Children[0]).Text == "Steam Big Picture menu", "Expected the Big Picture menu label");
                 tile.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
-                Require(p.Menus == 0);
+                Require(w.TransitionPending && p.Menus == 0, "Expected the Steam menu to wait for input release before dispatch");
                 Commit(w);
-                Require(p.Menus == 1 && p.LastTarget?.Same(p.BigPicture) == true && p.LastKeys == "F1");
+                Require(p.Menus == 1 && p.LastTarget?.Same(p.BigPicture) == true && p.LastKeys == "F1", "Expected F1 once against the captured Big Picture window");
             }
             finally
             {

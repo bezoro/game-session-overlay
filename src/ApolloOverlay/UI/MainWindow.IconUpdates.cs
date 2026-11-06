@@ -43,7 +43,7 @@ public partial class MainWindow
         var icon = Controller.Platform.Icon(window);
         if (icon is null)
             return;
-        if (Controller.Session.Anchor?.Same(window) == true)
+        if (Controller.Session.CardTarget?.Same(window) == true)
         {
             ContextIcon.Source = icon;
             ContextIcon.Visibility = Visibility.Visible;

@@ -406,7 +406,7 @@ public partial class MainWindow
     {
         if (exiting || !IsVisible)
             return Task.CompletedTask;
-        var target = Controller.Session.Anchor;
+        var target = Controller.Session.CardTarget;
         if (target is null ? artworkTarget is not null : artworkTarget?.Same(target) != true)
         {
             artworkTarget = target;
@@ -441,7 +441,7 @@ public partial class MainWindow
         try
         {
             var source = await CaptureImageLoader.ReadAsync(screenCaptures.ReadImageAsync, image, 640, request.Token);
-            if (request.IsCancellationRequested || exiting || !IsVisible || generation != artworkGeneration || Controller.Session.Anchor?.Same(target) != true)
+            if (request.IsCancellationRequested || exiting || !IsVisible || generation != artworkGeneration || !Controller.CardTargetAvailable(target))
                 return;
             SessionArtwork.Background = new ImageBrush(source)
             {

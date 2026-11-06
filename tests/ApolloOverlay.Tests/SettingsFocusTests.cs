@@ -9,6 +9,64 @@ internal static class SettingsFocusTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        foreach (var resultKind in new[] { ResultKind.Cancelled, ResultKind.Requested })
+            foreach (var returnToOverlay in new[] { false, true })
+                test($"administrator close returning to overlay {returnToOverlay} retains result {resultKind} without stealing focus", () =>
+                {
+                    using var host = new Host();
+                    var w = host.Window;
+                    host.Open();
+                    var platform = (PremiumInterfaceTests.FixturePlatform)w.Controller.Platform;
+                    var completion = new TaskCompletionSource<ActionResult>();
+                    var offers = 0;
+                    var acquisitions = 0;
+                    var notifications = new List<string>();
+                    w.ResultNotificationRequest = notifications.Add;
+                    w.FocusAcquisitionRequest = (_, _, _) =>
+                    {
+                        acquisitions++;
+                        return Task.FromResult(true);
+                    };
+                    platform.OnConfirmedClose = (target, token, prepare) =>
+                    {
+                        Require(target.Same(platform.Window) && !token.IsCancellationRequested && prepare(), "The original focused target did not prepare consent");
+                        offers++;
+                        host.Other.Show();
+                        host.Other.Activate();
+                        Native.SetForegroundWindow(host.OtherHandle);
+                        Pump(30);
+                        Require(w.IsVisible && !w.IsActive && Native.GetForegroundWindow() == host.OtherHandle, "PRECONDITION: consent did not preserve the inactive panel");
+                        return completion.Task;
+                    };
+                    ReviewFixTests.Button(w, "close").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                    w.AdvancePointerHold(false, true, true, 0);
+                    w.AdvancePointerHold(true, true, true, 1);
+                    Require(w.AdvancePointerHold(true, true, true, 1501) && offers == 1, "A fresh hold did not offer consent exactly once");
+                    if (returnToOverlay)
+                    {
+                        w.Activate();
+                        Native.SetForegroundWindow(host.Handle);
+                        host.RequireOwnedFocus();
+                    }
+                    completion.SetResult(new(resultKind, "Fixture administrator-close result"));
+                    Pump(80);
+                    Require(w.Controller.Operation is { Action: "close" } operation
+                        && operation.State == resultKind.ToString()
+                        && operation.Dispatched == (resultKind == ResultKind.Requested), "Consent completion lost or overstated its result");
+                    Require(w.IsVisible == returnToOverlay && offers == 1 && platform.Calls == 0, "Consent completion left an unusable panel, retried, or switched windows");
+                    Require(acquisitions == 0, "Consent completion requested foreground rather than observing its owner");
+                    if (returnToOverlay)
+                    {
+                        host.RequireOwnedFocus();
+                        Neutral(w);
+                        var selected = w.SelectedAction;
+                        Frame(w, PadButtons.Down);
+                        Require(w.SelectedAction != selected, "A returned overlay did not regain confirmed navigation");
+                    }
+                    else
+                        Require(Native.GetForegroundWindow() == host.OtherHandle
+                            && notifications.Count == (resultKind == ResultKind.Cancelled ? 1 : 0), "The hidden panel stole focus or lost its cancellation notification");
+                });
         test("isolated primary activation never calls the synchronous UI foreground request", () =>
         {
             using var host = new Host();

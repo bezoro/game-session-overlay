@@ -73,6 +73,8 @@ public sealed class OverlayController : IDisposable
     private long revision;
     private bool disposed;
     private CancellationTokenSource? refresh;
+    private CancellationTokenSource? cardResolution;
+    private Task<SessionTargetCandidate?>? cardScan;
     private WindowRef? steamLaunchAnchor, steamLaunchReturn;
     public bool SteamOverlayEligible(WindowRef? target) => !disposed
         && target is not null
@@ -125,11 +127,97 @@ public sealed class OverlayController : IDisposable
 
     public void CaptureReturn()
     {
+        CancelCardResolution();
         ReturnTarget = Platform.Foreground();
         Recent.Open(ReturnTarget, Platform.Valid);
         Session.ClearIfStale(Platform.Valid);
-        Session.Observe(ReturnTarget);
+        Session.Observe(ReturnTarget, Platform.Valid);
         PruneSteamLaunchObservations();
+    }
+
+    internal bool CardTargetAvailable(WindowRef? target) => target is not null && target.Same(Session.CardTarget)
+        && (Session.CardResumeOnly ? target.Same(ReturnTarget) : Platform.Valid(target))
+        && (Session.CardDisplayId is not { } display || Platform.OnSessionDisplay(target, display));
+
+    internal bool CanResumeCard(WindowRef target) => !Session.CardPending && CardTargetAvailable(target)
+        && (!Session.CardResumeOnly || Platform.CanSteamMenu(target));
+
+    internal async Task<ActionResult> ResumeCard(WindowRef target, CancellationToken token)
+    {
+        if (token.IsCancellationRequested || !CanResumeCard(target))
+            return new(ResultKind.Cancelled, "The session window changed before activation.");
+        return Session.CardResumeOnly ? await Platform.ResumeBigPicture(target, token) : await Switch(target);
+    }
+
+    internal void CancelCardResolution()
+    {
+        cardResolution?.Cancel();
+        Session.CancelCardResolution();
+    }
+
+    internal async Task ResolveCardTarget(string? displayId, IReadOnlySet<string> profileKeys)
+    {
+        if (disposed || Session.BeginCardResolution() is not { } revision)
+            return;
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+        cardResolution?.Cancel();
+        cardResolution = deadline;
+        var token = deadline.Token;
+        var foreground = ReturnTarget;
+        var history = Session.ForegroundHistory;
+        var verifiedLauncher = new TaskCompletionSource<SessionTargetCandidate?>();
+        SessionTargetCandidate? selected = null;
+        bool StillValid(SessionTargetCandidate candidate) => (candidate.ResumeOnly || Platform.Valid(candidate.Window))
+            && (displayId is null || Platform.OnSessionDisplay(candidate.Window, displayId));
+        try
+        {
+            // A non-cancellable native call may outlive an opening. Reuse its
+            // slot only after it exits, within this opening's own budget.
+            if (cardScan is { IsCompleted: false } previous)
+                await previous.WaitAsync(token);
+            token.ThrowIfCancellationRequested();
+            if (!Session.ResolvingCard(revision))
+                return;
+            cardScan = Task.Run(() => ScanCardTarget(displayId, foreground, history, profileKeys, token, verified =>
+            {
+                var launcher = SessionTracker.ChooseLauncher(verified, foreground, history);
+                if (!token.IsCancellationRequested)
+                    verifiedLauncher.TrySetResult(launcher);
+            }));
+            var result = await cardScan.WaitAsync(token);
+            if (result is { } candidate && !StillValid(candidate))
+                result = null;
+            token.ThrowIfCancellationRequested();
+            selected = result;
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            if (ReferenceEquals(cardResolution, deadline))
+                cardResolution = null;
+            if (selected is null && Session.ResolvingCard(revision) && verifiedLauncher.Task.IsCompletedSuccessfully
+                && verifiedLauncher.Task.Result is { } launcher && StillValid(launcher))
+                selected = launcher;
+            Session.SettleCard(revision, selected, displayId);
+        }
+    }
+
+    private SessionTargetCandidate? ScanCardTarget(string? displayId, WindowRef? foreground, WindowRef[] history,
+        IReadOnlySet<string> profileKeys, CancellationToken token, Action<IReadOnlyList<SessionTargetCandidate>> reportVerified)
+    {
+        try
+        {
+            token.ThrowIfCancellationRequested();
+            var candidates = Platform.ScanSessionTargets(displayId, foreground, token, reportVerified);
+            token.ThrowIfCancellationRequested();
+            return SessionTracker.ChooseCard(candidates, foreground, history, profileKeys);
+        }
+        catch (Exception error) when (error is OperationCanceledException or InvalidOperationException or System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     public IReadOnlyList<DisplayRef> RefreshDisplays() => Displays = Platform.Displays();
@@ -161,7 +249,7 @@ public sealed class OverlayController : IDisposable
         Recent.RefreshTitles(Apps, Platform.Valid);
         RefreshDisplays();
         SteamEvidence = result.evidence;
-        Session.ClearIfStale(Platform.Valid);
+        Session.ClearIfStale(Platform.Valid, window => CardTargetAvailable(window) && (!Session.CardResumeOnly || Platform.CanSteamMenu(window)));
         if (target is not null && !target.Same(Session.Anchor))
             Steam.Invalidate();
         if (SteamEvidence != ModuleEvidence.Loaded)
@@ -186,6 +274,9 @@ public sealed class OverlayController : IDisposable
 
     public void Select(WindowRef window)
     {
+        if (window.Protected || window.Launcher && !window.SessionLauncher || !Platform.Valid(window))
+            return;
+        CancelCardResolution();
         Session.Select(window);
         Steam.Invalidate();
         PruneSteamLaunchObservations();
@@ -193,6 +284,7 @@ public sealed class OverlayController : IDisposable
 
     public void ClearSelection()
     {
+        CancelCardResolution();
         Session.Clear();
         Steam.Invalidate();
         PruneSteamLaunchObservations();
@@ -290,6 +382,7 @@ public sealed class OverlayController : IDisposable
             return;
         disposed = true;
         revision++;
+        CancelCardResolution();
         refresh?.Cancel();
         refresh?.Dispose();
         steamLaunchAnchor = null;
