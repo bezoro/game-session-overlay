@@ -49,6 +49,14 @@ internal sealed class TrayHost : IDisposable
     }
 
     private void OnResultClick(object? sender, EventArgs args) => Dispatch(open);
+    internal bool NotifyBattery(ControllerBatteryAlert alert)
+    {
+        if (disposed || !icon.Visible)
+            return false;
+        icon.ShowBalloonTip(5000, alert.Title, alert.Message, Forms.ToolTipIcon.Warning);
+        return true;
+    }
+
     internal void NotifyResult(string message)
     {
         if (disposed || !icon.Visible)

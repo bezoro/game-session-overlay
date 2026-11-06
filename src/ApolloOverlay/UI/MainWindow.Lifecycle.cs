@@ -150,6 +150,7 @@ public partial class MainWindow
         if (exiting)
             return;
         LogCommandResult("application-shutdown", ResultKind.Requested, "cleanup-started");
+        DisposeBatteryNotifications();
         DisposeSessionFeatures();
         DisposeUpdates();
         diagnosticsCopyCancellation?.Cancel();
