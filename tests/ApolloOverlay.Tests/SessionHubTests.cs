@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -306,8 +307,13 @@ internal static class SessionHubTests
         test("session card resumes exact Big Picture without generic protected window access", () =>
         {
             var window = Fixture(out var platform, out _, out _, out _);
+            var other = new Window { Title = "Big Picture handoff fixture", Width = 260, Height = 140, ShowInTaskbar = false };
             try
             {
+                platform.BigPicture = platform.BigPicture with
+                {
+                    Handle = new WindowInteropHelper(other).EnsureHandle()
+                };
                 var controller = window.Controller;
                 platform.ForegroundWindow = platform.BigPicture;
                 platform.CardScan = (_, foreground) => platform.CanSteamMenu(foreground) ? [new(platform.BigPicture, ResumeOnly: true)] : [];
@@ -320,13 +326,31 @@ internal static class SessionHubTests
                 Check(!window.ActionIds.Contains("close") && !window.ActionIds.Contains("minimize"), "Resume-only window exposed a protected action");
                 window.Back();
                 Pick(window, "session-card");
+                window.EffectFramesFixture = () => new PadFrame[4];
+                window.ShowDiagnostic();
+                Check(window.IsActive && Native.GetForegroundWindow() == new WindowInteropHelper(window).Handle,
+                    "PRECONDITION: the overlay does not own real foreground focus");
+                var notifications = new List<string>();
+                window.ResultNotificationRequest = notifications.Add;
+                platform.OnBigPictureResume = (target, token) =>
+                {
+                    other.Show();
+                    other.Activate();
+                    Native.SetForegroundWindow(target.Handle);
+                    Check(!window.IsActive && Native.GetForegroundWindow() == target.Handle,
+                        "PRECONDITION: Big Picture did not receive real foreground focus");
+                    Check(!token.IsCancellationRequested, "The expected Big Picture handoff cancelled observation");
+                    return Task.FromResult(new ActionResult(ResultKind.Completed, "Fixture Big Picture focus observed"));
+                };
                 window.ActivateEntry();
                 Release(window);
                 Complete(window.OperationTask);
                 Check(platform.BigPictureResumes == 1 && platform.Switches == 0 && platform.LastSwitch?.Same(platform.BigPicture) == true,
                     "Resume did not use the exact protected Big Picture capability");
+                Check(!window.IsVisible && controller.Operation is { State: "Completed", Action: "session-card" } && notifications.Count == 0,
+                    "Successful Big Picture resume left the overlay visible or reported unconfirmed activation");
             }
-            finally { window.Close(); }
+            finally { window.Close(); other.Close(); }
         });
     }
 
@@ -1593,7 +1617,8 @@ internal static class SessionHubTests
         internal readonly WindowRef A = new(101, 42, 100, "Project document · demonstration window with a complete title", "fixture");
         internal readonly WindowRef B = new(102, 52, 200, "Session notes", "fixture-notes");
         internal readonly WindowRef Playnite = new(103, 62, 300, "Playnite", "Playnite.FullscreenApp");
-        internal readonly WindowRef BigPicture = new(104, 72, 400, "Steam Big Picture Mode", "steamwebhelper", true);
+        internal WindowRef BigPicture = new(104, 72, 400, "Steam Big Picture Mode", "steamwebhelper", true);
+        internal Func<WindowRef, CancellationToken, Task<ActionResult>>? OnBigPictureResume;
         internal Func<string?, WindowRef?, IReadOnlyList<SessionTargetCandidate>>? CardScan;
         internal IReadOnlyList<SessionTargetCandidate> VerifiedLaunchers = [];
         internal WindowRef? InvalidCard;
@@ -1617,7 +1642,7 @@ internal static class SessionHubTests
         {
             BigPictureResumes++;
             LastSwitch = target;
-            return Task.FromResult(new ActionResult(ResultKind.Completed, "Fixture Big Picture focus observed"));
+            return OnBigPictureResume?.Invoke(target, token) ?? Task.FromResult(new ActionResult(ResultKind.Completed, "Fixture Big Picture focus observed"));
         }
         public IReadOnlyList<DisplayRef> Displays() => [new("fixture", -12000, -12000, 1920, 1080, true)];
         public ModuleEvidence SteamEvidence(WindowRef? window) => ModuleEvidence.Unknown;

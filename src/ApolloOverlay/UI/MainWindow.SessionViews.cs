@@ -64,7 +64,7 @@ public partial class MainWindow
             if (target is null || !canResume)
                 ChooseSession();
             else
-                RunEffect((token, _) => Controller.ResumeCard(target, token), () => Controller.CanResumeCard(target));
+                RunEffect((token, _) => Controller.ResumeCard(target, token), () => Controller.CanResumeCard(target), focusTarget: target);
         }, true, canResume ? target!.Title : "Choose a window in Apps");
         AutomationProperties.SetName(SessionCardButton, canResume ? target!.Title + " · Resume window" : "Choose window");
         AutomationProperties.SetHelpText(SessionCardButton, canResume ? "A / Enter resumes this window. X or right-click opens options." : "Choose a window in Apps");
