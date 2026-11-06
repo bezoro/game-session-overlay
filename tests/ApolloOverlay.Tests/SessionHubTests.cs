@@ -173,7 +173,11 @@ internal static class SessionHubTests
             var window = Fixture(out var platform, out var audio, out _, out _);
             try
             {
-                platform.ForegroundWindow = platform.A with { Title = "ChatGPT", ProcessName = "ChatGPT" };
+                platform.ForegroundWindow = platform.A with
+                {
+                    Title = "ChatGPT",
+                    ProcessName = "ChatGPT"
+                };
                 window.Controller.CaptureReturn();
                 var previousAudioGeneration = audio.Generation;
                 platform.ForegroundWindow = platform.Playnite;

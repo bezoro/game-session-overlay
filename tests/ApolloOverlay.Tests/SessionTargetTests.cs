@@ -12,7 +12,10 @@ internal static class SessionTargetTests
         foreach (var launcher in new[] { "Playnite.FullscreenApp", "Playnite.DesktopApp", "steam", "EpicGamesLauncher", "GalaxyClient" })
             test("session card promotes coherent unprofiled game ancestry from " + launcher, () =>
             {
-                var parent = Launcher with { ProcessName = launcher };
+                var parent = Launcher with
+                {
+                    ProcessName = launcher
+                };
                 var games = Descendants([Game], parent);
                 Require(games.Contains(Game), "Launcher ancestry was not recognized");
                 var target = SessionTracker.ChooseCard([new(Ordinary), new(parent), new(Game, games.Contains(Game))], parent, [Ordinary], NoProfiles);
@@ -30,7 +33,11 @@ internal static class SessionTargetTests
         test("session card requires a unique exact profile game match and ranks tier ties", () =>
         {
             var profiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "GAME" };
-            var second = Game with { Handle = 204, Pid = 24 };
+            var second = Game with
+            {
+                Handle = 204,
+                Pid = 24
+            };
             Require(SessionTracker.ChooseCard([new(Launcher), new(Game)], Launcher, [], profiles)?.Window.Same(Game) == true,
                 "Exact case-insensitive profile match was ignored");
             Require(SessionTracker.ChooseCard([new(Launcher), new(Game), new(second)], Launcher, [], profiles)?.Window.Same(Launcher) == true,
@@ -46,14 +53,22 @@ internal static class SessionTargetTests
             foreach (var name in new[] { "chrome", "EpicWebHelper", "GalaxyClient Helper", "UnityCrashHandler64", "Updater", "ChatGPT" })
                 Require(Descendants([Game with { ProcessName = name }], Launcher).Count == 0, "False game promotion for " + name);
             Require(Descendants([Game with { Protected = true }], Launcher).Count == 0, "Protected window promoted");
-            Require(Descendants([Game], Launcher with { Started = Game.Started + 1 }).Count == 0, "Reused parent PID promoted a game");
+            Require(Descendants([Game], Launcher with
+            {
+                Started = Game.Started + 1
+            }).Count == 0, "Reused parent PID promoted a game");
             Require(Descendants([Game], Launcher, parentSession: 3).Count == 0, "Different-session ancestry promoted a game");
             Require(Descendants([Game], Launcher, childStart: Game.Started + 1).Count == 0, "Changed game identity promoted a game");
         });
 
         test("only exact captured verified Big Picture can enter the protected Resume tier", () =>
         {
-            var bigPicture = Launcher with { Protected = true, ProcessName = "steamwebhelper", Title = "Steam Big Picture Mode" };
+            var bigPicture = Launcher with
+            {
+                Protected = true,
+                ProcessName = "steamwebhelper",
+                Title = "Steam Big Picture Mode"
+            };
             Require(SessionTracker.ChooseCard([new(bigPicture)], bigPicture, [], NoProfiles) is null, "Unverified protected window promoted");
             Require(SessionTracker.ChooseCard([new(bigPicture, ResumeOnly: true)], Ordinary, [], NoProfiles) is null, "Non-foreground Big Picture promoted");
             Require(SessionTracker.ChooseCard([new(bigPicture, ResumeOnly: true)], bigPicture, [], NoProfiles)?.ResumeOnly == true,

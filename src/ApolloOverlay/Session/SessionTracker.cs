@@ -7,10 +7,22 @@ public sealed class SessionTracker
     private readonly List<WindowRef> foregroundHistory = [];
     private bool explicitCardChoice;
     private long cardRevision;
-    public WindowRef? CardTarget { get; private set; }
-    internal bool CardPending { get; private set; }
-    internal bool CardResumeOnly { get; private set; }
-    internal string? CardDisplayId { get; private set; }
+    public WindowRef? CardTarget
+    {
+        get; private set;
+    }
+    internal bool CardPending
+    {
+        get; private set;
+    }
+    internal bool CardResumeOnly
+    {
+        get; private set;
+    }
+    internal string? CardDisplayId
+    {
+        get; private set;
+    }
     internal WindowRef[] ForegroundHistory => foregroundHistory.ToArray();
 
     public WindowRef? Anchor
