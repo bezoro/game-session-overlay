@@ -196,6 +196,38 @@ public partial class MainWindow
     private bool CurrentCycle(long cycle) => cycle == focusCycle && !exiting && IsVisible;
     private bool OwnForeground => FocusForeground() == new WindowInteropHelper(this).Handle;
 
+    private bool PreserveEffectOnDeactivation()
+    {
+        var cancellation = effectCancellation;
+        var target = effectFocusTarget;
+        if (cancellation is null || target is null || cancellation.IsCancellationRequested || !EffectTargetValid(target))
+            return false;
+        var foreground = FocusForeground();
+        if (foreground == target.Handle)
+        {
+            effectFocusTransferred = true;
+            return true;
+        }
+        if (effectFocusTransferred || foreground != 0 && foreground != new WindowInteropHelper(this).Handle)
+            return false;
+
+        // Synchronous activation can deliver WPF Deactivated before Win32 updates foreground.
+        // Observe once after that native call unwinds; this never authorizes input dispatch.
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (effectCancellation != cancellation || cancellation.IsCancellationRequested)
+                return;
+            if (FocusForeground() == target.Handle && EffectTargetValid(target))
+            {
+                effectFocusTransferred = true;
+                UpdatePolling();
+            }
+            else
+                cancellation.Cancel();
+        });
+        return true;
+    }
+
     private void TraceFocus(string checkpoint, ResultKind kind, string detail = "")
     {
         if (!CommandLoggingEnabled)

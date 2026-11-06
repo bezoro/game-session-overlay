@@ -304,62 +304,80 @@ internal static class SessionHubTests
             }
             finally { finish.Set(); window.Close(); }
         });
-        test("session card resumes exact Big Picture without generic protected window access", () =>
-        {
-            var window = Fixture(out var platform, out _, out _, out _);
-            var other = new Window { Title = "Big Picture handoff fixture", Width = 260, Height = 140, ShowActivated = false };
-            try
+        foreach (var handoff in new[] { "confirmed", "other-window", "replaced-target" })
+            test("session card Big Picture handoff observes " + handoff + " without generic protected window access", () =>
             {
-                // A resumable Big Picture window is already visible and has no owner.
-                other.Show();
-                platform.BigPicture = platform.BigPicture with
+                var window = Fixture(out var platform, out _, out _, out _);
+                var other = new Window { Title = "Big Picture handoff fixture", Width = 260, Height = 140, ShowActivated = false };
+                var unrelated = new Window { Title = "Unrelated handoff fixture", Width = 260, Height = 140, ShowActivated = false };
+                try
                 {
-                    Handle = new WindowInteropHelper(other).EnsureHandle()
-                };
-                Check(Native.IsWindowVisible(platform.BigPicture.Handle) && Native.GetWindow(platform.BigPicture.Handle, 4) == 0,
-                    "PRECONDITION: the Big Picture fixture is not an eligible visible unowned window");
-                Native.SetForegroundWindow(platform.BigPicture.Handle);
-                Check(other.IsActive && Native.GetForegroundWindow() == platform.BigPicture.Handle,
-                    "PRECONDITION: Big Picture was not foreground before opening the overlay");
-                var controller = window.Controller;
-                platform.ForegroundWindow = platform.BigPicture;
-                platform.CardScan = (_, foreground) => platform.CanSteamMenu(foreground) ? [new(platform.BigPicture, ResumeOnly: true)] : [];
-                controller.CaptureReturn();
-                Complete(controller.ResolveCardTarget("fixture", new HashSet<string>()));
-                Check(controller.Session.CardResumeOnly && !platform.Valid(platform.BigPicture), "Big Picture leaked into generic window permission");
-                window.RefreshRows();
-                Pick(window, "session-card");
-                window.Details();
-                Check(!window.ActionIds.Contains("close") && !window.ActionIds.Contains("minimize"), "Resume-only window exposed a protected action");
-                window.Back();
-                Pick(window, "session-card");
-                window.EffectFramesFixture = () => new PadFrame[4];
-                window.InputContextReader = null;
-                window.ShowDiagnostic();
-                Check(window.IsActive && Native.GetForegroundWindow() == new WindowInteropHelper(window).Handle,
-                    "PRECONDITION: the overlay does not own real foreground focus");
-                var notifications = new List<string>();
-                window.ResultNotificationRequest = notifications.Add;
-                platform.OnBigPictureResume = (target, token) =>
-                {
-                    string? cancelledAt = null;
-                    using var registration = token.Register(() => cancelledAt = $"foreground=0x{Native.GetForegroundWindow():X}, target=0x{target.Handle:X}, active={window.IsActive}, visible={window.IsVisible}");
-                    Native.SetForegroundWindow(target.Handle);
-                    Check(!window.IsActive && Native.GetForegroundWindow() == target.Handle,
-                        "PRECONDITION: Big Picture did not receive real foreground focus");
-                    Check(!token.IsCancellationRequested, "The expected Big Picture handoff cancelled observation: " + cancelledAt);
-                    return Task.FromResult(new ActionResult(ResultKind.Completed, "Fixture Big Picture focus observed"));
-                };
-                window.ActivateEntry();
-                Release(window);
-                Complete(window.OperationTask);
-                Check(platform.BigPictureResumes == 1 && platform.Switches == 0 && platform.LastSwitch?.Same(platform.BigPicture) == true,
-                    "Resume did not use the exact protected Big Picture capability");
-                Check(!window.IsVisible && controller.Operation is { State: "Completed", Action: "session-card" } && notifications.Count == 0,
-                    "Successful Big Picture resume left the overlay visible or reported unconfirmed activation");
-            }
-            finally { window.Close(); other.Close(); }
-        });
+                    // A resumable Big Picture window is already visible and has no owner.
+                    other.Show();
+                    unrelated.Show();
+                    var unrelatedHandle = new WindowInteropHelper(unrelated).EnsureHandle();
+                    platform.BigPicture = platform.BigPicture with
+                    {
+                        Handle = new WindowInteropHelper(other).EnsureHandle()
+                    };
+                    var originalTarget = platform.BigPicture;
+                    Check(Native.IsWindowVisible(originalTarget.Handle) && Native.GetWindow(originalTarget.Handle, 4) == 0,
+                        "PRECONDITION: the Big Picture fixture is not an eligible visible unowned window");
+                    Native.SetForegroundWindow(originalTarget.Handle);
+                    Check(other.IsActive && Native.GetForegroundWindow() == originalTarget.Handle,
+                        "PRECONDITION: Big Picture was not foreground before opening the overlay");
+                    var controller = window.Controller;
+                    platform.ForegroundWindow = originalTarget;
+                    platform.CardScan = (_, foreground) => platform.CanSteamMenu(foreground) ? [new(platform.BigPicture, ResumeOnly: true)] : [];
+                    controller.CaptureReturn();
+                    Complete(controller.ResolveCardTarget("fixture", new HashSet<string>()));
+                    Check(controller.Session.CardResumeOnly && !platform.Valid(originalTarget), "Big Picture leaked into generic window permission");
+                    window.RefreshRows();
+                    Pick(window, "session-card");
+                    window.Details();
+                    Check(!window.ActionIds.Contains("close") && !window.ActionIds.Contains("minimize"), "Resume-only window exposed a protected action");
+                    window.Back();
+                    Pick(window, "session-card");
+                    window.EffectFramesFixture = () => new PadFrame[4];
+                    window.InputContextReader = null;
+                    window.ShowDiagnostic();
+                    Check(window.IsActive && Native.GetForegroundWindow() == new WindowInteropHelper(window).Handle,
+                        "PRECONDITION: the overlay does not own real foreground focus");
+                    var notifications = new List<string>();
+                    window.ResultNotificationRequest = notifications.Add;
+                    platform.OnBigPictureResume = async (target, token) =>
+                    {
+                        string? cancelledAt = null;
+                        using var registration = token.Register(() => cancelledAt = $"foreground=0x{Native.GetForegroundWindow():X}, target=0x{target.Handle:X}, overlay=0x{new WindowInteropHelper(window).Handle:X}, active={window.IsActive}, visible={window.IsVisible}");
+                        var destination = handoff == "other-window" ? unrelatedHandle : target.Handle;
+                        Native.SetForegroundWindow(destination);
+                        Check(!window.IsActive && Native.GetForegroundWindow() == destination,
+                            "PRECONDITION: the requested window did not receive real foreground focus");
+                        if (handoff == "replaced-target")
+                            platform.BigPicture = platform.BigPicture with
+                            {
+                                Started = platform.BigPicture.Started + 1
+                            };
+                        // Keep observation alive until the queued native-foreground check executes.
+                        await Dispatcher.Yield(DispatcherPriority.Background);
+                        window.ReviewTick(new PadFrame[4]);
+                        Check(token.IsCancellationRequested == (handoff != "confirmed"),
+                            "The Big Picture handoff cancellation did not match actual ownership: " + cancelledAt);
+                        return new ActionResult(token.IsCancellationRequested ? ResultKind.Unknown : ResultKind.Completed,
+                            "Fixture Big Picture focus observation");
+                    };
+                    window.ActivateEntry();
+                    Release(window);
+                    Complete(window.OperationTask);
+                    Check(platform.BigPictureResumes == 1 && platform.Switches == 0 && platform.LastSwitch?.Same(originalTarget) == true,
+                        "Resume did not use the exact protected Big Picture capability");
+                    Check(!window.IsVisible && controller.Operation is { Action: "session-card" } operation
+                        && operation.State == (handoff == "confirmed" ? "Completed" : "Unconfirmed")
+                        && notifications.Count == (handoff == "confirmed" ? 0 : 1),
+                        "Big Picture observation left the panel visible or reported the wrong result");
+                }
+                finally { window.Close(); other.Close(); unrelated.Close(); }
+            });
     }
 
     internal static void BusyControllerChecks(Action<string, Action> test)

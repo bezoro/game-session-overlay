@@ -197,10 +197,8 @@ public partial class MainWindow
 
             if (steamHiding || opening || exiting || (committing && !busy))
                 return;
-            var expected = effectCancellation is not null && effectFocusTarget is { } target && FocusForeground() == target.Handle && EffectTargetValid(target);
-            if (expected)
-                effectFocusTransferred = true;
-            else
+            var expected = PreserveEffectOnDeactivation();
+            if (!expected)
                 effectCancellation?.Cancel();
             RevokeFocus("deactivated", !ownedDialog);
             CancelHandoff();
