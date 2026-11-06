@@ -1317,7 +1317,10 @@ internal static class SessionHubTests
                     });
                 w.RefreshRows();
                 if (state == "card-options")
-                    Pick(w, "session-card");
+                {
+                    w.OpenOptions(w.Controller.Session.CardTarget!);
+                    Check(w.ActionIds.Contains("close"), "The card-options capture did not reach window options");
+                }
                 var root = (FrameworkElement)w.Content;
                 w.Content = null;
                 root.Resources.MergedDictionaries.Add(w.Resources);

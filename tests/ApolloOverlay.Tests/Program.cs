@@ -83,6 +83,12 @@ static class Program
             return Finish(args[0]);
         }
 
+        if (args.Length == 2 && args[1] == "--battery-notifications")
+        {
+            ControllerBatteryNotificationTests.Run(Case);
+            return Finish(args[0]);
+        }
+
         if (args.Length == 2 && args[1] == "--updates")
         {
             UpdateSourceTests.Run(Case);
@@ -976,6 +982,7 @@ static class Program
         MouseKeyboardTests.Run(Case);
         AgentUpdateTests.Run(Case);
         MotionAndControllerTests.Run(Case);
+        ControllerBatteryNotificationTests.Run(Case);
         SessionMediaLifecycleTests.Run(Case);
         SessionUtilityTests.Run(Case);
         SessionInterfaceTests.Run(Case);

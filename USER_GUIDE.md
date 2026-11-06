@@ -12,6 +12,8 @@ At the next Windows sign-in, the overlay starts hidden. A short press of **Guide
 
 ## Controller navigation
 
+The overlay checks controller charge in the background and requests a Windows notification when the battery is low. It warns at 20% or below when an actual percentage is available, or when XInput reports Low. A critical warning may follow at 5% or Empty. Charging, wired and unknown batteries do not trigger alerts. Apollo must expose battery information for streaming alerts to work. Windows notification settings and Do Not Disturb control whether and where the notification appears.
+
 | Control | Action |
 | --- | --- |
 | D-pad or left stick | Move selection |

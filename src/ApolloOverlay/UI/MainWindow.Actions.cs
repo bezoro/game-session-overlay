@@ -196,8 +196,14 @@ public partial class MainWindow
         command?.Complete(result.Kind, "window-close-result", commandError);
         if (exiting)
             return;
-        if (consentCycle is { } cycle && CurrentCycle(cycle) && IsActive && OwnForeground && !closeRequested)
-            await AcquireFocus(cycle, FocusForeground());
+        if (consentCycle is { } cycle && CurrentCycle(cycle) && !closeRequested)
+        {
+            if (IsActive && OwnForeground)
+                await AcquireFocus(cycle, FocusForeground());
+            else
+                // Consent can return directly to the game, without another Deactivated event.
+                HideNow(false, immediate: true);
+        }
         if (exiting)
             return;
         RecordOperationResult(result, "close", target,
