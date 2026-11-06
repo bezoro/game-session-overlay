@@ -48,6 +48,8 @@ internal sealed class ControllerBatteryMonitor : IDisposable
                             return;
                         samples[slot] = devices.Read(slot);
                     }
+                    if (Volatile.Read(ref disposed) != 0)
+                        return;
                     IReadOnlyList<ControllerIdentity> metadata = [];
                     var metadataFailed = false;
                     if (samples.Count(sample => sample.Connected) == 1)

@@ -130,6 +130,33 @@ internal static class ControllerBatteryNotificationTests
             Complete(monitor.Completion);
             Require(alerts.IsEmpty && events.IsEmpty && devices.Disposals == 1, "Late native completion escaped shutdown fencing");
         });
+        test("battery monitor cancellation after the final slot skips Windows metadata enumeration", () =>
+        {
+            using var entered = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            var devices = new Devices
+            {
+                Sample = slot =>
+                {
+                    if (slot == 3)
+                    {
+                        entered.Set();
+                        Require(release.Wait(5000), "Fixture final read was not released");
+                    }
+                    return Battery(slot, connected: slot == 0);
+                }
+            };
+            var identities = new Identities();
+            using var monitor = new ControllerBatteryMonitor(devices, identities, _ => throw new InvalidOperationException("Late notification"), (_, _) => { });
+            try
+            {
+                Require(entered.Wait(5000), "Final slot did not enter");
+                monitor.Dispose();
+            }
+            finally { release.Set(); }
+            Complete(monitor.Completion);
+            Require(identities.Reads == 0 && devices.Disposals == 1, "Cancellation started another native stage");
+        });
         test("battery monitor logs a transient failure once and recovers without overlapping reads", () =>
         {
             var attempts = 0;
@@ -162,7 +189,12 @@ internal static class ControllerBatteryNotificationTests
     private sealed class Identities : IControllerIdentitySource
     {
         internal bool Fail;
-        public IReadOnlyList<ControllerIdentity> Read() => Fail ? throw new NotSupportedException("fixture metadata failure") : [];
+        internal int Reads;
+        public IReadOnlyList<ControllerIdentity> Read()
+        {
+            Interlocked.Increment(ref Reads);
+            return Fail ? throw new NotSupportedException("fixture metadata failure") : [];
+        }
     }
 
     private sealed class Devices : IControllerDevices
