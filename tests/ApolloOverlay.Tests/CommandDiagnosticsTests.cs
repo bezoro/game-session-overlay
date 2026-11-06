@@ -13,6 +13,46 @@ internal static class CommandDiagnosticsTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        foreach (var accepted in new[] { false, true })
+            test("battery notification preserves hidden state and records shell request truthfully " + accepted, () =>
+            {
+                using var host = new Host();
+                var foreground = Native.GetForegroundWindow();
+                var calls = 0;
+                host.Window.BatteryNotificationRequest = alert =>
+                {
+                    calls++;
+                    Require(alert.BatteryPercent == 20 && alert.Message.Contains("20%"), "Notification content changed");
+                    return accepted;
+                };
+                host.Window.DeliverBatteryNotification(new(0, "Xbox One", 20, ControllerBatteryAlertLevel.Low));
+                Require(calls == 1 && !host.Window.IsVisible && Native.GetForegroundWindow() == foreground, "Battery notification opened or activated the overlay");
+                var entry = host.Read().Single(item => Field(item, "Command") == "controller-battery-notification" && Field(item, "Event") == "finished");
+                Require(Field(entry, "Outcome") == (accepted ? "Requested" : "Unavailable") && Field(entry, "Source") == "system", "Shell request was claimed as delivered or inherited UI origin");
+            });
+        test("battery notification failure is journaled and cleanup prevents late delivery", () =>
+        {
+            using var host = new Host();
+            var calls = 0;
+            host.Window.BatteryNotificationRequest = _ => { calls++; throw new InvalidOperationException("fixture notification failure"); };
+            host.Window.DeliverBatteryNotification(new(0, "Controller 1", null, ControllerBatteryAlertLevel.Low));
+            Require(host.Read().Any(item => Field(item, "Command") == "controller-battery-notification" && Field(item, "Outcome") == "Failed"), "Notification failure was not journaled");
+            host.Window.Close();
+            host.Window.DeliverBatteryNotification(new(0, "Controller 1", null, ControllerBatteryAlertLevel.Critical));
+            Require(calls == 1, "Cleanup allowed a late notification");
+        });
+        test("Windows tray battery notification submission never requests overlay focus", () =>
+        {
+            using var host = new Host();
+            var opened = 0;
+            var foreground = Native.GetForegroundWindow();
+            using var tray = new TrayHost(host.Window.Dispatcher, () => opened++, () => { });
+            Require(tray.NotifyBattery(new(0, "Controller 1", null, ControllerBatteryAlertLevel.Low)), "Visible tray could not submit the shell request");
+            Require(opened == 0 && !host.Window.IsVisible && Native.GetForegroundWindow() == foreground, "Shell submission activated the overlay");
+            tray.Dispose();
+            Require(!tray.NotifyBattery(new(0, "Controller 1", null, ControllerBatteryAlertLevel.Critical)), "Disposed tray accepted a notification");
+        });
+
         test("diagnostics controls and copy feedback have actual WPF review captures", () =>
         {
             using var host = new Host();

@@ -48,7 +48,8 @@ Window identity includes HWND, PID, process start time and observed generation. 
 - Audio and media have bounded owners. A timeout does not release exclusion while a native call can still complete. Uncertain mutations are not retried automatically.
 - `WindowIconCache` bounds capacity and concurrency. `WindowIconReader` copies the borrowed HICON, creates a frozen image and releases only its copy. Completion updates the image without replacing the row or its focus.
 - Foreground recovery runs in an authenticated disposable child with a bounded deadline and a kill-on-close job. It does not attach the WPF queue to another process. Native return values do not replace observation of the exact foreground window and WPF activation.
-- Hiding or shutting down suspends media, reads, feedback and animations. Shutdown drains operations that may still own keys or resources. Old completions cannot reopen the panel.
+- Hiding suspends foreground media/readers, feedback and animations. Automatic update discovery and low-battery monitoring have independent background lifetimes. Shutdown drains operations that may still own keys or resources. Old completions cannot reopen the panel.
+- `ControllerBatteryMonitor` owns a separate read-only controller service and samples every 30 seconds without dispatcher locks. `ControllerBatteryAlerts` owns bounded discharge/recovery state for four slots. Shutdown cancels monitoring immediately; its worker disposes the device service only after any native read finishes. Shell notification requests move to the dispatcher and never activate the overlay automatically.
 
 Broad `catch` blocks remain at boundaries that must preserve cleanup or stop an external callback from crashing its owner. Ordinary flows filter expected exceptions and convert them to results or unavailable states. A failed query must not produce invented values.
 
