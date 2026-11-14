@@ -50,3 +50,9 @@ dotnet run --project src/ApolloOverlay -- --preview
 The solution includes the app, CLI, tests and diagnostic tools. CI builds with nullable checks and warnings as errors, verifies formatting, runs tests, renders WPF captures and checks Velopack packaging, installation, upgrades and rollback. Fixtures do not replace tests with a physical controller, game and TV.
 
 Sources, licenses and vector provenance are documented in [icons](docs/third-party-icons.md). Update dependencies are documented in [Velopack](docs/third-party-updates.md); logging dependencies and licenses are documented in [Serilog](docs/third-party-logging.md).
+
+## License
+
+Original project code and documentation are licensed under the [MIT License](LICENSE). You may use, modify and redistribute them, including commercially, while retaining the copyright and license notice.
+
+Third-party components and assets retain their own licenses and attribution, as documented above. The [concept reference artwork](docs/design/overlay-ideal-v1.png) is excluded from the project's MIT grant. Third-party names and logos remain the property of their respective owners; this license grants no trademark rights.
