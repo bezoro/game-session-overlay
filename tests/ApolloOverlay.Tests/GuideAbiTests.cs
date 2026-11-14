@@ -663,11 +663,12 @@ internal static unsafe class GuideAbiTests
                 w.Close();
             }
         });
-        test("WPF session card resumes the selected game while Steam tile uses captured Big Picture context", () =>
+        test("WPF session card resumes and requests Steam for the selected game without opening Big Picture", () =>
         {
             using var p = new HandoffPlatform
             {
-                Menu = true
+                Menu = true,
+                Loaded = true
             };
             p.Context = p.BigPicture;
             var w = Host(p);
@@ -685,22 +686,20 @@ internal static unsafe class GuideAbiTests
                 Require(p.Switches == 1 && p.LastTarget?.Same(p.Game) == true, "Expected Resume to switch to the selected game once");
                 w.ShowDiagnostic();
                 w.Controller.CaptureReturn();
+                w.Controller.Select(p.Game);
                 w.RefreshRows();
                 Require(w.Controller.ReturnTarget?.Same(p.BigPicture) == true, "Expected captured Big Picture context before the Steam action");
-                var tile = Button(w, "steam-overlay");
-                var labels = (System.Windows.Controls.StackPanel)((System.Windows.Controls.Grid)tile.Content).Children[1];
-                Require(((System.Windows.Controls.TextBlock)labels.Children[0]).Text == "Steam Big Picture menu", "Expected the Big Picture menu label");
-                tile.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
-                Require(w.TransitionPending && p.Menus == 0, "Expected the Steam menu to wait for input release before dispatch");
+                PressCardY(w);
+                Require(w.TransitionPending && p.Menus == 0 && p.Shortcuts == 0, "Expected Steam Overlay to wait for input release before dispatch");
                 Commit(w);
-                Require(p.Menus == 1 && p.LastTarget?.Same(p.BigPicture) == true && p.LastKeys == "F1", "Expected F1 once against the captured Big Picture window");
+                Require(p.Shortcuts == 1 && p.LastTarget?.Same(p.Game) == true && p.Menus == 0, "Expected the exact card game and no Big Picture menu request");
             }
             finally
             {
                 w.Close();
             }
         });
-        test("WPF Steam game tile uses current context and mode change cancels before effect", () =>
+        test("WPF Steam card target change cancels before effect", () =>
         {
             using var p = new HandoffPlatform
             {
@@ -709,18 +708,18 @@ internal static unsafe class GuideAbiTests
             var w = Host(p);
             try
             {
-                Button(w, "steam-overlay").RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                PressCardY(w);
                 Commit(w);
                 Require(p.Shortcuts == 1 && p.LastTarget?.Same(p.Game) == true);
                 w.ShowDiagnostic();
-                p.Context = p.BigPicture;
-                p.Menu = true;
+                p.Context = p.Game;
                 w.Controller.CaptureReturn();
                 w.RefreshRows();
-                Button(w, "steam-overlay").RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
-                p.Menu = false;
+                PressCardY(w);
+                Require(w.TransitionPending);
+                w.Controller.ClearSelection();
                 Commit(w);
-                Require(w.IsVisible && p.Menus == 0 && !w.TransitionPending);
+                Require(w.IsVisible && p.Shortcuts == 1 && p.Menus == 0 && !w.TransitionPending);
             }
             finally
             {
@@ -2295,17 +2294,15 @@ internal static unsafe class GuideAbiTests
             {
                 FinishFocus(w.Controller.Refresh());
                 w.RefreshRows();
-                var tile = Button(w, "steam-overlay");
-                Require(tile.IsEnabled, "Confirmed launch context ignored when module access denied");
-                var labels = (System.Windows.Controls.StackPanel)((System.Windows.Controls.Grid)tile.Content).Children[1];
-                Require(((System.Windows.Controls.TextBlock)labels.Children[1]).Text.Contains("Launched by Steam"), "Launch label claims module injection");
+                Require(w.Controller.SteamOverlayEligible(w.Controller.Session.CardTarget)
+                    && !w.ActionIds.Contains("steam-overlay"),
+                    "Confirmed launch context ignored when module access denied");
                 var reads = p.LaunchQueries;
                 for (var i = 0; i < 4; i++)
                     w.RefreshRows();
                 Require(p.LaunchQueries == reads, "Row rebuild scanned process ancestry");
-                tile = Button(w, "steam-overlay");
                 var scans = p.LaunchQueries;
-                tile.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                PressCardY(w);
                 Require(p.Shortcuts == 0 && w.TransitionPending, "Shortcut bypassed handoff");
                 w.AdvanceHandoff(Neutral(0) with
                 {
@@ -2344,7 +2341,7 @@ internal static unsafe class GuideAbiTests
                 {
                     FinishFocus(w.Controller.Refresh());
                     w.RefreshRows();
-                    Button(w, "steam-overlay").RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                    PressCardY(w);
                     Require(w.TransitionPending, "Fallback did not queue");
                     if (scenario == "cancel")
                         w.Back();
@@ -2352,8 +2349,7 @@ internal static unsafe class GuideAbiTests
                         p.ValidTarget = false;
                     else
                     {
-                        p.Context = p.BigPicture;
-                        w.Controller.CaptureReturn();
+                        w.Controller.ClearSelection();
                     }
 
                     Commit(w);
@@ -2366,7 +2362,7 @@ internal static unsafe class GuideAbiTests
             });
         }
 
-        test("Steam launch integration action preserves module diagnostic and requests once", () =>
+        test("Steam card uses confirmed launch evidence when module access is denied", () =>
         {
             using var p = new HandoffPlatform
             {
@@ -2377,16 +2373,12 @@ internal static unsafe class GuideAbiTests
             try
             {
                 FinishFocus(w.Controller.Refresh());
-                w.SetRenderState("integrations");
-                var button = Button(w, "test-steam");
-                var texts = (System.Windows.Controls.StackPanel)((System.Windows.Controls.Grid)button.Content).Children[1];
-                var description = ((System.Windows.Controls.TextBlock)texts.Children[1]).Text;
-                Require(button.IsEnabled && description.Contains("Launched by Steam") && !description.Contains("Module loaded"), "Integration fallback misstates module evidence");
-                button.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
-                Require(p.Shortcuts == 0, "Integration bypassed handoff");
+                w.RefreshRows();
+                PressCardY(w);
+                Require(p.Shortcuts == 0 && w.TransitionPending, "Card bypassed handoff");
                 Commit(w);
                 Commit(w);
-                Require(p.Shortcuts == 1 && p.LastTarget?.Same(p.Game) == true, "Integration fallback duplicated or retargeted request");
+                Require(p.Shortcuts == 1 && p.LastTarget?.Same(p.Game) == true, "Launch fallback duplicated or retargeted request");
             }
             finally
             {
@@ -2399,6 +2391,17 @@ internal static unsafe class GuideAbiTests
     {
         w.AdvanceHandoff(Neutral(1000), 1000);
         w.AdvanceHandoff(Neutral(1100), 1100);
+    }
+
+    private static void PressCardY(MainWindow w)
+    {
+        // This key path exercises a controlled preview target and does not require native focus.
+        w.InputContextReader = () => new(Confirmed: true, Visible: w.IsVisible, Active: true, OwnForeground: true);
+        w.PhysicalKeyReader = _ => 0;
+        w.KeyboardModifiersReader = () => System.Windows.Input.ModifierKeys.None;
+        w.RefreshRows();
+        Key(w, System.Windows.Input.Key.Y, down: true);
+        Key(w, System.Windows.Input.Key.Y, down: false);
     }
 
     private sealed class HandoffPlatform : IPlatform

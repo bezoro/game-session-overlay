@@ -91,7 +91,7 @@ public partial class MainWindow
         {
             if (frames[slot].ReadFailed)
             {
-                Back();
+                BackFromController(slot: null);
                 FeedbackText("Controller input is unavailable. Closing cancelled.");
                 return false;
             }
@@ -100,12 +100,26 @@ public partial class MainWindow
         }
         if ((closeControllerConnections & ~connections) != 0)
         {
-            Back();
+            BackFromController(slot: null);
             FeedbackText("Controller disconnected. Closing cancelled.");
             return false;
         }
         closeControllerConnections |= connections;
         return true;
+    }
+
+    private void BackFromController(int? slot, bool trustedDismiss = false)
+    {
+        var previousSource = dispatchSource;
+        dispatchSource = slot + 1;
+        try
+        {
+            Back(trustedDismiss);
+        }
+        finally
+        {
+            dispatchSource = previousSource;
+        }
     }
 
     private void Tick(object? sender, EventArgs args)
@@ -156,7 +170,7 @@ public partial class MainWindow
             }
 
             if (current.Events.Pressed.HasFlag(PadButtons.B))
-                Back(trustedDismiss: current.Slot is { } slot && frames[slot].Connected && !frames[slot].ReadFailed);
+                BackFromController(current.Slot, trustedDismiss: current.Slot is { } slot && frames[slot].Connected && !frames[slot].ReadFailed);
             else
                 AdvanceHandoff(lastInputSample.Value, now);
             return;
@@ -186,7 +200,7 @@ public partial class MainWindow
                 Controller.Diagnostics.Commands.Record("controller-input-refused/buttons-" + (ushort)refusedButtons + "/direction-" + events.Direction,
                     ResultKind.Unavailable, "controller", opening ? "activation-pending" : focusConfirmed ? "foreground-lost" : "foreground-unconfirmed");
             if (!ownedDialog && events.Pressed.HasFlag(PadButtons.B))
-                Back();
+                BackFromController(current.Slot);
             return;
         }
 
@@ -200,7 +214,7 @@ public partial class MainWindow
                 return;
             if (events.Pressed.HasFlag(PadButtons.B))
             {
-                Back();
+                BackFromController(current.Slot);
                 return;
             }
             if (events.Direction != 0)
@@ -244,7 +258,7 @@ public partial class MainWindow
         if (busy)
         {
             if (events.Pressed.HasFlag(PadButtons.B))
-                Back();
+                BackFromController(current.Slot);
             else if (CancelDownloadSelected && events.Pressed.HasFlag(PadButtons.A) && events.Direction == 0)
             {
                 dispatchSource = current.Slot + 1;
@@ -266,6 +280,8 @@ public partial class MainWindow
             ActivateEntry();
         else if (events.Pressed.HasFlag(PadButtons.X) && events.Direction == 0)
             Details();
+        else if (events.Pressed.HasFlag(PadButtons.Y) && events.Direction == 0)
+            OpenCardSteamOverlay();
         else if (events.Pressed.HasFlag(PadButtons.LB))
             NavigatePrimaryTab(-1);
         else if (events.Pressed.HasFlag(PadButtons.RB))
@@ -385,6 +401,8 @@ public partial class MainWindow
             0 => FeedbackSourceKind.Keyboard,
             _ => inputMethod == "controller" ? FeedbackSourceKind.Controller : inputMethod == "mouse" ? FeedbackSourceKind.Pointer : FeedbackSourceKind.Keyboard
         };
-        return feedbackService.Request(cue, new(sourceKind, sourceKind == FeedbackSourceKind.Controller ? activeSlot : null, activeEpoch));
+        // Only the controller that supplied the current input can receive haptics.
+        var controllerSlot = dispatchSource is > 0 ? (uint?)(dispatchSource.Value - 1) : null;
+        return feedbackService.Request(cue, new(sourceKind, controllerSlot, activeEpoch));
     }
 }

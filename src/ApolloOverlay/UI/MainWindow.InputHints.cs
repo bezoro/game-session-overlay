@@ -1,5 +1,4 @@
 using System.Windows;
-using System.Windows.Automation;
 using System.Windows.Input;
 
 namespace ApolloOverlay;
@@ -60,8 +59,5 @@ public partial class MainWindow
         SetEntryPrompt("guide-limit", InputHint("{DpadHorizontal} adjusts · 0.5–3.0 s", "{Left}/{Right} adjusts · 0.5–3.0 s", "{MouseLeft} drag · 0.5–3.0 s"));
         SetEntryDescription("session-volume", GameVolumeDescription);
         SetEntryDescription("test-feedback", FeedbackDescription());
-        AutomationProperties.SetHelpText(SessionCardButton, !Controller.Session.CardPending && Controller.CardTargetAvailable(Controller.Session.CardTarget)
-            ? InputHint("A resumes this window · X opens options", "Enter resumes this window · X opens options", "Click resumes · right-click opens options")
-            : "Choose a window in Apps");
     }
 }

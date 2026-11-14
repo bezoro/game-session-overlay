@@ -17,7 +17,7 @@ Normal use does not require administrator privileges. The [user guide](USER_GUID
 - Apply TV/Desktop profiles or create profiles for your monitor, scale, panel side and audio.
 - Control supported media, type with the virtual keyboard and save local screenshots.
 - See controller model and battery information when Windows provides it. Ambiguous metadata and unknown charge remain explicit.
-- Use a clear focus outline, short press feedback and a subtle selection sheen. Interface sounds and vibration are separate options.
+- Follow a clear focus outline and a soft repeating highlight. A short press highlight, distinct sounds and light controller pulses acknowledge actions. Sounds and vibration are separate options.
 
 The default dark theme combines warm charcoal, a restrained amber accent and warm off-white text. Appearance provides presets and editing for all semantic colors, with separate dark/light palettes and readability checks. Windows high contrast keeps its system colors. See the [reference mapping and validation limits](docs/ui-reference-validation.md).
 
@@ -27,7 +27,7 @@ The default dark theme combines warm charcoal, a restrained amber accent and war
 | Keyboard | Arrows / Tab | Enter / Space | Esc | PageUp / PageDown |
 | Mouse | Pointer and scrolling | Click | Back button | Click |
 
-X opens window options through the controller or keyboard. Choose **Close window…** to review the exact window, then choose **Close window** to send a normal close request. **Cancel** is selected by default.
+Select the game card and press **A** to return to the window. **Y** opens Steam Overlay when available. **X** opens window options for per-app audio, minimize, maximize or restore, and close. Choose **Close window…** to review the exact window and confirm. **Cancel** is selected first.
 
 **Focus does not block controller input globally.** Games that read XInput in the background may still receive input. A streaming device may be virtual and may not report the TV controller's battery. See [compatibility](docs/controller-isolation.md) and the [real-use test checklist](docs/pilot-checklist.md).
 

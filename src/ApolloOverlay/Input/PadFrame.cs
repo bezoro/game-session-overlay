@@ -14,7 +14,8 @@ public enum PadButtons : ushort
     RB = 512,
     A = 4096,
     B = 8192,
-    X = 16384
+    X = 16384,
+    Y = 32768
 }
 
 public readonly record struct PadFrame(

@@ -116,7 +116,7 @@ internal static class AdaptiveInterfaceTests
                 w.RefreshRows();
                 var ids = w.ActionIds.ToList();
                 Require(ids.IndexOf("session-card") < ids.IndexOf("steam"), "Quick access precedes the game");
-                Require(ids.IndexOf("steam") < ids.IndexOf("audio") && ids.IndexOf("audio") < ids.IndexOf("playnite"), "Customized quick access order changed");
+                Require(ids.IndexOf("steam") < ids.IndexOf("playnite") && !ids.Contains("audio"), "Customized quick access order changed or showed a retired shortcut");
                 Require(ids.IndexOf("playnite") < ids.IndexOf("apps") && ids.IndexOf("apps") < ids.IndexOf("session-volume"), "Secondary tools interrupt the game-to-quick-access sequence");
             }
             finally

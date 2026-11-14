@@ -32,7 +32,7 @@ public partial class MainWindow
                 Subpage("audio", "volume");
                 break;
             case "integrations":
-                Subpage("integrations", "test-steam");
+                Subpage("integrations", "guide");
                 break;
             case "details":
                 if (Controller.Session.Anchor is { } selected)
@@ -50,7 +50,7 @@ public partial class MainWindow
                 FeedbackText("Unconfirmed · The window identity changed. Select it again in Apps. No additional command was sent.");
                 break;
             case "steam-unavailable":
-                navigation = new("steam-overlay");
+                navigation = new("session-card");
                 SetSelection();
                 break;
         }

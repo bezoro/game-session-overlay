@@ -34,8 +34,6 @@ public partial class MainWindow
             SetEntryText("volume", "Volume · " + (state.Available ? state.Volume.ToString("P0") : "unavailable"));
             SetEntryText("mute", state.Muted ? "Unmute" : "Mute");
         }
-        else if (page == 0)
-            SetEntryDescription("audio", state.Available ? (state.Muted ? "Muted" : state.Volume.ToString("P0")) : "Output unavailable");
     }
 
     private void AdjustVolume(float delta) => AudioAction(audio.Set(audio.Current.Volume + delta));

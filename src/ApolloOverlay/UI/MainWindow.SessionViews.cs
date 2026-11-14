@@ -55,37 +55,42 @@ public partial class MainWindow
         }
     }
 
+    private bool HubCardSelected => view.Current.Route == OverlayRoute.Hub && navigation.Id == "session-card";
+    private WindowRef? ResumableCardTarget => Controller.Session.CardTarget is { } target && Controller.CanResumeCard(target) ? target : null;
+    private bool cardSteamAvailable;
+
+    private bool HubCardCurrent(WindowRef target) => view.Current.Route == OverlayRoute.Hub
+        && !Controller.Session.CardResumeOnly && !Controller.Session.CardPending && Controller.CardTargetAvailable(target);
+
+    private void OpenCardSteamOverlay()
+    {
+        if (!HubCardSelected || !NavigationAllowed || busy || TransitionPending || Confirming || ResumableCardTarget is not { } target)
+            return;
+
+        cardSteamAvailable = HubCardCurrent(target) && Controller.SteamOverlayEligible(target);
+        UpdateSessionActionHint();
+        if (!cardSteamAvailable)
+        {
+            RequestCue(FeedbackCue.Unavailable);
+            FeedbackText("Steam Overlay is unavailable for this window.");
+            return;
+        }
+
+        RunInterfaceAction(SessionCardButton, () => QueueSteam(target, () => HubCardCurrent(target)), FeedbackCue.Confirmation);
+    }
+
     private void BuildHub()
     {
-        var target = Controller.Session.CardTarget;
-        var canResume = Controller.CardTargetAvailable(target) && !Controller.Session.CardPending;
+        var target = ResumableCardTarget;
+        cardSteamAvailable = target is not null && HubCardCurrent(target) && Controller.SteamOverlayEligible(target);
         RegisterFixed("session-card", SessionCardButton, () =>
         {
-            if (target is null || !canResume)
+            if (target is null)
                 ChooseSession();
             else
                 RunEffect((token, _) => Controller.ResumeCard(target, token), () => Controller.CanResumeCard(target), focusTarget: target);
-        }, true, canResume ? target!.Title : "Choose a window in Apps");
-        AutomationProperties.SetName(SessionCardButton, canResume ? target!.Title + " · Resume window" : "Choose window");
-        AutomationProperties.SetHelpText(SessionCardButton, canResume ? "A / Enter resumes this window. X or right-click opens options." : "Choose a window in Apps");
-        var closeUnavailable = CloseSessionWindowReason(target);
-        var closeHelp = closeUnavailable ?? "Review closing " + target!.Title;
-        SessionCloseReason.Text = closeUnavailable ?? "";
-        SessionCloseReason.Visibility = closeUnavailable is null ? Visibility.Collapsed : Visibility.Visible;
-        SessionCloseButton.ToolTip = closeHelp;
-        AutomationProperties.SetHelpText(SessionCloseButton, closeHelp);
-        AutomationProperties.SetName(SessionCloseDescription, "Close window. " + closeHelp);
-        RegisterFixed("session-close", SessionCloseButton, () =>
-        {
-            if (CloseSessionWindowReason(target) is { } reason)
-            {
-                FeedbackText(reason, important: true);
-                RefreshRows();
-                return;
-            }
-
-            Confirm(target!);
-        }, closeUnavailable is null, closeHelp);
+        }, true, target?.Title ?? "Choose a window in Apps");
+        AutomationProperties.SetName(SessionCardButton, target is null ? "Choose window" : target.Title + " · Resume window");
         var windowCount = Controller.Apps.Count;
         var windowSummary = windowCount switch
         {
@@ -117,25 +122,9 @@ public partial class MainWindow
             AddRow("setup-invitation", "Customize panel", "Quick setup in three steps", () => OpenView(new(OverlayRoute.Setup, SelectedId: "setup-next")));
     }
 
-    private string? CloseSessionWindowReason(WindowRef? target)
-    {
-        if (Controller.Session.CardPending)
-            return "Finding window";
-        if (target is null)
-            return "No window";
-        if (!Controller.CardTargetAvailable(target))
-            return "Window unavailable";
-        if (Controller.Session.CardResumeOnly || !target.CanClose || !Controller.Session.CardTarget!.CanClose)
-            return "Window protected";
-        return null;
-    }
-
     private void BuildFavorite(string id, int? row, int column)
     {
         var target = Controller.Session.Anchor;
-        var steamContext = Controller.ReturnTarget;
-        var menu = Controller.Platform.CanSteamMenu(steamContext);
-        var steamGame = Controller.SteamOverlayEligible(steamContext);
         switch (id)
         {
             case "playnite":
@@ -145,24 +134,10 @@ public partial class MainWindow
                 AddRow(id, "Steam Big Picture", Controller.SteamAvailable ? "Open library" : "Steam not found", () => RunEffect((token, keep) => Controller.Launch(false, token, keep), focusTarget: Controller.LaunchTarget(false)), Controller.SteamAvailable, row: row, column: column, compactGrid: true);
                 break;
             case "gamebar":
-                AddRow(id, "Game Bar", target is null ? "Choose a window" : "Xbox · session window", () => Shortcut("Win+G"), target is not null, row: row, column: column, compactGrid: true);
-                break;
-            case "steam-overlay":
-                AddRow(id, menu ? "Steam Big Picture menu" : "Steam Overlay", menu ? "Big Picture" : steamGame ? Controller.HasSteamLaunchObservation(steamContext) ? "Launched by Steam · " + Controller.Settings.SteamShortcut : "Request " + Controller.Settings.SteamShortcut : steamContext is null ? "Choose a window" : "Needs a Steam game", () =>
-                {
-                    if (steamContext is null)
-                        return;
-                    if (menu)
-                        RunEffect((token, keep) => Controller.Platform.SteamMenu(steamContext, token, keep), () => Controller.Platform.CanSteamMenu(steamContext), steamContext);
-                    else
-                        QueueSteam(steamContext, () => Controller.ReturnTarget?.Same(steamContext) == true && Controller.SteamOverlayEligible(steamContext));
-                }, menu || steamGame, row: row, column: column, compactGrid: true);
+                AddRow(id, "Game Bar", target is null ? "Choose a window" : "Xbox · session window", OpenGameBar, target is not null, row: row, column: column, compactGrid: true);
                 break;
             case "taskview":
                 AddRow(id, "Task View", "Open windows", () => RunEffect(Controller.Platform.TaskView), row: row, column: column, compactGrid: true);
-                break;
-            case "audio":
-                AddRow(id, "Windows audio", audio.Current.Available ? audio.Current.Muted ? "Output muted" : audio.Current.Volume.ToString("P0") : "Output unavailable", () => Subpage("audio", "volume"), row: row, column: column, compactGrid: true);
                 break;
         }
     }
@@ -273,8 +248,14 @@ public partial class MainWindow
         }
         if (!valid)
             Paragraph("This window is no longer available. Choose another window.");
+        AddRow("application-audio", "App audio", "Adjust this app’s volume and mute", () =>
+        {
+            OpenView(new(OverlayRoute.Mixer, target, "mixer-volume"));
+            StartFeatureRead();
+        }, valid && !target.Protected);
         AddRow("application-mute", MuteActionTitle(), valid ? AppAudioDescription() : "This window is no longer available.", () => MuteApplication(target), valid && AudioFor(target) && appAudio.CanSetMute);
         AddRow("minimize", "Minimize window", valid && target.CanClose ? "The panel stays open" : "Window protected or unavailable", () => RunInPlace(target, token => Controller.Platform.Minimize(target, token), "minimize"), valid && target.CanClose);
+        AddRow("maximize-restore", "Maximize / restore window", valid && target.CanClose ? "Change the window size" : "Window protected or unavailable", () => RunInPlace(target, token => Controller.Platform.MaximizeOrRestore(target, token), "maximize-restore"), valid && target.CanClose);
         AddRow("choose-session", "Choose another window", "Choose what to resume", ChooseSession);
         AddRow("details", "Window details", "View full details", () => OpenView(new(OverlayRoute.Details, target, "switch-detail")));
         AddRow("close", "Close window…", target.CanClose && valid ? "Opens a confirmation" : "Window protected or unavailable", () => Confirm(target), valid && target.CanClose, true);

@@ -116,12 +116,16 @@ internal static class AppearanceTests
                 var window = host.Window;
                 host.Open(compact ? 360 : 572, compact ? 480 : 940);
                 Require(ResourceColor(window, ThemeSupport.Text) == ColorFrom(palette.Text), "The custom palette was replaced rather than displayed safely");
+                var update = (Button)window.FindName("UpdateAvailableButton");
+                update.Visibility = Visibility.Visible;
                 CheckFeedbackGeometry(window);
+                update.Visibility = Visibility.Collapsed;
                 SessionInterfaceTests.Pick(window, "session-card");
                 var selected = ReviewFixTests.Button(window, "session-card");
                 selected.ApplyTemplate();
-                var outline = (Border)selected.Template.FindName("SelectionBreath", selected);
-                Require(outline.Opacity == 1 && outline.BorderThickness.Left > 0,
+                var outline = (Border)selected.Template.FindName("Surface", selected);
+                Require(outline.BorderBrush is SolidColorBrush focus && focus.Color == ResourceColor(window, ThemeSupport.Focus)
+                    && outline.BorderThickness.Left > 0,
                     "A selected control briefly loses its essential focus outline");
                 window.OpenAppearance();
                 window.OpenAppearanceColor(PaletteRole.Focus);

@@ -46,7 +46,7 @@ internal static class SessionInterfaceTests
             }
             finally { source.Release(); }
         });
-        test("activation glyph belongs only to the selected Resume action", () =>
+        test("secondary controller gestures appear only when the session card is selected", () =>
         {
             using var host = new Host();
             var window = host.Window;
@@ -54,9 +54,11 @@ internal static class SessionInterfaceTests
             AdaptiveInterfaceTests.UseController(window);
             Pick(window, "session-card");
             var hint = (TextBlock)window.FindName("SessionHint");
+            var options = (TextBlock)window.FindName("SessionOptionsHint");
             Require(InputPrompt.Read(hint).StartsWith("A ", StringComparison.Ordinal), "Selected Resume has no controller prompt");
-            Pick(window, "audio");
-            Require(InputPrompt.Read(hint) == "Resume", "Unselected Resume still advertises the selected action's input");
+            Require(options.Visibility == Visibility.Visible, "Selected card has no Options prompt");
+            Pick(window, "windows-volume");
+            Require(options.Visibility == Visibility.Hidden, "Unselected card still advertises secondary actions");
         });
         test("high contrast slider uses the actual system-mapped solid thumb", () =>
         {
@@ -93,7 +95,9 @@ internal static class SessionInterfaceTests
                 Require(bar.ActualWidth is >= 7.9 and <= 8.1, "A theme minimum expanded the reserved scrollbar lane");
                 var buttons = CaptureVisuals<Button>((DependencyObject)window.FindName("Rows"))
                     .Where(button => button.Tag is string id && (id.StartsWith("earlier:", StringComparison.Ordinal) || id.StartsWith("later:", StringComparison.Ordinal))).ToArray();
-                Require(buttons.Length == 12, "The customization fixture has no complete reorder controls");
+                var expected = SessionHubSettings.Catalog.SelectMany(id => new[] { "earlier:" + id, "later:" + id });
+                Require(buttons.Select(button => (string)button.Tag).Order().SequenceEqual(expected.Order()),
+                    "The customization fixture has no complete reorder controls");
                 foreach (var button in buttons)
                 {
                     Pick(window, (string)button.Tag);
@@ -607,10 +611,10 @@ internal static class SessionInterfaceTests
                         AwaitControllerDisconnect(window);
                     }
                     if (state == "unavailable-action")
-                        Pick(window, "steam-overlay");
+                        Pick(window, "session-card");
                     else if (state is "selected-audio" or "focused-action")
                     {
-                        Pick(window, "audio");
+                        Pick(window, "windows-volume");
                     }
                     else if (state == "mouse")
                     {

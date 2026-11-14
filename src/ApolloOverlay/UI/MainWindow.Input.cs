@@ -266,6 +266,20 @@ public partial class MainWindow
             case Key.X:
                 Details();
                 break;
+            case Key.Y when HubCardSelected && modifiers == ModifierKeys.None:
+                if (firstPress && !e.IsRepeat)
+                {
+                    dispatchSource = 0;
+                    try
+                    {
+                        OpenCardSteamOverlay();
+                    }
+                    finally
+                    {
+                        dispatchSource = null;
+                    }
+                }
+                break;
             default:
                 return;
         }

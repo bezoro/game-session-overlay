@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Automation;
@@ -12,9 +13,49 @@ namespace ApolloOverlay;
 internal static partial class InputPrompt
 {
     private sealed record Glyph(string Name, string Tone, string? Keycap = null, string[]? Group = null);
-    private sealed class KeycapLabel : TextBlock
+    private sealed class KeycapBorder(string caption, double fontSize) : Border
     {
+        private Geometry? outlines;
+
         protected override AutomationPeer? OnCreateAutomationPeer() => null;
+
+        protected override Size MeasureOverride(Size constraint)
+        {
+            var typeface = new Typeface(TextElement.GetFontFamily(this), TextElement.GetFontStyle(this), FontWeights.SemiBold, TextElement.GetFontStretch(this));
+            var text = new FormattedText(caption, CultureInfo.GetCultureInfo("en-US"), FlowDirection, typeface, fontSize,
+                Brushes.Black, null, TextOptions.GetTextFormattingMode(this), VisualTreeHelper.GetDpi(this).PixelsPerDip);
+            outlines = text.BuildGeometry(default);
+            outlines.Freeze();
+            return new(Math.Max(text.Width, outlines.Bounds.Width) + Padding.Left + Padding.Right, text.Height);
+        }
+
+        protected override void OnRender(DrawingContext context)
+        {
+            base.OnRender(context);
+            if (outlines is not { } geometry || geometry.Bounds is not { IsEmpty: false } ink)
+                return;
+
+            // The same glyph outlines determine the visible midpoint and the painted ink.
+            context.PushTransform(new TranslateTransform((RenderSize.Width - ink.Width) / 2 - ink.X, (RenderSize.Height - ink.Height) / 2 - ink.Y));
+            context.DrawGeometry(TextElement.GetForeground(this), null, geometry);
+            context.Pop();
+        }
+
+        protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
+        {
+            base.OnPropertyChanged(e);
+            if (e.Property == TextElement.ForegroundProperty)
+                InvalidateVisual();
+            else if (e.Property == TextElement.FontFamilyProperty || e.Property == TextElement.FontStyleProperty
+                || e.Property == TextElement.FontStretchProperty || e.Property == FlowDirectionProperty || e.Property == TextOptions.TextFormattingModeProperty)
+                InvalidateMeasure();
+        }
+
+        protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+        {
+            base.OnDpiChanged(oldDpi, newDpi);
+            InvalidateMeasure();
+        }
     }
     private sealed record RenderState(string Template, double FontSize, Inline? FirstInline);
     private static readonly DependencyProperty RenderStateProperty = DependencyProperty.RegisterAttached("RenderState", typeof(RenderState), typeof(InputPrompt));
@@ -43,6 +84,7 @@ internal static partial class InputPrompt
         ["PgUp"] = new("PgUp", ThemeSupport.PromptKeyboard, "PgUp"),
         ["PgDn"] = new("PgDn", ThemeSupport.PromptKeyboard, "PgDn"),
         ["KeyX"] = new("X", ThemeSupport.PromptKeyboard, "X"),
+        ["KeyY"] = new("Y", ThemeSupport.PromptKeyboard, "Y"),
         ["Shift"] = new("Shift", ThemeSupport.PromptKeyboard, "Shift"),
         ["Ctrl"] = new("Ctrl", ThemeSupport.PromptKeyboard, "Ctrl"),
         ["MouseLeft"] = new("Left click", ThemeSupport.PromptMouse),
@@ -100,18 +142,8 @@ internal static partial class InputPrompt
         }
         if (definition.Keycap is { } caption)
         {
-            var label = new KeycapLabel
+            var keycap = new KeycapBorder(caption, Math.Clamp(height * .56, 10, 13))
             {
-                Text = caption,
-                FontSize = Math.Clamp(height * .56, 10, 13),
-                FontWeight = FontWeights.SemiBold,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            label.SetResourceReference(TextBlock.ForegroundProperty, ThemeSupport.PromptForeground);
-            var keycap = new Border
-            {
-                Child = label,
                 Height = height,
                 MinWidth = height,
                 Padding = new(4, 0, 4, 0),
@@ -120,6 +152,7 @@ internal static partial class InputPrompt
                 Focusable = false,
                 Tag = key
             };
+            keycap.SetResourceReference(TextElement.ForegroundProperty, ThemeSupport.PromptForeground);
             keycap.SetResourceReference(Border.BackgroundProperty, definition.Tone);
             return keycap;
         }

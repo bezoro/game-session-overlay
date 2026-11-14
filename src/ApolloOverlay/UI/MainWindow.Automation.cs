@@ -90,9 +90,16 @@ public partial class MainWindow
         && Environment.TickCount64 <= owner.Deadline
         && owner.Context()
         && Controller.Platform.Valid(owner.Target);
-    private void QueueSteam(WindowRef target, Func<bool> context) => QueueHandoff(() => OperationTask = RunUiSteam(target, context), () => context() && Controller.SteamOverlayEligible(target));
+    private void QueueSteam(WindowRef target, Func<bool> context) => QueueHandoff(
+        () => OperationTask = RunUiSteam(target, context), context);
     private async Task RunUiSteam(WindowRef target, Func<bool> context)
     {
+        if (!context() || !Controller.SteamOverlayEligible(target))
+        {
+            RetainOperation("Cancelled", "Steam Overlay is no longer available for this window; no shortcut sent.", "steam-overlay", target, false);
+            return;
+        }
+
         var id = automationHost is null ? "ui:" + Guid.NewGuid().ToString("N") : automationHost.BeginUi("steam-overlay", TargetId(target));
         if (id is null)
         {
@@ -282,7 +289,7 @@ public partial class MainWindow
         "volume-down",
         "mute"
     };
-    private string Capability(Entry entry) => entry.Id is "close" or "close-detail" or "session-close" or "confirm-close" ? "RequiresGesture" : entry.Id is "steam-overlay" or "test-steam" ? (Controller.Platform.CanSteamMenu(Controller.ReturnTarget) && entry.Id == "steam-overlay" ? "RequiresInteractive" : "Execute") : SynchronousActions.Contains(entry.Id)
+    private string Capability(Entry entry) => entry.Id is "close" or "close-detail" or "confirm-close" ? "RequiresGesture" : SynchronousActions.Contains(entry.Id)
         || view.Current.ChooseSession
         && entry.Id.StartsWith("window:", StringComparison.Ordinal)
         || entry.Id.StartsWith("options:", StringComparison.Ordinal)

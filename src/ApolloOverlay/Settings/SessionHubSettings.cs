@@ -5,12 +5,16 @@ namespace ApolloOverlay;
 
 public static class SessionHubSettings
 {
-    public static readonly IReadOnlyList<string> Catalog = Array.AsReadOnly(new[] { "steam-overlay", "steam", "playnite", "taskview", "gamebar", "audio" });
+    public static readonly IReadOnlyList<string> Catalog = Array.AsReadOnly(new[] { "steam", "playnite", "taskview", "gamebar" });
     public static string[] Favorites(UserSettings value) => (value.FavoriteQuickActions ?? Catalog).Where(Catalog.Contains).Distinct(StringComparer.Ordinal).ToArray();
+
+    // Preserve retired shortcuts in saved layouts for rollback.
+    private static string[] StoredFavorites(UserSettings value) => (value.FavoriteQuickActions ?? Catalog)
+        .Where(id => id is "steam-overlay" or "audio" || Catalog.Contains(id)).Distinct(StringComparer.Ordinal).ToArray();
     public static UserSettings Copy(UserSettings value) => value with
     {
         Version = 3,
-        FavoriteQuickActions = Favorites(value),
+        FavoriteQuickActions = StoredFavorites(value),
         UiScalePercent = value.UiScalePercent is 100 or 115 or 130 or 150 ? value.UiScalePercent : 100,
         PanelSide = value.PanelSide is "Left" or "Right" ? value.PanelSide : "Left",
         Appearance = NormalizeAppearance(value.Appearance)
@@ -43,7 +47,7 @@ public static class SessionHubSettings
     {
         if (!Catalog.Contains(id))
             return Copy(settings);
-        var items = Favorites(settings).ToList();
+        var items = StoredFavorites(settings).ToList();
         if (!items.Remove(id))
             items.Add(id);
         return Copy(settings with
@@ -54,15 +58,18 @@ public static class SessionHubSettings
 
     public static UserSettings Move(UserSettings settings, string id, int delta)
     {
-        var items = Favorites(settings).ToList();
-        var index = items.IndexOf(id);
+        var visible = Favorites(settings);
+        var index = Array.IndexOf(visible, id);
         if (index < 0)
             return Copy(settings);
-        var next = Math.Clamp(index + delta, 0, items.Count - 1);
-        (items[index], items[next]) = (items[next], items[index]);
+        var next = Math.Clamp(index + delta, 0, visible.Length - 1);
+        var items = StoredFavorites(settings);
+        var first = Array.IndexOf(items, id);
+        var second = Array.IndexOf(items, visible[next]);
+        (items[first], items[second]) = (items[second], items[first]);
         return Copy(settings with
         {
-            FavoriteQuickActions = items.ToArray()
+            FavoriteQuickActions = items
         });
     }
 

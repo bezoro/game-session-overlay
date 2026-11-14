@@ -3,6 +3,11 @@ using System.Text;
 
 namespace ApolloOverlay;
 
+internal enum WindowShowState
+{
+    Normal = 1, Minimized = 2, Maximized = 3
+}
+
 internal static class Native
 {
     internal delegate bool EnumWindow(nint hwnd, nint parameter);
@@ -18,6 +23,15 @@ internal static class Native
     internal struct Point
     {
         public int X, Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct WindowPlacement
+    {
+        public int Length, Flags;
+        public WindowShowState ShowState;
+        public Point MinPosition, MaxPosition;
+        public Rect NormalPosition;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -92,6 +106,8 @@ internal static class Native
     internal static extern bool IsWindowVisible(nint hwnd);
     [DllImport("user32.dll")]
     internal static extern bool IsIconic(nint hwnd);
+    [DllImport("user32.dll")]
+    internal static extern bool GetWindowPlacement(nint hwnd, ref WindowPlacement placement);
     [DllImport("user32.dll")]
     internal static extern nint MonitorFromWindow(nint hwnd, uint flags);
     [DllImport("user32.dll")]

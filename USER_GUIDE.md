@@ -21,12 +21,13 @@ The overlay checks controller charge in the background and requests a Windows no
 | B | Go back; hide the panel from Session |
 | LB / RB | Switch tabs |
 | X | Open window options in Session and Apps |
+| Y on the game card | Open Steam Overlay when supported |
 | Guide | Open or hide the panel |
 | Left / right on a volume control | Adjust in 5% steps |
 
 Release the buttons and sticks when returning to the game. The panel waits for release before handing focus back. If direction and A arrive together, only the selection changes; press A again to activate it.
 
-**Resume** returns to the selected session window. If that window has closed, choose another one. Window options include application audio, minimize, details and close. To close a window, choose **Close window…**, release A, then make a new 1.5-second hold. Releasing early or pressing B cancels.
+Select the **game card** and press **A** to return. The card shows the available Xbox controls. **Y** opens Steam Overlay and appears dimmed when unavailable. On a keyboard, press Y with the card selected. **X** opens options for that window, including its audio, minimize, maximize or restore, details and close. To close, choose **Close window…**, then select **Close window** in the confirmation. **Cancel** is selected first. Press **B** or **Esc** to go back.
 
 If Windows blocks the request because the app runs as administrator, it may ask you to approve closing that window. The overlay keeps running in standard mode. The app can still ask you to save before it closes.
 
@@ -36,15 +37,13 @@ Controller input may still reach the game while the panel is open. Foreground fo
 
 In **System**, start with automatic monitor selection. It follows the active window; when opened from the tray, it tries the preserved session window. Choose a specific monitor to keep the panel on Apollo's virtual display or another screen.
 
-Increase the scale until titles are readable from your usual seat. The panel scrolls when space is limited. Selection has one clear outline, a short subtle sheen and press feedback. Windows animation restrictions and high contrast are respected.
+Increase the scale until titles are readable from your usual seat. The panel scrolls when space is limited. A clear outline and a soft repeating highlight identify the selected control. Activating a control adds a brief press highlight. Windows animation restrictions and high contrast are respected.
 
 In **Customize quick access**, keep the actions you use and put frequent actions first. Sounds and vibration are separate opt-ins, both off by default. Changes persist only after **Save**; **Discard** restores the saved settings.
 
-Enable **Sounds** in System and use **Test feedback** to request a sample. Navigation, confirmation and back have different cues. Failure has a lower cue; completion sounds only follow confirmed results. Check that the sound actually reaches the TV: a playback request alone does not establish audible output.
+Use **Test feedback** in System to try the enabled channels. Confirming, going back and attempting an unavailable action have distinct sounds and short controller pulses. Moving the selection does not vibrate the controller. A completion sound follows a verified result. Separate text and symbols distinguish pending, completed and uncertain outcomes.
 
-The selected action keeps its focus outline. Activating it produces a brief highlight and gentle compression. Separate text and symbols distinguish pending, completed and uncertain outcomes.
-
-**Windows audio** controls the PC's default output. Application audio in window options affects the identified audio sessions of that process. Neither guarantees control of the TV's physical volume.
+Use **Output** on the Session page to adjust the PC's volume, or open **Audio** for more controls. Application audio in window options affects the identified audio sessions of that process.
 
 **Appearance** offers warm charcoal, amber and off-white defaults, presets, and separate dark/light color palettes. Edit colors with RGB controls or local hexadecimal entry. **Keep color** adds the edit to the draft; **Save colors** persists it without saving unrelated settings changes. Unsafe intermediate colors remain editable while navigation keeps its last readable palette. Windows high contrast uses system colors.
 

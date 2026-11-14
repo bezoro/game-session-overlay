@@ -32,6 +32,9 @@ public interface IPlatform : IDisposable
     Task<ActionResult> CloseConfirmed(WindowRef window, CancellationToken cancellation, Func<bool> prepareForConsent) =>
         Close(window, cancellation);
     Task<ActionResult> Minimize(WindowRef window, CancellationToken cancellation) => Task.FromResult(new ActionResult(ResultKind.Unavailable, "Minimizing is unavailable on this platform."));
+    // Toggles a visible, non-minimized window. Cancellation after dispatch only stops observation.
+    Task<ActionResult> MaximizeOrRestore(WindowRef window, CancellationToken cancellation) =>
+        Task.FromResult(new ActionResult(ResultKind.Unavailable, "Maximizing or restoring is unavailable on this platform."));
     Task<ActionResult> Shortcut(WindowRef window, string keys);
     Task<ActionResult> Shortcut(WindowRef window, string keys, CancellationToken cancellation, Func<bool> continuing) => cancellation.IsCancellationRequested || !continuing() ? Task.FromResult(new ActionResult(ResultKind.Cancelled, "Cancelled before dispatch.")) : IsPreview ? Shortcut(window, keys) : Task.FromResult(new ActionResult(ResultKind.Unavailable, "This platform does not support cancellable shortcuts."));
     async Task<ActionResult> Focus(WindowRef window, CancellationToken cancellation, Func<bool> continuing)

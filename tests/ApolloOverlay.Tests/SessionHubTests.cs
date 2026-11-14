@@ -40,14 +40,19 @@ internal static class SessionHubTests
                     && !value.HapticFeedbackEnabled
                     && value.UiScalePercent == 100
                     && value.PanelSide == "Left"
-                    && SessionHubSettings.Favorites(value).Count() == 6, "Field-local recovery lost valid settings");
+                    && SessionHubSettings.Favorites(value).SequenceEqual(SessionHubSettings.Catalog), "Field-local recovery lost valid settings");
             }
         });
         test("hub favorites missing defaults versus empty and stable sanitized order", () =>
         {
-            Check(SessionHubSettings.Favorites(UserSettings.Parse("{}")).SequenceEqual(new[] { "steam-overlay", "steam", "playnite", "taskview", "gamebar", "audio" }), "Missing settings must put the four frequent shortcuts first");
+            Check(SessionHubSettings.Favorites(UserSettings.Parse("{}")).SequenceEqual(new[] { "steam", "playnite", "taskview", "gamebar" }), "Missing settings must show the current defaults");
             Check(SessionHubSettings.Favorites(UserSettings.Parse("{\"FavoriteQuickActions\":[]}")).Length == 0, "Explicit empty lost");
-            Check(SessionHubSettings.Favorites(UserSettings.Parse("{\"FavoriteQuickActions\":[\"audio\",\"bad\",\"playnite\",\"audio\"]}")).SequenceEqual(new[] { "audio", "playnite" }), "Order/dedup invalid");
+            var legacy = UserSettings.Parse("{\"FavoriteQuickActions\":[\"gamebar\",\"audio\",\"bad\",\"steam-overlay\",\"playnite\",\"audio\"]}");
+            Check(SessionHubSettings.Favorites(legacy).SequenceEqual(new[] { "gamebar", "playnite" }), "A retired shortcut appeared in a saved layout");
+            Check(legacy.FavoriteQuickActions!.SequenceEqual(new[] { "gamebar", "audio", "steam-overlay", "playnite" }), "Loading changed the stored layout");
+            Check(SessionHubSettings.Move(legacy, "gamebar", 1).FavoriteQuickActions!.SequenceEqual(new[] { "playnite", "audio", "steam-overlay", "gamebar" }),
+                "Reordering visible favorites changed the stored positions of retired shortcuts");
+            Check(SessionHubSettings.Toggle(legacy, "audio").FavoriteQuickActions!.SequenceEqual(legacy.FavoriteQuickActions!), "The retired audio shortcut is still editable");
         });
         test("hub structural dirty equality and snapshot isolation", () =>
         {
@@ -59,11 +64,11 @@ internal static class SessionHubTests
                 FavoriteQuickActions = copy
             });
             Check(!c.SettingsDirty, "Equivalent reconstructed array dirty");
-            copy[0] = "audio";
+            copy[0] = "gamebar";
             var exposed = c.Settings;
             exposed.FavoriteQuickActions![0] = "taskview";
             Check(!c.SettingsDirty && c.Settings.FavoriteQuickActions!.SequenceEqual(original.FavoriteQuickActions!), "Caller array aliased current/saved");
-            c.Change(SessionHubSettings.Move(c.Settings, "steam", -1));
+            c.Change(SessionHubSettings.Move(c.Settings, "playnite", -1));
             Check(c.SettingsDirty, "Reorder clean");
             c.Change(original);
             Check(!c.SettingsDirty, "Exact revert dirty");
@@ -90,10 +95,10 @@ internal static class SessionHubTests
             foreach (var id in SessionHubSettings.Catalog)
                 value = SessionHubSettings.Toggle(value, id);
             Check(SessionHubSettings.Favorites(value).Length == 0, "All-hidden impossible");
-            value = SessionHubSettings.Toggle(value, "audio");
+            value = SessionHubSettings.Toggle(value, "gamebar");
             value = SessionHubSettings.Toggle(value, "playnite");
             value = SessionHubSettings.Move(value, "playnite", -1);
-            Check(SessionHubSettings.Favorites(value).SequenceEqual(new[] { "playnite", "audio" }), "Restore/reorder changed identity");
+            Check(SessionHubSettings.Favorites(value).SequenceEqual(new[] { "playnite", "gamebar" }), "Restore/reorder changed identity");
         });
         test("hub bounded nested contexts and tab memories", () =>
         {
@@ -640,7 +645,7 @@ internal static class SessionHubTests
             Check(MainWindow.ContextIconSize(bitmap, 42, 3) == 21, "300% should cap the bitmap at its original resolution");
             Check(MainWindow.ContextIconSize(Icon(48), 42, 3) == 0, "An icon that would be too small needs the vector fallback");
         });
-        test("hub Resume leads to Close across and shortcuts below", () =>
+        test("hub has one session-card focus stop followed by shortcuts", () =>
         {
             var w = Fixture(out _, out _, out _, out _);
             try
@@ -657,15 +662,14 @@ internal static class SessionHubTests
                         var bottom = button.TranslatePoint(new Point(0, button.ActualHeight), viewport).Y;
                         Check(bottom <= viewport.ViewportHeight, $"{id} extends to {bottom:0} past the opening viewport {viewport.ViewportHeight:0} at {width}×{height}");
                     }
-                    w.Move(NavDirection.Right);
-                    Check(w.SelectedAction == "session-close", "Right did not reach Close");
-                    w.Move(NavDirection.Left);
-                    Check(w.SelectedAction == "session-card", "Left did not return to Resume");
+                    Check(!w.ActionIds.Contains("session-close") && !w.ActionIds.Contains("steam-overlay"), "A secondary card gesture gained its own focus stop");
+                    var card = (Button)w.FindName("SessionCardButton");
+                    Check(card.IsAncestorOf((TextBlock)w.FindName("TargetLabel")), "The game title sits outside the accessible card button");
                     w.Sequential(1);
-                    Check(w.SelectedAction == "session-close", "Tab did not reach Close");
+                    Check(w.SelectedAction == "steam", "Tab did not reach the first shortcut");
                     w.Sequential(-1);
                     w.Move(NavDirection.Down);
-                    Check(w.SelectedAction == "steam-overlay", "Down did not reach the first shortcut");
+                    Check(w.SelectedAction == "steam", "Down did not reach the first shortcut");
                 }
 
                 w.Controller.Change(w.Controller.Settings with
@@ -673,8 +677,9 @@ internal static class SessionHubTests
                     FavoriteQuickActions = ["audio", "taskview", "steam"]
                 });
                 w.RefreshRows();
-                Check(w.ActionIds.Where(SessionHubSettings.Catalog.Contains).SequenceEqual(new[] { "audio", "taskview", "steam" }),
-                    "Hub changed configured shortcut order");
+                Check(w.ActionIds.Where(SessionHubSettings.Catalog.Contains).SequenceEqual(new[] { "taskview", "steam" }) && !w.ActionIds.Contains("audio"),
+                    "Hub showed the retired audio shortcut or changed configured shortcut order");
+                Check(w.ActionIds.Contains("windows-volume"), "Hub lost the Windows output control");
             }
             finally
             {
@@ -693,15 +698,17 @@ internal static class SessionHubTests
                 w.RefreshRows();
                 Check(w.Controller.Session.Anchor?.Same(p.B) == true && w.Controller.Session.CardTarget?.Same(p.A) == true,
                     "Fixture needs a different session anchor from the displayed card");
-                Click(w, "session-close");
+                w.Details();
+                Click(w, "close");
                 Check(w.Confirming && ((TextBlock)w.FindName("ConfirmTarget")).Text == p.A.Title && p.Closes == 0,
                     "Close did not review the displayed card before a native request");
                 w.Back();
-                Check(w.SelectedAction == "session-close", "Cancel did not return to Close");
+                Check(w.SelectedAction == "close", "Cancel did not return to Close");
+                w.Back();
 
                 p.InvalidCard = p.A;
-                Click(w, "session-close");
-                Check(!w.Confirming && !ReviewFixTests.Button(w, "session-close").IsEnabled && p.Closes == 0,
+                w.Details();
+                Check(!w.Confirming && w.SelectedAction == "session-card" && !w.ActionIds.Contains("close") && p.Closes == 0,
                     "A stale card entered confirmation");
                 p.InvalidCard = null;
 
@@ -712,10 +719,13 @@ internal static class SessionHubTests
                     w.Controller.CaptureReturn();
                     Complete(w.Controller.ResolveCardTarget("fixture", new HashSet<string>()));
                     w.RefreshRows();
-                    var close = ReviewFixTests.Button(w, "session-close");
-                    Check(w.Controller.Session.CardTarget?.Same(target) == true && !close.IsEnabled, "Close enabled for a protected or resume-only card");
-                    Click(w, "session-close");
+                    w.Details();
+                    Check(w.Controller.Session.CardTarget?.Same(target) == true
+                        && (!w.ActionIds.Contains("close") || !ReviewFixTests.Button(w, "close").IsEnabled), "Close enabled for a protected or resume-only card");
+                    if (w.ActionIds.Contains("close"))
+                        Click(w, "close");
                     Check(!w.Confirming && p.Closes == 0, "Protected close entered confirmation");
+                    w.Back();
                 }
             }
             finally
@@ -767,7 +777,12 @@ internal static class SessionHubTests
                 RequireFocus(w);
                 Check(!w.ActionIds.Contains("session-options"), "Removed sibling options remains a navigation stop");
                 w.Details();
-                Check(w.ActionIds.Contains("application-mute") && p.Switches == 0, "Opening options switched window");
+                Check(w.ActionIds.Contains("application-mute") && w.ActionIds.Contains("maximize-restore")
+                    && w.SelectedAction == "application-audio" && p.Switches == 0, "Opening options switched window or omitted target actions");
+                Click(w, "application-audio");
+                Check(w.ActionIds.Contains("mixer-volume") && !w.ActionIds.Any(id => id.StartsWith("mix:", StringComparison.Ordinal)),
+                    "App audio did not open a mixer restricted to the card window");
+                w.Back();
                 w.Back();
                 Check(w.SelectedAction == "session-card", "Options Back lost the session card origin");
                 Pick(w, "session-card");
@@ -775,6 +790,115 @@ internal static class SessionHubTests
                 Release(w);
                 Complete(w.OperationTask);
                 Check(p.Switches == 1 && p.LastSwitch?.Same(p.A) == true, "Card resumed wrong target");
+            }
+            finally
+            {
+                w.Close();
+            }
+        });
+        test("hub face buttons are scoped to the card and Y waits for release", () =>
+        {
+            var w = Fixture(out var p, out _, out _, out _);
+            try
+            {
+                p.ForegroundWindow = p.B;
+                p.SteamTarget = p.B;
+                w.Controller.CaptureReturn();
+                w.Controller.Select(p.A);
+                w.RefreshRows();
+                w.Left = -12000;
+                w.Top = -12000;
+                w.ShowActivated = false;
+                w.Show();
+                w.AutomationInputReader = () => new(Pad(PadButtons.None), Environment.TickCount64);
+                void Tick(PadButtons buttons) => w.ReviewTick(Pad(buttons));
+                static PadFrame[] Pad(PadButtons buttons) => [new(true, buttons), default, default, default];
+                void At(long now, PadButtons buttons) => w.AdvanceHandoff(new(Pad(buttons), now), now);
+
+                Tick(PadButtons.None);
+                Tick(PadButtons.Y);
+                Check(!w.TransitionPending && p.Shortcuts == 0, "Y fell back to the Steam-eligible return window");
+                Tick(PadButtons.None);
+                p.SteamTarget = p.A;
+                w.RefreshRows();
+                Pick(w, "steam");
+                Tick(PadButtons.Y);
+                Check(!w.TransitionPending, "Y activated while a different action was selected");
+                Tick(PadButtons.None);
+                Pick(w, "session-card");
+                Tick(PadButtons.X);
+                Check(w.ActionIds.Contains("application-audio") && ((TextBlock)w.FindName("PageTitle")).Text == "Window options",
+                    "Pad X did not open card options");
+                w.Back();
+                Tick(PadButtons.None);
+                Tick(PadButtons.Y);
+                var now = Environment.TickCount64;
+                Check(w.TransitionPending && p.Shortcuts == 0, "Pad Y bypassed the release gate");
+                At(now, PadButtons.Y);
+                At(now + 100, PadButtons.Y);
+                Check(w.TransitionPending && p.Shortcuts == 0, "Held Y dispatched the Steam shortcut");
+                p.SteamTarget = null;
+                At(now + 101, PadButtons.None);
+                At(now + 201, PadButtons.None);
+                Complete(w.OperationTask);
+                Check(p.Shortcuts == 0 && w.Controller.Operation is { State: "Cancelled", Dispatched: false },
+                    "Losing Steam eligibility before dispatch did not cancel the queued action");
+                p.SteamTarget = p.A;
+                Tick(PadButtons.None);
+                Tick(PadButtons.Y);
+                now = Environment.TickCount64;
+                At(now, PadButtons.None);
+                At(now + 100, PadButtons.None);
+                Complete(w.OperationTask);
+                Check(p.Shortcuts == 1 && p.LastShortcut?.Same(p.A) == true && p.Switches == 0,
+                    "Pad Y dispatched to a different target or resumed the window");
+            }
+            finally
+            {
+                w.Close();
+            }
+        });
+        test("hub card and options repeat a stationary-layout sheen only while selected", () =>
+        {
+            var w = Fixture(out _, out _, out _, out _);
+            try
+            {
+                w.Left = w.Top = -12000;
+                w.ShowActivated = false;
+                w.Show();
+                var card = (Button)w.FindName("SessionCardButton");
+                w.UpdateLayout();
+                var bounds = card.RenderSize;
+                var sheen = (Border)card.Template.FindName("SelectionSheen", card);
+                if (InteractionMotion.Allowed)
+                {
+                    WaitForSheen(() => sheen.Opacity > .1, "Card selection did not animate");
+                    var transform = (TranslateTransform)sheen.Background.RelativeTransform;
+                    var start = transform.X;
+                    WaitForSheen(() => sheen.Opacity > .1 && transform.X > start + .15, "Highlight did not travel");
+                    WaitForSheen(() => sheen.Opacity == 0, "Highlight did not pause");
+                    WaitForSheen(() => sheen.Opacity > .1, "Highlight did not repeat");
+                }
+                Check(card.RenderSize == bounds, "Highlight moved the card");
+                w.Details();
+                var option = ReviewFixTests.Button(w, "application-audio");
+                WaitForSheen(() => !InteractionMotion.GetIsSelected(card) && !sheen.HasAnimatedProperties,
+                    "Leaving the card kept its motion clock");
+                Check(InteractionMotion.GetIsSelected(option) == InteractionMotion.Allowed, "Options did not follow the system motion setting");
+                if (InteractionMotion.Allowed)
+                {
+                    option.ApplyTemplate();
+                    var optionSheen = (Border)option.Template.FindName("SelectionSheen", option);
+                    WaitForSheen(() => optionSheen.Opacity > .1, "Selected option had no highlight");
+                }
+                w.Controller.Change(w.Controller.Settings with
+                {
+                    ReducedMotion = true
+                });
+                w.RefreshRows();
+                Check(!InteractionMotion.GetIsSelected(ReviewFixTests.Button(w, "application-audio")), "Reduced motion did not stop the highlight");
+                w.Hide();
+                Check(!InteractionMotion.GetIsSelected(option), "Hiding the panel retained a motion clock");
             }
             finally
             {
@@ -968,8 +1092,10 @@ internal static class SessionHubTests
                 w.ShowDiagnostic();
                 w.Page(2);
                 Click(w, "customize");
+                Check(!w.ActionIds.Contains("favorite:audio") && !w.ActionIds.Contains("earlier:audio") && !w.ActionIds.Contains("later:audio"),
+                    "Customize still exposes the retired audio shortcut");
                 Click(w, "later:playnite");
-                Check(w.Controller.Settings.FavoriteQuickActions![3] == "playnite" && w.SelectedAction == "favorite:playnite", "Moved favorite lost row identity");
+                Check(SessionHubSettings.Favorites(w.Controller.Settings)[2] == "playnite" && w.SelectedAction == "favorite:playnite", "Moved favorite lost row identity");
                 RequireFocus(w);
                 foreach (var id in SessionHubSettings.Catalog)
                     Click(w, "favorite:" + id);
@@ -1069,7 +1195,8 @@ internal static class SessionHubTests
                 w.RefreshRows();
                 var before = feedback.Configures;
                 Click(w, "discard-pending");
-                Check(feedback.Configures == before + 1 && !feedback.Sound && !feedback.Haptics && !w.Controller.SettingsDirty && SessionHubSettings.Favorites(w.Controller.Settings).Length == 6, "Discard did not reapply complete snapshot exactly once");
+                Check(feedback.Configures == before + 1 && !feedback.Sound && !feedback.Haptics && !w.Controller.SettingsDirty
+                    && SessionHubSettings.Favorites(w.Controller.Settings).SequenceEqual(SessionHubSettings.Catalog), "Discard did not reapply complete snapshot exactly once");
                 Check(((TextBlock)w.FindName("PageTitle")).Text == "System" && w.ActionIds.Contains(w.SelectedAction), "Discard reset view or invalidated selection");
                 RequireFocus(w);
             }
@@ -1192,6 +1319,18 @@ internal static class SessionHubTests
                     });
     }
 
+    private static void WaitForSheen(Func<bool> ready, string message)
+    {
+        var elapsed = System.Diagnostics.Stopwatch.StartNew();
+        while (!ready() && elapsed.Elapsed < TimeSpan.FromSeconds(5))
+        {
+            var frame = new DispatcherFrame();
+            Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background, () => frame.Continue = false);
+            Dispatcher.PushFrame(frame);
+        }
+        Check(ready(), message);
+    }
+
     private static void Navigate(MainWindow w, string state, HubPlatform p)
     {
         switch (state)
@@ -1296,6 +1435,9 @@ internal static class SessionHubTests
             )
                 cases.Add((theme, 572, 940, state, 100, "Left"));
             cases.Add((theme, 360, 480, "dirty-result", 100, "Left"));
+            foreach (var (width, height) in new[] { (572, 940), (360, 480) })
+                foreach (var state in new[] { "controller-steam", "controller-no-steam", "keyboard-steam", "mouse-steam", "controller-sheen", "options-sheen" })
+                    cases.Add((theme, width, height, state, 100, "Left"));
             foreach (var scale in new[]
             {
                 130,
@@ -1328,7 +1470,8 @@ internal static class SessionHubTests
         )
             cases.Add(("contrast-palette", 420, 600, state, 100, "Left"));
         if (focused)
-            cases = cases.Where(c => c.Theme != "contrast-palette" && c.Scale == 100 && c.Width != 420 && c.State is "home" or "options" or "customize" or "dirty-result").ToList();
+            cases = cases.Where(c => c.Theme != "contrast-palette" && c.Scale == 100 && c.Width != 420 && c.State is "home" or "options" or "customize" or "dirty-result"
+                or "controller-steam" or "controller-no-steam" or "keyboard-steam" or "mouse-steam" or "controller-sheen" or "options-sheen").ToList();
         var metadata = new List<SessionCaptureInfo>();
         foreach (var item in cases)
         {
@@ -1370,7 +1513,30 @@ internal static class SessionHubTests
             TaskCompletionSource<ApplicationAudioChange>? pendingCompletion = null;
             try
             {
-                if (state == "empty")
+                if (state is "controller-steam" or "controller-no-steam" or "keyboard-steam" or "mouse-steam" or "controller-sheen" or "options-sheen")
+                {
+                    p.A = p.A with
+                    {
+                        Title = "Aster Vale",
+                        ProcessName = "AsterVale"
+                    };
+                    w.Controller.CaptureReturn();
+                    p.SteamTarget = state == "controller-no-steam" ? null : p.A;
+                    w.Left = -12000;
+                    w.Top = -12000;
+                    w.ShowActivated = false;
+                    w.Show();
+                    if (state.StartsWith("controller-", StringComparison.Ordinal) || state == "options-sheen")
+                        AdaptiveInterfaceTests.UseController(w);
+                    if (state == "options-sheen")
+                        w.Details();
+                    else if (state == "mouse-steam")
+                    {
+                        w.ObservePointerPosition(new(100, 100));
+                        w.ObservePointerPosition(new(120, 100));
+                    }
+                }
+                else if (state == "empty")
                 {
                     p.Empty = true;
                     w.Controller.ClearSelection();
@@ -1473,6 +1639,31 @@ internal static class SessionHubTests
                     Check(w.ActionIds.Contains("close"), "The card-options capture did not reach window options");
                 }
                 var root = (FrameworkElement)w.Content;
+                if (state.EndsWith("-sheen", StringComparison.Ordinal))
+                {
+                    w.Width = width;
+                    w.Height = height;
+                    w.UpdateLayout();
+                    var selected = state == "options-sheen" ? ReviewFixTests.Button(w, "application-audio") : (Button)w.FindName("SessionCardButton");
+                    selected.ApplyTemplate();
+                    InteractionMotion.SetIsSelected(selected, false);
+                    InteractionMotion.SetIsSelected(selected, true);
+                    var sheen = (Border)selected.Template.FindName("SelectionSheen", selected);
+                    var elapsed = System.Diagnostics.Stopwatch.StartNew();
+                    WaitForSheen(() => sheen.Opacity >= .20 && ((TranslateTransform)sheen.Background.RelativeTransform).X >= -.15,
+                        "The selected template did not reach its active sheen phase");
+                    var movingFrame = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+                    movingFrame.Render(root);
+                    var movingEncoder = new PngBitmapEncoder();
+                    movingEncoder.Frames.Add(BitmapFrame.Create(movingFrame));
+                    var movingName = $"{theme}-{width}x{height}-{state}.png";
+                    using (var movingStream = File.Create(Path.Combine(output, movingName)))
+                        movingEncoder.Save(movingStream);
+                    var movingScroll = (ScrollViewer)w.FindName("ContentScroll");
+                    metadata.Add(new(movingName, theme, width, height, state, w.Controller.Settings, w.SelectedAction, ((TextBlock)w.FindName("PageTitle")).Text, movingScroll.VerticalOffset, movingScroll.ViewportHeight, movingScroll.ExtentHeight, true, true, false, SidebarLayout.Place(p.Displays()[0], 96, w.Controller.Settings.UiScalePercent, w.Controller.Settings.PanelSide)));
+                    Console.WriteLine($"CAPTURE {movingName}; offscreen=True; fixture=True; selection sheen sampled at {elapsed.ElapsedMilliseconds}ms");
+                    continue;
+                }
                 w.Content = null;
                 root.Resources.MergedDictionaries.Add(w.Resources);
                 root.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, ThemeSupport.Text);
@@ -1741,18 +1932,18 @@ internal static class SessionHubTests
 
     private sealed class HubPlatform : IPlatform
     {
-        internal readonly WindowRef A = new(101, 42, 100, "Project document · demonstration window with a complete title", "fixture");
+        internal WindowRef A = new(101, 42, 100, "Project document · demonstration window with a complete title", "fixture");
         internal readonly WindowRef B = new(102, 52, 200, "Session notes", "fixture-notes");
         internal readonly WindowRef Playnite = new(103, 62, 300, "Playnite", "Playnite.FullscreenApp");
         internal WindowRef BigPicture = new(104, 72, 400, "Steam Big Picture Mode", "steamwebhelper", true);
         internal Func<WindowRef, CancellationToken, Task<ActionResult>>? OnBigPictureResume;
         internal Func<string?, WindowRef?, IReadOnlyList<SessionTargetCandidate>>? CardScan;
         internal IReadOnlyList<SessionTargetCandidate> VerifiedLaunchers = [];
-        internal WindowRef? InvalidCard;
+        internal WindowRef? InvalidCard, SteamTarget;
         internal int BigPictureResumes;
         internal bool Stale, Empty;
-        internal int Switches, Minimizes, Closes;
-        internal WindowRef? LastSwitch, ForegroundWindow;
+        internal int Switches, Minimizes, Closes, Shortcuts;
+        internal WindowRef? LastSwitch, LastShortcut, ForegroundWindow;
         public bool IsPreview => true;
 
         public WindowRef? Foreground() => Empty ? null : ForegroundWindow ?? A;
@@ -1772,7 +1963,7 @@ internal static class SessionHubTests
             return OnBigPictureResume?.Invoke(target, token) ?? Task.FromResult(new ActionResult(ResultKind.Completed, "Fixture Big Picture focus observed"));
         }
         public IReadOnlyList<DisplayRef> Displays() => [new("fixture", -12000, -12000, 1920, 1080, true)];
-        public ModuleEvidence SteamEvidence(WindowRef? window) => ModuleEvidence.Unknown;
+        public ModuleEvidence SteamEvidence(WindowRef? window) => SteamTarget?.Same(window) == true ? ModuleEvidence.Loaded : ModuleEvidence.Unknown;
         public Task<ActionResult> Switch(WindowRef target)
         {
             Switches++;
@@ -1792,7 +1983,12 @@ internal static class SessionHubTests
             Closes++;
             return Task.FromResult(new ActionResult(ResultKind.Simulated, "Fixture close"));
         }
-        public Task<ActionResult> Shortcut(WindowRef target, string keys) => Task.FromResult(new ActionResult(ResultKind.Simulated, "Fixture shortcut"));
+        public Task<ActionResult> Shortcut(WindowRef target, string keys)
+        {
+            Shortcuts++;
+            LastShortcut = target;
+            return Task.FromResult(new ActionResult(ResultKind.Simulated, "Fixture shortcut"));
+        }
         public ActionResult Launch(bool playnite, string? path) => new(ResultKind.Simulated, "Fixture launch");
         public void Dispose()
         {

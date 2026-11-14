@@ -1,3 +1,5 @@
+using System.Windows;
+using System.Windows.Input;
 using System.Windows.Threading;
 using ApolloOverlay;
 using Automation = ApolloOverlay.Automation;
@@ -420,7 +422,7 @@ internal static class SteamShortcutFocusTests
                 try
                 {
                     w.PhysicalKeyReader = key => (p.Effect.NativeHeld & 1) != 0 && key is 16 or 0xA0 or 0xA1 ? unchecked((short)0x8000) : (short)0;
-                    Click(w, "steam-overlay");
+                    PressY(w);
                     Commit(w);
                     DriveUntil(() => p.Effect.Events.Any(e => !e.Up), p.Effect);
                     p.Effect.Response = (_, up, _) => new(true, up ? 0u : 1u);
@@ -484,7 +486,7 @@ internal static class SteamShortcutFocusTests
                     {
                         if (mode == "CLI")
                             Complete(w.StartAutomation(endpoint), new Effects());
-                        Click(w, "steam-overlay");
+                        PressY(w);
                         Commit(w);
                         DriveUntil(() => p.Effect.Events.Any(e => !e.Up), p.Effect);
                         if (mode == "B")
@@ -523,7 +525,7 @@ internal static class SteamShortcutFocusTests
                 var w = Window(p);
                 try
                 {
-                    Click(w, "steam-overlay");
+                    PressY(w);
                     Commit(w);
                     DriveUntil(() => p.Effect.Events.Any(e => !e.Up), p.Effect);
                     w.Back();
@@ -573,7 +575,7 @@ internal static class SteamShortcutFocusTests
                             if (key == 9 && e.Events.LastOrDefault() is { Key: 9, Up: true, Cleanup: false, Accepted: 1 })
                                 physical = 9;
                         };
-                        Click(w, "steam-overlay");
+                        PressY(w);
                         Commit(w);
                         Complete(w.OperationTask, p.Effect);
                         Require(p.LastResult?.Kind == (key == 0 ? ResultKind.Requested : ResultKind.Partial), "Self-input cancelled owner or foreign input was masked");
@@ -597,7 +599,7 @@ internal static class SteamShortcutFocusTests
                 var w = Window(p);
                 try
                 {
-                    Click(w, "steam-overlay");
+                    PressY(w);
                     Commit(w);
                     DriveUntil(() => p.Effect.Events.Any(e => !e.Up), p.Effect);
                     p.Effect.ObserveRelease = false;
@@ -673,7 +675,7 @@ internal static class SteamShortcutFocusTests
         };
         try
         {
-            Click(w, "steam-overlay");
+            PressY(w);
             Commit(w);
             var operation = w.OperationTask;
             DriveUntil(() => p.Effect.Events.Count(e => !e.Up) == downs, p.Effect);
@@ -879,7 +881,7 @@ internal static class SteamShortcutFocusTests
                 try
                 {
                     Complete(w.StartAutomation(name), new Effects());
-                    Click(w, "steam-overlay");
+                    PressY(w);
                     Commit(w);
                     var old = w.OperationTask;
                     var id = w.AutomationSnapshot().PendingRequestId;
@@ -901,7 +903,7 @@ internal static class SteamShortcutFocusTests
                 var w = Window(p);
                 try
                 {
-                    Click(w, "steam-overlay");
+                    PressY(w);
                     Require(w.TransitionPending, "UI handoff not pending");
                     var result = w.AutomationExecute(new()
                     {
@@ -925,7 +927,7 @@ internal static class SteamShortcutFocusTests
                 try
                 {
                     Complete(w.StartAutomation(name), new Effects());
-                    Click(w, "steam-overlay");
+                    PressY(w);
                     Commit(w);
                     var old = w.OperationTask;
                     w.OpenPanel();
@@ -959,7 +961,7 @@ internal static class SteamShortcutFocusTests
                     var w = Window(p);
                     try
                     {
-                        Click(w, "steam-overlay");
+                        PressY(w);
                         Commit(w);
                         var old = w.OperationTask;
                         Require(!w.IsVisible && !old.IsCompleted && p.Effect.Sends == 0 && w.Controller.Operation is { Dispatched: false }, "Pending owner did not intentionally hide before stable focus");
@@ -989,7 +991,7 @@ internal static class SteamShortcutFocusTests
                 });
             }
 
-            test("Steam UI owner retains ReturnTarget while integrations retain Anchor", () =>
+            test("Steam UI owner uses the displayed card instead of the return target", () =>
             {
                 using var p = new Platform();
                 var w = Window(p);
@@ -999,16 +1001,10 @@ internal static class SteamShortcutFocusTests
                     w.Controller.CaptureReturn();
                     w.Controller.Select(Game);
                     w.RefreshRows();
-                    Click(w, "steam-overlay");
+                    PressY(w);
                     Commit(w);
                     Complete(w.OperationTask, p.Effect);
-                    Require(p.LastTarget?.Same(p.Other) == true && p.Effect.Sends == 1, "Main tile changed captured ReturnTarget");
-                    w.ShowDiagnostic();
-                    w.SetRenderState("integrations");
-                    Click(w, "test-steam");
-                    Commit(w);
-                    Complete(w.OperationTask, p.Effect);
-                    Require(p.LastTarget?.Same(Game) == true && p.Effect.Sends == 2, "Integration changed Anchor");
+                    Require(p.LastTarget?.Same(Game) == true && p.Effect.Sends == 1, "Card gesture did not use the displayed game");
                 }
                 finally
                 {
@@ -1038,7 +1034,12 @@ internal static class SteamShortcutFocusTests
         return w;
     }
 
-    private static void Click(MainWindow w, string id) => ReviewFixTests.Button(w, id).RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+    private static void PressY(MainWindow w)
+    {
+        var source = PresentationSource.FromVisual(w);
+        w.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Y) { RoutedEvent = Keyboard.PreviewKeyDownEvent });
+        w.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Y) { RoutedEvent = Keyboard.PreviewKeyUpEvent });
+    }
     private static void Commit(MainWindow w)
     {
         w.AdvanceHandoff(new(new PadFrame[4], 0), 0);

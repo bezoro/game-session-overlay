@@ -28,6 +28,14 @@ public sealed class PreviewPlatform : IPlatform
     public Task<ActionResult> Shortcut(WindowRef window, string keys) => Task.FromResult(new ActionResult(ResultKind.Simulated, $"Would request {keys}; no external command was sent."));
     public Task<ActionResult> Shortcut(WindowRef window, string keys, CancellationToken cancellation, Func<bool> continuing) => Task.FromResult(cancellation.IsCancellationRequested || !continuing() ? new ActionResult(ResultKind.Cancelled, "Cancelled without dispatch.") : new ActionResult(ResultKind.Simulated, "Preview: no external shortcut was sent."));
     public Task<ActionResult> Minimize(WindowRef window, CancellationToken cancellation) => Task.FromResult(cancellation.IsCancellationRequested ? new ActionResult(ResultKind.Cancelled, "Nothing was sent.") : !Valid(window) || window.Protected ? new ActionResult(ResultKind.Unavailable, "The window is unavailable for minimizing.") : new ActionResult(ResultKind.Simulated, $"Would minimize {window.Title}; no external command was sent."));
+    public Task<ActionResult> MaximizeOrRestore(WindowRef window, CancellationToken cancellation)
+    {
+        if (cancellation.IsCancellationRequested)
+            return Task.FromResult(new ActionResult(ResultKind.Cancelled, "Nothing was sent."));
+        if (!Valid(window) || !window.CanClose || window.SessionLauncher)
+            return Task.FromResult(new ActionResult(ResultKind.Unavailable, "The window is protected or unavailable."));
+        return Task.FromResult(new ActionResult(ResultKind.Simulated, $"Would maximize or restore {window.Title}."));
+    }
     public ActionResult Launch(bool playnite, string? path) => new(ResultKind.Simulated, playnite ? "Would request Playnite in fullscreen mode." : "Would request Steam Big Picture.");
     public void Dispose()
     {

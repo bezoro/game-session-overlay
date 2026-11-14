@@ -181,20 +181,20 @@ public sealed class FeedbackService : IFeedbackService
                 }
             }
 
-            if (hapticsEnabled && source.Kind == FeedbackSourceKind.Controller && source.Slot is { } slot && context.ActiveSlot == slot && source.ConnectionEpoch == context.ConnectionEpoch)
+            var (leftMotor, rightMotor, duration) = HapticPulse(cue);
+            if (duration > 0 && hapticsEnabled && source.Kind == FeedbackSourceKind.Controller && source.Slot is { } slot && context.ActiveSlot == slot && source.ConnectionEpoch == context.ConnectionEpoch)
             {
                 var device = devices.Read(slot);
                 if (device.Connected && device.ConnectionEpoch == source.ConnectionEpoch && device.Vibration == ControllerVibrationCapability.Available)
                 {
                     StopPulse();
-                    var result = devices.SetVibration(slot, device.ConnectionEpoch, 2800, 1600);
+                    var result = devices.SetVibration(slot, device.ConnectionEpoch, leftMotor, rightMotor);
                     vibrated = result.Accepted;
-                    Report(hapticsAvailable: vibrated, reason: result.Reason);
                     if (vibrated)
                     {
                         pulse = (slot, device.ConnectionEpoch);
                         var issued = ++lease;
-                        timer = scheduler.Schedule(cue == FeedbackCue.Navigation ? 25 : cue == FeedbackCue.Test ? 50 : 45, () =>
+                        timer = scheduler.Schedule(duration, () =>
                         {
                             lock (gate)
                             {
@@ -204,6 +204,7 @@ public sealed class FeedbackService : IFeedbackService
                             }
                         });
                     }
+                    Report(hapticsAvailable: vibrated, reason: result.Reason);
                 }
                 else
                     Report(hapticsAvailable: false, reason: device.Vibration == ControllerVibrationCapability.Unavailable ? "This controller does not report haptic support." : "The active controller or its haptic support is unconfirmed.");
@@ -214,6 +215,17 @@ public sealed class FeedbackService : IFeedbackService
             return new(played, vibrated, Status.Reason);
         }
     }
+
+    // XInput's left motor is low frequency, and the right motor is high frequency.
+    private static (ushort LeftMotor, ushort RightMotor, int DurationMs) HapticPulse(FeedbackCue cue) => cue switch
+    {
+        FeedbackCue.Confirmation => (1400, 3600, 50),
+        FeedbackCue.Completion => (3600, 4100, 75),
+        FeedbackCue.Cancellation => (2400, 1000, 35),
+        FeedbackCue.Unavailable => (4100, 1200, 65),
+        FeedbackCue.Test => (3100, 3100, 60),
+        _ => default
+    };
 
     public void Suspend()
     {

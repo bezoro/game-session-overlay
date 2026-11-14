@@ -45,17 +45,17 @@ The overlay does not consume Guide globally. Steam's Guide shortcuts and Game Ba
 
 ## Session actions
 
-The selected game/window identity precedes a separate **Resume** action, Quick access, Open apps, session audio/utilities and Recent. Resume targets the exact preserved window. X or right-click opens options; there is no duplicate ellipsis. Options provide application audio, minimize, another window, details and protected close.
+The selected game card is the return action. **A**, Enter, or a click returns to that exact window. **Y** on the card opens the Steam Overlay when supported. **X** or right-click opens options for that window, including per-app audio, minimize, maximize or restore, another window, details, and protected close.
 
 The Details reader exposes full titles and technical identity. A/Enter enters reading, arrows scroll, and left/right returns to actions. In closing confirmation, the right stick scrolls the full title; keyboard users can use PageUp/PageDown. Application icons load in the background.
 
-Minimize and audio adjustments keep the panel open. An accepted request is not completion: partial, refused and unknown outcomes retain readable details. B/Esc before dispatch cancels without effects; after dispatch it stops observation only, because an already-sent change cannot be undone. There is no automatic retry. An in-flight native call may exceed its observation deadline; that result becomes uncertain and does not authorize another write.
+Minimize, maximize or restore, and audio adjustments operate on the selected window or its audio sessions. The panel reports completion after observing the result. Partial, refused and unknown outcomes retain readable details. B or Esc before dispatch cancels the action. After dispatch it stops observation. If a native call exceeds its observation deadline, the overlay reports uncertainty. It never retries automatically.
 
 Confirmed close first sends an ordinary window-close request. Only access denied for a verified elevated target can offer UAC consent for a temporary helper; it does not persist elevated startup or force termination. After consent, navigation resumes only if Windows returned foreground ownership to the overlay. Otherwise the panel hides immediately, preserves the result and leaves the foreground window alone.
 
 Application audio addresses sessions of the exact process, including identified inactive sessions and outputs. It does not include child processes, future sessions or global volume as a fallback. The mixer separates identified applications. Windows master volume and default communications-microphone mute are distinct controls. Output selection targets game/media playback; physical TV volume is not controlled.
 
-Quick access requests Playnite, Steam Big Picture, Game Bar, Steam Overlay/Big Picture menu, Task View and Windows audio according to their real capabilities. Task View requests Win+Tab without requiring a game. A verified Big Picture context uses F1 for its menu; an identified Steam game module uses the configured overlay shortcut. Sending a shortcut does not confirm menu visibility.
+Quick access offers Playnite, Steam Big Picture, Game Bar and Task View. Task View can open without a game. Use the Session page's **Output** control or the **Audio** tab for Windows audio. From a selected game card, the Steam Overlay action checks the exact target and sends the configured shortcut only when eligible. The card shows the action as unavailable in unsupported contexts. The result reports whether the shortcut was sent.
 
 Cancellation while awaiting Game Bar/Big Picture/Steam focus prevents unsent stages. A focus request already sent cannot be undone. Before key dispatch, target identity, request lifetime and input release are checked again. A previously observed connection remains relevant even when its sample ages; disconnection does not establish release.
 
@@ -67,7 +67,7 @@ Automatic monitor selection captures the external foreground window's monitor be
 
 The default palette is slightly warm charcoal with restrained amber and warm off-white text. Light mode has its own palette; Windows high contrast uses SystemColors. All semantic colors are editable through presets, RGB and local hexadecimal entry. Unsafe intermediate drafts remain editable while chrome retains its last readable palette. Saving colors preserves unrelated settings drafts.
 
-A clear selection outline appears immediately. Short sheen, press compression and finite route feedback distinguish input acknowledgement from actual completion. Clocks and transient state stop on hiding or context changes. There is no invented artwork, continuous capture, game injection, driver installation or telemetry.
+A clear selection outline appears immediately. A soft repeating sheen follows the selected control while the panel owns focus. Press feedback and finite route feedback distinguish input acknowledgement from actual completion. Selection motion stops on hiding or context changes. There is no invented artwork, continuous capture, game injection, driver installation or telemetry.
 
 Controller metadata uses the active observed slot and connection epoch. A measured percentage is shown only when valid corresponding evidence exists; XInput categories remain categories, and unknown charge is **Battery N/A**. Virtual streaming devices do not establish the physical TV controller model, connection or battery. Badge queries occur on showing/changing the controller and at most every five seconds in foreground.
 
@@ -75,7 +75,7 @@ Normal sessions also run a separate read-only battery monitor every 30 seconds, 
 
 Warnings latch per discharge and survive unknown samples and reconnects. Confirmed recovery above 25% or to Medium/Full rearms them, with a ten-minute cooldown against repeated low-charge warnings; a new critical escalation remains available. The monitor stops without waiting on native reads during shutdown and discards late results. Preview, diagnostics, automation bridges and isolated installation proofs do not start it. Notifications do not open or focus the overlay unless clicked. Windows controls presentation, duration and Do Not Disturb; a shell request is logged as Requested, never as proof that the user saw it. Observation changes, failures, recovery and notification requests are retained in command diagnostics.
 
-Sounds and vibration are independent opt-ins, off by default. **Test feedback** requests a sample. Deliberate navigation, confirmation and unavailable actions have brief cues; hover, data refresh and progress do not produce repeated sounds. Vibration requires the active controller and confirmed focus; hiding, disconnecting, disabling or exiting invalidates pulses. Accepted XInput output proves neither perception nor isolation from another app's later vibration writes. Preview uses simulated services and sends no audio or vibration.
+Sounds and vibration are independent opt-ins, off by default. **Test feedback** requests a sample. Activation, confirmed outcomes, cancellation and unavailable actions have distinct sounds. Deliberate controller actions have short pulse patterns. Ordinary focus movement produces no vibration. Delayed outcomes keep their visual and sound cues while the panel owns focus. Vibration requires a controller tied to the current input and confirmed focus. Hiding, disconnecting, disabling or exiting invalidates pulses. Hover, data refresh and progress do not produce repeated sounds. Preview uses simulated services and sends no audio or vibration.
 
 ## Utilities and settings
 

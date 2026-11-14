@@ -434,7 +434,7 @@ internal static class AutomaticUpdateTests
             }
             using var audio = new Host();
             audio.Open(572, 940);
-            Invoke(audio.Window, "OpenPrimaryAudio");
+            Click((Button)audio.Window.FindName("SettingsTab"));
             ReviewFixTests.Complete(Task.Delay(200));
             Capture(audio.Window, "automatic-update-dark-572x940-audio");
         });
