@@ -18,7 +18,6 @@ public partial class MainWindow
 
     private string inputMethod = "keyboard";
     private MouseButton? recoveryMouseRelease;
-    private bool keyboardDown;
     private readonly HashSet<Key> heldKeys = [];
     internal static Key NormalizeKey(Key key, Key system, Key ime, Key dead)
     {
@@ -79,6 +78,10 @@ public partial class MainWindow
         recoveryMouseRelease = null;
         e.Handled = true;
     }
+
+    private bool CloseKeysReleased(Key activating = Key.None) =>
+        (activating == Key.Enter || !heldKeys.Contains(Key.Enter) && (PhysicalKeyReader(0x0D) & 0x8000) == 0)
+        && (activating == Key.Space || !heldKeys.Contains(Key.Space) && (PhysicalKeyReader(0x20) & 0x8000) == 0);
 
     private static bool LocalRecoveryKey(Key key) => key is Key.Tab or Key.Up or Key.Down or Key.Left or Key.Right or Key.Enter or Key.Space or Key.PageUp or Key.PageDown or Key.X;
     private void OnKeyDown(object sender, KeyEventArgs e)
@@ -162,14 +165,6 @@ public partial class MainWindow
 
         var key = NormalizeKey(e.Key, e.SystemKey, e.ImeProcessedKey, e.DeadCharProcessedKey);
         var firstPress = key != Key.None && heldKeys.Add(key);
-        if (Confirming && closeSource != 0 && firstPress && key != Key.Escape)
-        {
-            CancelHold();
-            FeedbackText("Input source changed; closing cancelled.");
-            e.Handled = true;
-            return;
-        }
-
         if (key == Key.None && TransitionPending)
         {
             RejectHandoff("Transition cancelled; unidentified key.");
@@ -199,24 +194,18 @@ public partial class MainWindow
                 return;
             }
 
-            if (Confirming && navigation.Id == "confirm-cancel")
-            {
-                Back();
-                e.Handled = true;
-                return;
-            }
-
-            keyboardDown = true;
-            if (Confirming && closeSource != 0)
-            {
-                CancelHold();
-                FeedbackText("Input source changed; closing cancelled.");
-            }
-            else if (!e.IsRepeat && !Confirming)
+            if (firstPress && !e.IsRepeat
+                && (!Confirming || modifiers == ModifierKeys.None && CloseKeysReleased(e.Key) && Mouse.LeftButton == MouseButtonState.Released))
             {
                 dispatchSource = 0;
-                ActivateEntry();
-                dispatchSource = null;
+                try
+                {
+                    ActivateEntry();
+                }
+                finally
+                {
+                    dispatchSource = null;
+                }
             }
 
             e.Handled = true;
@@ -309,10 +298,7 @@ public partial class MainWindow
             if (!navigationKeysArmed && heldKeys.Count == 0 && PhysicalKeysNeutral())
                 navigationKeysArmed = true;
             if (e.Key is Key.Enter or Key.Space)
-            {
-                keyboardDown = false;
                 e.Handled = true;
-            }
         };
     }
 }

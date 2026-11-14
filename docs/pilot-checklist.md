@@ -8,7 +8,7 @@ Use the installed shortcut or tray. The product runs normally; no pilot flag or 
 - Two monitors, mixed DPI, negative origins, Apollo virtual display, removed/changed resolution and 4K at 100% on the TV: confirm readable text and focus.
 - Live light/dark changes, Windows high contrast, disabled Windows animations and HDR. Do not change user settings during automatic checks.
 - Audio: change/disconnect endpoints with the page open; alter volume/mute from another app and confirm live refresh.
-- Close an owned test window before trying a game: new 1.5-second hold, cancellation, unsaved work and refusal. Never force termination.
+- Use an owned test window before trying a game. Confirm that its title is shown and Cancel is focused. Verify that Cancel leaves it open and a separate activation of Close window sends a normal close request. Check what happens when the app prompts to save or refuses to close.
 - Apollo/Sunshine → Moonlight/Aurora/TV: inspect capture visibility, input and Game Bar. A virtual monitor alone does not establish stream compatibility.
 - Elevated games: test an ordinary opening, explicit **Restart as administrator**, rejected UAC, successful same-user restart and separately consented elevated startup. Confirm native/WPF focus and actual game input behavior; administrator privileges do not establish universal controller isolation.
 

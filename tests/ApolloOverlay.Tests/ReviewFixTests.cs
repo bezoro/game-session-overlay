@@ -59,7 +59,7 @@ internal static class ReviewFixTests
         }
     }
 
-    internal static void Capture(string output, bool focused = false)
+    internal static void Capture(string output, bool focused = false, bool closeConfirmation = false)
     {
         Directory.CreateDirectory(output);
         var app = Application.Current ?? new Application
@@ -94,7 +94,6 @@ internal static class ReviewFixTests
                 "audio",
                 "integrations",
                 "confirmation",
-                "progress",
                 "cancelled",
                 "empty",
                 "long-error",
@@ -129,6 +128,8 @@ internal static class ReviewFixTests
 
         )
             matrix.Add(("contrast-palette", 420, 600, state));
+        if (closeConfirmation)
+            matrix = matrix.Where(c => c.Theme == "dark" && c.State == "confirmation" && c.Width is 572 or 360).ToList();
         if (focused)
         {
             matrix.Clear();
@@ -195,16 +196,9 @@ internal static class ReviewFixTests
                     });
                     w.Page(2);
                 }
-                else if (state is "confirmation" or "progress" or "cancelled")
+                else if (state is "confirmation" or "cancelled")
                 {
                     Button(w, "close").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
-                    if (state == "progress")
-                    {
-                        w.AdvancePointerHold(false, true, true, 0);
-                        w.AdvancePointerHold(true, true, true, 1);
-                        w.AdvancePointerHold(true, true, true, 751);
-                    }
-
                     if (state == "cancelled")
                         w.Back();
                 }
@@ -237,9 +231,9 @@ internal static class ReviewFixTests
                     "DiscardSettingsButton"
                 }
 
-                : state is "confirmation" or "progress" ? new[]
+                : state == "confirmation" ? new[]
                 {
-                    "HoldCloseButton",
+                    "ConfirmCloseButton",
                     "CancelCloseButton"
                 }
 

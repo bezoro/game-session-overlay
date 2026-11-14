@@ -13,9 +13,9 @@ public partial class MainWindow
 
     private long operationGeneration;
     private bool closePending;
-    private readonly CloseHold closeHold = new();
-    private bool pointerDown, pointerCaptured;
-    private int? closeSource, dispatchSource;
+    private bool closeControllerReleased;
+    private int closeControllerConnections;
+    private int? dispatchSource;
     private CancellationTokenSource? pending;
     private CancellationTokenSource? effectCancellation;
     private WindowRef? effectFocusTarget;
@@ -59,24 +59,14 @@ public partial class MainWindow
         return PhysicalKeysNeutral();
     }
 
-    private void ReleasePointer()
-    {
-        pointerDown = false;
-        pointerCaptured = false;
-        if (HoldCloseButton.IsMouseCaptured)
-            HoldCloseButton.ReleaseMouseCapture();
-    }
-
-    private void CancelHold()
+    private void CancelCloseConfirmation()
     {
         nextConfirmationScroll = 0;
+        closeControllerReleased = false;
+        closeControllerConnections = 0;
         var restore = view.Current.Route == OverlayRoute.Confirmation;
-        ReleasePointer();
-        closeHold.Cancel();
         HeaderArea.Visibility = Visibility.Visible;
         TabArea.Visibility = Visibility.Visible;
-        closeSource = null;
-        keyboardDown = false;
         ConfirmPanel.Visibility = Visibility.Collapsed;
         ContentScroll.Visibility = Visibility.Visible;
         if (restore && view.Back())
@@ -84,18 +74,20 @@ public partial class MainWindow
             SyncView();
             RefreshRows();
             ContentScroll.ScrollToVerticalOffset(view.Current.ScrollOffset);
+            SetSelection();
         }
 
         UpdatePersistentState();
         UpdateHints();
     }
 
-    internal bool Confirming => closeHold.Target is not null;
-    internal WindowRef? HeldCloseTarget => closeHold.Target;
-    internal double CloseProgress => closeHold.Progress;
+    internal bool Confirming => view.Current.Route == OverlayRoute.Confirmation;
+    internal WindowRef? CloseTarget => Confirming ? view.Current.Target : null;
 
     internal void Confirm(WindowRef target)
     {
+        if (busy || Confirming || TransitionPending || exiting || closeRequested)
+            return;
         if (!target.CanClose || !Controller.Platform.Valid(target))
         {
             FeedbackText("Window protected or identity changed; closing blocked.");
@@ -103,52 +95,49 @@ public partial class MainWindow
         }
 
         SaveView();
-        view.Open(new(OverlayRoute.Confirmation, target, navigation.Id, ContentScroll.VerticalOffset));
+        view.Open(new(OverlayRoute.Confirmation, target, "confirm-cancel"));
         SyncView();
-        closeSource = dispatchSource ?? 0;
-        closeHold.Open(target);
+        closeControllerReleased = false;
+        closeControllerConnections = controllerMask;
         entries.Clear();
-        RegisterFixed("confirm-hold", HoldCloseButton, () =>
-        {
-        }, true, "Release, then hold for 1.5 s");
-        RegisterFixed("confirm-cancel", CancelCloseButton, Back, true, "Cancel closing");
-        navigation = new("confirm-hold");
+        RegisterFixed("confirm-cancel", CancelCloseButton, Back, true, "Keep this window open");
+        RegisterFixed("confirm-close", ConfirmCloseButton, CommitCloseConfirmation, true, "Request closing this window");
         HeaderArea.Visibility = Visibility.Collapsed;
         TabArea.Visibility = Visibility.Collapsed;
-        UpdatePersistentState();
         ConfirmTarget.Text = target.Title;
         ConfirmTarget.ToolTip = target.Title;
         AutomationProperties.SetName(ConfirmTarget, target.Title);
-        ConfirmPanel.Visibility = Visibility.Visible;
         ContentScroll.Visibility = Visibility.Collapsed;
-        HoldProgress.Value = 0;
-        ConfirmHint.Text = "Waiting for release…";
-        FeedbackText("No close command sent.");
+        ConfirmPanel.Visibility = Visibility.Visible;
+        ConfirmScroll.ScrollToTop();
+        FeedbackText("");
+        UpdatePersistentState();
         UpdateHints();
         SetSelection();
     }
 
-    internal bool AdvancePointerHold(bool down, bool captured, bool inside, long now)
+    private void CommitCloseConfirmation()
     {
-        if (!Confirming || closeSource != -1)
-            return false;
-        var target = closeHold.Target!;
-        var context = InputContext;
-        var valid = Controller.Platform.Valid(target) && target.Same(view.Current.Target ?? Controller.Session.Anchor) ? target : null;
-        var completed = closeHold.Tick(down, false, context.Active && context.OwnForeground && context.Confirmed, captured && (!down || inside), valid, now);
-        HoldProgress.Value = closeHold.Progress;
-        ConfirmHint.Text = closeHold.Progress > 0 ? $"Keep holding… {closeHold.Progress:P0}" : "Release, then hold again for 1.5 s.";
-        if (completed)
-        {
-            CancelHold();
-            RunClose(target);
-        }
-        else if (!Confirming)
-            CancelHold();
-        return completed;
+        if (CloseTarget is not { } target
+            || dispatchSource is null
+            || dispatchSource == -1 && !CloseKeysReleased()
+            || busy || TransitionPending || !NavigationAllowed)
+            return;
+
+        var activatingSlot = dispatchSource > 0 ? dispatchSource - 1 : null;
+        var frames = ReadControllerFrames();
+        if (!CloseControllerAvailable(frames))
+            return;
+        for (var slot = 0; slot < frames.Length; slot++)
+            if (frames[slot].Buttons.HasFlag(PadButtons.A) != (slot == activatingSlot))
+                return;
+
+        // Remove the confirmation before dispatch so a re-entrant activation cannot send twice.
+        CancelCloseConfirmation();
+        OperationTask = RunClose(target);
     }
 
-    private async void RunClose(WindowRef target)
+    private async Task RunClose(WindowRef target)
     {
         if (busy || exiting)
             return;
@@ -159,7 +148,7 @@ public partial class MainWindow
         closePending = true;
         using var request = new CancellationTokenSource();
         pending = request;
-        RetainOperation("Pending", "Waiting for closing confirmation…", "close", target);
+        RetainOperation("Pending", "Waiting for the window to close…", "close", target);
         bool PrepareForConsent()
         {
             if (exiting || closeRequested || !IsVisible || !IsActive || !OwnForeground || request.IsCancellationRequested)
@@ -173,7 +162,9 @@ public partial class MainWindow
         ActionResult result;
         try
         {
-            result = await Controller.Platform.CloseConfirmed(target, request.Token, PrepareForConsent);
+            result = !target.CanClose || !Controller.Platform.Valid(target) || !NavigationAllowed || closeRequested
+                ? new(ResultKind.Unavailable, "Window unavailable or focus changed. No close request was sent.")
+                : await Controller.Platform.CloseConfirmed(target, request.Token, PrepareForConsent);
         }
         catch (OperationCanceledException)
         {
@@ -419,48 +410,4 @@ public partial class MainWindow
         UpdatePersistentState();
     }
 
-    private void WireCloseConfirmation()
-    {
-        HoldCloseButton.PreviewMouseLeftButtonDown += (_, e) =>
-        {
-            if (!NavigationAllowed || !Confirming)
-                return;
-            e.Handled = true;
-            if (closeSource != -1)
-            {
-                CancelHold();
-                FeedbackText("Input source changed; closing cancelled.");
-                return;
-            }
-
-            pointerDown = true;
-            pointerCaptured = HoldCloseButton.CaptureMouse();
-            if (!pointerCaptured)
-                CancelHold();
-        };
-        HoldCloseButton.PreviewMouseLeftButtonUp += (_, e) =>
-        {
-            e.Handled = true;
-            pointerDown = false;
-            if (Confirming && closeSource == -1)
-                AdvancePointerHold(false, true, true, Environment.TickCount64);
-            ReleasePointer();
-        };
-        HoldCloseButton.MouseLeave += (_, _) =>
-        {
-            if (pointerDown)
-            {
-                CancelHold();
-                FeedbackText("Hold cancelled: the pointer left the button.");
-            }
-        };
-        HoldCloseButton.LostMouseCapture += (_, _) =>
-        {
-            if (pointerDown)
-            {
-                CancelHold();
-                FeedbackText("Hold cancelled: mouse capture lost.");
-            }
-        };
-    }
 }

@@ -117,7 +117,7 @@ public partial class MainWindow
             Opacity = interruptedOpacity;
         var cycle = focusCycle;
         CancelHandoff();
-        CancelHold();
+        CancelCloseConfirmation();
         input.Cancel();
         if (captureActivation)
         {
@@ -256,7 +256,7 @@ public partial class MainWindow
         focusConfirmed = false;
         navigationKeysArmed = false;
         input.Cancel();
-        CancelHold();
+        CancelCloseConfirmation();
         TraceFocus(reason, ResultKind.Cancelled);
     }
 

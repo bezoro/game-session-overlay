@@ -10,7 +10,7 @@ internal static class ActionIconCatalog
     internal static VectorIcon Create(FrameworkElement owner, string action, double size = 26, bool muted = false, bool playing = false, bool rightSide = false)
     {
         var asset = Asset(action, muted, playing, rightSide);
-        var tone = action is "exit" or "close" or "close-detail" or "external-close" or "confirm-hold" ? ThemeSupport.Critical : Tone(asset);
+        var tone = action is "exit" or "close" or "close-detail" or "external-close" or "confirm-close" ? ThemeSupport.Critical : Tone(asset);
         var icon = new VectorIcon
         {
             Data = (Geometry)owner.FindResource("Icon." + asset),
@@ -90,7 +90,7 @@ internal static class ActionIconCatalog
             "mute" => muted ? "speaker" : "mute",
             "mixer-mute" => "speaker",
             "microphone" => "microphone",
-            "close" or "close-detail" or "external-close" or "confirm-hold" => "close",
+            "close" or "close-detail" or "external-close" or "confirm-close" => "close",
             "exit" or "startup" or "administrator-restart" or "administrator-startup" => "power",
             "playnite" or "configure-playnite" => "playnite",
             "session-profiles" or "profile-new" or "profile-current" => "profile",

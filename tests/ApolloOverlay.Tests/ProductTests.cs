@@ -91,18 +91,18 @@ internal static class ProductTests
                 w.Close();
             }
         });
-        test("native dynamic resources switch on same tree preserving focus and hold", () =>
+        test("native dynamic resources switch on same tree preserving focus and confirmation", () =>
         {
             var w = Window();
             try
             {
                 w.SetRenderState("confirmation");
                 var selected = w.SelectedAction;
-                var target = w.HeldCloseTarget;
+                var target = w.CloseTarget;
                 ThemeSupport.ForceForValidation(application, true);
                 var light = w.SurfaceColor;
                 ThemeSupport.ForceForValidation(application, false);
-                Require(w.SurfaceColor != light && w.SelectedAction == selected && w.HeldCloseTarget!.Same(target) && w.Confirming);
+                Require(w.SurfaceColor != light && w.SelectedAction == selected && w.CloseTarget!.Same(target) && w.Confirming);
                 ThemeSupport.FollowSystem(application);
                 Require(ThemeSupport.FollowsSystem(application));
             }

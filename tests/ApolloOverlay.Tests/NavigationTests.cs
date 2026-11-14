@@ -157,10 +157,9 @@ internal static class NavigationTests
         });
         test("unavailable busy and confirming actions cannot dispatch", () =>
         {
-            Require(!Navigation.CanActivate(false, false, false));
-            Require(!Navigation.CanActivate(true, false, true));
-            Require(!Navigation.CanActivate(false, true, true));
-            Require(Navigation.CanActivate(false, false, true));
+            Require(!Navigation.CanActivate(false, false));
+            Require(!Navigation.CanActivate(true, true));
+            Require(Navigation.CanActivate(false, true));
         });
         test("sidebar physical placement leaves game visible at three scales", () =>
         {

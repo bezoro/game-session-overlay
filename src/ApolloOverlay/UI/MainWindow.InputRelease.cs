@@ -59,7 +59,7 @@ public partial class MainWindow
             ObserveHandoffInputs(sample, Environment.TickCount64);
         }
 
-        CancelHold();
+        CancelCloseConfirmation();
         input.Cancel();
         if (!dismiss)
             RetainOperation("Pending", InputHint("Release the controller to continue · B cancels before sending.", "Release the keys to continue · Esc cancels before sending.", "Release the mouse button to continue."));

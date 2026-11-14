@@ -256,11 +256,6 @@ public partial class MainWindow
 
     private void MoveConfirmation(int step)
     {
-        if (closeHold.Target is not { } target)
-            return;
-        closeHold.Open(target);
-        keyboardDown = false;
-        ReleasePointer();
         navigation = Navigation.Sequential(navigation, entries.Select(e => e.Id).ToArray(), step);
         SetSelection();
         RequestCue(FeedbackCue.Navigation);
@@ -278,7 +273,9 @@ public partial class MainWindow
             RunInterfaceAction(entry.Button, () => CancelUpdateInteraction(), FeedbackCue.Cancellation);
             return;
         }
-        if (Navigation.CanActivate(busy, Confirming, entry.Available))
+        if (Confirming && dispatchSource is null)
+            return;
+        if (Navigation.CanActivate(busy, entry.Available))
         {
             RunInterfaceAction(entry.Button, entry.Run, entry.Id == "test-feedback" ? null : entry.Id is "back" or "back-header" or "confirm-cancel" ? FeedbackCue.Cancellation : FeedbackCue.Confirmation);
         }
@@ -336,7 +333,7 @@ public partial class MainWindow
 
         if (Confirming)
         {
-            CancelHold();
+            CancelCloseConfirmation();
             FeedbackText("Closing cancelled before sending.");
             return;
         }
@@ -396,7 +393,15 @@ public partial class MainWindow
         DiscardSettingsButton.Content = new IconLabel(this, "discard-pending", "Discard");
         OperationDetailsButton.Content = new IconLabel(this, "operation-details", "Details", 13, 14);
         CancelCloseButton.Content = new IconLabel(this, "back", "Cancel");
-        HoldCloseButton.Content = new IconLabel(this, "confirm-hold", "Hold to close", 16, 20);
+        ConfirmCloseButton.Content = new IconLabel(this, "confirm-close", "Close window");
+        ConfirmCloseButton.PreviewMouseLeftButtonDown += (_, e) =>
+        {
+            // WPF's release click requires a press on this button. Ignore the
+            // continuation of a double-click that may have opened the dialog.
+            if (e.ClickCount != 1 || !CloseKeysReleased())
+                e.Handled = true;
+        };
+        ConfirmCloseButton.Click += (_, _) => ActivatePointerEntry(ConfirmCloseButton);
         SessionCardButton.Click += (_, _) => ActivatePointerEntry(SessionCardButton);
         SessionCloseButton.Click += (_, _) => ActivatePointerEntry(SessionCloseButton);
         SessionCloseButton.Resources["DescriptionTarget"] = SessionCloseDescription;
@@ -450,7 +455,7 @@ public partial class MainWindow
             (DismissOperationButton, "dismiss-operation"),
             (SaveSettingsButton, "save-pending"),
             (DiscardSettingsButton, "discard-pending"),
-            (HoldCloseButton, "confirm-hold"),
+            (ConfirmCloseButton, "confirm-close"),
             (CancelCloseButton, "confirm-cancel")
         }
 

@@ -315,6 +315,18 @@ static class Program
             return Finish(args[0]);
         }
 
+        if (args.Length == 2 && args[1] == "--close-confirmation")
+        {
+            PremiumInterfaceTests.RunCloseConfirmation(Case);
+            return Finish(args[0]);
+        }
+
+        if (args.Length == 2 && args[1] == "--close-confirmation-captures")
+        {
+            ReviewFixTests.Capture(args[0], closeConfirmation: true);
+            return 0;
+        }
+
         if (args.Length == 2 && args[1] == "--premium-safety")
         {
             PremiumInterfaceTests.RunSafety(Case);
@@ -605,63 +617,6 @@ static class Program
             Equal(0, p.Update(new(true, PadButtons.Up), 100).Direction);
             Equal(-1, p.Update(new(true, PadButtons.Up), 422).Direction);
             Equal(0, p.Update(new(true, PadButtons.Up), 430).Direction);
-        });
-        Case("initial held A cannot close", () =>
-        {
-            var h = new CloseHold();
-            h.Open(Game);
-            True(!h.Tick(true, false, true, true, Game, 0));
-            True(!h.Tick(true, false, true, true, Game, 5000));
-            Equal(0d, h.Progress);
-        });
-        Case("fresh 1.5 second hold closes exactly once", () =>
-        {
-            var h = new CloseHold();
-            h.Open(Game);
-            h.Tick(false, false, true, true, Game, 0);
-            True(!h.Tick(true, false, true, true, Game, 1));
-            True(!h.Tick(true, false, true, true, Game, 1500));
-            True(h.Tick(true, false, true, true, Game, 1501));
-            True(!h.Tick(true, false, true, true, Game, 3000));
-        });
-        Case("release restarts hold deadline", () =>
-        {
-            var h = new CloseHold();
-            h.Open(Game);
-            h.Tick(false, false, true, true, Game, 0);
-            h.Tick(true, false, true, true, Game, 1);
-            h.Tick(false, false, true, true, Game, 1400);
-            True(!h.Tick(true, false, true, true, Game, 1600));
-            Equal(0d, h.Progress);
-        });
-        Case("B cancellation before dispatch", () =>
-        {
-            var h = new CloseHold();
-            h.Open(Game);
-            True(!h.Tick(true, true, true, true, Game, 5000));
-            Equal<WindowRef?>(null, h.Target);
-        });
-        Case("focus disconnect and target changes cancel hold", () =>
-        {
-            foreach (var cause in new[]
-            {
-                0,
-                1,
-                2
-            }
-
-            )
-            {
-                var h = new CloseHold();
-                h.Open(Game);
-                h.Tick(false, false, true, true, Game, 0);
-                h.Tick(true, false, true, true, Game, 1);
-                True(!h.Tick(true, false, cause != 0, cause != 1, cause == 2 ? Game with
-                {
-                    Generation = 1
-                } : Game, 2000));
-                Equal<WindowRef?>(null, h.Target);
-            }
         });
         Case("foreground refusal prevents shortcut dispatch", () =>
         {

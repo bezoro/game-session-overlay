@@ -1010,7 +1010,7 @@ internal static class SessionHubTests
                 w.Close();
             }
         });
-        test("hub close modal exposes only hold cancel and restores options actual focus", () =>
+        test("hub close modal defaults to actual Cancel focus and restores options focus", () =>
         {
             var w = Fixture(out var p, out _, out _, out _);
             try
@@ -1020,9 +1020,10 @@ internal static class SessionHubTests
                 w.ShowDiagnostic();
                 w.OpenOptions(p.A);
                 Click(w, "close");
-                Check(w.ActionIds.SequenceEqual(new[] { "confirm-hold", "confirm-cancel" }), "Modal leaked underlying entries");
+                Check(w.ActionIds.SequenceEqual(new[] { "confirm-cancel", "confirm-close" }), "Modal leaked underlying entries");
+                Check(w.SelectedAction == "confirm-cancel" && ActualFocus(w).Name == "CancelCloseButton", "Cancel did not receive actual focus");
                 w.Sequential(1);
-                Check(w.SelectedAction == "confirm-cancel" && ActualFocus(w).Name == "CancelCloseButton", "Tab did not reach actual cancel");
+                Check(w.SelectedAction == "confirm-close" && ActualFocus(w).Name == "ConfirmCloseButton", "Tab did not focus Close");
                 w.Back();
                 Check(!w.Confirming && w.SelectedAction == "close" && ActualFocus(w).Tag as string == "close", "Cancel lost options control focus");
             }
@@ -1270,7 +1271,6 @@ internal static class SessionHubTests
                     "all-hidden",
                     "dirty",
                     "confirmation",
-                    "progress",
                     "pending",
                     "result"
                 }
@@ -1427,17 +1427,10 @@ internal static class SessionHubTests
                         foreach (var id in SessionHubSettings.Catalog)
                             Click(w, "favorite:" + id);
                 }
-                else if (state is "confirmation" or "progress" or "close-cancel")
+                else if (state is "confirmation" or "close-cancel")
                 {
                     w.OpenOptions(p.A);
                     Click(w, "close");
-                    if (state == "progress")
-                    {
-                        w.AdvancePointerHold(false, true, true, 0);
-                        w.AdvancePointerHold(true, true, true, 1);
-                        w.AdvancePointerHold(true, true, true, 751);
-                    }
-
                     if (state == "close-cancel")
                         w.Back();
                 }

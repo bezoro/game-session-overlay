@@ -81,13 +81,40 @@ public partial class MainWindow
         }
     }
 
+    private PadFrame[] ReadControllerFrames() =>
+        reviewFrames ?? Enumerable.Range(0, 4).Select(i => Native.ReadPad((uint)i)).ToArray();
+
+    private bool CloseControllerAvailable(IReadOnlyList<PadFrame> frames)
+    {
+        var connections = 0;
+        for (var slot = 0; slot < frames.Count; slot++)
+        {
+            if (frames[slot].ReadFailed)
+            {
+                Back();
+                FeedbackText("Controller input is unavailable. Closing cancelled.");
+                return false;
+            }
+            if (frames[slot].Connected)
+                connections |= 1 << slot;
+        }
+        if ((closeControllerConnections & ~connections) != 0)
+        {
+            Back();
+            FeedbackText("Controller disconnected. Closing cancelled.");
+            return false;
+        }
+        closeControllerConnections |= connections;
+        return true;
+    }
+
     private void Tick(object? sender, EventArgs args)
     {
         if (exiting)
             return;
         if (guideBackend is not null)
             PollGuideStatus(guideBackend);
-        var frames = reviewFrames ?? Enumerable.Range(0, 4).Select(i => Native.ReadPad((uint)i)).ToArray();
+        var frames = ReadControllerFrames();
         var now = Environment.TickCount64;
         if (effectFocusTransferred
             && effectCancellation is not null
@@ -165,13 +192,36 @@ public partial class MainWindow
 
         if (!navigationKeysArmed && heldKeys.Count == 0 && PhysicalKeysNeutral())
             navigationKeysArmed = true;
-        if (Confirming && closeSource == -1)
+        if (Confirming)
         {
-            var point = Mouse.GetPosition(HoldCloseButton);
-            var inside = point.X >= 0 && point.Y >= 0 && point.X < HoldCloseButton.ActualWidth && point.Y < HoldCloseButton.ActualHeight;
-            var mixed = keyboardDown || heldKeys.Count > 0 || events.Pressed != 0 || events.Direction != 0;
-            AdvancePointerHold(pointerDown, (!pointerDown || pointerCaptured && HoldCloseButton.IsMouseCaptured) && !mixed, inside, now);
-            return;
+            var controllerReleased = closeControllerReleased;
+            closeControllerReleased = frames.All(frame => !frame.Buttons.HasFlag(PadButtons.A));
+            if (!CloseControllerAvailable(frames))
+                return;
+            if (events.Pressed.HasFlag(PadButtons.B))
+            {
+                Back();
+                return;
+            }
+            if (events.Direction != 0)
+            {
+                Move((NavDirection)events.Direction);
+                return;
+            }
+            if (controllerReleased && current.Connected && events.Pressed.HasFlag(PadButtons.A)
+                && CloseKeysReleased() && Mouse.LeftButton == MouseButtonState.Released)
+            {
+                dispatchSource = current.Slot + 1;
+                try
+                {
+                    ActivateEntry();
+                }
+                finally
+                {
+                    dispatchSource = null;
+                }
+                return;
+            }
         }
 
         if (Confirming
@@ -188,36 +238,8 @@ public partial class MainWindow
             nextConfirmationScroll = now + 150;
         }
 
-        if (Confirming && navigation.Id == "confirm-cancel" && events.Pressed.HasFlag(PadButtons.A))
-        {
-            Back();
+        if (Confirming)
             return;
-        }
-
-        if (Confirming && events.Direction != 0 && closeSource != -1)
-        {
-            Move((NavDirection)events.Direction);
-            return;
-        }
-
-        if (Confirming && closeHold.Target is { } target)
-        {
-            var sourceValid = closeSource == 0 || current.Slot is { } slot && closeSource == slot + 1 && current.Connected;
-            var down = closeSource == 0 ? keyboardDown : sourceValid && events.ADown;
-            if ((closeSource != 0 && keyboardDown) || (closeSource == 0 && events.Pressed.HasFlag(PadButtons.A)))
-                sourceValid = false;
-            var valid = Controller.Platform.Valid(target) ? target : null;
-            if (closeHold.Tick(down, events.Pressed.HasFlag(PadButtons.B), IsActive, sourceValid, valid, Environment.TickCount64))
-            {
-                CancelHold();
-                RunClose(target);
-            }
-            else if (!Confirming)
-                CancelHold();
-            HoldProgress.Value = closeHold.Progress;
-            ConfirmHint.Text = closeHold.Progress > 0 ? $"Keep holding… {closeHold.Progress:P0}" : "Release, then hold again for 1.5 s.";
-            return;
-        }
 
         if (busy)
         {
