@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Media;
 using ApolloOverlay;
 using ApolloOverlay.Automation;
@@ -115,6 +116,50 @@ internal static class InterfaceFeedbackTests
             {
                 w.Close();
             }
+        });
+        test("interface keyboard keycaps center visible ink at multiple pixel densities", () =>
+        {
+            var resources = new Border();
+            foreach (var scale in new[] { 1d, 1.25, 1.5, 2 })
+                foreach (var key in new[] { "Enter", "Esc", "KeyX", "KeyY", "PgUp", "PgDn", "Up", "Down", "Left", "Right" })
+                {
+                    var cap = (Border)InputPrompt.CreateGlyph(resources, key, 20);
+                    cap.Background = Brushes.White;
+                    TextElement.SetForeground(cap, Brushes.Black);
+                    TextElement.SetFontFamily(cap, new FontFamily("Segoe UI Variable Text, Segoe UI"));
+                    cap.UseLayoutRounding = true;
+                    TextOptions.SetTextFormattingMode(cap, TextFormattingMode.Display);
+                    VisualTreeHelper.SetRootDpi(cap, new DpiScale(scale, scale));
+                    cap.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    cap.Arrange(new Rect(cap.DesiredSize));
+
+                    var width = (int)Math.Ceiling(cap.RenderSize.Width * scale);
+                    var height = (int)Math.Ceiling(cap.RenderSize.Height * scale);
+                    var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(width, height, 96 * scale, 96 * scale, PixelFormats.Pbgra32);
+                    bitmap.Render(cap);
+                    var pixels = new byte[width * height * 4];
+                    bitmap.CopyPixels(pixels, width * 4, 0);
+                    var left = width;
+                    var right = -1;
+                    var top = height;
+                    var bottom = -1;
+                    for (var y = 0; y < height; y++)
+                        for (var x = 0; x < width; x++)
+                        {
+                            var offset = (y * width + x) * 4;
+                            if (pixels[offset + 3] != 255 || pixels[offset + 1] >= 180)
+                                continue;
+                            left = Math.Min(left, x);
+                            right = Math.Max(right, x);
+                            top = Math.Min(top, y);
+                            bottom = Math.Max(bottom, y);
+                        }
+
+                    Require(right >= left && bottom >= top, $"{key} rendered no label at {scale:P0}");
+                    var offsetX = (left + right + 1 - cap.RenderSize.Width * scale) / 2;
+                    var offsetY = (top + bottom + 1 - cap.RenderSize.Height * scale) / 2;
+                    Require(Math.Abs(offsetX) <= 1 && Math.Abs(offsetY) <= 1, $"{key} at {scale:P0} is off-center by ({offsetX:F2}, {offsetY:F2}) physical pixels");
+                }
         });
         test("interface header Back cancels a pending handoff before dispatch", () =>
         {
