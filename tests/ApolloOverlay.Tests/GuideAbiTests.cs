@@ -1755,7 +1755,7 @@ internal static unsafe class GuideAbiTests
                     FinishFocus(w.OpeningTask);
                     w.Page(2);
                     Require(!w.ActionIds.Contains("hotkey") && !w.ActionIds.Contains("chord"));
-                    Require(ApolloOverlay.Program.AlreadyRunningMessage.Contains("bandeja") && !ApolloOverlay.Program.AlreadyRunningMessage.Contains("Ctrl"));
+                    Require(ApolloOverlay.Program.AlreadyRunningMessage.Contains("tray") && !ApolloOverlay.Program.AlreadyRunningMessage.Contains("Ctrl"));
                 }
                 finally
                 {
