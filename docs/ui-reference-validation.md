@@ -1,6 +1,8 @@
 # Interface reference coverage
 
-This follow-up implements the six user-provided concept boards and `IMPLEMENTACAO.txt` against the existing native WPF application. The user's later preferences take precedence over the boards' cold palette: warm charcoal, restrained amber/orange, warm off-white text and full semantic color customization.
+This follow-up implements the six user-provided concept boards and the accompanying implementation brief against the existing native WPF application. The user's later preferences take precedence over the boards' cold palette: warm charcoal, restrained amber/orange, warm off-white text and full semantic color customization.
+
+The [original concept reference](design/overlay-ideal-v1.png) has an English translation for contributors. It is concept art, not a screenshot of the application.
 
 ## Reference mapping
 
