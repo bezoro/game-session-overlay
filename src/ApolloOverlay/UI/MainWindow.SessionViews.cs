@@ -68,6 +68,24 @@ public partial class MainWindow
         }, true, canResume ? target!.Title : "Choose a window in Apps");
         AutomationProperties.SetName(SessionCardButton, canResume ? target!.Title + " · Resume window" : "Choose window");
         AutomationProperties.SetHelpText(SessionCardButton, canResume ? "A / Enter resumes this window. X or right-click opens options." : "Choose a window in Apps");
+        var closeUnavailable = CloseSessionWindowReason(target);
+        var closeHelp = closeUnavailable ?? "Review closing " + target!.Title;
+        SessionCloseReason.Text = closeUnavailable ?? "";
+        SessionCloseReason.Visibility = closeUnavailable is null ? Visibility.Collapsed : Visibility.Visible;
+        SessionCloseButton.ToolTip = closeHelp;
+        AutomationProperties.SetHelpText(SessionCloseButton, closeHelp);
+        AutomationProperties.SetName(SessionCloseDescription, "Close window. " + closeHelp);
+        RegisterFixed("session-close", SessionCloseButton, () =>
+        {
+            if (CloseSessionWindowReason(target) is { } reason)
+            {
+                FeedbackText(reason, important: true);
+                RefreshRows();
+                return;
+            }
+
+            Confirm(target!);
+        }, closeUnavailable is null, closeHelp);
         var windowCount = Controller.Apps.Count;
         var windowSummary = windowCount switch
         {
@@ -78,7 +96,7 @@ public partial class MainWindow
         var favorites = SessionHubSettings.Favorites(Controller.Settings);
         if (favorites.Length > 0)
         {
-            Section("Quick access");
+            Section("Quick access", compactChrome || narrow);
             var first = Rows.RowDefinitions.Count;
             for (var i = 0; i < favorites.Length; i++)
                 BuildFavorite(favorites[i], first + i / 2, i % 2);
@@ -99,6 +117,19 @@ public partial class MainWindow
             AddRow("setup-invitation", "Customize panel", "Quick setup in three steps", () => OpenView(new(OverlayRoute.Setup, SelectedId: "setup-next")));
     }
 
+    private string? CloseSessionWindowReason(WindowRef? target)
+    {
+        if (Controller.Session.CardPending)
+            return "Finding window";
+        if (target is null)
+            return "No window";
+        if (!Controller.CardTargetAvailable(target))
+            return "Window unavailable";
+        if (Controller.Session.CardResumeOnly || !target.CanClose || !Controller.Session.CardTarget!.CanClose)
+            return "Window protected";
+        return null;
+    }
+
     private void BuildFavorite(string id, int? row, int column)
     {
         var target = Controller.Session.Anchor;
@@ -117,7 +148,7 @@ public partial class MainWindow
                 AddRow(id, "Game Bar", target is null ? "Choose a window" : "Xbox · session window", () => Shortcut("Win+G"), target is not null, row: row, column: column, compactGrid: true);
                 break;
             case "steam-overlay":
-                AddRow(id, menu ? "Steam Big Picture menu" : "Steam Overlay", menu ? "Big Picture" : steamGame ? Controller.HasSteamLaunchObservation(steamContext) ? "Launched by Steam · " + Controller.Settings.SteamShortcut : "Request " + Controller.Settings.SteamShortcut : "Unavailable in this window", () =>
+                AddRow(id, menu ? "Steam Big Picture menu" : "Steam Overlay", menu ? "Big Picture" : steamGame ? Controller.HasSteamLaunchObservation(steamContext) ? "Launched by Steam · " + Controller.Settings.SteamShortcut : "Request " + Controller.Settings.SteamShortcut : steamContext is null ? "Choose a window" : "Needs a Steam game", () =>
                 {
                     if (steamContext is null)
                         return;

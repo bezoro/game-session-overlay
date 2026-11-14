@@ -151,6 +151,7 @@ public partial class MainWindow
         var target = Controller.Session.CardTarget;
         var valid = Controller.CardTargetAvailable(target);
         _ = UpdateSessionArtwork();
+        AutomationProperties.SetName(HeaderIdentity, "Game Session Overlay version " + HeaderIdentity.Text.TrimStart('v'));
         SessionKicker.Visibility = Visibility.Collapsed;
         ApplySessionCardDensity();
         TargetLabel.Text = target?.Title ?? "No window selected";
@@ -159,10 +160,8 @@ public partial class MainWindow
         SessionEvidence.Text = target?.ProcessName ?? "Apps";
         ContextStatus.Text = Controller.Session.CardPending ? "Finding a window" : target is null ? "No selection" : valid ? "Available" : "Window unavailable";
         ContextStatusDot.Opacity = valid ? 1 : .3;
-        ContextIcon.Source = target is null ? null : Controller.Platform.Icon(target);
-        ContextIcon.Visibility = ContextIcon.Source is null ? Visibility.Collapsed : Visibility.Visible;
-        ContextGlyph.Visibility = ContextIcon.Source is null ? Visibility.Visible : Visibility.Collapsed;
-        ContextStatus.Visibility = valid && !Controller.Session.CardPending ? Visibility.Collapsed : Visibility.Visible;
+        UpdateContextIcon(target is null ? null : Controller.Platform.Icon(target));
+        ContextStatus.Visibility = Controller.Session.CardPending || target is not null && !valid ? Visibility.Visible : Visibility.Collapsed;
         ContextStatusDot.Visibility = Visibility.Collapsed;
         SessionEvidence.Visibility = compactChrome || target is not null && string.Concat(target.Title.Where(char.IsLetterOrDigit)).Equals(string.Concat(target.ProcessName.Where(char.IsLetterOrDigit)), StringComparison.OrdinalIgnoreCase) ? Visibility.Collapsed : Visibility.Visible;
         UpdateSessionCardAudioLabel();
@@ -240,24 +239,29 @@ public partial class MainWindow
     private string GuideDescription() => Controller.Platform.IsPreview ? "Preview · Guide connection is not queried" : !Controller.Settings.GuideXInputEnabled ? "Disabled · double-click the tray icon to open" : guideBackend?.Active == true ? guideBackend.Status : guideConnection?.Status ?? "Controller or Guide input unavailable";
     private bool QuickAccessAction(string id) => view.Current.Route == OverlayRoute.Hub && SessionHubSettings.Catalog.Contains(id);
     private bool CompactAction(string id) => view.Current.Route == OverlayRoute.OperationResult
-        || narrow && (view.Current.Route == OverlayRoute.Hub && SessionHubSettings.Catalog.Contains(id) || view.Current.Route == OverlayRoute.Media && id is "media-previous" or "media-next");
+        || QuickAccessAction(id) || narrow && view.Current.Route == OverlayRoute.Media && id is "media-previous" or "media-next";
     private string ActionDescription(string id, string description, bool available) => QuickAccessAction(id) ? id switch
     {
-        "playnite" when !available => narrow ? "Needs setup" : "Set up in System",
-        "steam" when !available && narrow => "Not found",
-        "steam-overlay" when !available => narrow ? "Unavailable" : "Unavailable here",
+        "playnite" when narrow && !available => "Needs setup",
+        "steam-overlay" when narrow && description == "Needs a Steam game" => "Steam game only",
         "audio" when narrow && !audio.Current.Available => "No output",
         _ => description
     } : description;
     private Button MakeButton(string id, string title, string description, Action action, bool available, bool danger)
     {
+        var quickAccess = QuickAccessAction(id);
+        var compactShortcut = quickAccess && (narrow || compactChrome);
+        var displayTitle = compactShortcut ? id switch
+        {
+            "steam" => "Big Picture",
+            "steam-overlay" when title == "Steam Big Picture menu" => "Steam menu",
+            _ => title
+        } : title;
         var glyph = ActionIcon(id.StartsWith("favorite:", StringComparison.Ordinal) ? id[9..] : id);
-        var grid = new ActionButtonContent(glyph, title, ActionDescription(id, description, available), showIcon: true);
+        var grid = new ActionButtonContent(glyph, displayTitle, ActionDescription(id, description, available), showIcon: true);
         grid.Title.SetResourceReference(TextBlock.FontSizeProperty, "SessionType.Section");
         grid.Description.SetResourceReference(TextBlock.FontSizeProperty, "SessionType.Caption");
         grid.Description.Margin = new(0, 4, 0, 0);
-        if (QuickAccessAction(id) && id != "audio" && available)
-            grid.Description.Visibility = Visibility.Collapsed;
         AutomationProperties.SetName(grid.Description, description);
         var badge = new Border
         {
@@ -273,7 +277,7 @@ public partial class MainWindow
         var compactAction = CompactAction(id);
         if (compactAction)
         {
-            grid.Title.SetResourceReference(TextBlock.FontSizeProperty, "SessionType.CompactBody");
+            grid.Title.SetResourceReference(TextBlock.FontSizeProperty, quickAccess && !compactShortcut ? "SessionType.Body" : "SessionType.CompactBody");
             grid.Title.TextWrapping = TextWrapping.Wrap;
             grid.Title.TextTrimming = TextTrimming.CharacterEllipsis;
             grid.Title.LineHeight = 19;
@@ -281,7 +285,7 @@ public partial class MainWindow
             grid.Title.MaxHeight = 38;
             grid.Description.SetResourceReference(TextBlock.FontSizeProperty, "SessionType.Caption");
             grid.Description.Margin = new(0, 2, 0, 0);
-            grid.Description.TextWrapping = TextWrapping.NoWrap;
+            grid.Description.TextWrapping = quickAccess && !compactShortcut ? TextWrapping.Wrap : TextWrapping.NoWrap;
             grid.Description.TextTrimming = TextTrimming.CharacterEllipsis;
             grid.Description.Visibility = description.Length > 0 && (!available || id == "audio") ? Visibility.Visible : Visibility.Collapsed;
             grid.ColumnDefinitions[0].Width = new GridLength(26);
@@ -289,6 +293,8 @@ public partial class MainWindow
             badge.Width = badge.Height = 22;
             badge.Child = InputPrompt.CreateGlyph(this, "A", 20);
         }
+        if (quickAccess)
+            grid.ColumnDefinitions[0].Width = new GridLength(compactShortcut ? 22 : 32);
         if (id == "apps")
         {
             var count = new Border
@@ -313,9 +319,9 @@ public partial class MainWindow
         {
             Content = grid,
             Tag = id,
-            MinHeight = compactAction ? 52 : id == "return" ? 72 : 56,
+            MinHeight = compactShortcut ? 44 : compactAction ? 52 : id == "return" ? 72 : 56,
             IsEnabled = available,
-            Padding = compactAction ? new(8, 8, 8, 8) : new(12, 8, 12, 8)
+            Padding = compactShortcut ? new(5, 2, 5, 2) : compactAction ? new(8) : new(12, 8, 12, 8)
         };
         if (page == 0 && subpage == "" && id == "apps")
         {
@@ -332,6 +338,11 @@ public partial class MainWindow
 
         if (id == "close")
             grid.Description.Visibility = Visibility.Collapsed;
+        if (quickAccess && (!available || displayTitle != title))
+        {
+            button.ToolTip = displayTitle != title ? title + " · " + description : description;
+            ToolTipService.SetShowOnDisabled(button, true);
+        }
         if (danger)
             button.SetResourceReference(ForegroundProperty, ThemeSupport.Critical);
         AutomationProperties.SetName(button, title);

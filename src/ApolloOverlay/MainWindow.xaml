@@ -567,6 +567,7 @@
     </ResourceDictionary>
   </Window.Resources>
   <Grid
+    x:Name="PanelRoot"
     Margin="12">
     <Border
       x:Name="GlassSurface"
@@ -641,7 +642,7 @@
                 VerticalAlignment="Center" />
               <TextBlock
                 x:Name="HeaderBrand"
-                Text="Game Session"
+                Text="Game Session Overlay"
                 FontSize="{DynamicResource SessionType.CompactBody}"
                 FontWeight="SemiBold"
                 Margin="28,0,8,0"
@@ -664,7 +665,7 @@
                     x:Name="HeaderIdentity"
                     Text="v0.2"
                     FontSize="12"
-                    Foreground="{DynamicResource SessionMutedTextBrush}" />
+                    Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                 </Border>
                 <Button
                   x:Name="UpdateAvailableButton"
@@ -940,50 +941,77 @@
                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                   </StackPanel>
                 </Grid>
-                <Button
-                  x:Name="SessionCardButton"
-                  Margin="12,0,12,12"
-                  Padding="12,8"
-                  MinHeight="48"
-                  Background="Transparent"
-                  BorderThickness="1">
-                  <Grid>
-                    <Grid.ColumnDefinitions>
-                      <ColumnDefinition
-                        Width="32" />
-                      <ColumnDefinition />
-                      <ColumnDefinition
-                        Width="20" />
-                    </Grid.ColumnDefinitions>
-                    <local:VectorIcon
-                      Data="{StaticResource Icon.play}"
-                      Fill="{DynamicResource SessionAccentBrush}"
-                      Width="20"
-                      Height="20"
-                      HorizontalAlignment="Left" />
-                    <TextBlock
-                      x:Name="SessionHint"
-                      Grid.Column="1"
-                      Text="Resume"
-                      TextWrapping="NoWrap"
-                      TextTrimming="CharacterEllipsis"
-                      FontSize="{DynamicResource SessionType.Body}"
-                      FontWeight="SemiBold"
-                      VerticalAlignment="Center" />
-                    <local:VectorIcon
-                      Grid.Column="2"
-                      Data="{StaticResource Icon.back}"
-                      Fill="{DynamicResource TextFillColorSecondaryBrush}"
-                      Width="14"
-                      Height="14"
-                      RenderTransformOrigin="0.5,0.5">
-                      <local:VectorIcon.RenderTransform>
-                        <RotateTransform
-                          Angle="180" />
-                      </local:VectorIcon.RenderTransform>
-                    </local:VectorIcon>
-                  </Grid>
-                </Button>
+                <Grid
+                  x:Name="SessionActions"
+                  Margin="12,0,12,12">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition
+                      Width="3*" />
+                    <ColumnDefinition
+                      Width="8" />
+                    <ColumnDefinition
+                      Width="2*" />
+                  </Grid.ColumnDefinitions>
+                  <Button
+                    x:Name="SessionCardButton"
+                    Margin="0"
+                    Padding="12,8"
+                    MinHeight="48">
+                    <Grid>
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition
+                          Width="24" />
+                        <ColumnDefinition />
+                      </Grid.ColumnDefinitions>
+                      <local:VectorIcon
+                        x:Name="SessionActionIcon"
+                        Data="{StaticResource Icon.play}"
+                        Fill="{DynamicResource SessionAccentBrush}"
+                        Width="18"
+                        Height="18"
+                        HorizontalAlignment="Left" />
+                      <TextBlock
+                        x:Name="SessionHint"
+                        Grid.Column="1"
+                        Text="Resume"
+                        TextWrapping="NoWrap"
+                        TextTrimming="CharacterEllipsis"
+                        FontSize="{DynamicResource SessionType.Body}"
+                        FontWeight="SemiBold"
+                        VerticalAlignment="Center" />
+                    </Grid>
+                  </Button>
+                  <Border
+                    x:Name="SessionCloseDescription"
+                    Grid.Column="2"
+                    Focusable="True"
+                    FocusVisualStyle="{x:Null}"
+                    Tag="description:session-close" />
+                  <Button
+                    x:Name="SessionCloseButton"
+                    Grid.Column="2"
+                    Margin="0"
+                    Padding="4"
+                    MinHeight="48"
+                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                    ToolTipService.ShowOnDisabled="True"
+                    AutomationProperties.Name="Close window…">
+                    <StackPanel
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center">
+                      <TextBlock
+                        x:Name="SessionCloseLabel"
+                        Text="Close window…"
+                        FontSize="{DynamicResource SessionType.CompactBody}" />
+                      <TextBlock
+                        x:Name="SessionCloseReason"
+                        Visibility="Collapsed"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap"
+                        FontSize="{DynamicResource SessionType.Caption}" />
+                    </StackPanel>
+                  </Button>
+                </Grid>
               </StackPanel>
             </Border>
             <Grid

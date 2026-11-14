@@ -7,7 +7,7 @@ namespace ApolloOverlay;
 
 public partial class MainWindow
 {
-    private void Section(string title)
+    private void Section(string title, bool compact = false)
     {
         var text = new TextBlock
         {
@@ -15,7 +15,7 @@ public partial class MainWindow
             FontFamily = (System.Windows.Media.FontFamily)FindResource("SessionFont.Display"),
             FontSize = ResourceNumber("SessionType.Section", 17),
             FontWeight = FontWeights.SemiBold,
-            Margin = new(0, Rows.RowDefinitions.Count == 0 ? 4 : ResourceNumber("SessionSpace.16"), 0, ResourceNumber("SessionSpace.8"))
+            Margin = compact ? new(0, 0, 0, 4) : new(0, Rows.RowDefinitions.Count == 0 ? 4 : ResourceNumber("SessionSpace.16"), 0, ResourceNumber("SessionSpace.8"))
         };
         text.SetResourceReference(TextBlock.ForegroundProperty, ThemeSupport.Text);
         AddVisual(text);
@@ -63,7 +63,10 @@ public partial class MainWindow
         Grid.SetColumn(button, row is null ? 0 : column);
         Grid.SetColumnSpan(button, row is null ? 2 : 1);
         if (row is not null)
-            button.Margin = new(column == 0 ? 0 : 4, 4, column == 0 ? 4 : 0, 4);
+        {
+            var gap = compactGrid && (narrow || compactChrome) ? 2 : 4;
+            button.Margin = new(column == 0 ? 0 : gap, gap, column == 0 ? gap : 0, gap);
+        }
         var reason = new Border
         {
             Focusable = true,

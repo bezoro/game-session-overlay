@@ -11,7 +11,7 @@ internal static class WindowIconReader
 {
     private const uint WmGetIcon = 0x007F, AbortIfHung = 2;
     private const nuint LargeIcon = 1, SmallIconFallback = 2;
-    private const int ClassLargeIcon = -14, PreferredDpi = 192;
+    private const int ClassLargeIcon = -14, PreferredDpi = 288;
     internal static ImageSource? Load(WindowRef window, Func<WindowRef, bool> valid)
     {
         if (!valid(window))
