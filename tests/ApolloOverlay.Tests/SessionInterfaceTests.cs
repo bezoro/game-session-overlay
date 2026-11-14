@@ -95,7 +95,9 @@ internal static class SessionInterfaceTests
                 Require(bar.ActualWidth is >= 7.9 and <= 8.1, "A theme minimum expanded the reserved scrollbar lane");
                 var buttons = CaptureVisuals<Button>((DependencyObject)window.FindName("Rows"))
                     .Where(button => button.Tag is string id && (id.StartsWith("earlier:", StringComparison.Ordinal) || id.StartsWith("later:", StringComparison.Ordinal))).ToArray();
-                Require(buttons.Length == 12, "The customization fixture has no complete reorder controls");
+                var expected = SessionHubSettings.Catalog.SelectMany(id => new[] { "earlier:" + id, "later:" + id });
+                Require(buttons.Select(button => (string)button.Tag).Order().SequenceEqual(expected.Order()),
+                    "The customization fixture has no complete reorder controls");
                 foreach (var button in buttons)
                 {
                     Pick(window, (string)button.Tag);

@@ -120,8 +120,9 @@ internal static class AppearanceTests
                 SessionInterfaceTests.Pick(window, "session-card");
                 var selected = ReviewFixTests.Button(window, "session-card");
                 selected.ApplyTemplate();
-                var outline = (Border)selected.Template.FindName("SelectionBreath", selected);
-                Require(outline.Opacity == 1 && outline.BorderThickness.Left > 0,
+                var outline = (Border)selected.Template.FindName("Surface", selected);
+                Require(outline.BorderBrush is SolidColorBrush focus && focus.Color == ResourceColor(window, ThemeSupport.Focus)
+                    && outline.BorderThickness.Left > 0,
                     "A selected control briefly loses its essential focus outline");
                 window.OpenAppearance();
                 window.OpenAppearanceColor(PaletteRole.Focus);
