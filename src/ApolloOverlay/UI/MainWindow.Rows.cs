@@ -209,6 +209,7 @@ public partial class MainWindow
             OverlayRoute.System => "System",
             OverlayRoute.PlayniteBrowser => "Find Playnite",
             OverlayRoute.Updates => compactChrome ? "Updates" : "Version and updates",
+            OverlayRoute.UpdateReview when updateReview is { } release && CompareReleaseVersion(release) is not > 0 => "Review version",
             OverlayRoute.UpdateReview => (compactChrome, rollbackReview is null) switch
             {
                 (true, true) => "Review update",

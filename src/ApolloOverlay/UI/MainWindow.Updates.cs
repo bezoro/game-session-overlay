@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using Velopack;
 using Velopack.Exceptions;
 
 namespace ApolloOverlay;
@@ -22,6 +23,7 @@ public partial class MainWindow
     private long updateGeneration, nextUpdateProgress;
     private string updateChannel = AppBuild.Current.Channel == "stable" ? "stable" : "testing";
     private string updateStatus = "Updates are checked automatically every 15 minutes.";
+    private string? updateCatalogStatus;
     private TextBlock? updateProgressLabel;
     private TextBox? updateNotesText;
     internal Task UpdateTask
@@ -36,7 +38,7 @@ public partial class MainWindow
         FeatureHeading(AppBuild.Current.Display, "Installed version · " + (AppBuild.Current.Channel == "stable" ? "Stable" : "Testing"), "updates");
         FeatureFact("Build", AppBuild.Current.BuildId);
         FeatureFact("Commit", AppBuild.Current.ShortCommit);
-        updateProgressLabel = Paragraph(updateStatus);
+        updateProgressLabel = Paragraph(updateCatalogStatus ?? updateStatus);
         AutomationProperties.SetLiveSetting(updateProgressLabel, AutomationLiveSetting.Polite);
         AddRow("check-updates", "Check for updates", "Check again now · automatic checks run in the background", () => UpdateTask = CheckUpdatesAsync(), updateSource is not PreviewUpdateSource);
         AddRow("update-channel", "Channel · " + (updateChannel == "testing" ? "Testing" : "Stable"), updateChannel == "testing" ? "Validated preview builds · includes changes under evaluation" : "Versions published from the main branch", () =>
@@ -52,6 +54,7 @@ public partial class MainWindow
             {
                 command?.Fail(e, "channel-write-failed");
                 ReportUpdateFailure("Could not save the channel.", e);
+                updateCatalogStatus = updateStatus;
                 return;
             }
 
@@ -59,7 +62,7 @@ public partial class MainWindow
             UpdateDiscoveryChannelChanged();
             updateGeneration++;
             updateCandidates = [];
-            updateStatus = "Channel changed. New versions will be checked automatically.";
+            updateCatalogStatus = updateStatus = "Channel changed. New versions will be checked automatically.";
             command?.Complete(Controller.Platform.IsPreview ? ResultKind.Simulated : ResultKind.Completed, "channel-changed");
             RefreshRows();
             PollAutomaticUpdates();
@@ -68,12 +71,18 @@ public partial class MainWindow
             Paragraph("To enable updates, install Game Session Overlay using Setup.");
         if (updateCandidates.Count > 0)
         {
-            Section("Available versions");
+            Section("Published versions");
             foreach (var candidate in updateCandidates)
             {
                 var selected = candidate;
                 var current = candidate.BuildId == AppBuild.Current.BuildId;
-                AddRow("release:" + candidate.BuildId, candidate.Version + (current ? " · installed" : ""), candidate.PublishedAt.ToLocalTime().ToString("MMM d, yyyy HH:mm") + " · commit " + candidate.Commit[..7] + " · " + (candidate.Size / 1024d / 1024d).ToString("N0") + " MB", () => ReviewRelease(selected), !current);
+                var label = current ? " · installed" : CompareReleaseVersion(candidate) switch
+                {
+                    < 0 => " · earlier version",
+                    0 => " · same version",
+                    _ => ""
+                };
+                AddRow("release:" + candidate.BuildId, candidate.Version + label, candidate.PublishedAt.ToLocalTime().ToString("MMM d, yyyy HH:mm") + " · commit " + candidate.Commit[..7] + " · " + (candidate.Size / 1024d / 1024d).ToString("N0") + " MB", () => ReviewRelease(selected), !current);
             }
         }
 
@@ -155,15 +164,25 @@ public partial class MainWindow
         }
         else if (updateReview is { } candidate)
         {
-            FeatureHeading(preparedUpdate is null ? "Update available" : "Update downloaded", candidate.Version + " · " + (candidate.Channel == "stable" ? "Stable" : "Testing"), "updates");
+            var comparison = CompareReleaseVersion(candidate);
+            var heading = (comparison, preparedUpdate is null) switch
+            {
+                ( > 0, true) => "Update available",
+                ( > 0, false) => "Update downloaded",
+                ( < 0, true) => "Earlier version",
+                ( < 0, false) => "Earlier version downloaded",
+                (_, true) => "Published version",
+                _ => "Version downloaded"
+            };
+            FeatureHeading(heading, UpdateActionContext(candidate), "updates");
             FeatureFact("Installed", AppBuild.Current.Display);
-            FeatureFact("Update commit", candidate.Commit[..7]);
+            FeatureFact(comparison is > 0 ? "Update commit" : "Release commit", candidate.Commit[..7]);
             FeatureFact("Download", (candidate.Size / 1024d / 1024d).ToString("N1") + " MB");
             updateProgressLabel = Paragraph(preparedUpdate is null ? updateStatus : "Download verified. The installed version has not changed.");
             AutomationProperties.SetLiveSetting(updateProgressLabel, AutomationLiveSetting.Polite);
             if (preparedUpdate is null)
             {
-                AddRow("prepare-update", "Download update", UpdateActionContext(candidate), () => UpdateTask = DownloadUpdateAsync(candidate), updateSource is not PreviewUpdateSource);
+                AddRow("prepare-update", DownloadReleaseTitle(candidate), UpdateActionContext(candidate), () => UpdateTask = DownloadUpdateAsync(candidate), updateSource is not PreviewUpdateSource);
                 RefreshDownloadAction();
             }
             else
@@ -217,7 +236,7 @@ public partial class MainWindow
         updateCancellation = cancellation;
         busy = updateBusy = true;
         ClearPreviousUpdateResult();
-        updateStatus = "Checking versions on GitHub…";
+        updateCatalogStatus = updateStatus = "Checking versions on GitHub…";
         SetUpdateStatus(updateStatus);
         try
         {
@@ -227,8 +246,7 @@ public partial class MainWindow
                 command?.Complete(ResultKind.Cancelled, "catalog-result-superseded");
                 return;
             }
-            AcceptUpdateCatalog(releases);
-            updateStatus = releases.Count == 0 ? "No versions published to this channel. Builds appear only after passing validation." : releases[0].BuildId == AppBuild.Current.BuildId ? "You are using the latest version of this channel." : "Versions are available. Choose one to read the changes and update.";
+            AcceptUpdateCatalog(releases, manual: true);
             command?.Complete(ResultKind.Completed, releases.Count == 0 ? "catalog-empty" : "catalog-checked");
             RequestCue(FeedbackCue.Completion);
         }
@@ -261,6 +279,7 @@ public partial class MainWindow
 
             if (!exiting)
             {
+                updateCatalogStatus = updateStatus;
                 SetUpdateStatus(updateStatus);
                 UpdatePersistentState();
                 if (view.Current.Route == OverlayRoute.Updates)
@@ -296,7 +315,10 @@ public partial class MainWindow
                 if (value.Total > 0 && now < nextUpdateProgress)
                     return;
                 nextUpdateProgress = now + 100;
-                SetUpdateStatus(value.Phase + (value.Total > 0 ? " · " + Math.Clamp(value.Bytes * 100 / value.Total, 0, 100) + "%" : ""));
+                var phase = value.Phase == "Downloading update" && CompareReleaseVersion(candidate) is not > 0
+                    ? "Downloading version"
+                    : value.Phase;
+                SetUpdateStatus(phase + (value.Total > 0 ? " · " + Math.Clamp(value.Bytes * 100 / value.Total, 0, 100) + "%" : ""));
             });
             var prepared = await updateSource.StageAsync(candidate, progress, cancellation.Token);
             if (exiting || generation != updateGeneration || cancellation.IsCancellationRequested)
@@ -322,7 +344,7 @@ public partial class MainWindow
         {
             command?.Fail(e, "download-failed");
             if (!exiting)
-                ReportUpdateFailure("Could not prepare the update.", e);
+                ReportUpdateFailure(CompareReleaseVersion(candidate) is > 0 ? "Could not prepare the update." : "Could not prepare the selected version.", e);
         }
         catch (Exception e) when (e is not (OutOfMemoryException or AccessViolationException))
         {
@@ -447,6 +469,17 @@ public partial class MainWindow
     private static string UpdateActionContext(UpdateCandidate candidate) => candidate.Version + " · "
         + (candidate.Channel == "stable" ? "Stable" : "Testing");
 
+    private static int? CompareReleaseVersion(UpdateCandidate candidate) =>
+        SemanticVersion.TryParse(AppBuild.Current.Version, out var installed)
+        && SemanticVersion.TryParse(candidate.Version, out var version) ? version.CompareTo(installed) : null;
+
+    private static string DownloadReleaseTitle(UpdateCandidate candidate) => CompareReleaseVersion(candidate) switch
+    {
+        > 0 => "Download update",
+        < 0 => "Download earlier version",
+        _ => "Download version"
+    };
+
     private bool DownloadCancellationAvailable => updateDownloading && updateBusy && !updateCommitting
         && updateCancellation is { IsCancellationRequested: false };
     private bool CancelDownloadSelected => navigation.Id == "prepare-update" && view.Current.Route == OverlayRoute.UpdateReview
@@ -463,7 +496,7 @@ public partial class MainWindow
         var entry = entries[index];
         var downloading = updateDownloading && updateBusy && !updateCommitting;
         var cancelling = downloading && updateCancellation?.IsCancellationRequested == true;
-        var title = downloading ? cancelling ? "Cancelling…" : "Cancel download" : "Download update";
+        var title = downloading ? cancelling ? "Cancelling…" : "Cancel download" : DownloadReleaseTitle(candidate);
         if (entry.Button.Content is ActionButtonContent content && content.Title.Text != title)
         {
             SetEntryText(entry.Id, title);
@@ -533,7 +566,7 @@ public partial class MainWindow
     {
         var reason = error switch
         {
-            ChecksumFailedException => "The downloaded package failed its integrity check. Installation did not start. Download the update again.",
+            ChecksumFailedException => "The downloaded package failed its integrity check. Installation did not start. Download the package again.",
             AcquireLockFailedException => "Another update is in progress. Wait for it to finish and try again.",
             NotInstalledException => "Installation not found. Repair the overlay using Setup before updating.",
             UnauthorizedAccessException => "Check that the repository is public and GitHub is available.",
