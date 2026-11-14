@@ -96,7 +96,7 @@ public partial class MainWindow
         var favorites = SessionHubSettings.Favorites(Controller.Settings);
         if (favorites.Length > 0)
         {
-            Section("Quick access");
+            Section("Quick access", compactChrome || narrow);
             var first = Rows.RowDefinitions.Count;
             for (var i = 0; i < favorites.Length; i++)
                 BuildFavorite(favorites[i], first + i / 2, i % 2);

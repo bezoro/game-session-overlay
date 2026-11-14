@@ -139,7 +139,8 @@ internal static class SessionHubTests
         {
             96,
             144,
-            192
+            192,
+            288
         }
 
         )
@@ -158,7 +159,8 @@ internal static class SessionHubTests
                     var left = SidebarLayout.Place(display, dpi, percent, "Left");
                     var right = SidebarLayout.Place(display, dpi, percent, "Right");
                     Check(left.X >= display.X && left.Y >= display.Y && right.X + right.Width <= display.X + display.Width && left.Height <= display.Height, "Outside usable work area");
-                    Check(right.X > left.X && right.Width == left.Width, "Side placement broken");
+                    Check(right.X >= left.X && right.Width == left.Width
+                        && right.X + right.Width - left.X == display.Width - 2 * (left.X - display.X), "Side placement broken");
                     Check(SidebarLayout.EffectiveScale(display, dpi, percent) >= percent / 100d, "Chosen scale was reduced");
                 });
         BusyControllerChecks(test);
@@ -629,6 +631,15 @@ internal static class SessionHubTests
 
     private static void RunViews(Action<string, Action> test)
     {
+        test("hub session icon respects native pixels through 300 percent DPI", () =>
+        {
+            static BitmapSource Icon(int size) => BitmapSource.Create(size, size, 96, 96, PixelFormats.Bgra32, null, new byte[size * size * 4], size * 4);
+            var bitmap = Icon(64);
+            Check(MainWindow.ContextIconSize(bitmap, 42, 1) == 42, "Native icon should retain its intended size at 100%");
+            Check(MainWindow.ContextIconSize(bitmap, 42, 2) == 32, "200% should cap the bitmap at its original resolution");
+            Check(MainWindow.ContextIconSize(bitmap, 42, 3) == 21, "300% should cap the bitmap at its original resolution");
+            Check(MainWindow.ContextIconSize(Icon(48), 42, 3) == 0, "An icon that would be too small needs the vector fallback");
+        });
         test("hub Resume leads to Close across and shortcuts below", () =>
         {
             var w = Fixture(out _, out _, out _, out _);
@@ -638,6 +649,14 @@ internal static class SessionHubTests
                 {
                     Arrange(w, width, height);
                     Pick(w, "session-card");
+                    Arrange(w, width, height);
+                    var viewport = (ScrollViewer)w.FindName("ContentScroll");
+                    foreach (var id in w.ActionIds.Where(SessionHubSettings.Catalog.Contains).Take(4))
+                    {
+                        var button = ReviewFixTests.Button(w, id);
+                        var bottom = button.TranslatePoint(new Point(0, button.ActualHeight), viewport).Y;
+                        Check(bottom <= viewport.ViewportHeight, $"{id} extends to {bottom:0} past the opening viewport {viewport.ViewportHeight:0} at {width}×{height}");
+                    }
                     w.Move(NavDirection.Right);
                     Check(w.SelectedAction == "session-close", "Right did not reach Close");
                     w.Move(NavDirection.Left);
@@ -649,7 +668,10 @@ internal static class SessionHubTests
                     Check(w.SelectedAction == "steam-overlay", "Down did not reach the first shortcut");
                 }
 
-                w.Controller.Change(w.Controller.Settings with { FavoriteQuickActions = ["audio", "taskview", "steam"] });
+                w.Controller.Change(w.Controller.Settings with
+                {
+                    FavoriteQuickActions = ["audio", "taskview", "steam"]
+                });
                 w.RefreshRows();
                 Check(w.ActionIds.Where(SessionHubSettings.Catalog.Contains).SequenceEqual(new[] { "audio", "taskview", "steam" }),
                     "Hub changed configured shortcut order");

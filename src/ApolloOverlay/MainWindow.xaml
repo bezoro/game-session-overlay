@@ -567,6 +567,7 @@
     </ResourceDictionary>
   </Window.Resources>
   <Grid
+    x:Name="PanelRoot"
     Margin="12">
     <Border
       x:Name="GlassSurface"
@@ -944,9 +945,12 @@
                   x:Name="SessionActions"
                   Margin="12,0,12,12">
                   <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="3*" />
-                    <ColumnDefinition Width="8" />
-                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition
+                      Width="3*" />
+                    <ColumnDefinition
+                      Width="8" />
+                    <ColumnDefinition
+                      Width="2*" />
                   </Grid.ColumnDefinitions>
                   <Button
                     x:Name="SessionCardButton"
@@ -955,7 +959,8 @@
                     MinHeight="48">
                     <Grid>
                       <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="24" />
+                        <ColumnDefinition
+                          Width="24" />
                         <ColumnDefinition />
                       </Grid.ColumnDefinitions>
                       <local:VectorIcon
