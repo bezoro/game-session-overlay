@@ -21,12 +21,13 @@ The overlay checks controller charge in the background and requests a Windows no
 | B | Go back; hide the panel from Session |
 | LB / RB | Switch tabs |
 | X | Open window options in Session and Apps |
+| Y on the game card | Open Steam Overlay when supported |
 | Guide | Open or hide the panel |
 | Left / right on a volume control | Adjust in 5% steps |
 
 Release the buttons and sticks when returning to the game. The panel waits for release before handing focus back. If direction and A arrive together, only the selection changes; press A again to activate it.
 
-**Resume** returns to the selected session window. If that window has closed, choose another one. Window options include application audio, minimize, details and close. To close a window, choose **Close window…**, release A, then make a new 1.5-second hold. Releasing early or pressing B cancels.
+Select the **game card** and press **A** to return. The card shows the available Xbox controls. **Y** opens Steam Overlay and appears dimmed when unavailable. On a keyboard, press Y with the card selected. **X** opens options for that window, including its audio, minimize, maximize or restore, details and close. To close, choose **Close window…**, then select **Close window** in the confirmation. **Cancel** is selected first. Press **B** or **Esc** to go back.
 
 If Windows blocks the request because the app runs as administrator, it may ask you to approve closing that window. The overlay keeps running in standard mode. The app can still ask you to save before it closes.
 

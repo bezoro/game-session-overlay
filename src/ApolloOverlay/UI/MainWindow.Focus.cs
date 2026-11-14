@@ -240,6 +240,7 @@ public partial class MainWindow
     private void RevokeFocus(string reason, bool supersede = true)
     {
         ResetControllerBadge();
+        StopSelectionMotion();
         foreach (var entry in entries)
             InteractionMotion.Stop(entry.Button);
         activationCancellation?.Cancel();

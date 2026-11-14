@@ -138,6 +138,7 @@ public partial class MainWindow
         }
 
         var previous = entries.Select(e => e.Id).ToArray();
+        StopSelectionMotion();
         Rows.Children.Clear();
         Rows.RowDefinitions.Clear();
         Rows.ColumnDefinitions.Clear();
@@ -147,7 +148,7 @@ public partial class MainWindow
         operationText = null;
         entries.Add(new("settings", SettingsGear, () => Page(2), true, "Open System"));
         RefreshUpdateIndicator();
-        ContextCard.Visibility = view.Current.Route == OverlayRoute.Hub ? Visibility.Visible : Visibility.Collapsed;
+        SessionCardButton.Visibility = view.Current.Route == OverlayRoute.Hub ? Visibility.Visible : Visibility.Collapsed;
         var target = Controller.Session.CardTarget;
         var valid = Controller.CardTargetAvailable(target);
         _ = UpdateSessionArtwork();
@@ -156,7 +157,6 @@ public partial class MainWindow
         ApplySessionCardDensity();
         TargetLabel.Text = target?.Title ?? "No window selected";
         TargetLabel.ToolTip = target?.Title;
-        AutomationProperties.SetName(ContextCard, target?.Title ?? "No window selected");
         SessionEvidence.Text = target?.ProcessName ?? "Apps";
         ContextStatus.Text = Controller.Session.CardPending ? "Finding a window" : target is null ? "No selection" : valid ? "Available" : "Window unavailable";
         ContextStatusDot.Opacity = valid ? 1 : .3;
@@ -244,7 +244,6 @@ public partial class MainWindow
     private string ActionDescription(string id, string description, bool available) => QuickAccessAction(id) ? id switch
     {
         "playnite" when narrow && !available => "Needs setup",
-        "steam-overlay" when narrow && description == "Needs a Steam game" => "Steam game only",
         "audio" when narrow && !audio.Current.Available => "No output",
         _ => description
     } : description;
@@ -255,7 +254,6 @@ public partial class MainWindow
         var displayTitle = compactShortcut ? id switch
         {
             "steam" => "Big Picture",
-            "steam-overlay" when title == "Steam Big Picture menu" => "Steam menu",
             _ => title
         } : title;
         var displayDescription = ActionDescription(id, description, available);

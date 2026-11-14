@@ -20,6 +20,15 @@ internal static class Native
         public int X, Y;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct WindowPlacement
+    {
+        public int Length, Flags;
+        public WindowShowState ShowState;
+        public Point MinPosition, MaxPosition;
+        public Rect NormalPosition;
+    }
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     internal struct MonitorInfo
     {
@@ -92,6 +101,8 @@ internal static class Native
     internal static extern bool IsWindowVisible(nint hwnd);
     [DllImport("user32.dll")]
     internal static extern bool IsIconic(nint hwnd);
+    [DllImport("user32.dll")]
+    internal static extern bool GetWindowPlacement(nint hwnd, ref WindowPlacement placement);
     [DllImport("user32.dll")]
     internal static extern nint MonitorFromWindow(nint hwnd, uint flags);
     [DllImport("user32.dll")]

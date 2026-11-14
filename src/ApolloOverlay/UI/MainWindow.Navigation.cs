@@ -51,7 +51,7 @@ public partial class MainWindow
         ContentScroll.ScrollToVerticalOffset(next.ScrollOffset);
     }
 
-    internal void OpenOptions(WindowRef target) => OpenView(new(OverlayRoute.TargetOptions, target, "application-mute"));
+    internal void OpenOptions(WindowRef target) => OpenView(new(OverlayRoute.TargetOptions, target, "application-audio"));
     private void ChooseSession() => OpenView(new(OverlayRoute.Apps, SelectedId: Controller.Apps.FirstOrDefault() is { } w ? WindowId(w) : "refresh-apps", ChooseSession: true));
     internal void Page(int index) => RunSemanticCommand("navigate-tab", () => PageCore(index));
     private void PageCore(int index)
@@ -81,26 +81,55 @@ public partial class MainWindow
         "setup" => OverlayRoute.Setup,
         _ => OverlayRoute.OperationResult
     }, detail, first));
+    private void UpdateSelectionMotion()
+    {
+        var context = InputContext;
+        var animate = IsVisible && context.Confirmed && context.Active && context.OwnForeground && !context.OwnedDialog && !context.Exiting
+            && InteractionMotion.Allowed && !Controller.Settings.ReducedMotion;
+        Button? selected = null;
+        if (animate)
+            selected = entries.FirstOrDefault(entry => entry.Available && entry.Id == navigation.Id)?.Button;
+        if (ReferenceEquals(selectionMotionTarget, selected))
+            return;
+        StopSelectionMotion();
+        if (selected is not null)
+            InteractionMotion.SetIsSelected(selected, true);
+        selectionMotionTarget = selected;
+    }
+
+    private Button? selectionMotionTarget;
+    private void StopSelectionMotion()
+    {
+        if (selectionMotionTarget is not { } selected)
+            return;
+        InteractionMotion.SetIsSelected(selected, false);
+        selectionMotionTarget = null;
+    }
+
     private void SetSelection(bool restoreFocus = true)
     {
         UpdateSessionActionHint();
+        UpdateSelectionMotion();
         if (navigation.Id != "exit" && !IsFooterAction(navigation.Id) && entries.Any(entry => entry.Id == navigation.Id))
             lastContentSelection = navigation.Id;
         foreach (var entry in entries)
         {
             var selected = entry.Id == navigation.Id;
-            InteractionMotion.SetIsSelected(entry.Button, selected && entry.Available && IsVisible && focusConfirmed && IsActive && OwnForeground && InteractionMotion.Allowed);
-            var primary = entry.Id == "session-card";
-            var sessionClose = entry.Id == "session-close";
-            entry.Button.BorderThickness = new(sessionClose && !selected ? 1 : 2);
+            if (entry.Id == "session-card")
+            {
+                entry.Button.SetResourceReference(BorderBrushProperty, selected ? ThemeSupport.Focus : ThemeSupport.Stroke);
+                entry.Button.SetResourceReference(BackgroundProperty, selected ? ThemeSupport.Control : ThemeSupport.Card);
+                AutomationProperties.SetItemStatus(entry.Button, selected ? "Selected" : "");
+                continue;
+            }
+
+            entry.Button.BorderThickness = new(2);
             entry.Button.SetResourceReference(BorderBrushProperty, selected ? ThemeSupport.Focus : ThemeSupport.Stroke);
             if (selected && !entry.Available && entry.Button.Resources["DescriptionTarget"] is Border)
                 entry.Button.BorderBrush = Brushes.Transparent;
-            entry.Button.SetResourceReference(BackgroundProperty, selected || primary ? ThemeSupport.FocusBackground : ThemeSupport.Control);
-            if (entry.Id == "close" || sessionClose && !selected)
+            entry.Button.SetResourceReference(BackgroundProperty, selected ? ThemeSupport.FocusBackground : ThemeSupport.Control);
+            if (entry.Id == "close")
                 entry.Button.Background = Brushes.Transparent;
-            if (primary && !selected)
-                entry.Button.SetResourceReference(BorderBrushProperty, ThemeSupport.Accent);
             if (page == 0 && subpage == "" && entry.Id == "apps")
             {
                 if (selected)
@@ -123,14 +152,11 @@ public partial class MainWindow
             if (entry.Button.Resources["DescriptionTarget"] is Border host)
             {
                 host.BorderThickness = new(2);
-                host.CornerRadius = new(primary ? 12 : 10);
-                if (!primary)
-                {
-                    if (selected && !entry.Available)
-                        host.SetResourceReference(Border.BackgroundProperty, ThemeSupport.FocusBackground);
-                    else
-                        host.Background = Brushes.Transparent;
-                }
+                host.CornerRadius = new(10);
+                if (selected && !entry.Available)
+                    host.SetResourceReference(Border.BackgroundProperty, ThemeSupport.FocusBackground);
+                else
+                    host.Background = Brushes.Transparent;
                 if (selected && !entry.Available)
                     host.SetResourceReference(Border.BorderBrushProperty, ThemeSupport.Focus);
                 else
@@ -292,9 +318,15 @@ public partial class MainWindow
     {
         if (!NavigationAllowed || busy || TransitionPending || Confirming || view.Current.Route is not (OverlayRoute.Hub or OverlayRoute.Apps or OverlayRoute.Details))
             return;
+        if (HubCardSelected)
+        {
+            if (ResumableCardTarget is { } card)
+                RunInterfaceAction(SessionCardButton, () => OpenOptions(card), FeedbackCue.Confirmation);
+            return;
+        }
+
         RequestCue(FeedbackCue.Confirmation);
-        var target = navigation.Id is "session-card" or "session-close" ? Controller.Session.CardTarget
-            : Controller.Apps.FirstOrDefault(w => WindowId(w) == navigation.Id || "options:" + WindowId(w) == navigation.Id) ?? Controller.Recent.Items.FirstOrDefault(w => "recent:" + WindowId(w) == navigation.Id || "options:recent:" + WindowId(w) == navigation.Id) ?? view.Current.Target ?? Controller.Session.Anchor;
+        var target = Controller.Apps.FirstOrDefault(w => WindowId(w) == navigation.Id || "options:" + WindowId(w) == navigation.Id) ?? Controller.Recent.Items.FirstOrDefault(w => "recent:" + WindowId(w) == navigation.Id || "options:recent:" + WindowId(w) == navigation.Id) ?? view.Current.Target ?? Controller.Session.Anchor;
         if (target is null)
         {
             ChooseSession();
@@ -403,17 +435,7 @@ public partial class MainWindow
         };
         ConfirmCloseButton.Click += (_, _) => ActivatePointerEntry(ConfirmCloseButton);
         SessionCardButton.Click += (_, _) => ActivatePointerEntry(SessionCardButton);
-        SessionCloseButton.Click += (_, _) => ActivatePointerEntry(SessionCloseButton);
-        SessionCloseButton.Resources["DescriptionTarget"] = SessionCloseDescription;
-        SessionCloseButton.GotKeyboardFocus += (_, _) =>
-        {
-            if (navigation.Id != "session-close")
-            {
-                navigation = new("session-close");
-                SetSelection();
-            }
-        };
-        ContextCard.PreviewMouseUp += (_, args) =>
+        SessionCardButton.PreviewMouseUp += (_, args) =>
         {
             if (args.ChangedButton != System.Windows.Input.MouseButton.Right)
                 return;
@@ -423,14 +445,16 @@ public partial class MainWindow
             navigation = new("session-card");
             SetSelection(restoreFocus: false);
             args.Handled = true;
-            var target = Controller.Session.CardTarget;
-            RunInterfaceAction(SessionCardButton, () =>
+            var previousSource = dispatchSource;
+            dispatchSource = -1;
+            try
             {
-                if (target is null)
-                    ChooseSession();
-                else
-                    OpenOptions(target);
-            }, FeedbackCue.Confirmation);
+                Details();
+            }
+            finally
+            {
+                dispatchSource = previousSource;
+            }
         };
         SessionCardButton.GotKeyboardFocus += (_, _) =>
         {
@@ -441,8 +465,6 @@ public partial class MainWindow
             }
         };
 
-        ContextCard.Focusable = true;
-        SessionCardButton.Resources["DescriptionTarget"] = ContextCard;
         CancelCloseButton.Click += (_, _) => ActivatePointerEntry(CancelCloseButton);
         SaveSettingsButton.Click += (_, _) => ActivatePointerEntry(SaveSettingsButton);
         DiscardSettingsButton.Click += (_, _) => ActivatePointerEntry(DiscardSettingsButton);

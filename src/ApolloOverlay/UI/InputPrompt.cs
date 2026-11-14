@@ -43,6 +43,7 @@ internal static partial class InputPrompt
         ["PgUp"] = new("PgUp", ThemeSupport.PromptKeyboard, "PgUp"),
         ["PgDn"] = new("PgDn", ThemeSupport.PromptKeyboard, "PgDn"),
         ["KeyX"] = new("X", ThemeSupport.PromptKeyboard, "X"),
+        ["KeyY"] = new("Y", ThemeSupport.PromptKeyboard, "Y"),
         ["Shift"] = new("Shift", ThemeSupport.PromptKeyboard, "Shift"),
         ["Ctrl"] = new("Ctrl", ThemeSupport.PromptKeyboard, "Ctrl"),
         ["MouseLeft"] = new("Left click", ThemeSupport.PromptMouse),

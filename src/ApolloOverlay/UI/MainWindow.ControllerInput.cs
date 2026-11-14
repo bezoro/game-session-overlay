@@ -266,6 +266,8 @@ public partial class MainWindow
             ActivateEntry();
         else if (events.Pressed.HasFlag(PadButtons.X) && events.Direction == 0)
             Details();
+        else if (events.Pressed.HasFlag(PadButtons.Y) && events.Direction == 0)
+            OpenCardSteamOverlay();
         else if (events.Pressed.HasFlag(PadButtons.LB))
             NavigatePrimaryTab(-1);
         else if (events.Pressed.HasFlag(PadButtons.RB))

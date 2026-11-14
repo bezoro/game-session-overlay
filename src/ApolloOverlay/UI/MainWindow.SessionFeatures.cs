@@ -88,7 +88,7 @@ public partial class MainWindow
                 return;
             if (view.Current.Route == OverlayRoute.Mixer)
             {
-                foreach (var target in Controller.Apps.Where(window => !window.Protected).DistinctBy(window => (window.Pid, window.Started)).Take(12))
+                foreach (var target in MixerTargets())
                 {
                     var state = await mixerAudio.RefreshAsync(target, epoch, request.Token);
                     if (exiting || request.IsCancellationRequested || epoch != featureEpoch || !IsVisible)
@@ -122,5 +122,5 @@ public partial class MainWindow
         }
     }
 
-    private string FeatureViewShape() => view.Current.Route + "|" + (view.Current.Route == OverlayRoute.AudioDevices ? string.Join("|", systemAudio.Current.Outputs.Select(item => item.Id + ":" + item.Name)) : string.Join("|", Controller.Apps.Where(item => !item.Protected).DistinctBy(item => (item.Pid, item.Started)).Take(12).Select(WindowId)) + "|" + (mixerTarget is { } target ? mixerStates.GetValueOrDefault(WindowId(target))?.CanSetVolume + ":" + mixerStates.GetValueOrDefault(WindowId(target))?.CanSetMute : ""));
+    private string FeatureViewShape() => view.Current.Route + "|" + (view.Current.Route == OverlayRoute.AudioDevices ? string.Join("|", systemAudio.Current.Outputs.Select(item => item.Id + ":" + item.Name)) : string.Join("|", MixerTargets().Select(WindowId)) + "|" + (CurrentMixerTarget is { } target ? mixerStates.GetValueOrDefault(WindowId(target))?.CanSetVolume + ":" + mixerStates.GetValueOrDefault(WindowId(target))?.CanSetMute : ""));
 }

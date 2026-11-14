@@ -67,7 +67,9 @@ internal static class PremiumInterfaceTests
             var w = ReviewFixTests.Window();
             try
             {
-                Require(!new ButtonAutomationPeer(ReviewFixTests.Button(w, "steam-overlay")).IsEnabled(), "Unavailable action remains invokable");
+                var card = new ButtonAutomationPeer(ReviewFixTests.Button(w, "session-card"));
+                Require(!w.ActionIds.Contains("steam-overlay") && card.GetHelpText().Contains("Steam Overlay unavailable", StringComparison.Ordinal),
+                    "The unavailable Steam gesture has an independent action or missing accessibility status");
             }
             finally
             {

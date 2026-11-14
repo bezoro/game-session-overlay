@@ -10,6 +10,10 @@ public partial class MainWindow
     private IApplicationAudio mixerAudio = null!;
     private readonly Dictionary<string, ApplicationAudioSnapshot> mixerStates = [];
     private WindowRef? mixerTarget;
+    private WindowRef? CurrentMixerTarget => view.Current.Target ?? mixerTarget;
+    private IEnumerable<WindowRef> MixerTargets() => view.Current.Target is { } target
+        ? Controller.Platform.Valid(target) ? [target] : []
+        : Controller.Apps.Where(item => !item.Protected).DistinctBy(item => (item.Pid, item.Started)).Take(12);
     private bool synchronizingFeatureSlider;
     private void UpdateMixerLabels()
     {
@@ -29,7 +33,7 @@ public partial class MainWindow
             SetEntryDescription("mix:" + WindowId(window), state?.CanSetVolume == true ? $"{state.VolumeMaximum:P0}" + (state.MuteState == ApplicationMuteState.Muted ? " · muted" : "") : "Check this app's audio");
         }
 
-        if (mixerTarget is not { } target || mixerStates.GetValueOrDefault(WindowId(target)) is not { } selected)
+        if (CurrentMixerTarget is not { } target || mixerStates.GetValueOrDefault(WindowId(target)) is not { } selected)
             return;
         SetFeatureEntry("mixer-volume", selected.CanSetVolume ? $"Volume · {selected.VolumeMaximum:P0}" : "Volume unavailable", InputHint("← / → adjusts volume", "Arrow keys adjust · Tab leaves the slider", "Drag to adjust volume"), selected.CanSetVolume);
         SetFeatureEntry("mixer-mute", selected.MuteState == ApplicationMuteState.Muted ? "Unmute audio" : "Mute app", target.ProcessName, selected.CanSetMute);
@@ -127,7 +131,7 @@ public partial class MainWindow
             return true;
         }
 
-        if (navigation.Id == "mixer-volume" && mixerTarget is { } selected && mixerStates.GetValueOrDefault(WindowId(selected)) is { CanSetVolume: true } snapshot)
+        if (navigation.Id == "mixer-volume" && CurrentMixerTarget is { } selected && mixerStates.GetValueOrDefault(WindowId(selected)) is { CanSetVolume: true } snapshot)
         {
             ChangeMixerVolume(selected, Math.Clamp(snapshot.VolumeMaximum!.Value + delta, 0, 1));
             return true;
@@ -144,7 +148,7 @@ public partial class MainWindow
             nextFeatureRead = 0;
             StartFeatureRead();
         });
-        if (mixerTarget is { } target && Controller.Platform.Valid(target))
+        if (CurrentMixerTarget is { } target && Controller.Platform.Valid(target))
         {
             Section(target.Title);
             var state = mixerStates.GetValueOrDefault(WindowId(target));
@@ -155,7 +159,7 @@ public partial class MainWindow
                 AddSessionSlider(volume, state.VolumeMaximum!.Value, value => ChangeMixerVolume(target, value));
             AddRow("mixer-mute", state?.MuteState == ApplicationMuteState.Muted ? "Unmute audio" : "Mute app", target.ProcessName, () =>
             {
-                if (mixerStates.GetValueOrDefault(WindowId(target)) is not { CanSetMute: true } current)
+                if (!Controller.Platform.Valid(target) || mixerStates.GetValueOrDefault(WindowId(target)) is not { CanSetMute: true } current)
                     return;
                 StartSessionAction("mixer-mute", async token =>
                 {
@@ -164,6 +168,12 @@ public partial class MainWindow
                     return change.Result;
                 }, RefreshRows);
             }, state?.CanSetMute == true);
+        }
+
+        if (view.Current.Target is not null)
+        {
+            AddRow("back", "Back", "Window options", Back);
+            return;
         }
 
         Section("Apps");
@@ -188,7 +198,7 @@ public partial class MainWindow
 
     private void ChangeMixerVolume(WindowRef target, float value)
     {
-        if (!NavigationAllowed || busy || TransitionPending)
+        if (!NavigationAllowed || busy || TransitionPending || CurrentMixerTarget?.Same(target) != true || !Controller.Platform.Valid(target))
             return;
         OperationTask = RunSessionAction("mixer-volume", async token =>
         {

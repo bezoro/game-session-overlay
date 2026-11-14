@@ -8,6 +8,16 @@ internal enum ClosePost
     Rejected, AccessDenied, Accepted, Cancelled
 }
 
+internal enum WindowShowState
+{
+    Normal = 1, Minimized = 2, Maximized = 3
+}
+
+internal enum WindowStatePost
+{
+    Unavailable, Rejected, Accepted, Cancelled
+}
+
 public interface IWindowEffects
 {
     bool Valid(WindowRef window);
@@ -37,6 +47,48 @@ public interface IWindowEffects
 
 public sealed class GuardedActions(IWindowEffects effects, Action<SteamSequenceEvidence>? progress = null)
 {
+    internal async Task<ActionResult> MaximizeOrRestore(WindowRef window, CancellationToken cancellation,
+        Func<WindowShowState?> observe, Func<WindowShowState, WindowStatePost> request)
+    {
+        if (cancellation.IsCancellationRequested)
+            return new(ResultKind.Cancelled, "Cancelled before changing the window state.");
+        if (!window.CanClose || window.SessionLauncher || observe() is not { } initial)
+            return new(ResultKind.Unavailable, "The window is protected or unavailable.");
+        if (initial == WindowShowState.Minimized)
+            return new(ResultKind.Unavailable, "A minimized window can be reopened with Resume.");
+        if (cancellation.IsCancellationRequested)
+            return new(ResultKind.Cancelled, "Cancelled before changing the window state.");
+
+        var posted = request(initial);
+        switch (posted)
+        {
+            case WindowStatePost.Cancelled:
+                return new(ResultKind.Cancelled, "Cancelled before changing the window state.");
+            case WindowStatePost.Unavailable:
+                return new(ResultKind.Unavailable, "The window changed or does not support this action.");
+            case WindowStatePost.Rejected:
+                return new(ResultKind.Failed, "Windows rejected the window state request.");
+        }
+
+        var desired = initial == WindowShowState.Maximized ? WindowShowState.Normal : WindowShowState.Maximized;
+        for (var i = 0; i <= 20; i++)
+        {
+            if (cancellation.IsCancellationRequested)
+                return new(ResultKind.Unknown, "Observation cancelled after dispatch.");
+            var current = observe();
+            if (cancellation.IsCancellationRequested)
+                return new(ResultKind.Unknown, "Observation cancelled after dispatch.");
+            if (current is null)
+                return new(ResultKind.Unknown, "The window became unavailable after dispatch. The result could not be confirmed.");
+            if (current == desired)
+                return new(ResultKind.Completed, desired == WindowShowState.Maximized ? "Window maximized." : "Window restored.");
+            if (i < 20)
+                await effects.Wait(50);
+        }
+
+        return new(ResultKind.Unknown, "The requested window state was not confirmed within one second.");
+    }
+
     public async Task<ActionResult> Minimize(WindowRef window, CancellationToken cancellation)
     {
         if (cancellation.IsCancellationRequested)

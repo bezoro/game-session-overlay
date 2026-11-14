@@ -347,26 +347,16 @@ public partial class MainWindow
         UpdatePersistentState();
     }
 
-    private void Shortcut(string keys)
+    private void OpenGameBar()
     {
-        var target = keys == "Win+Tab" ? Controller.ReturnTarget : Controller.Session.Anchor;
+        var target = Controller.Session.Anchor;
         if (target is null)
         {
             FeedbackText("No valid window for this shortcut.");
             return;
         }
 
-        var steam = keys is "Shift+Tab" or "Ctrl+Tab";
-        if (steam && !Controller.SteamOverlayEligible(target))
-        {
-            FeedbackText("Steam Overlay unconfirmed in this window.");
-            return;
-        }
-
-        if (steam)
-            QueueSteam(target, () => Controller.Session.Anchor?.Same(target) == true && Controller.SteamOverlayEligible(target));
-        else
-            RunEffect((c, keep) => Controller.Platform.Shortcut(target, keys, c, keep), () => Controller.Platform.Valid(target), target);
+        RunEffect((c, keep) => Controller.Platform.Shortcut(target, "Win+G", c, keep), () => Controller.Platform.Valid(target), target);
     }
 
     private void RunInPlace(WindowRef target, Func<CancellationToken, Task<ActionResult>> effect, string action, Func<bool>? stillCurrent = null) =>

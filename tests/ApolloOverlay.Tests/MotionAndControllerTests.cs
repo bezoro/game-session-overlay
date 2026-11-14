@@ -34,7 +34,7 @@ internal static class MotionAndControllerTests
         test("enabled and unavailable actions render a single selection outline", () =>
         {
             using var host = new Host();
-            foreach (var id in new[] { "session-card", "steam-overlay" })
+            foreach (var id in new[] { "session-card", "playnite" })
             {
                 Pick(host.Window, id);
                 var button = id == "session-card" ? (Button)host.Window.FindName("SessionCardButton") : ReviewFixTests.Button(host.Window, id);
@@ -52,31 +52,44 @@ internal static class MotionAndControllerTests
                 Require(strokes == 1, "Selection renders " + strokes + " overlapping outlines for " + id);
             }
         });
-        test("selection acknowledges immediately then settles without moving layout or retaining obsolete motion", () =>
+        test("selection sheen loops with an idle gap and stops when selection or visibility changes", () =>
         {
             using var host = new Host();
             var window = host.Window;
-            var button = (Button)window.FindName("SessionCardButton");
+            Pick(window, "taskview");
+            var button = ReviewFixTests.Button(window, "taskview");
             button.ApplyTemplate();
             var outline = (Border)button.Template.FindName("SelectionBreath", button);
             var sheen = (Border)button.Template.FindName("SelectionSheen", button);
             var label = (TextBlock)window.FindName("TargetLabel");
             var layout = System.Windows.Controls.Primitives.LayoutInformation.GetLayoutSlot(label);
             var surface = (ScaleTransform)((Grid)button.Template.FindName("ButtonSurface", button)).RenderTransform;
-            Require(window.SelectedAction == "session-card" && button.IsKeyboardFocusWithin, "Motion delayed the logical selection or keyboard focus");
+            Require(window.SelectedAction == "taskview" && button.IsKeyboardFocusWithin, "Motion delayed the logical selection or keyboard focus");
             Require(Strokes(button) == 1 && outline.Opacity > 0, "Initial selection has no immediate, single visible outline");
+            var transform = (TranslateTransform)sheen.Background.RelativeTransform;
             Pump(350);
             Require(System.Windows.Controls.Primitives.LayoutInformation.GetLayoutSlot(label) == layout, "Selection acknowledgement changed layout");
             Require(surface.ScaleX == 1 && surface.ScaleY == 1 && !surface.HasAnimatedProperties, "Selection retained decorative scaling after settling");
-            var settled = outline.Opacity;
-            Require(sheen.Opacity == 0, "The selected action kept a repeating light sweep");
-            Pump(250);
-            Require(Math.Abs(outline.Opacity - settled) < .001 && sheen.Opacity == 0, "A settled selection continued decorative breathing or sheen");
+            if (InteractionMotion.Allowed)
+            {
+                Require(sheen.Opacity > 0 && transform.X > -.7 && transform.X < .7, "Selected action had no traveling highlight");
+                Pump(900);
+                Require(sheen.Opacity == 0, "Selected action had no rest between highlights");
+                Pump(2750);
+                Require(sheen.Opacity > 0, "Selected action did not repeat the highlight");
+            }
             window.Sequential(1);
             Pump(10);
             Require(!outline.HasAnimatedProperties && !sheen.HasAnimatedProperties && !sheen.Background.RelativeTransform.HasAnimatedProperties,
                 "The previous selection retained obsolete animation clocks");
-            Pick(window, "session-card");
+            Pick(window, "taskview");
+            window.Controller.Change(window.Controller.Settings with
+            {
+                ReducedMotion = true
+            });
+            window.RefreshRows();
+            var restrained = ReviewFixTests.Button(window, "taskview");
+            Require(!InteractionMotion.GetIsSelected(restrained), "Reduced motion allowed the selection sweep");
             window.Hide();
             Pump(10);
             Require(!InteractionMotion.GetIsSelected(button) && !outline.HasAnimatedProperties && !sheen.HasAnimatedProperties,

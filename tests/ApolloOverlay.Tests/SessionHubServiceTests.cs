@@ -1,5 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Windows.Interop;
+using System.Windows.Threading;
 using ApolloOverlay;
 
 internal static unsafe class SessionHubServiceTests
@@ -399,6 +401,7 @@ internal static unsafe class SessionHubServiceTests
             }
         });
         RunMinimize(test);
+        RunMaximizeOrRestore(test);
         RunDevices(test);
         RunFeedback(test);
         RunAbi(test);
@@ -521,6 +524,170 @@ internal static unsafe class SessionHubServiceTests
             Require(Done(new GuardedActions(effects).Minimize(Target, cancel.Token)).Kind == ResultKind.Unknown && effects.Requests == 1, "Post-dispatch cancellation");
         });
     }
+
+    private static void RunMaximizeOrRestore(Action<string, Action> test)
+    {
+        test("maximize and restore require observation of the requested state", () =>
+        {
+            foreach (var initial in new[] { WindowShowState.Normal, WindowShowState.Maximized })
+            {
+                var effects = new WindowEffects();
+                var current = initial;
+                var desired = initial == WindowShowState.Normal ? WindowShowState.Maximized : WindowShowState.Normal;
+                var posts = 0;
+                effects.Waiting = () => current = desired;
+                var result = Done(new GuardedActions(effects).MaximizeOrRestore(Target, CancellationToken.None, () => current, state =>
+                {
+                    Require(state == initial, "Dispatch must use the originally verified state");
+                    posts++;
+                    return WindowStatePost.Accepted;
+                }));
+                Require(result.Kind == ResultKind.Completed && effects.Waits == 50 && posts == 1, "Completion requires observation after dispatch");
+                Require(effects.Focus == 0 && effects.Keys == 0 && effects.Closes == 0, "Resizing must not focus, inject input, or close");
+            }
+        });
+        test("maximize blocks stale, protected, launcher, minimized and cancelled targets", () =>
+        {
+            var actions = new GuardedActions(new WindowEffects());
+            WindowStatePost UnexpectedPost(WindowShowState _) => throw new Exception("An unavailable request dispatched");
+            foreach (var target in new[] { Target with { Protected = true }, Target with { ProcessName = "EpicGamesLauncher" }, Target with { Pid = 0 } })
+                Require(Done(actions.MaximizeOrRestore(target, CancellationToken.None, () => throw new Exception("Unsafe observation"), UnexpectedPost)).Kind == ResultKind.Unavailable,
+                    "Invalid targets must stop before observation");
+            Require(Done(actions.MaximizeOrRestore(Target, CancellationToken.None, () => null, UnexpectedPost)).Kind == ResultKind.Unavailable, "Stale identity must stop dispatch");
+            Require(Done(actions.MaximizeOrRestore(Target, CancellationToken.None, () => WindowShowState.Minimized, UnexpectedPost)).Kind == ResultKind.Unavailable, "Minimized windows need Resume");
+            using var cancel = new CancellationTokenSource();
+            Require(Done(actions.MaximizeOrRestore(Target, cancel.Token, () =>
+            {
+                cancel.Cancel();
+                return WindowShowState.Normal;
+            }, UnexpectedPost)).Kind == ResultKind.Cancelled, "Cancellation between observation and dispatch must prevent posting");
+        });
+        test("maximize reports rejected, unconfirmed and interrupted requests accurately", () =>
+        {
+            var effects = new WindowEffects();
+            var actions = new GuardedActions(effects);
+            WindowShowState? current = WindowShowState.Normal;
+            Require(Done(actions.MaximizeOrRestore(Target, CancellationToken.None, () => current, _ => WindowStatePost.Rejected)).Kind == ResultKind.Failed
+                && effects.Waits == 0, "A rejected command must never be observed as dispatched");
+            Require(Done(actions.MaximizeOrRestore(Target, CancellationToken.None, () => current, _ => WindowStatePost.Accepted)).Kind == ResultKind.Unknown
+                && effects.Waits == 1000, "An accepted command without the expected state must time out");
+            effects.Waiting = () => current = null;
+            Require(Done(actions.MaximizeOrRestore(Target, CancellationToken.None, () => current, _ => WindowStatePost.Accepted)).Kind == ResultKind.Unknown,
+                "Replacement after dispatch must remain unconfirmed");
+            using var cancel = new CancellationTokenSource();
+            current = WindowShowState.Normal;
+            var accepted = false;
+            Require(Done(actions.MaximizeOrRestore(Target, cancel.Token, () =>
+            {
+                if (!accepted)
+                    return current;
+                cancel.Cancel();
+                return WindowShowState.Maximized;
+            }, _ =>
+            {
+                accepted = true;
+                return WindowStatePost.Accepted;
+            })).Kind == ResultKind.Unknown, "Cancellation during the confirming read must remain unconfirmed");
+        });
+        test("native maximize and restore affect only the verified disposable window", OrdinaryWindowsMaximizeOrRestore);
+    }
+
+    private static void OrdinaryWindowsMaximizeOrRestore()
+    {
+        // Exercise real HWNDs on a private, non-input desktop so the fixture cannot cover the user's windows.
+        const uint desktopAccess = 0x01FF;
+        nint desktop = 0;
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                desktop = CreateDesktop($"OverlayResize-{Guid.NewGuid():N}", null, 0, 0, desktopAccess, 0);
+                Require(desktop != 0 && SetThreadDesktop(desktop), $"Could not create the test desktop (Win32 {Marshal.GetLastPInvokeError()})");
+                ExerciseDisposableWindow();
+            }
+            catch (Exception error)
+            {
+                failure = error;
+            }
+            finally
+            {
+                Dispatcher.FromThread(Thread.CurrentThread)?.InvokeShutdown();
+            }
+        })
+        {
+            IsBackground = true
+        };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        Require(thread.Join(TimeSpan.FromSeconds(8)), "The isolated native fixture did not finish");
+        if (desktop != 0)
+            Require(CloseDesktop(desktop), $"Could not release the test desktop (Win32 {Marshal.GetLastPInvokeError()})");
+        if (failure is not null)
+            throw new Exception("Isolated native maximize/restore fixture failed", failure);
+    }
+
+    private static void ExerciseDisposableWindow()
+    {
+        using var fixture = new HwndSource(new HwndSourceParameters("Disposable resize target")
+        {
+            WindowStyle = 0x10CF0000, // WS_VISIBLE | WS_OVERLAPPEDWINDOW
+            ExtendedWindowStyle = 0x08000000, // WS_EX_NOACTIVATE
+            Width = 120,
+            Height = 80
+        });
+        using var fixedSize = new HwndSource(new HwndSourceParameters("Disposable fixed-size window")
+        {
+            WindowStyle = 0x10CE0000, // WS_VISIBLE | WS_OVERLAPPEDWINDOW without WS_MAXIMIZEBOX
+            ExtendedWindowStyle = 0x08000000,
+            Width = 120,
+            Height = 80
+        });
+        using var platform = new WindowsPlatform(allowOwnedFixture: true);
+        var windows = platform.Windows();
+        var target = windows.Single(window => window.Handle == fixture.Handle);
+        var fixedTarget = windows.Single(window => window.Handle == fixedSize.Handle);
+        var commands = new List<nint>();
+        fixture.AddHook((nint _, int message, nint command, nint _, ref bool _) =>
+        {
+            if (message == 0x0112)
+                commands.Add(command);
+            return 0;
+        });
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        ActionResult Resize(WindowRef window)
+        {
+            var task = platform.MaximizeOrRestore(window, cancellation.Token);
+            if (!task.IsCompleted)
+            {
+                var frame = new DispatcherFrame();
+                var dispatcher = Dispatcher.CurrentDispatcher;
+                _ = task.ContinueWith(_ => dispatcher.BeginInvoke(() => frame.Continue = false), TaskScheduler.Default);
+                Dispatcher.PushFrame(frame);
+            }
+
+            return task.GetAwaiter().GetResult();
+        }
+
+        Require(Resize(target with
+        {
+            Generation = target.Generation + 1
+        }).Kind == ResultKind.Unavailable, "A stale generation must remain unavailable");
+        Require(Resize(fixedTarget).Kind == ResultKind.Unavailable, "A fixed-size window must remain unavailable");
+        Require(Resize(target).Kind == ResultKind.Completed, "The native window did not maximize");
+        Require(Resize(target).Kind == ResultKind.Completed, "The native window did not restore");
+        Require(commands.SequenceEqual(new nint[] { 0xF030, 0xF120 }), "Exactly one maximize and one restore command must reach the selected HWND");
+        Require(Native.GetForegroundWindow() != fixture.Handle && Native.GetForegroundWindow() != fixedSize.Handle, "The isolated fixture came to the foreground");
+    }
+
+    [DllImport("user32.dll", EntryPoint = "CreateDesktopW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern nint CreateDesktop(string name, string? device, nint devMode, uint flags, uint access, nint security);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetThreadDesktop(nint desktop);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool CloseDesktop(nint desktop);
 
     private sealed class ControllerNative : IControllerNative
     {

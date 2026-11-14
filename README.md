@@ -27,7 +27,7 @@ The default dark theme combines warm charcoal, a restrained amber accent and war
 | Keyboard | Arrows / Tab | Enter / Space | Esc | PageUp / PageDown |
 | Mouse | Pointer and scrolling | Click | Back button | Click |
 
-X opens window options through the controller or keyboard. Choose **Close window…** to review the exact window, then choose **Close window** to send a normal close request. **Cancel** is selected by default.
+Select the game card and press **A** to return to the window. **Y** opens Steam Overlay when available. **X** opens window options for per-app audio, minimize, maximize or restore, and close. Choose **Close window…** to review the exact window and confirm. **Cancel** is selected first.
 
 **Focus does not block controller input globally.** Games that read XInput in the background may still receive input. A streaming device may be virtual and may not report the TV controller's battery. See [compatibility](docs/controller-isolation.md) and the [real-use test checklist](docs/pilot-checklist.md).
 

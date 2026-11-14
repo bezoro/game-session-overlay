@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -88,11 +89,12 @@ public partial class MainWindow
         if (!OpenAnimationAllowed)
         {
             CancelOpenAnimation();
+            StopSelectionMotion();
             foreach (var entry in entries)
                 InteractionMotion.Stop(entry.Button);
         }
         else if (IsVisible)
-            SetSelection(restoreFocus: false);
+            UpdateSelectionMotion();
         ApplyAppearanceTheme();
         GlassSurface.Opacity = 1;
         if (SystemParameters.HighContrast)
@@ -268,8 +270,7 @@ public partial class MainWindow
         var context = InputContext;
         if (context.Visible && !context.Confirmed && !context.OwnedDialog)
         {
-            RenderHint(SessionHint, "Focus not confirmed");
-            System.Windows.Automation.AutomationProperties.SetHelpText(SessionCardButton, InputPrompt.Read(SessionHint));
+            UpdateSessionActionHint();
             RenderHint(ModeLabel, InputHint("{Guide} / {B} hide · reopen to retry", "{Esc} hides · tray opens the panel", "{MouseLeft} the panel to retry · tray opens"));
             return;
         }
@@ -280,7 +281,7 @@ public partial class MainWindow
         }
 
         UpdateSessionActionHint();
-        var details = page == 1 || subpage == "details" || view.Current.Route == OverlayRoute.Hub && Controller.CardTargetAvailable(Controller.Session.CardTarget);
+        var details = page == 1 || subpage == "details";
         var prompt = inputMethod switch
         {
             "mouse" => "{MouseLeft} Select · {MouseScroll} Scroll" + (details ? " · {MouseRight} Options" : ""),
@@ -292,21 +293,33 @@ public partial class MainWindow
 
     private void UpdateSessionActionHint()
     {
-        var canResume = !Controller.Session.CardPending && Controller.CardTargetAvailable(Controller.Session.CardTarget);
-        var glyph = navigation.Id != "session-card" ? "" : inputMethod switch
+        if (view.Current.Route != OverlayRoute.Hub)
+            return;
+        var context = InputContext;
+        var focusUnavailable = context.Visible && !context.Confirmed && !context.OwnedDialog;
+        var canResume = !focusUnavailable && ResumableCardTarget is not null;
+        var showShortcuts = HubCardSelected && !focusUnavailable;
+        SessionSteamHint.Visibility = SessionOptionsHint.Visibility = !canResume ? Visibility.Collapsed : showShortcuts ? Visibility.Visible : Visibility.Hidden;
+        var primary = focusUnavailable ? "Focus not confirmed" : canResume ? "Resume" : "Choose window";
+        RenderHint(SessionHint, (!focusUnavailable ? InputHint("{A} ", "{Enter} ", "{MouseLeft} ") : "") + primary);
+        if (canResume)
         {
-            "controller" => "{A} ",
-            "mouse" => "",
-            _ => "{Enter} "
-        };
-        var showActionIcon = canResume || glyph.Length == 0;
-        SessionActionIcon.Data = (Geometry)FindResource(canResume ? "Icon.play" : "Icon.window");
-        SessionActionIcon.Visibility = showActionIcon ? Visibility.Visible : Visibility.Collapsed;
-        ((Grid)SessionCardButton.Content).ColumnDefinitions[0].Width = new(showActionIcon ? 24 : 0);
-        var padding = compactChrome || narrow ? showActionIcon ? 8 : 4 : 12;
-        SessionCardButton.Padding = new(padding, 8, padding, 8);
-        var label = canResume ? "Resume" : "Choose window";
-        RenderHint(SessionHint, glyph + label);
+            RenderHint(SessionOptionsHint, InputHint("{X} Options", "{KeyX} Options", "{MouseRight} Options"));
+            RenderHint(SessionSteamHint, InputHint("{Y} ", "{KeyY} ", "{KeyY} ") + "Steam Overlay");
+            System.Windows.Automation.AutomationProperties.SetItemStatus(SessionSteamHint, cardSteamAvailable ? "" : "Unavailable");
+            SessionSteamHint.ToolTip = cardSteamAvailable ? null : "Steam Overlay is unavailable for this window";
+            SessionSteamHint.SetResourceReference(TextBlock.ForegroundProperty, cardSteamAvailable ? ThemeSupport.Text : ThemeSupport.DisabledText);
+            if (SessionSteamHint.Inlines.FirstInline is InlineUIContainer { Child: VectorIcon glyph })
+                glyph.SetResourceReference(VectorIcon.FillProperty, cardSteamAvailable ? ThemeSupport.PromptY : ThemeSupport.DisabledText);
+            else if (SessionSteamHint.Inlines.FirstInline is InlineUIContainer { Child: Border keycap })
+                keycap.SetResourceReference(Border.BackgroundProperty, cardSteamAvailable ? ThemeSupport.PromptKeyboard : ThemeSupport.DisabledText);
+        }
+
+        var help = focusUnavailable ? primary : canResume
+            ? InputHint("A resumes", "Enter resumes", "Left click resumes") + " · " + InputHint("X opens options", "X opens options", "Right click opens options")
+                + (cardSteamAvailable ? " · Y opens Steam Overlay" : " · Steam Overlay unavailable")
+            : "Choose a window in Apps";
+        System.Windows.Automation.AutomationProperties.SetHelpText(SessionCardButton, help);
     }
 
     private void PlaceCompactStatus()
@@ -373,17 +386,17 @@ public partial class MainWindow
         TargetLabel.MaxHeight = TargetLabel.LineHeight * 2;
         TargetLabel.Margin = new(0, 0, 0, compact ? 2 : 4);
         SessionEvidence.FontSize = ResourceNumber("SessionType.Caption", 13);
-        SessionHint.FontSize = ResourceNumber(compact ? "SessionType.CompactBody" : "SessionType.Body", compact ? 14 : 15);
-        SessionCloseLabel.FontSize = ResourceNumber(compact ? "SessionType.Caption" : "SessionType.CompactBody", compact ? 13 : 14);
-        SessionHint.Margin = new(0);
+        var promptSize = ResourceNumber(compact ? "SessionType.Caption" : "SessionType.CompactBody", compact ? 13 : 14);
+        SessionHint.FontSize = SessionSteamHint.FontSize = SessionOptionsHint.FontSize = promptSize;
+        SessionHint.Margin = SessionSteamHint.Margin = new(0, 0, compact ? 4 : 14, 0);
         SessionIconColumn.Width = new(compact ? 48 : 66);
         SessionIconHost.Height = compact ? 40 : 54;
         SessionIconHost.Margin = new(0, 0, compact ? 8 : 12, 0);
         SessionIdentity.Margin = compact ? new(10, 6, 10, 6) : new(16, 14, 16, 12);
         ContextGlyph.Width = ContextGlyph.Height = compact ? 22 : 25;
         ApplyContextIconSize();
-        SessionActions.Margin = compact ? new(8, 0, 8, 6) : new(12, 0, 12, 12);
-        ContextCard.Margin = new(0, 0, 0, compact ? 6 : 12);
+        SessionActions.Margin = compact ? new(10, 0, 5, 8) : new(16, 0, 16, 14);
+        SessionCardButton.Margin = new(0, 0, 0, compact ? 6 : 12);
         // Root tabs provide their own label. Nested views keep a distinct heading.
         PageTitle.Visibility = view.Current.Route == OverlayRoute.Hub || view.Depth == 0 && view.Current.Route == OverlayRoute.Apps
             ? Visibility.Collapsed : Visibility.Visible;

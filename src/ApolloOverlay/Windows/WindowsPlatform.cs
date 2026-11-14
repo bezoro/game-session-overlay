@@ -268,6 +268,49 @@ public sealed class WindowsPlatform : IPlatform, IWindowEffects, IWindowIconNoti
 
     public bool IsMinimized(WindowRef window) => Valid(window) && Native.IsIconic(window.Handle);
     public bool RequestMinimize(WindowRef window) => !disposed && !window.Protected && Valid(window) && Native.ShowWindowAsync(window.Handle, 6);
+
+    public Task<ActionResult> MaximizeOrRestore(WindowRef window, CancellationToken cancellation)
+    {
+        var thread = Native.GetWindowThreadProcessId(window.Handle, out _);
+        return new GuardedActions(this).MaximizeOrRestore(window, cancellation,
+            () => ReadWindowShowState(window, thread),
+            initial => PostWindowState(window, thread, initial, cancellation));
+    }
+
+    private WindowShowState? ReadWindowShowState(WindowRef target, uint thread)
+    {
+        var placement = new Native.WindowPlacement { Length = Marshal.SizeOf<Native.WindowPlacement>() };
+        if (!HasOwner(target.Handle, target.Pid, thread) || !Native.GetWindowPlacement(target.Handle, ref placement))
+            return null;
+        var current = Read(target.Handle);
+        if (disposed || current is null || !current.CanClose || current.SessionLauncher || !current.Same(target)
+            || !Relevant(target.Handle) || hook == 0 || !HasOwner(target.Handle, target.Pid, thread))
+            return null;
+        return placement.ShowState is WindowShowState.Normal or WindowShowState.Minimized or WindowShowState.Maximized
+            ? placement.ShowState
+            : null;
+    }
+
+    private WindowStatePost PostWindowState(WindowRef target, uint thread, WindowShowState initial, CancellationToken cancellation)
+    {
+        const int styleIndex = -16;
+        const int maximizeBox = 0x00010000;
+        const uint systemCommand = 0x0112;
+        const int maximize = 0xF030;
+        const int restore = 0xF120;
+        if (ReadWindowShowState(target, thread) != initial
+            || initial == WindowShowState.Normal && (Native.GetWindowLongPtr(target.Handle, styleIndex).ToInt64() & maximizeBox) == 0
+            || !HasOwner(target.Handle, target.Pid, thread))
+            return WindowStatePost.Unavailable;
+        if (cancellation.IsCancellationRequested)
+            return WindowStatePost.Cancelled;
+
+        // Post the app's system command without explicitly activating it or escalating access.
+        return Native.PostMessage(target.Handle, systemCommand, initial == WindowShowState.Maximized ? restore : maximize, 0)
+            ? WindowStatePost.Accepted
+            : WindowStatePost.Rejected;
+    }
+
     public Task<ActionResult> Shortcut(WindowRef window, string keys) => keys is "Win+G" or "Shift+Tab" or "Ctrl+Tab" ? new GuardedActions(this).Shortcut(window, keys) : Task.FromResult(new ActionResult(ResultKind.Unavailable, "Shortcut not allowed in this flow."));
     public Task<ActionResult> Shortcut(WindowRef window, string keys, CancellationToken cancellation, Func<bool> continuing) => keys is "Win+G" or "Shift+Tab" or "Ctrl+Tab" ? new GuardedActions(this).Shortcut(window, keys, cancellation, continuing) : Task.FromResult(new ActionResult(ResultKind.Unavailable, "Shortcut not allowed."));
     public Task<ActionResult> Shortcut(WindowRef window, string keys, CancellationToken cancellation, Func<bool> continuing, Action<ShortcutDispatch> progress) => keys is "Shift+Tab" or "Ctrl+Tab" ? new GuardedActions(this, _ => progress(LastShortcutDispatch!.Value)).Shortcut(window, keys, cancellation, continuing) : Task.FromResult(new ActionResult(ResultKind.Unavailable, "Shortcut not allowed."));

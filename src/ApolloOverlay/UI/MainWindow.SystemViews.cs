@@ -8,7 +8,6 @@ public partial class MainWindow
 {
     private void BuildIntegrations()
     {
-        AddRow("test-steam", "Request Steam Overlay", (Controller.HasSteamLaunchObservation(Controller.Session.Anchor) && Controller.SteamEvidence != ModuleEvidence.Loaded ? "Launched by Steam · " : "") + SteamPermission.Reason(Controller.SteamEvidence), () => Shortcut(Controller.Settings.SteamShortcut), Controller.SteamOverlayEligible(Controller.Session.Anchor));
         AddGuideToggle();
         AddRow("external-close", "Close external overlays", "Unavailable: external overlay visibility is unverified", () =>
         {
@@ -42,7 +41,7 @@ public partial class MainWindow
         Section("Integrations");
         AddRow("configure-playnite", "Playnite location", Controller.Settings.PlaynitePath is null ? "Choose executable…" : "Installation configured", ConfigurePlaynite);
         AddRow("shortcut", "Steam shortcut · " + Controller.Settings.SteamShortcut, "A switches Shift+Tab / Ctrl+Tab", () => Change(Controller.Settings with { SteamShortcut = Controller.Settings.SteamShortcut == "Shift+Tab" ? "Ctrl+Tab" : "Shift+Tab" }));
-        AddRow("integrations", "Integrations and limits", "Guide, Steam and external features", () => Subpage("integrations", "test-steam"));
+        AddRow("integrations", "Integrations and limits", "Guide and external features", () => Subpage("integrations", "guide"));
         Section("Settings and background services");
         AddRow("save", "Save settings", "Keep your changes on this computer", Save);
         AddRow("exit", "Quit overlay", Controller.SettingsDirty ? "Unsaved changes will be lost" : "Stops background services and removes the tray icon", () => QueueHandoff(Close));
@@ -178,7 +177,7 @@ public partial class MainWindow
             AddReorder(id, name, row, 1, shown && Array.IndexOf(visible, id) < visible.Length - 1);
         }
 
-        AddRow("restore-favorites", "Restore default order", "Show the six default actions", () => Change(Controller.Settings with { FavoriteQuickActions = null }));
+        AddRow("restore-favorites", "Restore default order", "Show the default quick actions", () => Change(Controller.Settings with { FavoriteQuickActions = null }));
         AddRow("back", "Back", "Changes remain pending until you save", Back);
     }
 
@@ -243,7 +242,6 @@ public partial class MainWindow
         "playnite" => "Playnite",
         "steam" => "Steam Big Picture",
         "gamebar" => "Game Bar",
-        "steam-overlay" => "Steam Overlay",
         "taskview" => "Task View",
         _ => "Windows audio"
     };

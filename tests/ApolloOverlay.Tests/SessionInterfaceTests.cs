@@ -46,7 +46,7 @@ internal static class SessionInterfaceTests
             }
             finally { source.Release(); }
         });
-        test("activation glyph belongs only to the selected Resume action", () =>
+        test("secondary controller gestures appear only when the session card is selected", () =>
         {
             using var host = new Host();
             var window = host.Window;
@@ -54,9 +54,11 @@ internal static class SessionInterfaceTests
             AdaptiveInterfaceTests.UseController(window);
             Pick(window, "session-card");
             var hint = (TextBlock)window.FindName("SessionHint");
+            var options = (TextBlock)window.FindName("SessionOptionsHint");
             Require(InputPrompt.Read(hint).StartsWith("A ", StringComparison.Ordinal), "Selected Resume has no controller prompt");
+            Require(options.Visibility == Visibility.Visible, "Selected card has no Options prompt");
             Pick(window, "audio");
-            Require(InputPrompt.Read(hint) == "Resume", "Unselected Resume still advertises the selected action's input");
+            Require(options.Visibility == Visibility.Hidden, "Unselected card still advertises secondary actions");
         });
         test("high contrast slider uses the actual system-mapped solid thumb", () =>
         {
@@ -607,7 +609,7 @@ internal static class SessionInterfaceTests
                         AwaitControllerDisconnect(window);
                     }
                     if (state == "unavailable-action")
-                        Pick(window, "steam-overlay");
+                        Pick(window, "session-card");
                     else if (state is "selected-audio" or "focused-action")
                     {
                         Pick(window, "audio");
