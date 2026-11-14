@@ -296,13 +296,16 @@ public partial class MainWindow
     {
         var canResume = !Controller.Session.CardPending && Controller.CardTargetAvailable(Controller.Session.CardTarget);
         var label = canResume ? "Resume" : "Choose window";
-        var glyph = !canResume || navigation.Id != "session-card" ? "" : inputMethod switch
+        var glyph = navigation.Id != "session-card" ? "" : inputMethod switch
         {
             "controller" => "{A} ",
             "mouse" => "",
             _ => "{Enter} "
         };
+        var showActionIcon = canResume || glyph.Length == 0;
         SessionActionIcon.Data = (Geometry)FindResource(canResume ? "Icon.play" : "Icon.window");
+        SessionActionIcon.Visibility = showActionIcon ? Visibility.Visible : Visibility.Collapsed;
+        ((Grid)SessionCardButton.Content).ColumnDefinitions[0].Width = new(showActionIcon ? 24 : 0);
         RenderHint(SessionHint, glyph + label);
     }
 
