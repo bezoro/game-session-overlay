@@ -2,8 +2,10 @@ using System.IO;
 using System.Reflection;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -27,6 +29,19 @@ internal static class AutomaticUpdateTests
             PackageName = $"GameSessionOverlay-{version}-full.nupkg",
             Size = 92_903_834,
             Notes = "New releases now appear automatically in the overlay. Background checks preserve your current selection and session controls.\n\nThis preview also refines the warm charcoal theme, update guidance, and controller navigation."
+        };
+    }
+
+    private static UpdateCandidate EarlierPreview()
+    {
+        var installed = AppBuild.Current.Version.Split('+')[0];
+        var core = installed.Split('-')[0];
+        var version = installed == core ? core + "-preview.109.1+2e3a75a" : core + "-0";
+        return Release("fixture-earlier-preview", version, "testing") with
+        {
+            Commit = "2e3a75a" + new string('a', 33),
+            PublishedAt = new DateTimeOffset(2026, 11, 13, 16, 0, 0, TimeSpan.Zero),
+            Size = 92_903_834
         };
     }
 
@@ -241,6 +256,136 @@ internal static class AutomaticUpdateTests
                     && ReferenceEquals(pin, ReadField(host.Window, "agentUpdateApplyPin")) && Equals(generation, ReadField(host.Window, "updateGeneration")),
                     "A late automatic batch replaced the explicit catalog, prepared payload, job, or apply pin");
             });
+        test("manual update checks distinguish an earlier published version from an update", () =>
+        {
+            using var host = new Host();
+            var window = host.Window;
+            var earlier = EarlierPreview();
+            var newRelease = Release(channel: "testing");
+            Invoke(window, "OpenUpdates");
+            if (host.Status().SelectedChannel != earlier.Channel)
+                Click(ReviewFixTests.Button(window, "update-channel"));
+            host.FinishAutomatic();
+            host.Source.Releases = [earlier];
+            Click(ReviewFixTests.Button(window, "check-updates"));
+            ReviewFixTests.Complete(window.UpdateTask);
+            var catalog = (TextBlock)ReadField(window, "updateProgressLabel")!;
+            Require(catalog.Text == "No newer version is available in this channel." && host.Badge.Visibility == Visibility.Collapsed,
+                $"An earlier preview was presented as an available update: {catalog.Text}");
+            var row = ReviewFixTests.Button(window, "release:" + earlier.BuildId);
+            Require(row.IsEnabled && AutomationProperties.GetName(row).EndsWith(" · earlier version", StringComparison.Ordinal),
+                "The earlier version was not clearly labeled and selectable");
+            Click(row);
+            Require(((TextBlock)window.FindName("PageTitle")).Text == "Review version"
+                && ViewHasText(window, "Earlier version") && host.Source.Stages == 0,
+                "Review did not identify the earlier version or downloaded without an explicit action");
+            var download = ReviewFixTests.Button(window, "prepare-update");
+            Require(AutomationProperties.GetName(download) == "Download earlier version", "The action did not identify the earlier download");
+            host.Source.StageCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            Click(download);
+            Require(AutomationProperties.GetName(download) == "Cancel download", "The pending earlier download could not be cancelled");
+            Click(download);
+            host.Source.StageCompletion.SetResult(new("fixture-never-installed.nupkg",
+                new(earlier.Version, earlier.BuildId, earlier.Commit, earlier.Channel)));
+            ReviewFixTests.Complete(window.UpdateTask);
+            Require(host.Source.StageToken.IsCancellationRequested && host.Source.Discards == 1
+                && !window.ActionIds.Contains("apply-update")
+                && AutomationProperties.GetName(ReviewFixTests.Button(window, "prepare-update")) == "Download earlier version",
+                "Cancelling an earlier download retained its payload or lost the earlier download label");
+            host.Source.StageCompletion = null;
+            Click(ReviewFixTests.Button(window, "prepare-update"));
+            ReviewFixTests.Complete(window.UpdateTask);
+            Require(ViewHasText(window, "Earlier version downloaded") && host.Source.Stages == 2
+                && window.ActionIds.Contains("apply-update") && !window.TransitionPending,
+                "A verified earlier download was mislabeled or crossed the restart boundary");
+            Click(ReviewFixTests.Button(window, "back"));
+            Require(((TextBlock)ReadField(window, "updateProgressLabel")!).Text == catalog.Text,
+                "Returning from the review lost the catalog result");
+
+            host.Source.Releases = [earlier, newRelease];
+            Click(ReviewFixTests.Button(window, "check-updates"));
+            ReviewFixTests.Complete(window.UpdateTask);
+            Require(((TextBlock)ReadField(window, "updateProgressLabel")!).Text.StartsWith("Versions are available.", StringComparison.Ordinal)
+                && host.Badge.Visibility == Visibility.Visible, "The check missed a genuinely newer version listed after the earlier preview");
+            Click(ReviewFixTests.Button(window, "release:" + newRelease.BuildId));
+            Require(ViewHasText(window, "Update available")
+                && AutomationProperties.GetName(ReviewFixTests.Button(window, "prepare-update")) == "Download update",
+                "A genuine update lost its usual review and download labels");
+        });
+        test("passive update discovery preserves the existing catalog controls and scroll position", () =>
+        {
+            using var host = new Host();
+            var window = host.Window;
+            var earlier = EarlierPreview();
+            Invoke(window, "OpenUpdates");
+            if (host.Status().SelectedChannel != earlier.Channel)
+                Click(ReviewFixTests.Button(window, "update-channel"));
+            host.FinishAutomatic();
+            var installed = earlier with { BuildId = AppBuild.Current.BuildId, Version = AppBuild.Current.Version };
+            var initialCatalog = Enumerable.Range(1, 8).Select(i => earlier with { BuildId = $"earlier-{i}" }).Prepend(installed).ToArray();
+            host.Source.Releases = initialCatalog;
+            Click(ReviewFixTests.Button(window, "check-updates"));
+            ReviewFixTests.Complete(window.UpdateTask);
+
+            var (surface, root, scroll) = RenderUpdateSurface(window, 360, 480);
+            scroll.ScrollToVerticalOffset(500);
+            surface.UpdateLayout();
+            var offset = scroll.VerticalOffset;
+            var selection = window.SelectedAction;
+            var check = UpdateButton(root, "check-updates");
+            var status = (TextBlock)ReadField(window, "updateProgressLabel")!;
+            Require(offset > 0 && selection == "check-updates" && status.Text.Contains("latest version", StringComparison.Ordinal),
+                "The fixture did not start with the current build in the catalog or could not scroll away from the selected action");
+
+            host.Source.Releases = initialCatalog[1..];
+            host.Poll(915_000);
+            host.FinishAutomatic();
+            surface.UpdateLayout();
+            Require(ReferenceEquals(check, UpdateButton(root, "check-updates"))
+                && ReferenceEquals(status, ReadField(window, "updateProgressLabel")), "A background result replaced existing catalog controls");
+            Require(window.SelectedAction == selection && Math.Abs(scroll.VerticalOffset - offset) < .1,
+                $"A background result moved selection from {selection} to {window.SelectedAction} or scrolled from {offset} to {scroll.VerticalOffset}");
+            Require(host.Source.Checks >= 2 && host.Badge.Visibility == Visibility.Collapsed
+                && status.Text == "No newer version is available in this channel.",
+                $"The background result did not publish availability. Checks={host.Source.Checks}; badge={host.Badge.Visibility}; status={status.Text}");
+        });
+        test("earlier published version renders at wide and compact WPF sizes", () =>
+        {
+            foreach (var (width, height) in new[] { (572, 940), (360, 480) })
+            {
+                using var host = new Host();
+                var earlier = EarlierPreview();
+                var window = host.Window;
+                Invoke(window, "OpenUpdates");
+                if (host.Status().SelectedChannel != earlier.Channel)
+                    Click(ReviewFixTests.Button(window, "update-channel"));
+                host.FinishAutomatic();
+                host.Source.Releases = [earlier];
+                Click(ReviewFixTests.Button(window, "check-updates"));
+                ReviewFixTests.Complete(window.UpdateTask);
+
+                var (surface, root, scroll) = RenderUpdateSurface(window, width, height);
+                var row = UpdateButton(root, "release:" + earlier.BuildId);
+                scroll.ScrollToTop();
+                Capture(surface, $"earlier-version-dark-{width}x{height}-catalog", "offscreen=True");
+                if (height == 480)
+                {
+                    var heading = PremiumInterfaceTests.Descendants<TextBlock>(root).Single(block => block.Text == "Published versions");
+                    ScrollToCapture(surface, scroll, heading);
+                    Capture(surface, $"earlier-version-dark-{width}x{height}-catalog-release", "offscreen=True");
+                }
+                Click(row);
+                surface.UpdateLayout();
+                scroll.ScrollToTop();
+                Capture(surface, $"earlier-version-dark-{width}x{height}-review", "offscreen=True");
+                if (height == 480)
+                {
+                    var status = (TextBlock)ReadField(window, "updateProgressLabel")!;
+                    ScrollToCapture(surface, scroll, status);
+                    Capture(surface, $"earlier-version-dark-{width}x{height}-review-download", "offscreen=True");
+                }
+            }
+        });
         test("automatic update indicator has real foreground-owned wide compact and download WPF captures", () =>
         {
             using (var idle = new Host())
@@ -292,6 +437,37 @@ internal static class AutomaticUpdateTests
     }
 
     private static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+    private static bool ViewHasText(MainWindow window, string text) =>
+        PremiumInterfaceTests.Descendants<TextBlock>((DependencyObject)window.Content).Any(block => block.Text == text);
+    private static Button UpdateButton(FrameworkElement root, string id) =>
+        PremiumInterfaceTests.Descendants<Button>(root).Single(button => Equals(button.Tag, id));
+
+    private static void ScrollToCapture(FrameworkElement surface, ScrollViewer scroll, FrameworkElement target)
+    {
+        surface.UpdateLayout();
+        var top = target.TranslatePoint(new Point(), scroll).Y;
+        scroll.ScrollToVerticalOffset(scroll.VerticalOffset + top - 8);
+        surface.UpdateLayout();
+    }
+
+    private static (Border Surface, FrameworkElement Root, ScrollViewer Scroll) RenderUpdateSurface(MainWindow window, int width, int height)
+    {
+        var root = (FrameworkElement)window.Content;
+        window.Content = null;
+        root.Resources.MergedDictionaries.Add(window.Resources);
+        root.SetResourceReference(TextElement.ForegroundProperty, ThemeSupport.Text);
+        root.SetValue(TextElement.FontFamilyProperty, window.FontFamily);
+        root.SetValue(TextElement.FontSizeProperty, window.FontSize);
+        var surface = new Border { Child = root };
+        surface.Measure(new Size(width, height));
+        surface.Arrange(new Rect(0, 0, width, height));
+        surface.UpdateLayout();
+        window.RefreshRows();
+        surface.UpdateLayout();
+        var scroll = (ScrollViewer)window.FindName("ContentScroll");
+        Require(!window.IsVisible && scroll.ViewportHeight > 0, "The render-only fixture has no usable content viewport");
+        return (surface, root, scroll);
+    }
     private static object? Invoke(MainWindow window, string name, params object?[] args) =>
         typeof(MainWindow).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, args);
     private static FieldInfo GetField(string name) => typeof(MainWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!;
@@ -320,15 +496,21 @@ internal static class AutomaticUpdateTests
         Require(window.IsVisible && window.IsActive && window.Opacity > .95
             && Native.GetForegroundWindow() == new WindowInteropHelper(window).Handle,
             "The actual WPF capture was not revealed with confirmed native foreground ownership");
-        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth), (int)Math.Ceiling(window.ActualHeight), 96, 96, PixelFormats.Pbgra32);
-        bitmap.Render(window);
+        Capture(window, name, "foreground=True");
+    }
+
+    private static void Capture(FrameworkElement surface, string name, string mode)
+    {
+        surface.UpdateLayout();
+        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(surface.ActualWidth), (int)Math.Ceiling(surface.ActualHeight), 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(surface);
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(bitmap));
         var directory = Path.GetFullPath("artifacts/check-native-v1");
         Directory.CreateDirectory(directory);
         using var output = File.Create(Path.Combine(directory, name + ".png"));
         encoder.Save(output);
-        Console.WriteLine($"CAPTURE {name}; actual={window.ActualWidth}x{window.ActualHeight}; foreground=True; fixture=True; installed={VelopackInstallation.IsInstalled}");
+        Console.WriteLine($"CAPTURE {name}; actual={surface.ActualWidth}x{surface.ActualHeight}; {mode}; fixture=True; installed={VelopackInstallation.IsInstalled}");
     }
 
     private sealed class Host : IDisposable
