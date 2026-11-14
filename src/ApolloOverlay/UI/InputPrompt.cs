@@ -12,6 +12,16 @@ namespace ApolloOverlay;
 internal static partial class InputPrompt
 {
     private sealed record Glyph(string Name, string Tone, string? Keycap = null, string[]? Group = null);
+    private static readonly Transform KeycapInkOffset = CreateKeycapInkOffset();
+
+    private static Transform CreateKeycapInkOffset()
+    {
+        // Center the visible ink inside the keycap while keeping the text line's layout metrics.
+        var offset = new TranslateTransform(0, 1);
+        offset.Freeze();
+        return offset;
+    }
+
     private sealed class KeycapLabel : TextBlock
     {
         protected override AutomationPeer? OnCreateAutomationPeer() => null;
@@ -107,7 +117,8 @@ internal static partial class InputPrompt
                 FontSize = Math.Clamp(height * .56, 10, 13),
                 FontWeight = FontWeights.SemiBold,
                 HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
+                VerticalAlignment = VerticalAlignment.Center,
+                RenderTransform = KeycapInkOffset
             };
             label.SetResourceReference(TextBlock.ForegroundProperty, ThemeSupport.PromptForeground);
             var keycap = new Border
