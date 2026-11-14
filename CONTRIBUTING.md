@@ -1,5 +1,11 @@
 # Development
 
+## Licensing contributions
+
+By submitting a contribution, you agree that your original work may be distributed under this project's [MIT License](LICENSE). Contribute only material you have the right to license. Retain required upstream notices and document the source, license and modifications of imported code or assets. Third-party resources keep their existing licenses and attribution.
+
+## Development setup
+
 The application uses WPF/.NET 10 for Windows 11 x64. Install the SDK specified in [global.json](global.json) and PowerShell 7. The published installer includes the runtime; only development requires the SDK.
 
 Start with [architecture](docs/architecture.md), which maps modules, native-resource ownership and the action flow. [README](README.md) describes the product; [docs/cli.md](docs/cli.md) covers automation.
