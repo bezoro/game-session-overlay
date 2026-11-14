@@ -293,7 +293,6 @@ public partial class MainWindow
     private void UpdateSessionActionHint()
     {
         var canResume = !Controller.Session.CardPending && Controller.CardTargetAvailable(Controller.Session.CardTarget);
-        var label = canResume ? "Resume" : "Choose window";
         var glyph = navigation.Id != "session-card" ? "" : inputMethod switch
         {
             "controller" => "{A} ",
@@ -304,6 +303,9 @@ public partial class MainWindow
         SessionActionIcon.Data = (Geometry)FindResource(canResume ? "Icon.play" : "Icon.window");
         SessionActionIcon.Visibility = showActionIcon ? Visibility.Visible : Visibility.Collapsed;
         ((Grid)SessionCardButton.Content).ColumnDefinitions[0].Width = new(showActionIcon ? 24 : 0);
+        var padding = compactChrome || narrow ? showActionIcon ? 8 : 4 : 12;
+        SessionCardButton.Padding = new(padding, 8, padding, 8);
+        var label = canResume ? "Resume" : "Choose window";
         RenderHint(SessionHint, glyph + label);
     }
 
@@ -380,7 +382,6 @@ public partial class MainWindow
         SessionIdentity.Margin = compact ? new(10, 6, 10, 6) : new(16, 14, 16, 12);
         ContextGlyph.Width = ContextGlyph.Height = compact ? 22 : 25;
         ApplyContextIconSize();
-        SessionCardButton.Padding = compact ? new(8, 8, 8, 8) : new(12, 8, 12, 8);
         SessionActions.Margin = compact ? new(8, 0, 8, 6) : new(12, 0, 12, 12);
         ContextCard.Margin = new(0, 0, 0, compact ? 6 : 12);
         // Root tabs provide their own label. Nested views keep a distinct heading.
