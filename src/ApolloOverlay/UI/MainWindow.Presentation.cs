@@ -294,13 +294,16 @@ public partial class MainWindow
     {
         var canResume = !Controller.Session.CardPending && Controller.CardTargetAvailable(Controller.Session.CardTarget);
         var label = canResume ? "Resume" : "Choose window";
-        var glyph = !canResume || navigation.Id != "session-card" ? "" : inputMethod switch
+        var glyph = navigation.Id != "session-card" ? "" : inputMethod switch
         {
             "controller" => "{A} ",
             "mouse" => "",
             _ => "{Enter} "
         };
+        var showActionIcon = canResume || glyph.Length == 0;
         SessionActionIcon.Data = (Geometry)FindResource(canResume ? "Icon.play" : "Icon.window");
+        SessionActionIcon.Visibility = showActionIcon ? Visibility.Visible : Visibility.Collapsed;
+        ((Grid)SessionCardButton.Content).ColumnDefinitions[0].Width = new(showActionIcon ? 24 : 0);
         RenderHint(SessionHint, glyph + label);
     }
 
@@ -408,7 +411,6 @@ public partial class MainWindow
         TabArea.Margin = new(0, 0, 0, compact ? 4 : 12);
         TabArea.Padding = compact ? new(0) : new(0, 0, 0, 4);
         Sidebar.Padding = compact ? new(16, 10, 16, 10) : new(24, 20, 24, 20);
-        FooterArea.Margin = new(0, compact ? 6 : 10, 0, 0);
         FooterDivider.Margin = new(0, 0, 0, compact ? 4 : 8);
         SharedControlNotice.FontSize = ResourceNumber("SessionType.Caption", 13);
         SharedControlNotice.FontWeight = FontWeights.Normal;
@@ -416,7 +418,7 @@ public partial class MainWindow
         StatusLabel.FontSize = ResourceNumber("SessionType.Caption", 13);
         StatusLabel.Margin = new(0, compact ? 2 : 4, 0, 0);
         ModeLabel.FontSize = ResourceNumber("SessionType.Caption", 13);
-        ModeLabel.LineHeight = compact ? 20 : 22;
+        ModeLabel.LineHeight = compact ? 18 : 22;
         ModeLabel.Margin = new(0, compact ? 3 : 5, 0, 0);
         if (!compact)
         {
