@@ -387,18 +387,20 @@ public sealed class GuardedActions(IWindowEffects effects, Action<SteamSequenceE
         else if (disposition != ClosePost.Accepted)
             return new(ResultKind.Failed, "Windows rejected WM_CLOSE; no escalation was attempted.");
 
-        for (var i = 0; i < 20; i++)
+        const int waitCount = 20;
+        for (var i = 0; i <= waitCount; i++)
         {
-            if (effects.ObserveWindow(window) == WindowObservation.GoneOrReplaced)
-                return Outcome.Closure(true, false);
             if (cancellation.IsCancellationRequested)
                 return new(ResultKind.Unknown, "Observation cancelled after dispatch; the request cannot be undone.");
-            await effects.Wait(100);
+            if (effects.ObserveWindow(window) == WindowObservation.GoneOrReplaced)
+                return Outcome.Closure(true, false);
+            if (i < waitCount)
+                await effects.Wait(100);
         }
 
         if (elevated is null)
             return Outcome.Closure(false, true);
         return elevated.Kind == ResultKind.Unknown ? elevated
-            : new(ResultKind.Unknown, "The window is still open. Check for a save dialog or a refusal.");
+            : new(ResultKind.Unknown, Outcome.CloseTimeoutMessage);
     }
 }

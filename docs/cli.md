@@ -95,7 +95,7 @@ ApolloOverlay.Cli.exe shutdown
 | Capability | Behavior |
 | --- | --- |
 | `Execute` | Safe synchronous handler or cancellable focus/Steam owner. |
-| `RequiresGesture` | Hold-to-close requires normal interaction; no bypass. |
+| `RequiresGesture` | Closing a window requires confirmation in the overlay. |
 | `RequiresInteractive` | File picker, legacy startup/shortcuts, `operation-details` and `dismiss-operation`, and asynchronous operations without a client guard. The CLI does not invoke these handlers. |
 | `Unavailable`, `Denied`, `Unsupported` | Nothing dispatched. The response includes the reason. `diagnostic-dwell` is Unsupported at this stage. |
 

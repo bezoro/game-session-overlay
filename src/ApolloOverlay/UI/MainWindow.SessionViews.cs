@@ -277,7 +277,7 @@ public partial class MainWindow
         AddRow("minimize", "Minimize window", valid && target.CanClose ? "The panel stays open" : "Window protected or unavailable", () => RunInPlace(target, token => Controller.Platform.Minimize(target, token), "minimize"), valid && target.CanClose);
         AddRow("choose-session", "Choose another window", "Choose what to resume", ChooseSession);
         AddRow("details", "Window details", "View full details", () => OpenView(new(OverlayRoute.Details, target, "switch-detail")));
-        AddRow("close", "Close window…", target.CanClose && valid ? "Confirm with a fresh 1.5-second hold" : "Window protected or unavailable", () => Confirm(target), valid && target.CanClose, true);
+        AddRow("close", "Close window…", target.CanClose && valid ? "Opens a confirmation" : "Window protected or unavailable", () => Confirm(target), valid && target.CanClose, true);
         AddRow("back", "Back", "", Back);
     }
 
@@ -319,7 +319,7 @@ public partial class MainWindow
             Back();
             RefreshRows();
         }, !target.Launcher && !target.Protected && Controller.Platform.Valid(target));
-        AddRow("close-detail", "Close this window…", "Fresh long press · 1.5 s", () => Confirm(target), target.CanClose && Controller.Platform.Valid(target), true);
+        AddRow("close-detail", "Close this window…", "Opens a confirmation", () => Confirm(target), target.CanClose && Controller.Platform.Valid(target), true);
         AddRow("back", "Back", "Returns to the previous options", Back);
     }
 

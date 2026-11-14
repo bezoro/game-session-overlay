@@ -63,7 +63,5 @@ public partial class MainWindow
         AutomationProperties.SetHelpText(SessionCardButton, !Controller.Session.CardPending && Controller.CardTargetAvailable(Controller.Session.CardTarget)
             ? InputHint("A resumes this window · X opens options", "Enter resumes this window · X opens options", "Click resumes · right-click opens options")
             : "Choose a window in Apps");
-        if (HoldCloseButton.Content is IconLabel hold)
-            RenderHint(hold.Label, InputHint("Hold {A} · 1.5 s", "Hold {Enter} / {Space} · 1.5 s", "Hold {MouseLeft} · 1.5 s"));
     }
 }

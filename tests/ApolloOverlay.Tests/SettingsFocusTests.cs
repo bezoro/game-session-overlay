@@ -39,9 +39,8 @@ internal static class SettingsFocusTests
                         return completion.Task;
                     };
                     ReviewFixTests.Button(w, "close").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
-                    w.AdvancePointerHold(false, true, true, 0);
-                    w.AdvancePointerHold(true, true, true, 1);
-                    Require(w.AdvancePointerHold(true, true, true, 1501) && offers == 1, "A fresh hold did not offer consent exactly once");
+                    PremiumInterfaceTests.ClickFixed(w, "ConfirmCloseButton");
+                    Require(offers == 1, "A normal Close activation did not offer consent exactly once");
                     if (returnToOverlay)
                     {
                         w.Activate();

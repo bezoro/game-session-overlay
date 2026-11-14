@@ -17,6 +17,9 @@ internal static class ElevatedWindowCloseTests
     {
         test("ordinary, allowed elevated, protected, launcher, and other native close results use no consent", StandardFirst);
         test("a close receipt or missing receipt requires reliable observation of the original window", Observation);
+        test("closure at the observation deadline is confirmed without a second post", ObserveAtDeadline);
+        test("close timeout leaves the outcome unknown for ordinary and elevated requests", CloseTimeout);
+        test("cancellation at the close deadline stops observation", CancelAtDeadline);
         test("expired or stale authorization cannot start writing a grant", BeforeGrant);
         test("write failure and cancellation after the grant begins remain unconfirmed", UncertainExchange);
         test("one grant distinguishes helper rejection, refused post, and queued post", Receipts);
@@ -87,6 +90,62 @@ internal static class ElevatedWindowCloseTests
                 return Task.FromResult(new ActionResult(ResultKind.Unknown, "Fixture lost its receipt"));
             }).GetAwaiter().GetResult();
         Check(afterGrant.Kind == ResultKind.Unknown, "Cancellation after a grant was treated as definite failure");
+    }
+
+    private static ActionResult ObserveClose(ObservationEffects fixture, bool elevated, CancellationToken cancellation = default)
+    {
+        var posts = 0;
+        var offers = 0;
+        var result = new GuardedActions(fixture).Close(Target, cancellation, (_, _) =>
+        {
+            posts++;
+            return elevated ? ClosePost.AccessDenied : ClosePost.Accepted;
+        }, (_, _) =>
+        {
+            offers++;
+            return Task.FromResult(new ActionResult(ResultKind.Requested, "Fixture receipt"));
+        }).GetAwaiter().GetResult();
+        Check(posts == 1 && offers == (elevated ? 1 : 0), "Observation dispatched more than once or changed consent behavior");
+        return result;
+    }
+
+    private static void ObserveAtDeadline()
+    {
+        foreach (var elevated in new[] { false, true })
+        {
+            var fixture = new ObservationEffects { ClosesAt = 2000 };
+            var result = ObserveClose(fixture, elevated);
+            Check(result.Kind == ResultKind.Completed && fixture.Elapsed == 2000, "A window disappearing on the last wait was not confirmed");
+        }
+    }
+
+    private static void CloseTimeout()
+    {
+        foreach (var elevated in new[] { false, true })
+            foreach (var observation in new[] { WindowObservation.SameIdentity, WindowObservation.Unknown })
+            {
+                var fixture = new ObservationEffects { Observation = observation };
+                var result = ObserveClose(fixture, elevated);
+                Check(fixture.Elapsed == 2000 && result.Kind == ResultKind.Unknown
+                    && result.Message.Contains("within", StringComparison.OrdinalIgnoreCase)
+                    && !result.Message.Contains("still open", StringComparison.OrdinalIgnoreCase),
+                    "A timed-out request did not preserve uncertainty: " + result.Message);
+            }
+    }
+
+    private static void CancelAtDeadline()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var fixture = new ObservationEffects();
+        fixture.Waited = () =>
+        {
+            if (fixture.Elapsed == 2000)
+                cancellation.Cancel();
+        };
+        var result = ObserveClose(fixture, false, cancellation.Token);
+        Check(result.Kind == ResultKind.Unknown && fixture.LastObservation < fixture.Elapsed
+            && result.Message.Contains("cancelled", StringComparison.OrdinalIgnoreCase),
+            "Cancellation during the final wait was reported as an ordinary timeout");
     }
 
     private static void BeforeGrant()
@@ -394,9 +453,22 @@ internal static class ElevatedWindowCloseTests
     private sealed class ObservationEffects : IWindowEffects
     {
         internal WindowObservation Observation = WindowObservation.SameIdentity;
+        internal int? ClosesAt;
+        internal int Elapsed, LastObservation;
+        internal Action? Waited;
         public bool Valid(WindowRef window) => Target.Same(window);
-        public WindowObservation ObserveWindow(WindowRef window) => Observation;
-        public Task Wait(int milliseconds) => Task.CompletedTask;
+        public WindowObservation ObserveWindow(WindowRef window)
+        {
+            LastObservation = Elapsed;
+            return Elapsed >= ClosesAt ? WindowObservation.GoneOrReplaced : Observation;
+        }
+
+        public Task Wait(int milliseconds)
+        {
+            Elapsed += milliseconds;
+            Waited?.Invoke();
+            return Task.CompletedTask;
+        }
         public bool IsForeground(WindowRef window) => throw new NotSupportedException();
         public bool RequestFocus(WindowRef window) => throw new NotSupportedException();
         public uint SendKeys(string keys) => throw new NotSupportedException();

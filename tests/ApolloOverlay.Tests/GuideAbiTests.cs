@@ -333,7 +333,7 @@ internal static unsafe class GuideAbiTests
                         Require(window.IsVisible && platform.Switches == 0);
                         window.AdvanceHandoff(Neutral(100), 100);
                         Require(platform.Switches == 1, "Owned fixture did not exercise restore branch; foreground unavailable");
-                        Require(!window.Confirming, "Dismiss retained close hold");
+                        Require(!window.Confirming, "Dismiss retained close confirmation");
                         Require(!window.IsVisible, "Dismiss reopened overlay after " + result + "; expected hidden independently of restore outcome");
                     }
                     finally
@@ -2104,7 +2104,7 @@ internal static unsafe class GuideAbiTests
                         }
 
                         Require(!w.IsVisible, "Dismiss remained visible after " + fault);
-                        Require(!w.TransitionPending && !w.Confirming, "Dismiss retained pending transition or close hold");
+                        Require(!w.TransitionPending && !w.Confirming, "Dismiss retained pending transition or close confirmation");
                         Require(p.Switches == 0 && p.Globals == 0 && p.Menus == 0 && p.Shortcuts == 0, "Uncertain dismiss dispatched an outgoing action");
                         Commit(w);
                         Require(!w.IsVisible && p.Switches == 0, "Dismiss remounted or dispatched later");

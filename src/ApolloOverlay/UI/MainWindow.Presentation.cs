@@ -121,8 +121,6 @@ public partial class MainWindow
                 Native.SetWindowPos(hwnd, 0, chosen.X + 16, chosen.Y + 16, 0, 0, 0x15);
             var dpi = DpiReader(hwnd);
             var presentation = SidebarLayout.Calculate(chosen, dpi, Controller.Settings.UiScalePercent, Controller.Settings.PanelSide, DesktopPresentation);
-            if (pointerDown)
-                CancelHold();
             ((FrameworkElement)Content).LayoutTransform = new ScaleTransform(presentation.ContentScale, presentation.ContentScale);
             ApplyContextIconSize();
             var placement = presentation.Bounds;
@@ -192,7 +190,7 @@ public partial class MainWindow
         RevokeFocus("hide");
         CancelHandoff();
         heldKeys.Clear();
-        CancelHold();
+        CancelCloseConfirmation();
         if (!preserveSteam && !preservePending)
             pending?.Cancel();
         if (!preserveEffect)
@@ -277,7 +275,7 @@ public partial class MainWindow
         }
         if (Confirming)
         {
-            RenderHint(ModeLabel, InputHint("Hold {A} · {B} cancel · {RS} scroll", "Hold {Enter} / {Space} · {Esc} cancel · {PgUp}/{PgDn} scroll", "Hold {MouseLeft} to confirm · Cancel stops"));
+            RenderHint(ModeLabel, InputHint("{Dpad} move · {A} select · {B} cancel", "{Tab} move · {Enter} select · {Esc} cancel", "{MouseLeft} select"));
             return;
         }
 
@@ -397,8 +395,6 @@ public partial class MainWindow
         if (compact == compactChrome)
             return;
         compactChrome = compact;
-        if (pointerDown)
-            CancelHold();
         HeaderIdentity.Visibility = Visibility.Visible;
         RefreshUpdateIndicator(register: false);
         ControllerStatusLabel.Visibility = Visibility.Collapsed;
