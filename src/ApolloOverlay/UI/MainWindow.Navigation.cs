@@ -91,13 +91,16 @@ public partial class MainWindow
             var selected = entry.Id == navigation.Id;
             InteractionMotion.SetIsSelected(entry.Button, selected && entry.Available && IsVisible && focusConfirmed && IsActive && OwnForeground && InteractionMotion.Allowed);
             var primary = entry.Id == "session-card";
-            entry.Button.BorderThickness = new(2);
+            var sessionClose = entry.Id == "session-close";
+            entry.Button.BorderThickness = new(sessionClose && !selected ? 1 : 2);
             entry.Button.SetResourceReference(BorderBrushProperty, selected ? ThemeSupport.Focus : ThemeSupport.Stroke);
             if (selected && !entry.Available && entry.Button.Resources["DescriptionTarget"] is Border)
                 entry.Button.BorderBrush = Brushes.Transparent;
-            entry.Button.SetResourceReference(BackgroundProperty, selected ? ThemeSupport.FocusBackground : primary ? ThemeSupport.Card : ThemeSupport.Control);
-            if (entry.Id == "close")
+            entry.Button.SetResourceReference(BackgroundProperty, selected || primary ? ThemeSupport.FocusBackground : ThemeSupport.Control);
+            if (entry.Id == "close" || sessionClose && !selected)
                 entry.Button.Background = Brushes.Transparent;
+            if (primary && !selected)
+                entry.Button.SetResourceReference(BorderBrushProperty, ThemeSupport.Accent);
             if (page == 0 && subpage == "" && entry.Id == "apps")
             {
                 if (selected)
@@ -186,6 +189,7 @@ public partial class MainWindow
         {
             var next = (navigation.Id, direction) switch
             {
+                ("session-card", NavDirection.Down) => entries.FirstOrDefault(entry => SessionHubSettings.Catalog.Contains(entry.Id))?.Id ?? "apps",
                 ("session-volume", NavDirection.Down) => "windows-volume",
                 ("windows-volume", NavDirection.Up) => "session-volume",
                 ("windows-volume", NavDirection.Down) => "microphone",
@@ -292,7 +296,7 @@ public partial class MainWindow
         if (!NavigationAllowed || busy || TransitionPending || Confirming || view.Current.Route is not (OverlayRoute.Hub or OverlayRoute.Apps or OverlayRoute.Details))
             return;
         RequestCue(FeedbackCue.Confirmation);
-        var target = navigation.Id == "session-card" ? Controller.Session.CardTarget
+        var target = navigation.Id is "session-card" or "session-close" ? Controller.Session.CardTarget
             : Controller.Apps.FirstOrDefault(w => WindowId(w) == navigation.Id || "options:" + WindowId(w) == navigation.Id) ?? Controller.Recent.Items.FirstOrDefault(w => "recent:" + WindowId(w) == navigation.Id || "options:recent:" + WindowId(w) == navigation.Id) ?? view.Current.Target ?? Controller.Session.Anchor;
         if (target is null)
         {
@@ -394,6 +398,16 @@ public partial class MainWindow
         CancelCloseButton.Content = new IconLabel(this, "back", "Cancel");
         HoldCloseButton.Content = new IconLabel(this, "confirm-hold", "Hold to close", 16, 20);
         SessionCardButton.Click += (_, _) => ActivatePointerEntry(SessionCardButton);
+        SessionCloseButton.Click += (_, _) => ActivatePointerEntry(SessionCloseButton);
+        SessionCloseButton.Resources["DescriptionTarget"] = SessionCloseDescription;
+        SessionCloseButton.GotKeyboardFocus += (_, _) =>
+        {
+            if (navigation.Id != "session-close")
+            {
+                navigation = new("session-close");
+                SetSelection();
+            }
+        };
         ContextCard.PreviewMouseUp += (_, args) =>
         {
             if (args.ChangedButton != System.Windows.Input.MouseButton.Right)

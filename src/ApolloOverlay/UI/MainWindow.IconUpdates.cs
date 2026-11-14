@@ -1,5 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
 namespace ApolloOverlay;
@@ -34,6 +36,32 @@ public partial class MainWindow
         }
     }
 
+    private void UpdateContextIcon(ImageSource? source)
+    {
+        ContextIcon.Source = source;
+        ApplyContextIconSize();
+    }
+
+    private void ApplyContextIconSize()
+    {
+        var dpi = VisualTreeHelper.GetDpi(ContextIcon);
+        var scale = PanelRoot.LayoutTransform.Value;
+        var size = ContextIconSize(ContextIcon.Source, compactChrome || narrow ? 32 : 42, Math.Max(dpi.DpiScaleX * scale.M11, dpi.DpiScaleY * scale.M22));
+        ContextIcon.Width = ContextIcon.Height = size;
+        ContextIcon.Visibility = size > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ContextGlyph.Visibility = size > 0 ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    internal static double ContextIconSize(ImageSource? source, double preferred, double pixelsPerDip)
+    {
+        if (source is null)
+            return 0;
+        if (source is not BitmapSource bitmap)
+            return preferred;
+        var nativeSize = Math.Floor(Math.Min(bitmap.PixelWidth, bitmap.PixelHeight) / pixelsPerDip);
+        return nativeSize < 20 ? 0 : Math.Min(nativeSize, preferred);
+    }
+
     // Update only the image, so a background completion cannot rebuild the view,
     // steal focus, move the selection or interrupt an editor.
     private void ApplyAvailableIcon(WindowRef window)
@@ -44,11 +72,7 @@ public partial class MainWindow
         if (icon is null)
             return;
         if (Controller.Session.CardTarget?.Same(window) == true)
-        {
-            ContextIcon.Source = icon;
-            ContextIcon.Visibility = Visibility.Visible;
-            ContextGlyph.Visibility = Visibility.Collapsed;
-        }
+            UpdateContextIcon(icon);
 
         var id = WindowId(window);
         foreach (var entry in entries.Where(e => e.Id == id || e.Id == "recent:" + id))

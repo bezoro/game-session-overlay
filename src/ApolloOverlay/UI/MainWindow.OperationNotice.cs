@@ -15,11 +15,14 @@ public partial class MainWindow
         var changed = operationNotice.Update(Controller.Operation, now);
         var operation = operationNotice.Operation;
         var show = operationNotice.Visible && !Confirming && subpage != "operation";
-        // A desktop panel reserves its quiet line. Compact panels reclaim empty
-        // space and reveal the current selection when the viewport changes.
-        OperationPanel.Visibility = Confirming || compactChrome && !show
+        var hub = view.Current.Route == OverlayRoute.Hub;
+        var passive = !operationNotice.AllowsActions;
+        // Reserve a single line on Session so brief acknowledgements never resize the viewport.
+        OperationPanel.Visibility = Confirming || !show && compactChrome && !hub
             ? Visibility.Collapsed : show ? Visibility.Visible : Visibility.Hidden;
-        OperationPanel.Height = compactChrome && !operationNotice.AllowsActions ? 24 : 44;
+        OperationPanel.Height = passive ? hub ? 20 : compactChrome ? 24 : 44 : 44;
+        OperationPanel.Margin = new(0, hub && passive ? 0 : 4, 0, 0);
+        FooterArea.Margin = new(0, hub && passive ? 0 : compactChrome ? 6 : 10, 0, 0);
         OperationPanel.Opacity = show && IsVisible && OpenAnimationAllowed ? operationNotice.Opacity(now) : 1;
         var actions = operationNotice.AllowsActions ? Visibility.Visible : Visibility.Collapsed;
         OperationDetailsButton.Visibility = actions;

@@ -124,6 +124,7 @@ public partial class MainWindow
             if (pointerDown)
                 CancelHold();
             ((FrameworkElement)Content).LayoutTransform = new ScaleTransform(presentation.ContentScale, presentation.ContentScale);
+            ApplyContextIconSize();
             var placement = presentation.Bounds;
             automaticScaleDescription = $"Windows {presentation.DpiScale:P0} · sized to the monitor work area";
             SetEntryDescription("ui-scale", automaticScaleDescription);
@@ -285,21 +286,28 @@ public partial class MainWindow
         var prompt = inputMethod switch
         {
             "mouse" => "{MouseLeft} Select · {MouseScroll} Scroll" + (details ? " · {MouseRight} Options" : ""),
-            "controller" => "{A} select · {B} back" + (details ? " · {X} options" : "") + "\n{LB}/{RB} tabs · {Dpad} move" + (Controller.Settings.GuideXInputEnabled && guideBackend?.Active == true ? " · {Guide} hide" : ""),
-            _ => "{Enter} select · {Esc} back" + (details ? " · {KeyX} options" : "") + "\n{Arrows} / {Tab} move · {PgUp}/{PgDn} tabs"
+            "controller" => "{A} select · {B} back" + (details ? " · {X} options" : "") + "\n{Dpad} move · {LB}/{RB} tabs" + (Controller.Settings.GuideXInputEnabled && guideBackend?.Active == true ? " · {Guide} hide" : ""),
+            _ => "{Enter} select · {Esc} back" + (details ? " · {KeyX} options" : "") + "\n{Arrows}/{Tab} move · {PgUp}/{PgDn} tabs"
         };
         RenderHint(ModeLabel, prompt);
     }
 
     private void UpdateSessionActionHint()
     {
-        var label = Controller.Session.CardPending || !Controller.CardTargetAvailable(Controller.Session.CardTarget) ? "Choose window" : "Resume";
+        var canResume = !Controller.Session.CardPending && Controller.CardTargetAvailable(Controller.Session.CardTarget);
         var glyph = navigation.Id != "session-card" ? "" : inputMethod switch
         {
             "controller" => "{A} ",
-            "mouse" => "{MouseLeft} ",
+            "mouse" => "",
             _ => "{Enter} "
         };
+        var showActionIcon = canResume || glyph.Length == 0;
+        SessionActionIcon.Data = (Geometry)FindResource(canResume ? "Icon.play" : "Icon.window");
+        SessionActionIcon.Visibility = showActionIcon ? Visibility.Visible : Visibility.Collapsed;
+        ((Grid)SessionCardButton.Content).ColumnDefinitions[0].Width = new(showActionIcon ? 24 : 0);
+        var padding = compactChrome || narrow ? showActionIcon ? 8 : 4 : 12;
+        SessionCardButton.Padding = new(padding, 8, padding, 8);
+        var label = canResume ? "Resume" : "Choose window";
         RenderHint(SessionHint, glyph + label);
     }
 
@@ -339,7 +347,7 @@ public partial class MainWindow
         var selected = entries.FirstOrDefault(entry => entry.Id == navigation.Id);
         var target = selected is null ? null : FocusTarget(selected);
         var clearanceFits = target is null || !ContentScroll.IsAncestorOf(target) || target.ActualHeight + ScrollFadeHeight + 4 <= ContentScroll.ViewportHeight;
-        if (more && clearanceFits && !ThemeSupport.HighContrastActive)
+        if (more && clearanceFits && view.Current.Route != OverlayRoute.Hub && !ThemeSupport.HighContrastActive)
         {
             scrollFade.GradientStops[1].Offset = 1 - Math.Min(.25, ScrollFadeHeight / ContentScroll.ViewportHeight);
             ContentScroll.OpacityMask = scrollFade;
@@ -350,7 +358,7 @@ public partial class MainWindow
 
     private void RevealTarget(FrameworkElement target)
     {
-        if (ContentScroll.IsAncestorOf(target) && target.ActualWidth > 0 && target.ActualHeight > 0
+        if (view.Current.Route != OverlayRoute.Hub && ContentScroll.IsAncestorOf(target) && target.ActualWidth > 0 && target.ActualHeight > 0
             && target.ActualHeight + ScrollFadeHeight + 4 <= ContentScroll.ViewportHeight)
             target.BringIntoView(new Rect(0, -2, target.ActualWidth, target.ActualHeight + ScrollFadeHeight + 4));
         else
@@ -361,23 +369,23 @@ public partial class MainWindow
     private void ApplySessionCardDensity()
     {
         var compact = compactChrome || narrow;
-        TargetLabel.FontSize = compact ? 24 : ResourceNumber("SessionType.Title", 26);
-        TargetLabel.LineHeight = compact ? 28 : 32;
+        TargetLabel.FontSize = compact ? 22 : ResourceNumber("SessionType.Title", 26);
+        TargetLabel.LineHeight = compact ? 25 : 32;
         TargetLabel.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
         TargetLabel.MaxHeight = TargetLabel.LineHeight * 2;
         TargetLabel.Margin = new(0, 0, 0, compact ? 2 : 4);
         SessionEvidence.FontSize = ResourceNumber("SessionType.Caption", 13);
         SessionHint.FontSize = ResourceNumber(compact ? "SessionType.CompactBody" : "SessionType.Body", compact ? 14 : 15);
+        SessionCloseLabel.FontSize = ResourceNumber(compact ? "SessionType.Caption" : "SessionType.CompactBody", compact ? 13 : 14);
         SessionHint.Margin = new(0);
         SessionIconColumn.Width = new(compact ? 48 : 66);
         SessionIconHost.Height = compact ? 40 : 54;
         SessionIconHost.Margin = new(0, 0, compact ? 8 : 12, 0);
-        SessionIdentity.Margin = compact ? new(12, 8, 12, 8) : new(16, 14, 16, 12);
+        SessionIdentity.Margin = compact ? new(10, 6, 10, 6) : new(16, 14, 16, 12);
         ContextGlyph.Width = ContextGlyph.Height = compact ? 22 : 25;
-        ContextIcon.Width = ContextIcon.Height = compact ? 32 : 42;
-        SessionCardButton.Padding = new(12, 8, 12, 8);
-        SessionCardButton.Margin = compact ? new(8, 0, 8, 8) : new(12, 0, 12, 12);
-        ContextCard.Margin = new(0, 0, 0, compact ? 8 : 12);
+        ApplyContextIconSize();
+        SessionActions.Margin = compact ? new(8, 0, 8, 6) : new(12, 0, 12, 12);
+        ContextCard.Margin = new(0, 0, 0, compact ? 6 : 12);
         // Root tabs provide their own label. Nested views keep a distinct heading.
         PageTitle.Visibility = view.Current.Route == OverlayRoute.Hub || view.Depth == 0 && view.Current.Route == OverlayRoute.Apps
             ? Visibility.Collapsed : Visibility.Visible;
@@ -408,7 +416,6 @@ public partial class MainWindow
         TabArea.Margin = new(0, 0, 0, compact ? 4 : 12);
         TabArea.Padding = compact ? new(0) : new(0, 0, 0, 4);
         Sidebar.Padding = compact ? new(16, 10, 16, 10) : new(24, 20, 24, 20);
-        FooterArea.Margin = new(0, compact ? 6 : 10, 0, 0);
         FooterDivider.Margin = new(0, 0, 0, compact ? 4 : 8);
         SharedControlNotice.FontSize = ResourceNumber("SessionType.Caption", 13);
         SharedControlNotice.FontWeight = FontWeights.Normal;
@@ -416,7 +423,7 @@ public partial class MainWindow
         StatusLabel.FontSize = ResourceNumber("SessionType.Caption", 13);
         StatusLabel.Margin = new(0, compact ? 2 : 4, 0, 0);
         ModeLabel.FontSize = ResourceNumber("SessionType.Caption", 13);
-        ModeLabel.LineHeight = compact ? 20 : 22;
+        ModeLabel.LineHeight = compact ? 18 : 22;
         ModeLabel.Margin = new(0, compact ? 3 : 5, 0, 0);
         if (!compact)
         {
@@ -426,6 +433,8 @@ public partial class MainWindow
 
         // Header, navigation, notices and Save/Discard keep their fixed grid rows.
         ApplySessionCardDensity();
+        if (!Confirming && view.Current.Route == OverlayRoute.Hub && !narrow)
+            RefreshRows();
         RefreshOperationNotice(Environment.TickCount64);
         UpdateStatusPresentation(importantStatus);
         PlaceCompactStatus();
