@@ -55,7 +55,7 @@ Confirmed close first sends an ordinary window-close request. Only access denied
 
 Application audio addresses sessions of the exact process, including identified inactive sessions and outputs. It does not include child processes, future sessions or global volume as a fallback. The mixer separates identified applications. Windows master volume and default communications-microphone mute are distinct controls. Output selection targets game/media playback; physical TV volume is not controlled.
 
-Quick access offers Playnite, Steam Big Picture, Game Bar, Task View and Windows audio. Task View can open without a game. From a selected game card, the Steam Overlay action checks the exact target and sends the configured shortcut only when eligible. The card shows the action as unavailable in unsupported contexts. The result reports whether the shortcut was sent.
+Quick access offers Playnite, Steam Big Picture, Game Bar and Task View. Task View can open without a game. Use the Session page's **Output** control or the **Audio** tab for Windows audio. From a selected game card, the Steam Overlay action checks the exact target and sends the configured shortcut only when eligible. The card shows the action as unavailable in unsupported contexts. The result reports whether the shortcut was sent.
 
 Cancellation while awaiting Game Bar/Big Picture/Steam focus prevents unsent stages. A focus request already sent cannot be undone. Before key dispatch, target identity, request lifetime and input release are checked again. A previously observed connection remains relevant even when its sample ages; disconnection does not establish release.
 

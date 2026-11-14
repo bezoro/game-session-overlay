@@ -43,7 +43,7 @@ In **Customize quick access**, keep the actions you use and put frequent actions
 
 Use **Test feedback** in System to try the enabled channels. Confirming, going back and attempting an unavailable action have distinct sounds and short controller pulses. Moving the selection does not vibrate the controller. A completion sound follows a verified result. Separate text and symbols distinguish pending, completed and uncertain outcomes.
 
-**Windows audio** controls the PC's default output. Application audio in window options affects the identified audio sessions of that process. Neither guarantees control of the TV's physical volume.
+Use **Output** on the Session page to adjust the PC's volume, or open **Audio** for more controls. Application audio in window options affects the identified audio sessions of that process.
 
 **Appearance** offers warm charcoal, amber and off-white defaults, presets, and separate dark/light color palettes. Edit colors with RGB controls or local hexadecimal entry. **Keep color** adds the edit to the draft; **Save colors** persists it without saving unrelated settings changes. Unsafe intermediate colors remain editable while navigation keeps its last readable palette. Windows high contrast uses system colors.
 

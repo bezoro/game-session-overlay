@@ -5,12 +5,12 @@ namespace ApolloOverlay;
 
 public static class SessionHubSettings
 {
-    public static readonly IReadOnlyList<string> Catalog = Array.AsReadOnly(new[] { "steam", "playnite", "taskview", "gamebar", "audio" });
+    public static readonly IReadOnlyList<string> Catalog = Array.AsReadOnly(new[] { "steam", "playnite", "taskview", "gamebar" });
     public static string[] Favorites(UserSettings value) => (value.FavoriteQuickActions ?? Catalog).Where(Catalog.Contains).Distinct(StringComparer.Ordinal).ToArray();
 
-    // Preserve the retired shortcut in saved layouts for rollback.
+    // Preserve retired shortcuts in saved layouts for rollback.
     private static string[] StoredFavorites(UserSettings value) => (value.FavoriteQuickActions ?? Catalog)
-        .Where(id => id == "steam-overlay" || Catalog.Contains(id)).Distinct(StringComparer.Ordinal).ToArray();
+        .Where(id => id is "steam-overlay" or "audio" || Catalog.Contains(id)).Distinct(StringComparer.Ordinal).ToArray();
     public static UserSettings Copy(UserSettings value) => value with
     {
         Version = 3,

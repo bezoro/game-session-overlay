@@ -468,19 +468,21 @@ internal static class ReviewFixTests
                     w.Close();
                 }
             });
-        test("RF audio description stays accessible despite omitted home subtitle", () =>
+        test("RF Audio tab exposes current volume and mute state to accessibility", () =>
         {
             var w = Window();
             try
             {
-                var button = Button(w, "audio");
-                var peer = new ButtonAutomationPeer(button);
-                w.UpdateAudioEntries(new("fixture", .35f, true, "fixture"));
-                Require(peer.GetHelpText() == "Muted", "Mute help stale");
-                w.UpdateAudioEntries(new("fixture", .35f, false, "fixture"));
-                Require(peer.GetHelpText() == .35f.ToString("P0"), "Volume help stale");
-                w.UpdateAudioEntries(new(null, 0, false, "fixture"));
-                Require(peer.GetHelpText() == "Output unavailable", "Unavailable help stale");
+                var state = new AudioSnapshot("fixture", .35f, true, "fixture");
+                var audio = typeof(MainWindow).GetField("audio", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(w);
+                typeof(WindowsAudio).GetProperty(nameof(WindowsAudio.Current))!.SetValue(audio, state);
+                w.SetRenderState("audio");
+                var mute = new ButtonAutomationPeer(Button(w, "mute"));
+                var volume = new ButtonAutomationPeer(Button(w, "volume"));
+                Require(mute.GetName() == "Unmute", "Initial mute state stale");
+                w.UpdateAudioEntries(state with { Volume = .55f, Muted = false });
+                Require(mute.GetName() == "Mute", "Unmute state stale");
+                Require(volume.GetName() == "Volume · " + .55f.ToString("P0"), "Volume state stale");
             }
             finally
             {

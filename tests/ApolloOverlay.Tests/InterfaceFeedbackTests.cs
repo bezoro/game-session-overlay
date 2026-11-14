@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using ApolloOverlay;
+using ApolloOverlay.Automation;
 
 internal static class InterfaceFeedbackTests
 {
@@ -94,6 +95,21 @@ internal static class InterfaceFeedbackTests
                     "Audio tab did not keep its pointer source or emitted the wrong activation cue");
                 tab.ApplyTemplate();
                 Require(tab.Template.FindName("ActivationFeedback", tab) is Border { Opacity: > 0 }, "Audio tab had no visible acknowledgement");
+            }
+            finally
+            {
+                w.Close();
+            }
+        });
+        test("interface Audio automation route remains available without a Session shortcut", () =>
+        {
+            var w = Fixture(out _);
+            try
+            {
+                Require(!w.ActionIds.Contains("audio") && w.ActionIds.Contains("windows-volume"), "Session audio shortcuts or controls are incorrect");
+                var request = new AutomationRequest { ActionId = "route:audio", Revision = w.AutomationSnapshot().Revision };
+                var reply = w.AutomationExecute(request, CancellationToken.None, _ => { }, () => true).GetAwaiter().GetResult();
+                Require(reply.Outcome == "Completed" && w.ActionIds.Contains("volume") && w.ActionIds.Contains("mute"), "Audio automation route lost its controls");
             }
             finally
             {

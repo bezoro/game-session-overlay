@@ -6,7 +6,7 @@ Game Session Overlay is a native WPF side panel for controller, keyboard and mou
 
 The Session page starts at the game card. With the card selected, **A** returns to the window, **Y** opens Steam Overlay when available, and **X** opens options for that window. The options include per-app audio, minimize, maximize or restore, details, and a separate close confirmation. Press Down from the card to reach Quick access, or Open apps when every shortcut is hidden. Apps and Audio remain the other primary tabs. The header gear opens System.
 
-The default Quick access order starts with Steam Big Picture, Playnite and Task View. The panel keeps your saved order for the shortcuts available in this version, including an empty list.
+The default Quick access order is Steam Big Picture, Playnite, Task View and Game Bar. The panel keeps your saved order for available shortcuts, including an empty list. The Session page includes **Output** for Windows volume.
 
 The header uses real application/controller metadata and a short installed version. Game imagery comes from the actual window icon or a validated local capture. No game library, artwork download, statistics or stream telemetry is inferred.
 

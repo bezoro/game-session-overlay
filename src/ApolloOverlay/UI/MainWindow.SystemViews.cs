@@ -243,7 +243,7 @@ public partial class MainWindow
         "steam" => "Steam Big Picture",
         "gamebar" => "Game Bar",
         "taskview" => "Task View",
-        _ => "Windows audio"
+        _ => id
     };
     private void BuildSetup()
     {

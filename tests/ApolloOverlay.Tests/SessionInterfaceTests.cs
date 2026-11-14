@@ -57,7 +57,7 @@ internal static class SessionInterfaceTests
             var options = (TextBlock)window.FindName("SessionOptionsHint");
             Require(InputPrompt.Read(hint).StartsWith("A ", StringComparison.Ordinal), "Selected Resume has no controller prompt");
             Require(options.Visibility == Visibility.Visible, "Selected card has no Options prompt");
-            Pick(window, "audio");
+            Pick(window, "windows-volume");
             Require(options.Visibility == Visibility.Hidden, "Unselected card still advertises secondary actions");
         });
         test("high contrast slider uses the actual system-mapped solid thumb", () =>
@@ -612,7 +612,7 @@ internal static class SessionInterfaceTests
                         Pick(window, "session-card");
                     else if (state is "selected-audio" or "focused-action")
                     {
-                        Pick(window, "audio");
+                        Pick(window, "windows-volume");
                     }
                     else if (state == "mouse")
                     {

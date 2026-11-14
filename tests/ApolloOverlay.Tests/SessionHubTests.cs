@@ -45,13 +45,14 @@ internal static class SessionHubTests
         });
         test("hub favorites missing defaults versus empty and stable sanitized order", () =>
         {
-            Check(SessionHubSettings.Favorites(UserSettings.Parse("{}")).SequenceEqual(new[] { "steam", "playnite", "taskview", "gamebar", "audio" }), "Missing settings must show the current defaults");
+            Check(SessionHubSettings.Favorites(UserSettings.Parse("{}")).SequenceEqual(new[] { "steam", "playnite", "taskview", "gamebar" }), "Missing settings must show the current defaults");
             Check(SessionHubSettings.Favorites(UserSettings.Parse("{\"FavoriteQuickActions\":[]}")).Length == 0, "Explicit empty lost");
-            Check(SessionHubSettings.Favorites(UserSettings.Parse("{\"FavoriteQuickActions\":[\"audio\",\"bad\",\"playnite\",\"audio\"]}")).SequenceEqual(new[] { "audio", "playnite" }), "Order/dedup invalid");
-            var legacy = UserSettings.Parse("{\"FavoriteQuickActions\":[\"audio\",\"steam-overlay\",\"playnite\"]}");
-            Check(SessionHubSettings.Favorites(legacy).SequenceEqual(new[] { "audio", "playnite" }), "The retired Steam shortcut is visible in a saved layout");
-            Check(SessionHubSettings.Move(legacy, "audio", 1).FavoriteQuickActions!.SequenceEqual(new[] { "playnite", "steam-overlay", "audio" }),
-                "Reordering visible favorites lost the retired shortcut's stored value");
+            var legacy = UserSettings.Parse("{\"FavoriteQuickActions\":[\"gamebar\",\"audio\",\"bad\",\"steam-overlay\",\"playnite\",\"audio\"]}");
+            Check(SessionHubSettings.Favorites(legacy).SequenceEqual(new[] { "gamebar", "playnite" }), "A retired shortcut appeared in a saved layout");
+            Check(legacy.FavoriteQuickActions!.SequenceEqual(new[] { "gamebar", "audio", "steam-overlay", "playnite" }), "Loading changed the stored layout");
+            Check(SessionHubSettings.Move(legacy, "gamebar", 1).FavoriteQuickActions!.SequenceEqual(new[] { "playnite", "audio", "steam-overlay", "gamebar" }),
+                "Reordering visible favorites changed the stored positions of retired shortcuts");
+            Check(SessionHubSettings.Toggle(legacy, "audio").FavoriteQuickActions!.SequenceEqual(legacy.FavoriteQuickActions!), "The retired audio shortcut is still editable");
         });
         test("hub structural dirty equality and snapshot isolation", () =>
         {
@@ -63,7 +64,7 @@ internal static class SessionHubTests
                 FavoriteQuickActions = copy
             });
             Check(!c.SettingsDirty, "Equivalent reconstructed array dirty");
-            copy[0] = "audio";
+            copy[0] = "gamebar";
             var exposed = c.Settings;
             exposed.FavoriteQuickActions![0] = "taskview";
             Check(!c.SettingsDirty && c.Settings.FavoriteQuickActions!.SequenceEqual(original.FavoriteQuickActions!), "Caller array aliased current/saved");
@@ -94,10 +95,10 @@ internal static class SessionHubTests
             foreach (var id in SessionHubSettings.Catalog)
                 value = SessionHubSettings.Toggle(value, id);
             Check(SessionHubSettings.Favorites(value).Length == 0, "All-hidden impossible");
-            value = SessionHubSettings.Toggle(value, "audio");
+            value = SessionHubSettings.Toggle(value, "gamebar");
             value = SessionHubSettings.Toggle(value, "playnite");
             value = SessionHubSettings.Move(value, "playnite", -1);
-            Check(SessionHubSettings.Favorites(value).SequenceEqual(new[] { "playnite", "audio" }), "Restore/reorder changed identity");
+            Check(SessionHubSettings.Favorites(value).SequenceEqual(new[] { "playnite", "gamebar" }), "Restore/reorder changed identity");
         });
         test("hub bounded nested contexts and tab memories", () =>
         {
@@ -676,8 +677,9 @@ internal static class SessionHubTests
                     FavoriteQuickActions = ["audio", "taskview", "steam"]
                 });
                 w.RefreshRows();
-                Check(w.ActionIds.Where(SessionHubSettings.Catalog.Contains).SequenceEqual(new[] { "audio", "taskview", "steam" }),
-                    "Hub changed configured shortcut order");
+                Check(w.ActionIds.Where(SessionHubSettings.Catalog.Contains).SequenceEqual(new[] { "taskview", "steam" }) && !w.ActionIds.Contains("audio"),
+                    "Hub showed the retired audio shortcut or changed configured shortcut order");
+                Check(w.ActionIds.Contains("windows-volume"), "Hub lost the Windows output control");
             }
             finally
             {
@@ -1090,6 +1092,8 @@ internal static class SessionHubTests
                 w.ShowDiagnostic();
                 w.Page(2);
                 Click(w, "customize");
+                Check(!w.ActionIds.Contains("favorite:audio") && !w.ActionIds.Contains("earlier:audio") && !w.ActionIds.Contains("later:audio"),
+                    "Customize still exposes the retired audio shortcut");
                 Click(w, "later:playnite");
                 Check(SessionHubSettings.Favorites(w.Controller.Settings)[2] == "playnite" && w.SelectedAction == "favorite:playnite", "Moved favorite lost row identity");
                 RequireFocus(w);

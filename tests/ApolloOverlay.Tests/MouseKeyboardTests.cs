@@ -103,9 +103,12 @@ internal static class MouseKeyboardTests
             Require(w.ActionIds.Contains("application-mute"), "X did not open session options");
             Tap(w, Key.Escape);
             Require(w.SelectedAction == "session-card", "Options did not return to the session card");
-            Pick(w, "audio");
+            Pick(w, "session-mixer");
             Tap(w, Key.Enter);
-            Require(w.ActionIds.Contains("volume") && w.ActionIds.Contains("back"), "Enter did not open Audio");
+            Require(w.ActionIds.Contains("mixer-refresh"), "Enter did not open the audio mixer");
+            Tap(w, Key.Escape);
+            Tap(w, Key.PageUp);
+            Require(w.ActionIds.Contains("volume") && w.ActionIds.Contains("back"), "Page Up did not open the Audio tab");
             Pick(w, "back");
             Tap(w, Key.Space);
             Require(w.ActionIds.Contains("session-card"), "Space did not operate the nested Back action");
