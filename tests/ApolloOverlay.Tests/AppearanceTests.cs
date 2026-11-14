@@ -116,7 +116,10 @@ internal static class AppearanceTests
                 var window = host.Window;
                 host.Open(compact ? 360 : 572, compact ? 480 : 940);
                 Require(ResourceColor(window, ThemeSupport.Text) == ColorFrom(palette.Text), "The custom palette was replaced rather than displayed safely");
+                var update = (Button)window.FindName("UpdateAvailableButton");
+                update.Visibility = Visibility.Visible;
                 CheckFeedbackGeometry(window);
+                update.Visibility = Visibility.Collapsed;
                 SessionInterfaceTests.Pick(window, "session-card");
                 var selected = ReviewFixTests.Button(window, "session-card");
                 selected.ApplyTemplate();
