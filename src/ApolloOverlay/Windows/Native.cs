@@ -3,6 +3,11 @@ using System.Text;
 
 namespace ApolloOverlay;
 
+internal enum WindowShowState
+{
+    Normal = 1, Minimized = 2, Maximized = 3
+}
+
 internal static class Native
 {
     internal delegate bool EnumWindow(nint hwnd, nint parameter);

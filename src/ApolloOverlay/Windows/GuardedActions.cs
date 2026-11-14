@@ -8,11 +8,6 @@ internal enum ClosePost
     Rejected, AccessDenied, Accepted, Cancelled
 }
 
-internal enum WindowShowState
-{
-    Normal = 1, Minimized = 2, Maximized = 3
-}
-
 internal enum WindowStatePost
 {
     Unavailable, Rejected, Accepted, Cancelled
