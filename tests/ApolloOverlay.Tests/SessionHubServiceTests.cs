@@ -861,8 +861,14 @@ internal static unsafe class SessionHubServiceTests
             var source = new FeedbackSource(FeedbackSourceKind.Controller, 1, device.ConnectionEpoch);
 
             foreach (var cue in Enum.GetValues<FeedbackCue>())
-                Require(!feedback.Request(cue, source with { Slot = 0 }).HapticRequested, "Wrong slot accepted for " + cue);
-            Require(!feedback.Request(FeedbackCue.Test, source with { ConnectionEpoch = device.ConnectionEpoch - 1 }).HapticRequested,
+                Require(!feedback.Request(cue, source with
+                {
+                    Slot = 0
+                }).HapticRequested, "Wrong slot accepted for " + cue);
+            Require(!feedback.Request(FeedbackCue.Test, source with
+            {
+                ConnectionEpoch = device.ConnectionEpoch - 1
+            }).HapticRequested,
                 "Stale controller epoch accepted");
             Require(native.Writes.Count == 0, "Rejected source wrote to a controller");
             feedback.Suspend();
