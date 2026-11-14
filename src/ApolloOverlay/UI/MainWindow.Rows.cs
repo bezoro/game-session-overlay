@@ -257,8 +257,9 @@ public partial class MainWindow
             "steam-overlay" when title == "Steam Big Picture menu" => "Steam menu",
             _ => title
         } : title;
+        var displayDescription = ActionDescription(id, description, available);
         var glyph = ActionIcon(id.StartsWith("favorite:", StringComparison.Ordinal) ? id[9..] : id);
-        var grid = new ActionButtonContent(glyph, displayTitle, ActionDescription(id, description, available), showIcon: true);
+        var grid = new ActionButtonContent(glyph, displayTitle, displayDescription, showIcon: true);
         grid.Title.SetResourceReference(TextBlock.FontSizeProperty, "SessionType.Section");
         grid.Description.SetResourceReference(TextBlock.FontSizeProperty, "SessionType.Caption");
         grid.Description.Margin = new(0, 4, 0, 0);
@@ -338,7 +339,7 @@ public partial class MainWindow
 
         if (id == "close")
             grid.Description.Visibility = Visibility.Collapsed;
-        if (quickAccess && (!available || displayTitle != title))
+        if (quickAccess && (displayTitle != title || displayDescription != description))
         {
             button.ToolTip = displayTitle != title ? title + " · " + description : description;
             ToolTipService.SetShowOnDisabled(button, true);
