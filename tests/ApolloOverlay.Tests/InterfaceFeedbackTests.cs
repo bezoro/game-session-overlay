@@ -197,6 +197,49 @@ internal static class InterfaceFeedbackTests
                 w.Close();
             }
         });
+        test("interface close confirmation vibrates only for a deliberate controller cancellation", () =>
+        {
+            var w = Fixture(out var feedback);
+            try
+            {
+                w.Left = -12000;
+                w.Top = -12000;
+                w.ShowActivated = false;
+                w.Show();
+                var anchor = w.Controller.Session.Anchor!;
+                void Tick(PadButtons buttons, PadFrame second) => w.ReviewTick([new(true, buttons), second, default, default]);
+                var connected = new PadFrame(true, PadButtons.None);
+                Tick(PadButtons.None, connected);
+                Tick(PadButtons.Down, connected);
+                Tick(PadButtons.None, connected);
+
+                foreach (var second in new[] { default(PadFrame), new PadFrame(false, PadButtons.None, ReadFailed: true) })
+                {
+                    Tick(PadButtons.None, connected);
+                    w.Confirm(anchor);
+                    Require(w.Confirming, "Fixture did not enter close confirmation");
+                    feedback.Cues.Clear();
+                    feedback.Sources.Clear();
+                    Tick(PadButtons.None, second);
+                    Require(!w.Confirming && w.Feedback.Contains("Closing cancelled"), "Lost controller certainty did not abort confirmation");
+                    Require(feedback.Cues.SequenceEqual(new[] { FeedbackCue.Cancellation }) && feedback.Sources.Single().Slot is null,
+                        "An automatic cancellation vibrated the remaining controller");
+                }
+
+                Tick(PadButtons.None, connected);
+                w.Confirm(anchor);
+                feedback.Cues.Clear();
+                feedback.Sources.Clear();
+                Tick(PadButtons.B, connected);
+                Require(!w.Confirming && feedback.Cues.SequenceEqual(new[] { FeedbackCue.Cancellation })
+                    && feedback.Sources.Single() is { Kind: FeedbackSourceKind.Controller, Slot: 0 },
+                    "A deliberate B press did not target the controller that pressed it");
+            }
+            finally
+            {
+                w.Close();
+            }
+        });
         test("interface disabled action reports unavailability without confirmation", () =>
         {
             var w = Fixture(out var feedback);
