@@ -285,21 +285,23 @@ public partial class MainWindow
         var prompt = inputMethod switch
         {
             "mouse" => "{MouseLeft} Select · {MouseScroll} Scroll" + (details ? " · {MouseRight} Options" : ""),
-            "controller" => "{A} select · {B} back" + (details ? " · {X} options" : "") + "\n{LB}/{RB} tabs · {Dpad} move" + (Controller.Settings.GuideXInputEnabled && guideBackend?.Active == true ? " · {Guide} hide" : ""),
-            _ => "{Enter} select · {Esc} back" + (details ? " · {KeyX} options" : "") + "\n{Arrows} / {Tab} move · {PgUp}/{PgDn} tabs"
+            "controller" => "{A} select · {B} back" + (details ? " · {X} options" : "") + "\n{Dpad} move · {LB}/{RB} tabs" + (Controller.Settings.GuideXInputEnabled && guideBackend?.Active == true ? " · {Guide} hide" : ""),
+            _ => "{Enter} select · {Esc} back" + (details ? " · {KeyX} options" : "") + "\n{Arrows}/{Tab} move · {PgUp}/{PgDn} tabs"
         };
         RenderHint(ModeLabel, prompt);
     }
 
     private void UpdateSessionActionHint()
     {
-        var label = Controller.Session.CardPending || !Controller.CardTargetAvailable(Controller.Session.CardTarget) ? "Choose window" : "Resume";
-        var glyph = navigation.Id != "session-card" ? "" : inputMethod switch
+        var canResume = !Controller.Session.CardPending && Controller.CardTargetAvailable(Controller.Session.CardTarget);
+        var label = canResume ? "Resume" : "Choose window";
+        var glyph = !canResume || navigation.Id != "session-card" ? "" : inputMethod switch
         {
             "controller" => "{A} ",
-            "mouse" => "{MouseLeft} ",
+            "mouse" => "",
             _ => "{Enter} "
         };
+        SessionActionIcon.Data = (Geometry)FindResource(canResume ? "Icon.play" : "Icon.window");
         RenderHint(SessionHint, glyph + label);
     }
 
@@ -368,6 +370,7 @@ public partial class MainWindow
         TargetLabel.Margin = new(0, 0, 0, compact ? 2 : 4);
         SessionEvidence.FontSize = ResourceNumber("SessionType.Caption", 13);
         SessionHint.FontSize = ResourceNumber(compact ? "SessionType.CompactBody" : "SessionType.Body", compact ? 14 : 15);
+        SessionCloseLabel.FontSize = ResourceNumber(compact ? "SessionType.Caption" : "SessionType.CompactBody", compact ? 13 : 14);
         SessionHint.Margin = new(0);
         SessionIconColumn.Width = new(compact ? 48 : 66);
         SessionIconHost.Height = compact ? 40 : 54;
@@ -375,8 +378,8 @@ public partial class MainWindow
         SessionIdentity.Margin = compact ? new(12, 8, 12, 8) : new(16, 14, 16, 12);
         ContextGlyph.Width = ContextGlyph.Height = compact ? 22 : 25;
         ContextIcon.Width = ContextIcon.Height = compact ? 32 : 42;
-        SessionCardButton.Padding = new(12, 8, 12, 8);
-        SessionCardButton.Margin = compact ? new(8, 0, 8, 8) : new(12, 0, 12, 12);
+        SessionCardButton.Padding = compact ? new(8, 8, 8, 8) : new(12, 8, 12, 8);
+        SessionActions.Margin = compact ? new(8, 0, 8, 8) : new(12, 0, 12, 12);
         ContextCard.Margin = new(0, 0, 0, compact ? 8 : 12);
         // Root tabs provide their own label. Nested views keep a distinct heading.
         PageTitle.Visibility = view.Current.Route == OverlayRoute.Hub || view.Depth == 0 && view.Current.Route == OverlayRoute.Apps

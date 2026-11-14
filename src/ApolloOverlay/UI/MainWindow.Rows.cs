@@ -151,6 +151,7 @@ public partial class MainWindow
         var target = Controller.Session.CardTarget;
         var valid = Controller.CardTargetAvailable(target);
         _ = UpdateSessionArtwork();
+        AutomationProperties.SetName(HeaderIdentity, "Game Session Overlay version " + HeaderIdentity.Text.TrimStart('v'));
         SessionKicker.Visibility = Visibility.Collapsed;
         ApplySessionCardDensity();
         TargetLabel.Text = target?.Title ?? "No window selected";
@@ -162,7 +163,7 @@ public partial class MainWindow
         ContextIcon.Source = target is null ? null : Controller.Platform.Icon(target);
         ContextIcon.Visibility = ContextIcon.Source is null ? Visibility.Collapsed : Visibility.Visible;
         ContextGlyph.Visibility = ContextIcon.Source is null ? Visibility.Visible : Visibility.Collapsed;
-        ContextStatus.Visibility = valid && !Controller.Session.CardPending ? Visibility.Collapsed : Visibility.Visible;
+        ContextStatus.Visibility = Controller.Session.CardPending || target is not null && !valid ? Visibility.Visible : Visibility.Collapsed;
         ContextStatusDot.Visibility = Visibility.Collapsed;
         SessionEvidence.Visibility = compactChrome || target is not null && string.Concat(target.Title.Where(char.IsLetterOrDigit)).Equals(string.Concat(target.ProcessName.Where(char.IsLetterOrDigit)), StringComparison.OrdinalIgnoreCase) ? Visibility.Collapsed : Visibility.Visible;
         UpdateSessionCardAudioLabel();
@@ -240,12 +241,12 @@ public partial class MainWindow
     private string GuideDescription() => Controller.Platform.IsPreview ? "Preview · Guide connection is not queried" : !Controller.Settings.GuideXInputEnabled ? "Disabled · double-click the tray icon to open" : guideBackend?.Active == true ? guideBackend.Status : guideConnection?.Status ?? "Controller or Guide input unavailable";
     private bool QuickAccessAction(string id) => view.Current.Route == OverlayRoute.Hub && SessionHubSettings.Catalog.Contains(id);
     private bool CompactAction(string id) => view.Current.Route == OverlayRoute.OperationResult
-        || narrow && (view.Current.Route == OverlayRoute.Hub && SessionHubSettings.Catalog.Contains(id) || view.Current.Route == OverlayRoute.Media && id is "media-previous" or "media-next");
+        || QuickAccessAction(id) || narrow && view.Current.Route == OverlayRoute.Media && id is "media-previous" or "media-next";
     private string ActionDescription(string id, string description, bool available) => QuickAccessAction(id) ? id switch
     {
         "playnite" when !available => narrow ? "Needs setup" : "Set up in System",
         "steam" when !available && narrow => "Not found",
-        "steam-overlay" when !available => narrow ? "Unavailable" : "Unavailable here",
+        "steam-overlay" when narrow && description == "Needs a Steam game" => "Steam games",
         "audio" when narrow && !audio.Current.Available => "No output",
         _ => description
     } : description;
@@ -256,8 +257,6 @@ public partial class MainWindow
         grid.Title.SetResourceReference(TextBlock.FontSizeProperty, "SessionType.Section");
         grid.Description.SetResourceReference(TextBlock.FontSizeProperty, "SessionType.Caption");
         grid.Description.Margin = new(0, 4, 0, 0);
-        if (QuickAccessAction(id) && id != "audio" && available)
-            grid.Description.Visibility = Visibility.Collapsed;
         AutomationProperties.SetName(grid.Description, description);
         var badge = new Border
         {
@@ -273,7 +272,7 @@ public partial class MainWindow
         var compactAction = CompactAction(id);
         if (compactAction)
         {
-            grid.Title.SetResourceReference(TextBlock.FontSizeProperty, "SessionType.CompactBody");
+            grid.Title.SetResourceReference(TextBlock.FontSizeProperty, QuickAccessAction(id) && !narrow ? "SessionType.Body" : "SessionType.CompactBody");
             grid.Title.TextWrapping = TextWrapping.Wrap;
             grid.Title.TextTrimming = TextTrimming.CharacterEllipsis;
             grid.Title.LineHeight = 19;
@@ -281,7 +280,7 @@ public partial class MainWindow
             grid.Title.MaxHeight = 38;
             grid.Description.SetResourceReference(TextBlock.FontSizeProperty, "SessionType.Caption");
             grid.Description.Margin = new(0, 2, 0, 0);
-            grid.Description.TextWrapping = TextWrapping.NoWrap;
+            grid.Description.TextWrapping = QuickAccessAction(id) ? TextWrapping.Wrap : TextWrapping.NoWrap;
             grid.Description.TextTrimming = TextTrimming.CharacterEllipsis;
             grid.Description.Visibility = description.Length > 0 && (!available || id == "audio") ? Visibility.Visible : Visibility.Collapsed;
             grid.ColumnDefinitions[0].Width = new GridLength(26);
@@ -289,6 +288,8 @@ public partial class MainWindow
             badge.Width = badge.Height = 22;
             badge.Child = InputPrompt.CreateGlyph(this, "A", 20);
         }
+        if (QuickAccessAction(id))
+            grid.ColumnDefinitions[0].Width = new GridLength(narrow ? 24 : 32);
         if (id == "apps")
         {
             var count = new Border
@@ -332,6 +333,11 @@ public partial class MainWindow
 
         if (id == "close")
             grid.Description.Visibility = Visibility.Collapsed;
+        if (QuickAccessAction(id) && !available)
+        {
+            button.ToolTip = description;
+            ToolTipService.SetShowOnDisabled(button, true);
+        }
         if (danger)
             button.SetResourceReference(ForegroundProperty, ThemeSupport.Critical);
         AutomationProperties.SetName(button, title);

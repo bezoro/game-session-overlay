@@ -45,7 +45,7 @@ internal static class SessionHubTests
         });
         test("hub favorites missing defaults versus empty and stable sanitized order", () =>
         {
-            Check(SessionHubSettings.Favorites(UserSettings.Parse("{}")).SequenceEqual(SessionHubSettings.Catalog), "Missing is not defaults");
+            Check(SessionHubSettings.Favorites(UserSettings.Parse("{}")).SequenceEqual(new[] { "steam-overlay", "steam", "playnite", "taskview", "gamebar", "audio" }), "Missing settings must put the four frequent shortcuts first");
             Check(SessionHubSettings.Favorites(UserSettings.Parse("{\"FavoriteQuickActions\":[]}")).Length == 0, "Explicit empty lost");
             Check(SessionHubSettings.Favorites(UserSettings.Parse("{\"FavoriteQuickActions\":[\"audio\",\"bad\",\"playnite\",\"audio\"]}")).SequenceEqual(new[] { "audio", "playnite" }), "Order/dedup invalid");
         });
@@ -62,7 +62,7 @@ internal static class SessionHubTests
             copy[0] = "audio";
             var exposed = c.Settings;
             exposed.FavoriteQuickActions![0] = "taskview";
-            Check(!c.SettingsDirty && c.Settings.FavoriteQuickActions![0] == "playnite", "Caller array aliased current/saved");
+            Check(!c.SettingsDirty && c.Settings.FavoriteQuickActions!.SequenceEqual(original.FavoriteQuickActions!), "Caller array aliased current/saved");
             c.Change(SessionHubSettings.Move(c.Settings, "steam", -1));
             Check(c.SettingsDirty, "Reorder clean");
             c.Change(original);
@@ -629,6 +629,78 @@ internal static class SessionHubTests
 
     private static void RunViews(Action<string, Action> test)
     {
+        test("hub Resume leads to Close across and shortcuts below", () =>
+        {
+            var w = Fixture(out _, out _, out _, out _);
+            try
+            {
+                foreach (var (width, height) in new[] { (572, 940), (360, 480) })
+                {
+                    Arrange(w, width, height);
+                    Pick(w, "session-card");
+                    w.Move(NavDirection.Right);
+                    Check(w.SelectedAction == "session-close", "Right did not reach Close");
+                    w.Move(NavDirection.Left);
+                    Check(w.SelectedAction == "session-card", "Left did not return to Resume");
+                    w.Sequential(1);
+                    Check(w.SelectedAction == "session-close", "Tab did not reach Close");
+                    w.Sequential(-1);
+                    w.Move(NavDirection.Down);
+                    Check(w.SelectedAction == "steam-overlay", "Down did not reach the first shortcut");
+                }
+
+                w.Controller.Change(w.Controller.Settings with { FavoriteQuickActions = ["audio", "taskview", "steam"] });
+                w.RefreshRows();
+                Check(w.ActionIds.Where(SessionHubSettings.Catalog.Contains).SequenceEqual(new[] { "audio", "taskview", "steam" }),
+                    "Hub changed configured shortcut order");
+            }
+            finally
+            {
+                w.Close();
+            }
+        });
+        test("hub Close reviews the displayed card and blocks stale and protected targets", () =>
+        {
+            var w = Fixture(out var p, out _, out _, out _);
+            try
+            {
+                p.ForegroundWindow = p.B;
+                p.CardScan = (_, _) => [new(p.A, LauncherDescendant: true)];
+                w.Controller.CaptureReturn();
+                Complete(w.Controller.ResolveCardTarget("fixture", new HashSet<string>()));
+                w.RefreshRows();
+                Check(w.Controller.Session.Anchor?.Same(p.B) == true && w.Controller.Session.CardTarget?.Same(p.A) == true,
+                    "Fixture needs a different session anchor from the displayed card");
+                Click(w, "session-close");
+                Check(w.Confirming && ((TextBlock)w.FindName("ConfirmTarget")).Text == p.A.Title && p.Closes == 0,
+                    "Close did not review the displayed card before a native request");
+                w.Back();
+                Check(w.SelectedAction == "session-close", "Cancel did not return to Close");
+
+                p.InvalidCard = p.A;
+                Click(w, "session-close");
+                Check(!w.Confirming && !ReviewFixTests.Button(w, "session-close").IsEnabled && p.Closes == 0,
+                    "A stale card entered confirmation");
+                p.InvalidCard = null;
+
+                foreach (var target in new[] { p.Playnite, p.BigPicture })
+                {
+                    p.ForegroundWindow = target;
+                    p.CardScan = (_, _) => target.Same(p.BigPicture) ? [new(target, ResumeOnly: true)] : [new(target)];
+                    w.Controller.CaptureReturn();
+                    Complete(w.Controller.ResolveCardTarget("fixture", new HashSet<string>()));
+                    w.RefreshRows();
+                    var close = ReviewFixTests.Button(w, "session-close");
+                    Check(w.Controller.Session.CardTarget?.Same(target) == true && !close.IsEnabled, "Close enabled for a protected or resume-only card");
+                    Click(w, "session-close");
+                    Check(!w.Confirming && p.Closes == 0, "Protected close entered confirmation");
+                }
+            }
+            finally
+            {
+                w.Close();
+            }
+        });
         test("hub compact selected card remains fully visible with dirty and retained result", () =>
         {
             var w = Fixture(out _, out _, out _, out _);
@@ -875,7 +947,7 @@ internal static class SessionHubTests
                 w.Page(2);
                 Click(w, "customize");
                 Click(w, "later:playnite");
-                Check(w.Controller.Settings.FavoriteQuickActions![1] == "playnite" && w.SelectedAction == "favorite:playnite", "Moved favorite lost row identity");
+                Check(w.Controller.Settings.FavoriteQuickActions![3] == "playnite" && w.SelectedAction == "favorite:playnite", "Moved favorite lost row identity");
                 RequireFocus(w);
                 foreach (var id in SessionHubSettings.Catalog)
                     Click(w, "favorite:" + id);
@@ -1664,7 +1736,7 @@ internal static class SessionHubTests
         internal WindowRef? InvalidCard;
         internal int BigPictureResumes;
         internal bool Stale, Empty;
-        internal int Switches, Minimizes;
+        internal int Switches, Minimizes, Closes;
         internal WindowRef? LastSwitch, ForegroundWindow;
         public bool IsPreview => true;
 
@@ -1700,7 +1772,11 @@ internal static class SessionHubTests
             return Task.FromResult(new ActionResult(ResultKind.Completed, "Fixture minimized observed"));
         }
 
-        public Task<ActionResult> Close(WindowRef target, CancellationToken cancellation) => Task.FromResult(new ActionResult(ResultKind.Simulated, "Fixture close"));
+        public Task<ActionResult> Close(WindowRef target, CancellationToken cancellation)
+        {
+            Closes++;
+            return Task.FromResult(new ActionResult(ResultKind.Simulated, "Fixture close"));
+        }
         public Task<ActionResult> Shortcut(WindowRef target, string keys) => Task.FromResult(new ActionResult(ResultKind.Simulated, "Fixture shortcut"));
         public ActionResult Launch(bool playnite, string? path) => new(ResultKind.Simulated, "Fixture launch");
         public void Dispose()
