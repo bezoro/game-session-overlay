@@ -2,25 +2,29 @@ namespace ApolloOverlay;
 
 public partial class MainWindow
 {
-    private void OpenPrimaryAudio()
+    private void OpenPrimaryTab(int index)
     {
-        if (!NavigationAllowed || TransitionPending || Confirming || view.Current.Route == OverlayRoute.WindowsAudio)
+        if (!NavigationAllowed || TransitionPending || Confirming || updateCommitting)
             return;
-        if (updateBusy)
-            CancelUpdateInteraction();
-        RunInterfaceAction(SettingsTab, () => Subpage("audio", "volume"), FeedbackCue.Navigation);
+
+        if (index == 2)
+        {
+            if (view.Current.Route == OverlayRoute.WindowsAudio)
+                return;
+            if (updateBusy)
+                CancelUpdateInteraction();
+            RunInterfaceAction(SettingsTab, () => Subpage("audio", "volume"), FeedbackCue.Confirmation);
+        }
+        else if (page != index || view.Depth != 0)
+        {
+            RunInterfaceAction(index == 0 ? HomeTab : AppsTab, () => Page(index), FeedbackCue.Confirmation);
+        }
     }
 
     private void NavigatePrimaryTab(int direction)
     {
-        if (Confirming || TransitionPending || updateCommitting)
-            return;
         var current = view.Current.Route == OverlayRoute.WindowsAudio ? 2 : page == 1 ? 1 : 0;
-        var next = (current + direction + 3) % 3;
-        if (next == 2)
-            OpenPrimaryAudio();
-        else
-            Page(next);
+        OpenPrimaryTab((current + direction + 3) % 3);
     }
 
     private void BuildSessionDashboard()

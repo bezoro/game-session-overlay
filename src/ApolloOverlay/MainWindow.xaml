@@ -34,9 +34,10 @@
       <DropShadowEffect
         x:Key="SessionPanelShadow"
         Color="{DynamicResource SessionShadowColor}"
-        BlurRadius="16"
-        ShadowDepth="3"
-        Opacity="0.18" />
+        BlurRadius="10"
+        ShadowDepth="2"
+        Direction="270"
+        Opacity="0.50" />
       <Style
         TargetType="TextBox">
         <Setter
@@ -502,6 +503,13 @@
                   x:Name="TabInteraction"
                   Background="{DynamicResource SessionHoverBrush}"
                   Opacity="0" />
+                <Border
+                  x:Name="ActivationFeedback"
+                  Margin="1"
+                  CornerRadius="6"
+                  Background="{DynamicResource SessionPressBrush}"
+                  Opacity="0"
+                  IsHitTestVisible="False" />
                 <ContentPresenter
                   Margin="{TemplateBinding Padding}"
                   VerticalAlignment="Center"

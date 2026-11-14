@@ -847,6 +847,49 @@ internal static unsafe class SessionHubServiceTests
 
     private static void RunFeedback(Action<string, Action> test)
     {
+        test("feedback controller outputs distinguish each deliberate cue and leave focus movement quiet", () =>
+        {
+            var native = new ControllerNative();
+            using var devices = new ControllerDevices(native, () => 0);
+            devices.UpdateConnections([true, true, false, false]);
+            var device = devices.Read(1);
+            var scheduler = new Scheduler();
+            var sound = new Sound();
+            using var feedback = new FeedbackService(devices, sound, scheduler, () => 0);
+            feedback.Configure(true, true);
+            feedback.SetContext(new(true, true, 1, device.ConnectionEpoch));
+            var source = new FeedbackSource(FeedbackSourceKind.Controller, 1, device.ConnectionEpoch);
+
+            foreach (var cue in Enum.GetValues<FeedbackCue>())
+                Require(!feedback.Request(cue, source with { Slot = 0 }).HapticRequested, "Wrong slot accepted for " + cue);
+            Require(!feedback.Request(FeedbackCue.Test, source with { ConnectionEpoch = device.ConnectionEpoch - 1 }).HapticRequested,
+                "Stale controller epoch accepted");
+            Require(native.Writes.Count == 0, "Rejected source wrote to a controller");
+            feedback.Suspend();
+            feedback.SetContext(new(true, true, 1, device.ConnectionEpoch));
+
+            var movement = feedback.Request(FeedbackCue.Navigation, source);
+            Require(movement.SoundRequested && !movement.HapticRequested && scheduler.Actions.Count == 0 && native.Writes.Count == 0,
+                "Ordinary movement drove the controller or suppressed navigation sound");
+
+            var signatures = new Dictionary<FeedbackCue, (ushort Left, ushort Right, int Duration)>();
+            foreach (var cue in new[] { FeedbackCue.Confirmation, FeedbackCue.Completion, FeedbackCue.Cancellation, FeedbackCue.Unavailable, FeedbackCue.Test })
+            {
+                Require(feedback.Request(cue, source).HapticRequested, "Missing haptic request for " + cue);
+                var (slot, left, right) = native.Writes.Last();
+                var (duration, stop) = scheduler.Actions.Last();
+                Require(slot == 1 && Math.Max(left, right) is > 0 and <= 4200 && duration is >= 25 and <= 80, "Wrong slot or excessive pulse for " + cue);
+                signatures.Add(cue, (left, right, duration));
+                stop();
+                Require(native.Writes.Last() == (1u, (ushort)0, (ushort)0), "Cue did not stop on the activating controller");
+            }
+
+            Require(signatures.Values.Distinct().Count() == signatures.Count, "Deliberate cues share a motor pattern");
+            Require(signatures[FeedbackCue.Confirmation].Right > signatures[FeedbackCue.Confirmation].Left && signatures[FeedbackCue.Confirmation].Duration <= 60,
+                "Activation lost its short high-frequency tap");
+            Require(signatures[FeedbackCue.Completion].Duration > signatures[FeedbackCue.Confirmation].Duration && signatures[FeedbackCue.Unavailable].Left > signatures[FeedbackCue.Unavailable].Right,
+                "Confirmed and unavailable results lost their distinct signatures");
+        });
         test("feedback opt-ins independent and foreground deliberate source gates", () =>
         {
             var native = new ControllerNative();
@@ -891,11 +934,15 @@ internal static unsafe class SessionHubServiceTests
             now = 80;
             feedback.Request(FeedbackCue.Navigation, source);
             Require(sound.Plays == 2, "Navigation boundary");
+            feedback.Configure(false, true);
+            Require(feedback.Request(FeedbackCue.Confirmation, source).HapticRequested && feedback.Request(FeedbackCue.Completion, source).HapticRequested,
+                "The replacement pulse was not requested");
             var writes = native.Writes.Count;
             scheduler.Actions[0].Action();
             Require(native.Writes.Count == writes, "Old timer stopped newer pulse");
             scheduler.Actions[1].Action();
             Require(native.Writes.Last().Left == 0 && native.Writes.Last().Right == 0, "Current lease stop");
+            feedback.Configure(true, true);
             now = 100;
             feedback.Request(FeedbackCue.Unavailable, source);
             now = 349;

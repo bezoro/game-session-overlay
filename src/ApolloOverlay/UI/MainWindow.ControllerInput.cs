@@ -387,6 +387,10 @@ public partial class MainWindow
             0 => FeedbackSourceKind.Keyboard,
             _ => inputMethod == "controller" ? FeedbackSourceKind.Controller : inputMethod == "mouse" ? FeedbackSourceKind.Pointer : FeedbackSourceKind.Keyboard
         };
-        return feedbackService.Request(cue, new(sourceKind, sourceKind == FeedbackSourceKind.Controller ? activeSlot : null, activeEpoch));
+        // Asynchronous outcomes may outlive the initiating input and its controller ownership.
+        var controllerSlot = sourceKind == FeedbackSourceKind.Controller && (dispatchSource > 0 || cue is not (FeedbackCue.Completion or FeedbackCue.Unavailable))
+            ? activeSlot
+            : null;
+        return feedbackService.Request(cue, new(sourceKind, controllerSlot, activeEpoch));
     }
 }

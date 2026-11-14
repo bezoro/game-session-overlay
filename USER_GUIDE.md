@@ -37,13 +37,11 @@ Controller input may still reach the game while the panel is open. Foreground fo
 
 In **System**, start with automatic monitor selection. It follows the active window; when opened from the tray, it tries the preserved session window. Choose a specific monitor to keep the panel on Apollo's virtual display or another screen.
 
-Increase the scale until titles are readable from your usual seat. The panel scrolls when space is limited. Selection has one clear outline, a short subtle sheen and press feedback. Windows animation restrictions and high contrast are respected.
+Increase the scale until titles are readable from your usual seat. The panel scrolls when space is limited. A clear outline and a soft repeating highlight identify the selected control. Activating a control adds a brief press highlight. Windows animation restrictions and high contrast are respected.
 
 In **Customize quick access**, keep the actions you use and put frequent actions first. Sounds and vibration are separate opt-ins, both off by default. Changes persist only after **Save**; **Discard** restores the saved settings.
 
-Enable **Sounds** in System and use **Test feedback** to request a sample. Navigation, confirmation and back have different cues. Failure has a lower cue; completion sounds only follow confirmed results. Check that the sound actually reaches the TV: a playback request alone does not establish audible output.
-
-The selected action keeps its focus outline. Activating it produces a brief highlight and gentle compression. Separate text and symbols distinguish pending, completed and uncertain outcomes.
+Use **Test feedback** in System to try the enabled channels. Confirming, going back and attempting an unavailable action have distinct sounds and short controller pulses. Moving the selection does not vibrate the controller. A completion sound follows a verified result. Separate text and symbols distinguish pending, completed and uncertain outcomes.
 
 **Windows audio** controls the PC's default output. Application audio in window options affects the identified audio sessions of that process. Neither guarantees control of the TV's physical volume.
 

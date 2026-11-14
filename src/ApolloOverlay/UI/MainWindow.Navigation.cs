@@ -53,14 +53,15 @@ public partial class MainWindow
 
     internal void OpenOptions(WindowRef target) => OpenView(new(OverlayRoute.TargetOptions, target, "application-audio"));
     private void ChooseSession() => OpenView(new(OverlayRoute.Apps, SelectedId: Controller.Apps.FirstOrDefault() is { } w ? WindowId(w) : "refresh-apps", ChooseSession: true));
-    internal void Page(int index) => RunSemanticCommand("navigate-tab", () => PageCore(index));
-    private void PageCore(int index)
+    internal void Page(int index) => NavigateTab(index);
+    private void NavigateTab(int index, bool acknowledge = true) => RunSemanticCommand("navigate-tab", () => PageCore(index, acknowledge));
+    private void PageCore(int index, bool acknowledge)
     {
         if (TransitionPending || Confirming || updateCommitting)
             return;
         if (updateBusy)
             CancelUpdateInteraction();
-        if ((index + 3) % 3 != page && interfaceActionDepth == 0)
+        if (acknowledge && (index + 3) % 3 != page && interfaceActionDepth == 0)
             RequestCue(FeedbackCue.Navigation);
         if (view.Current.Route == OverlayRoute.PlayniteBrowser)
             CancelPlayniteScan();
@@ -396,7 +397,7 @@ public partial class MainWindow
 
         if (page != 0)
         {
-            Page(0);
+            NavigateTab(0, acknowledge: false);
             return;
         }
 
@@ -407,9 +408,9 @@ public partial class MainWindow
     private FrameworkElement FocusTarget(Entry entry) => !entry.Available && entry.Button.Resources["DescriptionTarget"] is FrameworkElement reason ? reason : entry.Button;
     private void WireFixedActions()
     {
-        HomeTab.Click += (_, _) => ClickTab(HomeTab, 0);
-        AppsTab.Click += (_, _) => ClickTab(AppsTab, 1);
-        SettingsTab.Click += (_, _) => OpenPrimaryAudio();
+        HomeTab.Click += (_, _) => ClickTab(() => OpenPrimaryTab(0));
+        AppsTab.Click += (_, _) => ClickTab(() => OpenPrimaryTab(1));
+        SettingsTab.Click += (_, _) => ClickTab(() => OpenPrimaryTab(2));
         SettingsGear.Click += (_, _) => ActivatePointerEntry(SettingsGear);
         UpdateAvailableButton.Click += (_, _) => ActivatePointerEntry(UpdateAvailableButton);
         UpdateAvailableButton.Content = new IconLabel(this, "updates", "Update available", 12, 14);

@@ -7,16 +7,14 @@ namespace ApolloOverlay;
 public partial class MainWindow
 {
     private int interfaceActionDepth;
-    private void ClickTab(Button button, int index)
+    private void ClickTab(Action openTab)
     {
         SetInputMethod("mouse");
-        if (!NavigationAllowed || TransitionPending || Confirming || page == index && view.Depth == 0)
-            return;
         var previousSource = dispatchSource;
         dispatchSource = -1;
         try
         {
-            RunInterfaceAction(button, () => Page(index), FeedbackCue.Navigation);
+            openTab();
         }
         finally
         {
@@ -79,7 +77,9 @@ public partial class MainWindow
 
     private void PulseActivation(Button button)
     {
-        InteractionMotion.Press(button);
+        var animate = OpenAnimationAllowed && !Controller.Settings.ReducedMotion;
+        if (animate)
+            InteractionMotion.Press(button);
         button.ApplyTemplate();
         if (button.Template.FindName("ActivationFeedback", button) is not Border highlight)
             return;
@@ -87,13 +87,13 @@ public partial class MainWindow
             previous.Stop();
         highlight.BeginAnimation(OpacityProperty, null);
         highlight.Opacity = .6;
-        if (OpenAnimationAllowed)
+        if (animate)
         {
             highlight.BeginAnimation(OpacityProperty, new DoubleAnimation(.6, 0, ResourceDuration("SessionMotion.Notice", 140)));
             return;
         }
 
-        // A system animation restriction still receives a brief static acknowledgement.
+        // Keep acknowledgement visible when motion is reduced.
         var reset = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(150)
