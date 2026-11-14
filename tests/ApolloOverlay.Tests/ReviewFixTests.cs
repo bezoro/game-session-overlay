@@ -480,7 +480,11 @@ internal static class ReviewFixTests
                 var mute = new ButtonAutomationPeer(Button(w, "mute"));
                 var volume = new ButtonAutomationPeer(Button(w, "volume"));
                 Require(mute.GetName() == "Unmute", "Initial mute state stale");
-                w.UpdateAudioEntries(state with { Volume = .55f, Muted = false });
+                w.UpdateAudioEntries(state with
+                {
+                    Volume = .55f,
+                    Muted = false
+                });
                 Require(mute.GetName() == "Mute", "Unmute state stale");
                 Require(volume.GetName() == "Volume · " + .55f.ToString("P0"), "Volume state stale");
             }
