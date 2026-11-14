@@ -56,7 +56,6 @@ public partial class MainWindow : Window
         };
         timer.Tick += Tick;
         WireFixedActions();
-        WireCloseConfirmation();
         WireLocalPointerInput();
         WireAdaptiveLayout();
         WireKeyboardInput();

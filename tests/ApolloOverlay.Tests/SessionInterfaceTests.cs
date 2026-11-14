@@ -665,9 +665,9 @@ internal static class SessionInterfaceTests
             .ToArray();
         var confirmation = ((FrameworkElement)window.FindName("ConfirmPanel")).IsVisible;
         if (confirmation)
-            Require(buttons.Any(button => Equals(button.Tag, "confirm-hold"))
+            Require(buttons.Any(button => Equals(button.Tag, "confirm-close"))
                 && buttons.Any(button => Equals(button.Tag, "confirm-cancel")),
-                "Confirmation capture is missing its actual hold or cancel command");
+                "Confirmation capture is missing its actual Close or Cancel command");
         else
             Require(buttons.Length >= 4, "Capture has no rendered command buttons: selected=" + window.SelectedAction + "; visible=" + buttons.Length
                 + "; all=" + string.Join(", ", CaptureVisuals<Button>(root).Select(button => $"{button.Tag}:{button.Visibility}/{button.IsVisible}/{button.ActualWidth:F1}x{button.ActualHeight:F1}")));
@@ -694,9 +694,7 @@ internal static class SessionInterfaceTests
                 "Confirmation capture does not identify its actual close target");
         }
 
-        var footer = confirmation && ((Button)window.FindName("HoldCloseButton")).Content is IconLabel hold
-            ? InputPrompt.Read(hold.Label)
-            : InputPrompt.Read((TextBlock)window.FindName("ModeLabel"));
+        var footer = InputPrompt.Read((TextBlock)window.FindName("ModeLabel"));
         var expectedPrompt = expectedInput switch
         {
             "controller" => confirmation ? "A" : "LB/RB",

@@ -110,7 +110,7 @@ public static class Navigation
     }
 
     public static int NextAppPage(int offset, int count) => offset + 4 >= count ? 0 : offset + 4;
-    public static bool CanActivate(bool busy, bool confirming, bool available) => !busy && !confirming && available;
+    public static bool CanActivate(bool busy, bool available) => !busy && available;
     private static int Index(IReadOnlyList<string> ids, string id)
     {
         for (var i = 0; i < ids.Count; i++)

@@ -1016,78 +1016,68 @@
           Visibility="Collapsed"
           Background="{DynamicResource ApplicationBackgroundBrush}"
           CornerRadius="{DynamicResource SessionRadius.Panel}">
-          <Grid
+          <Border
             x:Name="ConfirmationGroup"
-            MaxHeight="460"
-            VerticalAlignment="Center">
-            <Grid.RowDefinitions>
-              <RowDefinition />
-              <RowDefinition
-                Height="Auto" />
-            </Grid.RowDefinitions>
-            <ScrollViewer
-              x:Name="ConfirmScroll"
-              Style="{StaticResource OverlayScrollViewer}"
-              VerticalScrollBarVisibility="Auto">
-              <StackPanel
-                x:Name="ConfirmationInfo"
-                Margin="4,6">
-                <TextBlock
-                  Text="Safe closing"
+            MaxWidth="440"
+            MaxHeight="420"
+            Padding="20"
+            VerticalAlignment="Center"
+            Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="{DynamicResource SessionRadius.Card}">
+            <Grid>
+              <Grid.RowDefinitions>
+                <RowDefinition />
+                <RowDefinition
+                  Height="Auto" />
+              </Grid.RowDefinitions>
+              <ScrollViewer
+                x:Name="ConfirmScroll"
+                Style="{StaticResource OverlayScrollViewer}"
+                VerticalScrollBarVisibility="Auto">
+                <StackPanel
+                  x:Name="ConfirmationInfo">
+                  <TextBlock
+                    x:Name="ConfirmationHeading"
+                    Text="Close this window?"
+                    FontSize="{DynamicResource SessionType.Title}"
+                    FontWeight="SemiBold"
+                    TextWrapping="Wrap"
+                    AutomationProperties.HeadingLevel="Level1" />
+                  <TextBlock
+                    x:Name="ConfirmTarget"
+                    FontSize="18"
+                    FontWeight="SemiBold"
+                    TextWrapping="Wrap"
+                    Margin="0,12,0,4" />
+                  <TextBlock
+                    x:Name="ConfirmationWarning"
+                    Text="Unsaved work may be lost."
+                    FontSize="{DynamicResource SessionType.Body}"
+                    TextWrapping="Wrap"
+                    Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+              </ScrollViewer>
+              <UniformGrid
+                Grid.Row="1"
+                Columns="2"
+                Margin="0,20,0,0">
+                <Button
+                  x:Name="CancelCloseButton"
+                  Margin="0,0,4,0"
+                  MinHeight="44"
+                  AutomationProperties.Name="Cancel closing" />
+                <Button
+                  x:Name="ConfirmCloseButton"
+                  Margin="4,0,0,0"
+                  Padding="8,4"
+                  MinHeight="44"
                   Foreground="{DynamicResource SystemFillColorCriticalBrush}"
-                  FontSize="13"
-                  FontWeight="SemiBold" />
-                <TextBlock
-                  Text="Close this window?"
-                  FontSize="24"
-                  FontWeight="SemiBold"
-                  TextWrapping="Wrap"
-                  Margin="0,8,0,0" />
-                <TextBlock
-                  x:Name="ConfirmTarget"
-                  FontSize="18"
-                  TextWrapping="Wrap"
-                  Margin="0,8,0,8" />
-                <TextBlock
-                  x:Name="ConfirmationWarning"
-                  Text="Unsaved work may be lost."
-                  FontSize="15"
-                  TextWrapping="Wrap"
-                  Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-              </StackPanel>
-            </ScrollViewer>
-            <StackPanel
-              Grid.Row="1"
-              Margin="0,8,0,0">
-              <ProgressBar
-                x:Name="HoldProgress"
-                Height="6"
-                Maximum="1"
-                Margin="0,0,0,8"
-                Foreground="{DynamicResource SystemFillColorCriticalBrush}" />
-              <TextBlock
-                x:Name="ConfirmHint"
-                Text="Waiting for release…"
-                FontSize="13"
-                Margin="0,0,0,4"
-                TextWrapping="Wrap" />
-              <Button
-                x:Name="HoldCloseButton"
-                MinHeight="52"
-                Foreground="{DynamicResource SystemFillColorCriticalBrush}"
-                AutomationProperties.Name="Hold for 1.5 seconds to close this window">
-                <TextBlock
-                  Text="Hold to close · 1.5 s"
-                  TextWrapping="Wrap"
-                  TextAlignment="Center" />
-              </Button>
-              <Button
-                x:Name="CancelCloseButton"
-                Content="Cancel"
-                MinHeight="44"
-                AutomationProperties.Name="Cancel closing" />
-            </StackPanel>
-          </Grid>
+                  AutomationProperties.Name="Close window" />
+              </UniformGrid>
+            </Grid>
+          </Border>
         </Border>
         <Border
           x:Name="OperationPanel"

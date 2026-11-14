@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -105,7 +106,7 @@ internal static class PremiumInterfaceTests
             try
             {
                 w.SetRenderState("confirmation");
-                Require(w.FindName("HoldCloseButton") is Button && w.FindName("CancelCloseButton") is Button, "Mouse confirmation controls absent");
+                Require(w.FindName("ConfirmCloseButton") is Button && w.FindName("CancelCloseButton") is Button, "Mouse confirmation controls absent");
             }
             finally
             {
@@ -305,90 +306,6 @@ internal static class PremiumInterfaceTests
                 w.Close();
             }
         });
-        test("premium pointer hold requires fresh release and exactly 1500ms", () =>
-        {
-            var p = new FixturePlatform();
-            var w = FixtureWindow(p);
-            try
-            {
-                OpenPointerClose(w);
-                Require(!w.AdvancePointerHold(true, true, true, 0) && !w.AdvancePointerHold(true, true, true, 5000) && p.Closes == 0, "Opening press counted");
-                w.AdvancePointerHold(false, true, true, 5001);
-                w.AdvancePointerHold(true, true, true, 5002);
-                Require(!w.AdvancePointerHold(true, true, true, 6501) && p.Closes == 0, "1499ms closed");
-                Require(w.AdvancePointerHold(true, true, true, 6502) && p.Closes == 1, "1500ms did not close exactly once");
-                w.AdvancePointerHold(true, true, true, 8000);
-                Require(p.Closes == 1, "Duplicate close");
-            }
-            finally
-            {
-                w.Close();
-            }
-        });
-        foreach (var reason in new[]
-        {
-            "capture",
-            "leave",
-            "focus",
-            "identity",
-            "source",
-            "release"
-        }
-
-        )
-            test("premium pointer interruption " + reason, () =>
-            {
-                var p = new FixturePlatform();
-                var w = FixtureWindow(p);
-                try
-                {
-                    OpenPointerClose(w);
-                    w.AdvancePointerHold(false, true, true, 0);
-                    w.AdvancePointerHold(true, true, true, 1);
-                    w.AdvancePointerHold(true, true, true, 1000);
-                    if (reason == "focus")
-                        w.InputContextReader = () => new(true, true, false, false);
-                    if (reason == "identity")
-                        p.ValidIdentity = false;
-                    if (reason == "release")
-                    {
-                        w.AdvancePointerHold(false, true, true, 1100);
-                        w.AdvancePointerHold(true, true, true, 1101);
-                        Require(!w.AdvancePointerHold(true, true, true, 2500) && p.Closes == 0, "Early release accumulated time");
-                    }
-                    else
-                    {
-                        w.AdvancePointerHold(true, reason is not ("capture" or "source"), reason != "leave", 1100);
-                        Require(!w.Confirming && p.Closes == 0, "Interrupted hold remained armed");
-                        w.AdvancePointerHold(true, true, true, 5000);
-                        Require(p.Closes == 0, "Reentry resumed cancelled hold");
-                    }
-                }
-                finally
-                {
-                    w.Close();
-                }
-            });
-        test("premium protected close and stale anchor remain blocked", () =>
-        {
-            var p = new FixturePlatform();
-            var w = FixtureWindow(p);
-            try
-            {
-                w.Confirm(p.Window with
-                {
-                    Protected = true
-                });
-                Require(!w.Confirming && p.Closes == 0, "Protected close opened");
-                p.ValidIdentity = false;
-                w.Confirm(p.Window);
-                Require(!w.Confirming && p.Closes == 0, "Stale close opened");
-            }
-            finally
-            {
-                w.Close();
-            }
-        });
         test("premium Guide slider named focusable stable and dirty", () =>
         {
             var w = ReviewFixTests.Window();
@@ -499,52 +416,214 @@ internal static class PremiumInterfaceTests
                     ThemeSupport.FollowSystem(app);
                 }
             });
-        test("premium compact confirmation target warning progress hint and controls visible", () =>
+        RunCloseConfirmation(test);
+        RunSafety(test);
+    }
+
+    internal static void RunCloseConfirmation(Action<string, Action> test)
+    {
+        _ = Application.Current ?? new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        ThemeSupport.FollowSystem(Application.Current!);
+        void ConfirmCase(string name, Action run) => test(name, () =>
         {
-            var w = FixtureWindow(new());
+            var previous = SynchronizationContext.Current;
+            SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
             try
             {
-                OpenPointerClose(w);
-                w.AdvancePointerHold(false, true, true, 0);
-                w.AdvancePointerHold(true, true, true, 1);
-                w.AdvancePointerHold(true, true, true, 751);
-                var root = Detach(w);
-                Layout(root, 360, 480);
-                foreach (var name in new[]
-                {
-                    "ConfirmTarget",
-                    "ConfirmationWarning",
-                    "HoldProgress",
-                    "ConfirmHint",
-                    "HoldCloseButton",
-                    "CancelCloseButton"
-                }
-
-                )
-                {
-                    var element = (FrameworkElement)w.FindName(name);
-                    var bounds = element.TransformToAncestor(root).TransformBounds(new Rect(new Size(element.ActualWidth, element.ActualHeight)));
-                    Require(bounds.Top >= 0 && bounds.Bottom <= 480 && bounds.Height > 0, "Compact confirmation clipped: " + name);
-                    if (name is "ConfirmTarget" or "ConfirmationWarning")
-                    {
-                        var scroll = Descendants<ScrollViewer>((DependencyObject)w.FindName("ConfirmPanel")).Single();
-                        var viewport = scroll.TransformToAncestor(root).TransformBounds(new Rect(new Size(scroll.ActualWidth, scroll.ActualHeight)));
-                        Console.WriteLine($"COMPACT-CONFIRM-GEOMETRY name={name}; bounds={bounds}; viewport={viewport}; extent={scroll.ExtentHeight}; offset={scroll.VerticalOffset}; scrollHeight={scroll.ViewportHeight}");
-                        Require(bounds.Top >= viewport.Top && bounds.Bottom <= viewport.Bottom, "Decision text clipped inside scroller: " + name);
-                    }
-
-                    Console.WriteLine("COMPACT-CONFIRM " + name + "=" + bounds);
-                }
-
-                Require(w.CloseProgress == .5, "Progress fixture lost");
+                run();
+            }
+            finally
+            {
+                SynchronizationContext.SetSynchronizationContext(previous);
+            }
+        });
+        ConfirmCase("close confirmation shows the named target, defaults to cancel and restores its origin", () =>
+        {
+            var p = new FixturePlatform();
+            var w = FixtureWindow(p);
+            try
+            {
+                w.OpenOptions(p.Window);
+                OpenCloseConfirmation(w);
+                var target = (TextBlock)w.FindName("ConfirmTarget");
+                Require(target.Text == p.Window.Title && w.CloseTarget!.Same(p.Window), "Confirmation omitted or changed the exact target");
+                Require(w.ActionIds.SequenceEqual(["confirm-cancel", "confirm-close"]) && w.SelectedAction == "confirm-cancel", "Wrong confirmation commands or default");
+                Require(w.AutomationSnapshot().Actions.Any(a => a.Id == "confirm-hold" && a.Capability == "RequiresGesture"), "CLI close capability changed");
+                ClickFixed(w, "CancelCloseButton");
+                Require(!w.Confirming && w.SelectedAction == "close" && p.Closes == 0, "Cancel did not restore its origin");
+                OpenCloseConfirmation(w);
+                ClickFixed(w, "ConfirmCloseButton");
+                ClickFixed(w, "ConfirmCloseButton");
+                Complete(w.OperationTask);
+                Require(!w.Confirming && p.Closes == 1 && w.Controller.Operation is { Action: "close", State: "Simulated" }, "One Close click did not dispatch exactly once");
             }
             finally
             {
                 w.Close();
             }
         });
-        RunSafety(test);
+        ConfirmCase("close confirmation draws the complete decision at compact panel size", () =>
+        {
+            var w = FixtureWindow(new());
+            try
+            {
+                OpenCloseConfirmation(w);
+                var root = Detach(w);
+                Layout(root, 360, 480);
+                var scroll = (ScrollViewer)w.FindName("ConfirmScroll");
+                foreach (var name in new[] { "ConfirmationHeading", "ConfirmTarget", "ConfirmationWarning", "CancelCloseButton", "ConfirmCloseButton" })
+                {
+                    var element = (FrameworkElement)w.FindName(name);
+                    var bounds = element.TransformToAncestor(root).TransformBounds(new Rect(new Size(element.ActualWidth, element.ActualHeight)));
+                    Require(bounds.Top >= 0 && bounds.Bottom <= 480 && bounds.Height > 0, "Compact confirmation clipped: " + name);
+                    if (name is "ConfirmationHeading" or "ConfirmTarget" or "ConfirmationWarning")
+                    {
+                        var viewport = scroll.TransformToAncestor(root).TransformBounds(new Rect(new Size(scroll.ActualWidth, scroll.ViewportHeight)));
+                        Require(bounds.Top >= viewport.Top && bounds.Bottom <= viewport.Bottom + 1, "Decision text clipped inside scroller: " + name);
+                    }
+                    Console.WriteLine("COMPACT-CONFIRM " + name + "=" + bounds);
+                }
+            }
+            finally
+            {
+                w.Close();
+            }
+        });
+        ConfirmCase("keyboard opening press and repeat cannot close; a fresh key dispatches once", () =>
+        {
+            var p = new FixturePlatform();
+            var w = FixtureWindow(p);
+            try
+            {
+                var source = HwndSource.FromHwnd(new WindowInteropHelper(w).EnsureHandle());
+                w.OpenOptions(p.Window);
+                for (var i = 0; i < w.ActionIds.Count && w.SelectedAction != "close"; i++)
+                    w.Sequential(1);
+                Require(w.SelectedAction == "close", "Keyboard fixture could not reach Close");
+                ConfirmKey(w, source, Key.Enter, true);
+                Require(w.Confirming && w.SelectedAction == "confirm-cancel", "Opening Enter did not stop at Cancel");
+                ConfirmKey(w, source, Key.Tab, true);
+                ConfirmKey(w, source, Key.Tab, false);
+                Require(w.SelectedAction == "confirm-close", "Tab did not reach Close");
+                ConfirmKey(w, source, Key.Enter, true);
+                ConfirmKey(w, source, Key.Space, true);
+                ConfirmKey(w, source, Key.Space, false);
+                Require(p.Closes == 0 && w.Confirming, "Held opening key or overlapping activation closed the window");
+                ConfirmKey(w, source, Key.Enter, false);
+                Require(p.Closes == 0, "Opening release sent a close request");
+                ConfirmKey(w, source, Key.Space, true);
+                ConfirmKey(w, source, Key.Space, true);
+                ConfirmKey(w, source, Key.Space, false);
+                Complete(w.OperationTask);
+                Require(p.Closes == 1 && !w.Confirming, "Fresh normal key activation did not close exactly once");
+            }
+            finally
+            {
+                w.Close();
+            }
+        });
+        ConfirmCase("controller opening press and repeat cannot close; a fresh A dispatches once", () =>
+        {
+            var p = new FixturePlatform();
+            var w = FixtureWindow(p);
+            try
+            {
+                AdmitFixtureWindow(w);
+                w.OpenOptions(p.Window);
+                for (var i = 0; i < w.ActionIds.Count && w.SelectedAction != "close"; i++)
+                    w.Sequential(1);
+                Require(w.SelectedAction == "close", "Controller fixture could not reach Close");
+                CloseFrame(w, 0);
+                CloseFrame(w, PadButtons.A);
+                Require(w.Confirming && w.SelectedAction == "confirm-cancel", "Opening A did not stop at Cancel");
+                CloseFrame(w, PadButtons.A | PadButtons.Right);
+                CloseFrame(w, PadButtons.A);
+                Require(w.SelectedAction == "confirm-close" && p.Closes == 0, "Moving with A held sent a close");
+                CloseFrame(w, 0);
+                Require(p.Closes == 0 && w.Confirming, "Opening A release sent a close");
+                CloseFrame(w, PadButtons.A);
+                CloseFrame(w, PadButtons.A);
+                Complete(w.OperationTask);
+                Require(p.Closes == 1 && !w.Confirming, "Fresh A did not close exactly once");
+            }
+            finally
+            {
+                w.Close();
+            }
+        });
+        foreach (var cause in new[] { "focus loss", "stale identity", "disconnection", "read failure" })
+            ConfirmCase("close confirmation blocks " + cause, () =>
+            {
+                var p = new FixturePlatform();
+                var w = FixtureWindow(p);
+                try
+                {
+                    AdmitFixtureWindow(w);
+                    w.OpenOptions(p.Window);
+                    CloseFrame(w, 0);
+                    OpenCloseConfirmation(w);
+                    CloseFrame(w, PadButtons.Right);
+                    CloseFrame(w, 0);
+                    Require(w.SelectedAction == "confirm-close", "Confirmation fixture failed to select Close");
+                    if (cause == "focus loss")
+                        w.InputContextReader = () => new(true, true, true, false);
+                    if (cause == "stale identity")
+                        p.Window = p.Window with
+                        {
+                            Generation = p.Window.Generation + 1
+                        };
+                    if (cause is "disconnection" or "read failure")
+                        w.ReviewTick([new(false, 0, ReadFailed: cause == "read failure"), default, default, default]);
+                    else
+                        CloseFrame(w, PadButtons.A);
+                    Complete(w.OperationTask);
+                    Require(p.Closes == 0 && !w.Confirming, "Unsafe condition allowed confirmation or left it armed");
+                }
+                finally
+                {
+                    w.Close();
+                }
+            });
+        ConfirmCase("protected close and stale targets are blocked before confirmation", () =>
+        {
+            var p = new FixturePlatform();
+            var w = FixtureWindow(p);
+            try
+            {
+                w.Confirm(p.Window with
+                {
+                    Protected = true
+                });
+                Require(!w.Confirming && p.Closes == 0, "Protected close opened");
+                p.ValidIdentity = false;
+                w.Confirm(p.Window);
+                Require(!w.Confirming && p.Closes == 0, "Stale close opened");
+            }
+            finally
+            {
+                w.Close();
+            }
+        });
     }
+
+    internal static void ClickFixed(MainWindow w, string name) =>
+        ((Button)w.FindName(name)).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+
+    private static void ConfirmKey(MainWindow w, HwndSource source, Key key, bool down) =>
+        w.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, key)
+        {
+            RoutedEvent = down ? Keyboard.PreviewKeyDownEvent : Keyboard.PreviewKeyUpEvent
+        });
+
+    private static void AdmitFixtureWindow(MainWindow w)
+    {
+        w.ShowActivated = false;
+        w.Left = -12000;
+        w.Top = -12000;
+        w.Show();
+    }
+
+    private static void CloseFrame(MainWindow w, PadButtons buttons) => w.ReviewTick([new(true, buttons), default, default, default]);
 
     internal static void RunSafety(Action<string, Action> test)
     {
@@ -1155,7 +1234,7 @@ internal static class PremiumInterfaceTests
         w.AdvanceHandoff(new(new PadFrame[4], 100, GuideValid: true), 100);
     }
 
-    private static void OpenPointerClose(MainWindow w) => ReviewFixTests.Button(w, "close").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+    internal static void OpenCloseConfirmation(MainWindow w) => ReviewFixTests.Button(w, "close").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
     internal sealed class FixturePlatform(bool preview = true) : IPlatform
     {
         public WindowRef Window = new(101, 42, 100, "Production report — an ordinary window with a complete and deliberately long title", "fixture");

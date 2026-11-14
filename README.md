@@ -27,7 +27,7 @@ The default dark theme combines warm charcoal, a restrained amber accent and war
 | Keyboard | Arrows / Tab | Enter / Space | Esc | PageUp / PageDown |
 | Mouse | Pointer and scrolling | Click | Back button | Click |
 
-X opens window options through the controller or keyboard. Closing a window requires a fresh 1.5-second hold; the app does not force termination.
+X opens window options through the controller or keyboard. Choose **Close window…** to review the exact window, then choose **Close window** to send a normal close request. **Cancel** is selected by default.
 
 **Focus does not block controller input globally.** Games that read XInput in the background may still receive input. A streaming device may be virtual and may not report the TV controller's battery. See [compatibility](docs/controller-isolation.md) and the [real-use test checklist](docs/pilot-checklist.md).
 

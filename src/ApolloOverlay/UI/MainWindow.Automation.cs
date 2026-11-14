@@ -282,7 +282,7 @@ public partial class MainWindow
         "volume-down",
         "mute"
     };
-    private string Capability(Entry entry) => entry.Id is "close" or "close-detail" or "confirm-hold" ? "RequiresGesture" : entry.Id is "steam-overlay" or "test-steam" ? (Controller.Platform.CanSteamMenu(Controller.ReturnTarget) && entry.Id == "steam-overlay" ? "RequiresInteractive" : "Execute") : SynchronousActions.Contains(entry.Id)
+    private string Capability(Entry entry) => entry.Id is "close" or "close-detail" or "session-close" or "confirm-close" ? "RequiresGesture" : entry.Id is "steam-overlay" or "test-steam" ? (Controller.Platform.CanSteamMenu(Controller.ReturnTarget) && entry.Id == "steam-overlay" ? "RequiresInteractive" : "Execute") : SynchronousActions.Contains(entry.Id)
         || view.Current.ChooseSession
         && entry.Id.StartsWith("window:", StringComparison.Ordinal)
         || entry.Id.StartsWith("options:", StringComparison.Ordinal)
@@ -290,7 +290,7 @@ public partial class MainWindow
     internal AutomationSnapshot AutomationSnapshot()
     {
         using var process = System.Diagnostics.Process.GetCurrentProcess();
-        IEnumerable<AutomationAction> actions = entries.Select(entry => new AutomationAction(entry.Id, entry.Available, entry.Reason, Capability(entry), entry.Id is "volume" or "guide-limit" ? ["activate", "left", "right"] : ["activate"]));
+        IEnumerable<AutomationAction> actions = entries.Select(entry => new AutomationAction(entry.Id == "confirm-close" ? "confirm-hold" : entry.Id, entry.Available, entry.Reason, Capability(entry), entry.Id is "volume" or "guide-limit" ? ["activate", "left", "right"] : ["activate"]));
         if (view.Current.Route == OverlayRoute.Hub)
             actions = actions.Append(new("session-options", !busy, "Session window options", "Execute", ["activate"]));
         actions = actions.Concat(new[] { "home", "apps", "system", "audio", "integrations", "options", "details", "customize", "setup", "result" }

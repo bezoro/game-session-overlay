@@ -19,7 +19,7 @@ The installed `startup-task.ps1 -Action Install` also supports explicit administ
 - Controller: a configured short Guide press opens on release; Guide also hides with release protection. D-pad/left stick navigates, A selects, B returns, X opens session/window options, and LB/RB switch tabs. Simultaneous direction and A moves selection without activation. Ctrl+Alt+Space and LB+RB+Start are not overlay activation bindings.
 - Keyboard: arrows, Tab/Shift+Tab, Enter/Space, Esc, X and PageUp/PageDown. Readers and sliders retain an exit to actions with Tab/Shift+Tab.
 - Mouse: actions, tabs, scrolling and controls accept pointer input. Input-source prompts adapt without rebuilding an editor or changing its focus.
-- Close window: release, then start a new 1.5-second A/Enter hold. Release, B, disconnection or focus loss cancels. Steam, Playnite, Explorer and technical windows are protected. No force termination is offered.
+- Choose **Close window…** to review the exact target. **Cancel** is selected and focused when the confirmation opens. Release the input used to open the dialog. Select **Close window** and press A, Enter or Space once, or click **Close window**. A normal press or click is enough. B, Esc, controller disconnection and focus loss cancel the confirmation. Steam, Playnite, Explorer and technical windows are protected.
 
 Before hiding, switching an app, sending a shortcut or exiting through the interface, the overlay requires all observed controls and keys to remain released for 100 continuous milliseconds. New input restarts that wait. B/Esc cancels pending actions; when already dismissing the panel, B/Esc/Guide reaffirms dismissal.
 

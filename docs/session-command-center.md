@@ -29,7 +29,7 @@ Input prompts follow the latest deliberate controller, keyboard or mouse interac
 
 ## Focus and input safety
 
-A provisional opening remains transparent until both native foreground ownership and WPF activation are confirmed. Refusal hides it and provides tray recovery. Explicit administrator restart uses Windows consent; persistent elevated startup is configured separately. Input release, window/process identity, cancellation and fresh hold-to-close guards remain part of every handoff.
+A provisional opening remains transparent until both native foreground ownership and WPF activation are confirmed. Refusal hides it and provides tray recovery. Explicit administrator restart uses Windows consent; persistent elevated startup is configured separately. Effect handoffs check input release, window and process identity, and cancellation. Closing a window requires a separate confirmation of the named window.
 
 Window focus does not establish universal controller isolation. Background readers can still consume the public device. Physical controller identity, connection and battery are reported only when Windows provides corresponding evidence; virtual streaming devices do not prove the TV controller model or charge. See [controller focus and isolation](controller-isolation.md).
 

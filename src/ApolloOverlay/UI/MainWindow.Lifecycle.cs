@@ -203,7 +203,7 @@ public partial class MainWindow
             RevokeFocus("deactivated", !ownedDialog);
             CancelHandoff();
             heldKeys.Clear();
-            CancelHold();
+            CancelCloseConfirmation();
             input.Cancel();
             if (IsVisible && !ownedDialog)
             {
