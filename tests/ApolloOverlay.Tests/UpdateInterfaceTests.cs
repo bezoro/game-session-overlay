@@ -15,7 +15,17 @@ using Velopack.Exceptions;
 
 internal static class UpdateInterfaceTests
 {
-    private static readonly UpdateCandidate Next = new(42, "0.2.0-preview.42.1+1111111", "ui-fixture-next", new string('1', 40), "testing", DateTimeOffset.Parse("2026-10-28T12:00:00Z"), "Test release changes.\nLiteral text: <script>do not execute</script>.\n" + string.Concat(Enumerable.Repeat("Complete release notes for reading and scrolling. ", 30)), 201, "fixture.zip", 1234, new string('a', 64));
+    private static readonly UpdateCandidate Next = NextRelease();
+
+    private static UpdateCandidate NextRelease()
+    {
+        var installed = AppBuild.Current;
+        var core = Version.Parse(installed.Version.Split('-', '+')[0]);
+        var version = $"{core.Major}.{core.Minor + 1}.0";
+        if (installed.Channel == "testing")
+            version += "-preview.42.1+1111111";
+        return new(42, version, "ui-fixture-next", new string('1', 40), installed.Channel, DateTimeOffset.Parse("2026-10-28T12:00:00Z"), "Test release changes.\nLiteral text: <script>do not execute</script>.\n" + string.Concat(Enumerable.Repeat("Complete release notes for reading and scrolling. ", 30)), 201, "fixture.zip", 1234, new string('a', 64));
+    }
     internal static void Capture(string output)
     {
         Directory.CreateDirectory(output);

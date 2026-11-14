@@ -110,16 +110,25 @@ public partial class MainWindow
         RefreshUpdateIndicator();
     }
 
-    private void AcceptUpdateCatalog(IReadOnlyList<UpdateCandidate> releases)
+    private void AcceptUpdateCatalog(IReadOnlyList<UpdateCandidate> releases, bool manual = false)
     {
         updateCandidates = releases;
         availableUpdate = UpdateAvailability.Newer(releases, AppBuild.Current, updateChannel);
+        updateCatalogStatus = availableUpdate switch
+        {
+            not null when manual => "Versions are available. Choose a newer version to read the changes and update.",
+            { } next => $"Version {next.Version} is available. Select Update available to see the download.",
+            null when releases.Count == 0 => "No versions published to this channel. Builds appear only after passing validation.",
+            null when releases.Any(release => release.BuildId == AppBuild.Current.BuildId) => "You are using the latest version of this channel.",
+            _ => "No newer version is available in this channel."
+        };
+        if (manual)
+            updateStatus = updateCatalogStatus;
         automaticUpdateSchedule?.Complete(UpdateDiscoveryClock(), succeeded: true);
         RefreshUpdateIndicator();
         if (view.Current.Route == OverlayRoute.Updates && updateProgressLabel is not null && !updateBusy)
         {
-            updateStatus = availableUpdate is { } next ? $"Version {next.Version} is available. Select Update available to see the download."
-                : "No newer version is available in this channel.";
+            updateStatus = updateCatalogStatus;
             updateProgressLabel.Text = updateStatus;
         }
     }
