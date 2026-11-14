@@ -167,10 +167,10 @@ public partial class MainWindow
             var comparison = CompareReleaseVersion(candidate);
             var heading = (comparison, preparedUpdate is null) switch
             {
-                (> 0, true) => "Update available",
-                (> 0, false) => "Update downloaded",
-                (< 0, true) => "Earlier version",
-                (< 0, false) => "Earlier version downloaded",
+                ( > 0, true) => "Update available",
+                ( > 0, false) => "Update downloaded",
+                ( < 0, true) => "Earlier version",
+                ( < 0, false) => "Earlier version downloaded",
                 (_, true) => "Published version",
                 _ => "Version downloaded"
             };

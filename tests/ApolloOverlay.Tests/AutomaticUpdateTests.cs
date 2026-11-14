@@ -321,7 +321,11 @@ internal static class AutomaticUpdateTests
             if (host.Status().SelectedChannel != earlier.Channel)
                 Click(ReviewFixTests.Button(window, "update-channel"));
             host.FinishAutomatic();
-            var installed = earlier with { BuildId = AppBuild.Current.BuildId, Version = AppBuild.Current.Version };
+            var installed = earlier with
+            {
+                BuildId = AppBuild.Current.BuildId,
+                Version = AppBuild.Current.Version
+            };
             var initialCatalog = Enumerable.Range(1, 8).Select(i => earlier with { BuildId = $"earlier-{i}" }).Prepend(installed).ToArray();
             host.Source.Releases = initialCatalog;
             Click(ReviewFixTests.Button(window, "check-updates"));
