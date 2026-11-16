@@ -32,6 +32,75 @@ internal static class LocalUpdateHistoryTests
 
     internal static void Run(Action<string, Action> test)
     {
+        test("update history observations share background work and invalidate cached snapshots", () =>
+        {
+            var caller = Environment.CurrentManagedThreadId;
+            var reader = caller;
+            var reads = 0;
+            using var entered = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            var history = new UpdateHistorySnapshot(() =>
+            {
+                reader = Environment.CurrentManagedThreadId;
+                var read = Interlocked.Increment(ref reads);
+                entered.Set();
+                if (!release.Wait(TimeSpan.FromSeconds(3)))
+                    throw new TimeoutException("Fixture history read was not released");
+                return new[] { new InstalledBuild("build-" + read, "1.0.0", new string('a', 40), DateTimeOffset.UnixEpoch) };
+            });
+            var first = history.ReadAsync();
+            Require(entered.Wait(TimeSpan.FromSeconds(3)) && !first.IsCompleted && history.Current.Count == 0,
+                "The history read blocked its caller or published incomplete data");
+            Require(ReferenceEquals(first, history.ReadAsync()), "Concurrent observations started duplicate disk reads");
+            history.Invalidate();
+            release.Set();
+            Complete(first);
+            Require(reader != caller && reads == 2 && history.Current.Single().BuildId == "build-2" && history.Fresh,
+                "An invalidated observation was published or file work ran on the caller");
+            Complete(history.ReadAsync());
+            Require(reads == 2, "Fresh history was reread during polling");
+        });
+        test("update receipt writes preserve durable ordering and coalesce superseded checkpoints", () =>
+        {
+            var caller = Environment.CurrentManagedThreadId;
+            var writes = new List<int>();
+            using var entered = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            var writer = new UpdateReceiptWriter(bytes =>
+            {
+                Require(Environment.CurrentManagedThreadId != caller, "Receipt persistence ran on the UI caller");
+                if (bytes[0] == 1)
+                {
+                    entered.Set();
+                    if (!release.Wait(TimeSpan.FromSeconds(3)))
+                        throw new TimeoutException("Fixture receipt write was not released");
+                }
+                writes.Add(bytes[0]);
+            });
+            var initial = writer.WriteAsync([1]);
+            Require(entered.Wait(TimeSpan.FromSeconds(3)) && !initial.IsCompleted, "Receipt did not expose its pending durable boundary");
+            var progress = writer.WriteAsync([2], checkpoint: true);
+            var superseding = writer.WriteAsync([3], checkpoint: true);
+            var apply = writer.WriteAsync([4]);
+            Require(ReferenceEquals(progress, superseding) && !apply.IsCompleted, "Progress backlog grew or apply bypassed a prior write");
+            release.Set();
+            Complete(writer.Drained);
+            Require(writes.SequenceEqual(new[] { 1, 3, 4 }), "A stale checkpoint overwrote a newer durable receipt");
+        });
+        test("update receipt failure is observable without poisoning the next durable write", () =>
+        {
+            var writes = 0;
+            var writer = new UpdateReceiptWriter(_ =>
+            {
+                if (Interlocked.Increment(ref writes) == 1)
+                    throw new IOException("Fixture disk failure");
+            });
+            var failed = writer.WriteAsync([1]);
+            var recovered = writer.WriteAsync([2]);
+            Refuses(() => failed);
+            Complete(recovered);
+            Require(writes == 2 && writer.Drained.IsCompletedSuccessfully, "A failed receipt prevented subsequent recovery");
+        });
         test("rollback history retains verified packages and lists only actually installed versions", () =>
         {
             using var f = new Fixture();
@@ -118,7 +187,7 @@ internal static class LocalUpdateHistoryTests
             f.History.SnapshotSettings("a");
             File.WriteAllText(f.Settings, "{\"newSchema\":99}");
             f.History.QueueSettingsRestore(a.Build);
-            Require(f.History.CompleteSettingsRestore(a.Build)!.Contains("restored"), "Rollback restore missing");
+            Require(f.History.CompleteSettingsRestore(a.Build) is { Outcome: SettingsRestoreOutcome.Restored }, "Rollback restore missing");
             Require(File.ReadAllText(f.Settings) == "{\"compatible\":true}" && File.ReadAllText(f.Settings + ".before-rollback") == "{\"newSchema\":99}", "Compatible or newest settings were lost");
             Require(f.History.CompleteSettingsRestore(a.Build) is null, "Restore repeated on another startup");
         });
@@ -134,7 +203,7 @@ internal static class LocalUpdateHistoryTests
             Require(f.History.CompleteSettingsRestore(a.Build with
             {
                 BuildId = "unrelated"
-            })!.Contains("was not applied")
+            }) is { Outcome: SettingsRestoreOutcome.NotApplied }
                 && File.ReadAllText(f.Settings).Contains("current"), "Unrelated startup restored old settings");
             Require(f.History.CompleteSettingsRestore(a.Build) is null, "Stale restore remained armed");
         });

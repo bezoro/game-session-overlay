@@ -132,6 +132,14 @@ internal static class UpdateInterfaceTests
 
     internal static void Run(Action<string, Action> test)
     {
+        test("update recovery classification follows its typed outcome rather than display copy", () =>
+        {
+            using var host = new Host();
+            host.Window.PresentUpdateRecoveryNotice(new(SettingsRestoreOutcome.Restored, "Settings recovery completed."));
+            Require(host.Window.Controller.Operation is { State: "Completed", Action: "update" }, "Successful recovery was classified as unconfirmed");
+            host.Window.PresentUpdateRecoveryNotice(new(SettingsRestoreOutcome.BackupUnavailable, "Earlier version restored is only display copy."));
+            Require(host.Window.Controller.Operation is { State: "Unconfirmed", Action: "update" }, "Display wording falsely confirmed an unavailable backup");
+        });
         test("updates journal records verified downloads and technical failures without payloads", () =>
         {
             using var host = new Host(logging: true);
@@ -313,7 +321,7 @@ internal static class UpdateInterfaceTests
             Require(host.Source.Stages == 1 && host.Source.Staged?.BuildId == Next.BuildId, "Wrong release downloaded");
             Require(w.ActionIds.Contains("apply-update") && !w.ActionIds.Contains("prepare-update") && Text(w).Contains("Download verified"), "Verified payload has no distinct ready state");
             Require(StatusShownOnce(w, "Download verified"), "Verified download status was missing from the page or repeated in the footer");
-            Require(!ReviewFixTests.Button(w, "apply-update").IsEnabled && !w.TransitionPending, "Diagnostic fixture allowed native installation");
+            Require(!WpfTestElements.Button(w, "apply-update").IsEnabled && !w.TransitionPending, "Diagnostic fixture allowed native installation");
             Click(w, "apply-update");
             Require(!w.TransitionPending && w.IsLoaded == false && host.Source.Stages == 1, "Disabled install queued a native operation");
         });
@@ -341,7 +349,7 @@ internal static class UpdateInterfaceTests
                 host.Source.StageCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
                 host.Review();
                 w.ShowDiagnostic();
-                var primary = ReviewFixTests.Button(w, "prepare-update");
+                var primary = WpfTestElements.Button(w, "prepare-update");
                 Require(AutomationProperties.GetName(primary) == "Download update"
                     && !AutomationProperties.GetHelpText(primary).Contains("cancel", StringComparison.OrdinalIgnoreCase),
                     "Idle download guidance promises a cancellation that has not started");
@@ -362,7 +370,7 @@ internal static class UpdateInterfaceTests
                 Require(!pending.IsCompleted && host.Source.Stages == 1 && AutomationProperties.GetName(primary) == "Cancel download",
                     "The active transfer did not expose an actual cancel action");
                 w.RefreshRows();
-                primary = ReviewFixTests.Button(w, "prepare-update");
+                primary = WpfTestElements.Button(w, "prepare-update");
                 Require(AutomationProperties.GetName(primary) == "Cancel download" && primary.IsEnabled,
                     "Rebuilding the download view restored an idle action during an active transfer");
                 var cancellations = 0;
@@ -385,7 +393,7 @@ internal static class UpdateInterfaceTests
                 host.Source.StageCompletion.SetResult(PreparedFixture());
                 Complete(pending);
                 Require(host.Source.Discards == 1 && !w.ActionIds.Contains("apply-update") && !w.TransitionPending
-                    && AutomationProperties.GetName(ReviewFixTests.Button(w, "prepare-update")) == "Download update",
+                    && AutomationProperties.GetName(WpfTestElements.Button(w, "prepare-update")) == "Download update",
                     "Late cancellation exposed install, retained its payload, or failed to restore the download action");
             });
         test("updates active download cancellation exception does not admit other busy actions", () =>
@@ -521,7 +529,7 @@ internal static class UpdateInterfaceTests
             Click(w, "prepare-update");
             Complete(w.UpdateTask);
             Require(w.Controller.SettingsDirty && w.Controller.Settings.UiScalePercent == 130, "Updates silently saved or discarded the settings draft");
-            Require(!ReviewFixTests.Button(w, "apply-update").IsEnabled && Text(w).Contains("Save or discard"), "Dirty settings did not block restart or explain recovery");
+            Require(!WpfTestElements.Button(w, "apply-update").IsEnabled && Text(w).Contains("Save or discard"), "Dirty settings did not block restart or explain recovery");
             Require(w.ActionIds.Contains("save-pending") && w.ActionIds.Contains("discard-pending"), "Settings recovery controls disappeared");
         });
         test("updates UI cleanup fences late completions and disposes its source", () =>
@@ -545,7 +553,7 @@ internal static class UpdateInterfaceTests
             using var host = new Host(useDefaultSource: true);
             var w = host.Window;
             host.Open();
-            Require(!ReviewFixTests.Button(w, "check-updates").IsEnabled && Text(w).Contains("Setup"), "Preview enabled downloads or omitted the real installation path");
+            Require(!WpfTestElements.Button(w, "check-updates").IsEnabled && Text(w).Contains("Setup"), "Preview enabled downloads or omitted the real installation path");
             Require(!w.ActionIds.Any(id => id is "install-overlay" or "apply-update" or "apply-rollback"), "Preview exposed a native installation action");
             Click(w, "check-updates");
             Require(w.UpdateTask.IsCompleted && !w.TransitionPending, "Disabled preview started work");
@@ -565,7 +573,7 @@ internal static class UpdateInterfaceTests
             host.Open();
             Click(w, "check-updates");
             Complete(w.UpdateTask);
-            Require(StatusShownOnce(w, "latest") && !ReviewFixTests.Button(w, "release:" + AppBuild.Current.BuildId).IsEnabled, "Current version is offered as an update or its completed status was missing or repeated");
+            Require(StatusShownOnce(w, "latest") && !WpfTestElements.Button(w, "release:" + AppBuild.Current.BuildId).IsEnabled, "Current version is offered as an update or its completed status was missing or repeated");
         });
     }
 
@@ -593,7 +601,7 @@ internal static class UpdateInterfaceTests
         && row.TryGetProperty("Outcome", out var o) && o.GetString() == outcome
         && row.TryGetProperty("Reason", out var r) && r.GetString() == reason);
 
-    private static void Complete(Task task) => ReviewFixTests.Complete(task);
+    private static void Complete(Task task) => WpfTestDispatcher.Complete(task);
     private static bool ResultVisible(MainWindow window) => ((Border)window.FindName("OperationPanel")).Visibility == Visibility.Visible;
     private static PreparedUpdate PreparedFixture() => new("fixture-only-never-installed", new(Next.Version, Next.BuildId, Next.Commit, Next.Channel));
     private static void Pick(MainWindow window, string id)
@@ -603,7 +611,7 @@ internal static class UpdateInterfaceTests
         Require(window.SelectedAction == id, "Capture selection is unreachable: " + id);
     }
 
-    private static void Click(MainWindow window, string id) => ReviewFixTests.Button(window, id).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+    private static void Click(MainWindow window, string id) => WpfTestElements.Button(window, id).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
     private static void Pad(MainWindow window, PadButtons buttons) => window.ReviewTick([new(true, buttons), default, default, default]);
     private static void SendKey(MainWindow window, Key key, bool down)
     {
@@ -613,12 +621,12 @@ internal static class UpdateInterfaceTests
             RoutedEvent = down ? Keyboard.PreviewKeyDownEvent : Keyboard.PreviewKeyUpEvent
         });
     }
-    private static string PrimaryText(MainWindow window) => PremiumInterfaceTests.Descendants<TextBlock>((DependencyObject)window.FindName("Rows"))
+    private static string PrimaryText(MainWindow window) => WpfTestElements.Descendants<TextBlock>((DependencyObject)window.FindName("Rows"))
         .Single(block => AutomationProperties.GetLiveSetting(block) == AutomationLiveSetting.Polite).Text;
     private static bool StatusShownOnce(MainWindow window, string expected) => PrimaryText(window).Contains(expected, StringComparison.Ordinal)
         && !window.Feedback.Contains(expected, StringComparison.Ordinal);
-    private static string Text(MainWindow window) => string.Join("\n", PremiumInterfaceTests.Descendants<TextBlock>((DependencyObject)window.FindName("Rows")).Select(t => t.Text));
-    private static TextBox Notes(MainWindow window) => PremiumInterfaceTests.Descendants<TextBox>((DependencyObject)window.FindName("Rows")).Single(t => AutomationProperties.GetName(t).StartsWith("Changes in version", StringComparison.Ordinal));
+    private static string Text(MainWindow window) => string.Join("\n", WpfTestElements.Descendants<TextBlock>((DependencyObject)window.FindName("Rows")).Select(t => t.Text));
+    private static TextBox Notes(MainWindow window) => WpfTestElements.Descendants<TextBox>((DependencyObject)window.FindName("Rows")).Single(t => AutomationProperties.GetName(t).StartsWith("Changes in version", StringComparison.Ordinal));
     private sealed class Host : IDisposable
     {
         private readonly SynchronizationContext? previous = SynchronizationContext.Current;

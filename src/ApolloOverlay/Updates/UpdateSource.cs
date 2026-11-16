@@ -1,6 +1,5 @@
 using System.IO;
 using System.Net.Http;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using Velopack;
 using Velopack.Logging;
@@ -224,25 +223,9 @@ public sealed class GitHubUpdateSource : IUpdateSource
     {
         protected override async Task<GithubRelease[]> GetReleases(bool includePrereleases)
         {
-            const string endpoint = "https://api.github.com/repositories/1430327913/releases?per_page=100";
-            var text = await Downloader.DownloadString(endpoint, GetRequestHeaders("application/vnd.github+json"), .75).ConfigureAwait(false);
-            if (text.Length > 8 * 1024 * 1024)
-                throw new InvalidDataException("The release list exceeds the allowed size.");
-            using var document = JsonDocument.Parse(text);
-            if (document.RootElement.ValueKind != JsonValueKind.Array)
-                throw new InvalidDataException("The release list is invalid.");
-            var matching = new List<(DateTimeOffset Date, GithubRelease Release)>();
-            foreach (var item in document.RootElement.EnumerateArray())
-            {
-                if (item.GetProperty("draft").GetBoolean() || item.GetProperty("prerelease").GetBoolean() != (channel == "testing"))
-                    continue;
-                if (!item.GetProperty("assets").EnumerateArray().Any(a => a.GetProperty("name").GetString() == "releases." + channel + ".json"))
-                    continue;
-                var release = JsonSerializer.Deserialize<GithubRelease>(item.GetRawText()) ?? throw new InvalidDataException("Invalid release.");
-                matching.Add((item.GetProperty("published_at").GetDateTimeOffset(), release));
-            }
-
-            return matching.OrderByDescending(r => r.Date).Take(12).Select(r => r.Release).ToArray();
+            return await GitHubReleaseCatalog.ReadAsync(channel, page => Downloader.DownloadString(
+                $"https://api.github.com/repositories/1430327913/releases?per_page=100&page={page}",
+                GetRequestHeaders("application/vnd.github+json"), .75)).ConfigureAwait(false);
         }
 
         internal static DateTimeOffset PublishedAt(VelopackAsset asset) => asset is GitBaseAsset wrapped && wrapped.Release.PublishedAt is { } date ? new DateTimeOffset(date.ToUniversalTime()) : DateTimeOffset.UnixEpoch;
