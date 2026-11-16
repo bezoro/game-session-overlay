@@ -22,6 +22,24 @@ internal sealed class StartupMutationLease : IDisposable
         ownerThread = Native.GetCurrentThreadId();
     }
 
+    /// <summary>Admits a synchronous transaction only while its caller still wants it.</summary>
+    internal static ActionResult Execute(CancellationToken cancellation, Func<ActionResult> transaction,
+        Func<StartupMutationLease?>? acquire = null)
+    {
+        if (cancellation.IsCancellationRequested)
+            return Cancelled();
+        using var lease = acquire is null ? TryAcquire() : acquire();
+        // Acquisition is bounded but not interruptible. A request cancelled while
+        // another process owns the registration must never enter its transaction.
+        if (cancellation.IsCancellationRequested)
+            return Cancelled();
+        return lease is null
+            ? new(ResultKind.Unavailable, "Another startup change is active. Try again after it finishes.")
+            : transaction();
+    }
+
+    internal static ActionResult Cancelled() => new(ResultKind.Cancelled, "Cancelled before changing Windows startup.");
+
     internal static StartupMutationLease? TryAcquire(int timeoutMilliseconds = 2000)
     {
         if (timeoutMilliseconds is < 0 or > 30000)

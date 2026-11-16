@@ -93,7 +93,7 @@ public partial class MainWindow
             ? new StartupStatus(false, false, false, "Installed startup registration is not changed in preview mode.")
             : startupStatus;
         AddRow("startup", "Start with Windows · " + (state.Enabled ? "On" : "Off"), state.Description, () =>
-            StartSessionAction("startup", token => ApplyStartupChange(() => StartupRegistration.SetEnabled(!state.Enabled), token)),
+            StartSessionAction("startup", token => ApplyStartupChange(() => StartupRegistration.SetEnabled(!state.Enabled, token), token)),
             state.Available && startupStatusFresh);
         AddAdministratorMode(state);
     }

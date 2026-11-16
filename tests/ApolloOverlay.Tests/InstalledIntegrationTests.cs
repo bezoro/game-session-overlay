@@ -78,6 +78,52 @@ internal static class InstalledIntegrationTests
                     "An abandoned lease remained blocked or falsely implied its unfinished transaction had recovered");
             }));
         });
+        test("startup cancellation while another process owns the lease never enters the released transaction", () =>
+        {
+            WithDirectory(root => WithStartupLeaseOwner(root, (child, release, statePath) =>
+            {
+                using var cancellation = new CancellationTokenSource();
+                using var acquiring = new ManualResetEventSlim();
+                var effects = 0;
+                var contender = Task.Run(() => StartupMutationLease.Execute(cancellation.Token, () =>
+                {
+                    Interlocked.Increment(ref effects);
+                    File.WriteAllText(statePath, "cancelled mutation");
+                    return new(ResultKind.Completed, "Unexpected mutation.");
+                }, acquire: () =>
+                {
+                    // This signal is after Execute's initial cancellation check.
+                    // Use the actual cross-process lease, rather than a simulated wait.
+                    acquiring.Set();
+                    return StartupMutationLease.TryAcquire();
+                }));
+                try
+                {
+                    Require(acquiring.Wait(TimeSpan.FromSeconds(1)) && !contender.Wait(100),
+                        "The contender did not reach the blocked native ownership boundary");
+                    cancellation.Cancel();
+                    release.Set();
+                    Require(child.WaitForExit(3000) && child.ExitCode == 0, "The preceding owner failed to finish rollback");
+                    Require(contender.Wait(3000) && contender.GetAwaiter().GetResult().Kind == ResultKind.Cancelled,
+                        "The request cancelled during acquisition was admitted after ownership became available");
+                    Require(effects == 0 && File.ReadAllText(statePath) == "before",
+                        "A cancelled contender dispatched a change after the previous owner released its lease");
+                }
+                finally
+                {
+                    release.Set();
+                    Require(contender.Wait(4000), "The cancelled contender outlived the bounded startup lease test");
+                }
+            }));
+        });
+        test("startup APIs reject an already cancelled request before installation or privilege checks", () =>
+        {
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+            Require(StartupRegistration.SetEnabled(true, cancellation.Token).Kind == ResultKind.Cancelled
+                && StartupRegistration.SetElevated(true, cancellation.Token).Kind == ResultKind.Cancelled,
+                "A cancelled startup request reached installation or privilege validation");
+        });
         test("startup repair requires exactly one explicit administrative action", () =>
         {
             Require(StartupRepairCommand.TryReadAction([StartupRepairCommand.Argument, "Install"], out var install) && install,

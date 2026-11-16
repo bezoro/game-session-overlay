@@ -108,39 +108,20 @@ internal static class StartupRegistration
         }
     }
 
-    internal static ActionResult SetEnabled(bool enabled)
+    internal static ActionResult SetEnabled(bool enabled, CancellationToken cancellation = default)
     {
+        if (cancellation.IsCancellationRequested)
+            return StartupMutationLease.Cancelled();
         var executable = VelopackInstallation.StartupExecutable;
         if (!VelopackInstallation.IsInstalled || !ValidExecutable(executable) || !File.Exists(executable))
             return new(ResultKind.Unavailable, "Install the overlay using Setup to configure Windows startup.");
         try
         {
-            using var mutation = StartupMutationLease.TryAcquire();
-            if (mutation is null)
-                return new(ResultKind.Unavailable, "Another startup change is active. Try again after it finishes.");
-            var task = ScheduledStartup.Read(executable);
-            if (task.Exists && (!task.Owned || !ScheduledStartup.SetEnabled(executable, enabled)))
-                return new(ResultKind.Unavailable, "The existing startup task could not be changed. Its registration was preserved.");
-            using var settings = Registry.CurrentUser.CreateSubKey(SettingsKey, writable: true);
-            using var run = Registry.CurrentUser.CreateSubKey(RunKey, writable: true);
-            if (enabled)
-            {
-                if (!task.Exists)
-                    run.SetValue(RunValue, Command(executable), RegistryValueKind.String);
-                else if (run.GetValue(RunValue) is string duplicate && MatchesHiddenCommand(duplicate, executable))
-                    run.DeleteValue(RunValue, false);
-                // Only a deliberate enable action clears this application's Windows opt-out.
-                using var approved = Registry.CurrentUser.OpenSubKey(ApprovedKey, writable: true);
-                approved?.DeleteValue(RunValue, false);
-            }
-            else
-                run.DeleteValue(RunValue, false);
-            settings.SetValue(PreferenceValue, enabled ? 1 : 0, RegistryValueKind.DWord);
-            settings.SetValue(MarkerValue, 1, RegistryValueKind.DWord);
-            var observed = ReadStatus(executable);
-            return observed.Available && observed.Enabled == enabled
-                ? new(ResultKind.Completed, enabled ? "Hidden startup is enabled." : "Hidden startup is disabled.")
-                : new(ResultKind.Unknown, "Windows startup could not be confirmed. Check Startup apps before trying again.");
+            return StartupMutationLease.Execute(cancellation, () => SetEnabledCore(executable, enabled, cancellation));
+        }
+        catch (OperationCanceledException)
+        {
+            return StartupMutationLease.Cancelled();
         }
         catch (Exception error) when (RegistrationError(error))
         {
@@ -148,14 +129,47 @@ internal static class StartupRegistration
         }
     }
 
+    private static ActionResult SetEnabledCore(string executable, bool enabled, CancellationToken cancellation)
+    {
+        var task = ScheduledStartup.Read(executable);
+        cancellation.ThrowIfCancellationRequested();
+        if (task.Exists && (!task.Owned || !ScheduledStartup.SetEnabled(executable, enabled, cancellation)))
+            return new(ResultKind.Unavailable, "The existing startup task could not be changed. Its registration was preserved.");
+        // The task request above, or the registry writes below, begin the mutation.
+        // Finish persistence and observation even if cancellation arrives afterwards.
+        using var settings = Registry.CurrentUser.CreateSubKey(SettingsKey, writable: true);
+        using var run = Registry.CurrentUser.CreateSubKey(RunKey, writable: true);
+        if (enabled)
+        {
+            if (!task.Exists)
+                run.SetValue(RunValue, Command(executable), RegistryValueKind.String);
+            else if (run.GetValue(RunValue) is string duplicate && MatchesHiddenCommand(duplicate, executable))
+                run.DeleteValue(RunValue, false);
+            // Only a deliberate enable action clears this application's Windows opt-out.
+            using var approved = Registry.CurrentUser.OpenSubKey(ApprovedKey, writable: true);
+            approved?.DeleteValue(RunValue, false);
+        }
+        else
+            run.DeleteValue(RunValue, false);
+        settings.SetValue(PreferenceValue, enabled ? 1 : 0, RegistryValueKind.DWord);
+        settings.SetValue(MarkerValue, 1, RegistryValueKind.DWord);
+        var observed = ReadStatus(executable);
+        return observed.Available && observed.Enabled == enabled
+            ? new(ResultKind.Completed, enabled ? "Hidden startup is enabled." : "Hidden startup is disabled.")
+            : new(ResultKind.Unknown, "Windows startup could not be confirmed. Check Startup apps before trying again.");
+    }
+
     /// <summary>Changes startup privilege without changing whether this user starts the app at sign-in.</summary>
-    internal static ActionResult SetElevated(bool elevated) => ConfigureMode(elevated);
+    internal static ActionResult SetElevated(bool elevated, CancellationToken cancellation = default) =>
+        ConfigureMode(elevated, cancellation: cancellation);
 
     /// <summary>Explicit administrative repair uses the same ownership and rollback boundary as the application.</summary>
     internal static ActionResult Repair(bool install) => ConfigureMode(elevated: install, enabled: install);
 
-    private static ActionResult ConfigureMode(bool elevated, bool? enabled = null)
+    private static ActionResult ConfigureMode(bool elevated, bool? enabled = null, CancellationToken cancellation = default)
     {
+        if (cancellation.IsCancellationRequested)
+            return StartupMutationLease.Cancelled();
         var executable = VelopackInstallation.StartupExecutable;
         if (!VelopackInstallation.IsInstalled || !ValidExecutable(executable) || !File.Exists(executable))
             return new(ResultKind.Unavailable, "Install the overlay using Setup to remember administrator startup.");
@@ -163,51 +177,11 @@ internal static class StartupRegistration
             return new(ResultKind.Unavailable, "Restart as administrator before changing startup privileges.");
         try
         {
-            using var mutation = StartupMutationLease.TryAcquire();
-            if (mutation is null)
-                return new(ResultKind.Unavailable, "Another startup change is active. Try again after it finishes.");
-            var before = ReadStatus(executable);
-            if (!before.Available)
-                return new(ResultKind.Unavailable, "The existing startup registration could not be verified. It was preserved.");
-            var requestedEnabled = enabled ?? before.Enabled;
-            using var settings = Registry.CurrentUser.CreateSubKey(SettingsKey, writable: true);
-            using var run = Registry.CurrentUser.CreateSubKey(RunKey, writable: true);
-            using var approved = enabled == true ? Registry.CurrentUser.OpenSubKey(ApprovedKey, writable: true) : null;
-            var savedRun = RegistryValueSnapshot.Read(run, RunValue);
-            var savedMarker = RegistryValueSnapshot.Read(settings, MarkerValue);
-            var savedPreference = RegistryValueSnapshot.Read(settings, PreferenceValue);
-            var savedApproval = approved is null ? null : RegistryValueSnapshot.Read(approved, RunValue);
-            if (savedRun.Value is string command && !MatchesHiddenCommand(command, executable))
-                return new(ResultKind.Unavailable, "The Run entry belongs to another location. It was preserved.");
-            try
-            {
-                ScheduledStartup.ConfigureElevation(executable, elevated, requestedEnabled, () =>
-                {
-                    if (elevated || !requestedEnabled)
-                        run.DeleteValue(RunValue, false);
-                    else
-                        run.SetValue(RunValue, Command(executable), RegistryValueKind.String);
-                    settings.SetValue(MarkerValue, 1, RegistryValueKind.DWord);
-                    settings.SetValue(PreferenceValue, requestedEnabled ? 1 : 0, RegistryValueKind.DWord);
-                    if (enabled == true)
-                        approved?.DeleteValue(RunValue, false);
-                    var observed = ReadStatus(executable);
-                    if (!observed.Available || observed.Enabled != requestedEnabled || observed.Elevated != elevated)
-                        throw new InvalidOperationException("Windows did not confirm the requested startup mode.");
-                });
-            }
-            catch
-            {
-                savedRun.Restore(run, RunValue);
-                savedMarker.Restore(settings, MarkerValue);
-                savedPreference.Restore(settings, PreferenceValue);
-                if (approved is not null)
-                    savedApproval?.Restore(approved, RunValue);
-                throw;
-            }
-            return new(ResultKind.Completed, elevated
-                ? requestedEnabled ? "Administrator startup is configured. The overlay will remain hidden at sign-in." : "Administrator mode is remembered. Startup remains off."
-                : requestedEnabled ? "Standard hidden startup is restored. This session remains elevated until you exit." : "Administrator startup is removed. Startup remains off.");
+            return StartupMutationLease.Execute(cancellation, () => ConfigureModeCore(executable, elevated, enabled, cancellation));
+        }
+        catch (OperationCanceledException)
+        {
+            return StartupMutationLease.Cancelled();
         }
         catch (Exception error) when (RegistrationError(error))
         {
@@ -215,10 +189,75 @@ internal static class StartupRegistration
         }
     }
 
+    private static ActionResult ConfigureModeCore(string executable, bool elevated, bool? enabled, CancellationToken cancellation)
+    {
+        var before = ReadStatus(executable);
+        cancellation.ThrowIfCancellationRequested();
+        if (!before.Available)
+            return new(ResultKind.Unavailable, "The existing startup registration could not be verified. It was preserved.");
+        var requestedEnabled = enabled ?? before.Enabled;
+        // Snapshot without creating keys: cancellation during a slow read must not
+        // create a registration before the native mutation is admitted.
+        using var settingsSnapshot = Registry.CurrentUser.OpenSubKey(SettingsKey);
+        using var runSnapshot = Registry.CurrentUser.OpenSubKey(RunKey);
+        using var approvedSnapshot = enabled == true ? Registry.CurrentUser.OpenSubKey(ApprovedKey) : null;
+        var savedRun = RegistryValueSnapshot.Read(runSnapshot, RunValue);
+        var savedMarker = RegistryValueSnapshot.Read(settingsSnapshot, MarkerValue);
+        var savedPreference = RegistryValueSnapshot.Read(settingsSnapshot, PreferenceValue);
+        var savedApproval = RegistryValueSnapshot.Read(approvedSnapshot, RunValue);
+        if (savedRun.Value is string command && !MatchesHiddenCommand(command, executable))
+            return new(ResultKind.Unavailable, "The Run entry belongs to another location. It was preserved.");
+        cancellation.ThrowIfCancellationRequested();
+        var registryStarted = false;
+        try
+        {
+            ScheduledStartup.ConfigureElevation(executable, elevated, requestedEnabled, () =>
+            {
+                // Task mutation has begun, or the scheduler has admitted this first
+                // registry mutation. Cancellation must not interrupt commit/rollback.
+                registryStarted = true;
+                using var settings = Registry.CurrentUser.CreateSubKey(SettingsKey, writable: true);
+                using var run = Registry.CurrentUser.CreateSubKey(RunKey, writable: true);
+                using var approved = enabled == true ? Registry.CurrentUser.OpenSubKey(ApprovedKey, writable: true) : null;
+                if (elevated || !requestedEnabled)
+                    run.DeleteValue(RunValue, false);
+                else
+                    run.SetValue(RunValue, Command(executable), RegistryValueKind.String);
+                settings.SetValue(MarkerValue, 1, RegistryValueKind.DWord);
+                settings.SetValue(PreferenceValue, requestedEnabled ? 1 : 0, RegistryValueKind.DWord);
+                if (enabled == true)
+                    approved?.DeleteValue(RunValue, false);
+                var observed = ReadStatus(executable);
+                if (!observed.Available || observed.Enabled != requestedEnabled || observed.Elevated != elevated)
+                    throw new InvalidOperationException("Windows did not confirm the requested startup mode.");
+            }, cancellation);
+        }
+        catch
+        {
+            if (registryStarted)
+            {
+                using var settings = Registry.CurrentUser.CreateSubKey(SettingsKey, writable: true);
+                using var run = Registry.CurrentUser.CreateSubKey(RunKey, writable: true);
+                using var approved = enabled == true ? Registry.CurrentUser.OpenSubKey(ApprovedKey, writable: true) : null;
+                savedRun.Restore(run, RunValue);
+                savedMarker.Restore(settings, MarkerValue);
+                savedPreference.Restore(settings, PreferenceValue);
+                if (approved is not null)
+                    savedApproval.Restore(approved, RunValue);
+            }
+            throw;
+        }
+        return new(ResultKind.Completed, elevated
+            ? requestedEnabled ? "Administrator startup is configured. The overlay will remain hidden at sign-in." : "Administrator mode is remembered. Startup remains off."
+            : requestedEnabled ? "Standard hidden startup is restored. This session remains elevated until you exit." : "Administrator startup is removed. Startup remains off.");
+    }
+
     private sealed record RegistryValueSnapshot(object? Value, RegistryValueKind Kind)
     {
-        internal static RegistryValueSnapshot Read(RegistryKey key, string name)
+        internal static RegistryValueSnapshot Read(RegistryKey? key, string name)
         {
+            if (key is null)
+                return new(null, RegistryValueKind.None);
             var value = key.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
             return new(value, value is null ? RegistryValueKind.None : key.GetValueKind(name));
         }

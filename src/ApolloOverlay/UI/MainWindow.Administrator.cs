@@ -27,7 +27,7 @@ public partial class MainWindow
             startup.Available
                 ? "Current session: administrator · " + (startup.Enabled ? "applies at the next sign-in" : "Windows startup remains off")
                 : "Current session: administrator · install with Setup to remember this mode",
-            () => StartSessionAction("administrator-startup", token => ApplyStartupChange(() => StartupRegistration.SetElevated(!startup.Elevated), token)),
+            () => StartSessionAction("administrator-startup", token => ApplyStartupChange(() => StartupRegistration.SetElevated(!startup.Elevated, token), token)),
             startup.Available && startupStatusFresh);
     }
 
