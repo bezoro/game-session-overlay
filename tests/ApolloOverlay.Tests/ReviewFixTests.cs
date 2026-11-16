@@ -291,7 +291,7 @@ internal static class ReviewFixTests
                     w.Close();
                 }
             });
-        test("RF complete keyboard domain excludes physical mouse and ignores low bit", () =>
+        test("RF physical input coverage includes mouse buttons and ignores the low bit", () =>
         {
             var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
@@ -303,7 +303,8 @@ internal static class ReviewFixTests
                     return 1;
                 };
                 Require(w.PhysicalKeysNeutral(), "Low bit must not mean held");
-                Require(read.SetEquals(new[] { 3 }.Concat(Enumerable.Range(8, 0xFE - 8 + 1))), "Keyboard VK coverage differs");
+                Require(read.SetEquals(Enumerable.Range(1, 6).Concat(Enumerable.Range(8, 0xFE - 8 + 1))),
+                    "Keyboard or mouse-button VK coverage differs");
             }
             finally
             {
@@ -406,12 +407,13 @@ internal static class ReviewFixTests
                     {
                         var peer = new ButtonAutomationPeer(button);
                         Require(peer.GetHelpText().Length > 0, "Action help missing: " + button.Tag);
-                        if (button.Content is Grid grid)
+                        if (button.Content is ActionButtonContent content)
                         {
-                            var texts = (StackPanel)grid.Children[1];
-                            Require(peer.GetName() == ((TextBlock)texts.Children[0]).Text, "Action name differs: " + button.Tag);
-                            if (texts.Children.Count > 1 && texts.Children[1] is TextBlock desc)
-                                Require(peer.GetHelpText() == InputPrompt.Read(desc), "Accessible description differs from rendered prompt: " + button.Tag);
+                            Require(peer.GetName() == content.Title.Text, "Action name differs: " + button.Tag);
+                            var guidance = InputPrompt.Read(content.Description).Trim();
+                            if (content.Description.Visibility == Visibility.Visible && guidance.Length > 0)
+                                Require(peer.GetHelpText().Contains(guidance, StringComparison.Ordinal),
+                                    "Accessible help omits the rendered guidance: " + button.Tag);
                         }
                         else
                             Require(peer.GetName().StartsWith("Options for "), "Sibling options missing full target name");

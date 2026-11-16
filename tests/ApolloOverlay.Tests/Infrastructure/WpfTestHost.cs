@@ -1,4 +1,5 @@
 using System.IO;
+using System.Windows.Input;
 using System.Windows.Threading;
 using ApolloOverlay;
 
@@ -11,7 +12,11 @@ internal enum TestFocusMode
 internal sealed class WpfTestHost : IDisposable
 {
     private readonly IDisposable context;
-    private bool disposed, disposing, closed;
+    private bool disposed, disposing, closed, suppressNativeKeyboardFocus;
+    internal int SuppressedNativeFocusRequests
+    {
+        get; private set;
+    }
     internal MainWindow Window
     {
         get;
@@ -31,6 +36,25 @@ internal sealed class WpfTestHost : IDisposable
 
     private void Closed(object? sender, EventArgs args) => closed = true;
 
+    private void SuppressNativeKeyboardFocus(bool suppress)
+    {
+        if (suppressNativeKeyboardFocus == suppress)
+            return;
+        suppressNativeKeyboardFocus = suppress;
+        if (suppress)
+            Window.AddHandler(Keyboard.PreviewGotKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(RejectKeyboardFocus), true);
+        else
+            Window.RemoveHandler(Keyboard.PreviewGotKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(RejectKeyboardFocus));
+    }
+
+    private void RejectKeyboardFocus(object sender, KeyboardFocusChangedEventArgs args)
+    {
+        // Synthetic admission still renders selection. Prevent selection/layout's Focus() call
+        // from asking WPF's input provider to activate this HWND implicitly.
+        SuppressedNativeFocusRequests++;
+        args.Handled = true;
+    }
+
     internal static WpfTestHost Create(Func<LocalDiagnostics, MainWindow> createWindow, TestFocusMode focusMode,
         Action<MainWindow>? initialize = null, bool? light = false)
     {
@@ -47,6 +71,7 @@ internal sealed class WpfTestHost : IDisposable
             if (focusMode == TestFocusMode.Synthetic)
             {
                 window.ShowActivated = false;
+                host.SuppressNativeKeyboardFocus(true);
                 window.InputContextReader = () => new(true, true, true, true);
                 window.PhysicalKeyReader = _ => 0;
             }
@@ -86,6 +111,7 @@ internal sealed class WpfTestHost : IDisposable
         try
         {
             host.Window.ShowActivated = activateOnShow;
+            host.SuppressNativeKeyboardFocus(focusMode == TestFocusMode.Synthetic && !activateOnShow);
             host.Refresh();
             host.context.Dispose();
             host.Window.Closed += (_, _) => host.Dispose();
@@ -134,6 +160,7 @@ internal sealed class WpfTestHost : IDisposable
                         throw new WpfTestCleanupException(this, "Closing was cancelled. The live fixture retains its resources; remove the cancellation and retry disposal.");
                 }
                 ReleaseDiagnostics(Diagnostics);
+                SuppressNativeKeyboardFocus(false);
                 Window.Closed -= Closed;
                 disposed = true;
             }

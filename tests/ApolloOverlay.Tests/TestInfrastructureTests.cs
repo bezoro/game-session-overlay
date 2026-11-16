@@ -20,8 +20,13 @@ internal static class TestInfrastructureTests
                 host.Window.Left = -12000;
                 host.Window.Top = -12000;
                 host.Window.ShowInTaskbar = false;
+                var activations = 0;
+                host.Window.Activated += (_, _) => activations++;
                 host.Window.Show();
-                Require(!host.Window.ShowActivated && !host.Window.IsActive, "A synthetic fixture acquired native activation");
+                host.Window.RefreshRows();
+                WpfTestDispatcher.Complete(host.Window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background).Task);
+                Require(!host.Window.ShowActivated && !host.Window.IsActive && activations == 0 && host.SuppressedNativeFocusRequests > 0,
+                    $"Synthetic layout must attempt selection without native activation: active={host.Window.IsActive}, activations={activations}, suppressed-focus={host.SuppressedNativeFocusRequests}");
                 host.Diagnostics.Commands.Record("fixture-lifetime", ResultKind.Completed);
                 WpfTestDispatcher.Complete(host.Diagnostics.Commands.FlushAsync());
                 Require(Directory.Exists(root), "The isolated journal was not created");
@@ -81,21 +86,21 @@ internal static class TestInfrastructureTests
         test("fixture disposal waits for deferred closure before releasing the journal", () =>
         {
             var before = SynchronizationContext.Current;
-            using var host = WpfTestHost.Create(diagnostics => new ControlledCloseWindow(diagnostics) { DeferNextClose = true }, TestFocusMode.Synthetic);
-            var window = (ControlledCloseWindow)host.Window;
+            using var host = WpfTestHost.Create(diagnostics => new(renderOnly: true, diagnostics: diagnostics), TestFocusMode.Synthetic);
+            using var closing = new ClosingControl(host.Window) { DeferNextClose = true };
             host.Diagnostics.Commands.Record("deferred-close", ResultKind.Completed);
             WpfTestDispatcher.Complete(host.Diagnostics.Commands.FlushAsync());
             var remainedOwned = false;
-            window.BeforeDeferredClose = () => remainedOwned = !host.Diagnostics.Commands.Status.Closing && Directory.Exists(host.Diagnostics.Root);
+            closing.BeforeDeferredClose = () => remainedOwned = !host.Diagnostics.Commands.Status.Closing && Directory.Exists(host.Diagnostics.Root);
             host.Dispose();
-            Require(remainedOwned && host.Diagnostics.Commands.Status.Closed && !Directory.Exists(host.Diagnostics.Root)
+            Require(remainedOwned && closing.Closed && closing.Attempts == 2 && host.Diagnostics.Commands.Status.Closed && !Directory.Exists(host.Diagnostics.Root)
                 && ReferenceEquals(before, SynchronizationContext.Current), "Deferred closure released live resources or leaked thread state");
         });
         test("cancelled closure retains its owner and permits a later cleanup attempt", () =>
         {
             var before = SynchronizationContext.Current;
-            using var host = WpfTestHost.Create(diagnostics => new ControlledCloseWindow(diagnostics) { CancelClose = true }, TestFocusMode.Synthetic);
-            var window = (ControlledCloseWindow)host.Window;
+            using var host = WpfTestHost.Create(diagnostics => new(renderOnly: true, diagnostics: diagnostics), TestFocusMode.Synthetic);
+            using var closing = new ClosingControl(host.Window) { CancelClose = true };
             host.Diagnostics.Commands.Record("cancelled-close", ResultKind.Completed);
             WpfTestDispatcher.Complete(host.Diagnostics.Commands.FlushAsync());
             try
@@ -109,20 +114,20 @@ internal static class TestInfrastructureTests
                 {
                     Require(ReferenceEquals(error.Owner, host), "The failed cleanup lost its retriable owner");
                 }
-                Require(!host.Diagnostics.Commands.Status.Closing && Directory.Exists(host.Diagnostics.Root)
+                Require(!closing.Closed && closing.Attempts == 1 && !host.Diagnostics.Commands.Status.Closing && Directory.Exists(host.Diagnostics.Root)
                     && ReferenceEquals(before, SynchronizationContext.Current), "Cancellation released live resources or leaked the dispatcher context");
             }
             finally
             {
-                window.CancelClose = false;
+                closing.CancelClose = false;
                 host.Dispose();
             }
-            Require(host.Diagnostics.Commands.Status.Closed && !Directory.Exists(host.Diagnostics.Root), "A later successful close did not release retained resources");
+            Require(closing.Closed && closing.Attempts == 2 && host.Diagnostics.Commands.Status.Closed && !Directory.Exists(host.Diagnostics.Root), "A later successful close did not release retained resources");
         });
         test("failed initialization preserves both causes and a cancelled close owner for recovery", () =>
         {
             var before = SynchronizationContext.Current;
-            ControlledCloseWindow? window = null;
+            ClosingControl? closing = null;
             WpfTestHost? retained = null;
             var original = new InvalidOperationException("initialization failed before cleanup");
             try
@@ -131,8 +136,15 @@ internal static class TestInfrastructureTests
                 {
                     diagnostics.Commands.Record("failed-initialization", ResultKind.Completed);
                     WpfTestDispatcher.Complete(diagnostics.Commands.FlushAsync());
-                    return window = new ControlledCloseWindow(diagnostics) { CancelClose = true };
-                }, TestFocusMode.Synthetic, initialize: _ => throw original);
+                    return new(renderOnly: true, diagnostics: diagnostics);
+                }, TestFocusMode.Synthetic, initialize: window =>
+                {
+                    closing = new(window)
+                    {
+                        CancelClose = true
+                    };
+                    throw original;
+                });
                 throw new Exception("Initialization unexpectedly completed");
             }
             catch (AggregateException error)
@@ -140,17 +152,21 @@ internal static class TestInfrastructureTests
                 retained = error.InnerExceptions.OfType<WpfTestCleanupException>().Single().Owner;
                 try
                 {
-                    Require(error.InnerExceptions.Contains(original) && !retained.Diagnostics.Commands.Status.Closing
+                    Require(error.InnerExceptions.Contains(original) && closing is { Closed: false, Attempts: 1 } && !retained.Diagnostics.Commands.Status.Closing
                         && Directory.Exists(retained.Diagnostics.Root) && ReferenceEquals(before, SynchronizationContext.Current),
                         "Failed initialization discarded its original cause, live resources or caller context");
                 }
                 finally
                 {
-                    window!.CancelClose = false;
-                    retained.Dispose();
+                    closing!.CancelClose = false;
+                    try
+                    {
+                        retained.Dispose();
+                    }
+                    finally { closing.Dispose(); }
                 }
             }
-            Require(retained is not null && retained.Diagnostics.Commands.Status.Closed && !Directory.Exists(retained.Diagnostics.Root)
+            Require(closing is { Closed: true, Attempts: 2 } && retained is not null && retained.Diagnostics.Commands.Status.Closed && !Directory.Exists(retained.Diagnostics.Root)
                 && ReferenceEquals(before, SynchronizationContext.Current), "The retained initialization owner could not be recovered");
         });
     }
@@ -161,30 +177,52 @@ internal static class TestInfrastructureTests
             throw new Exception(reason);
     }
 
-    private sealed class ControlledCloseWindow(LocalDiagnostics diagnostics) : MainWindow(renderOnly: true, diagnostics: diagnostics)
+    private sealed class ClosingControl : IDisposable
     {
+        private readonly MainWindow window;
         internal bool CancelClose, DeferNextClose;
+        internal bool Closed
+        {
+            get; private set;
+        }
+        internal int Attempts
+        {
+            get; private set;
+        }
         internal Action? BeforeDeferredClose;
 
-        protected override void OnClosing(CancelEventArgs args)
+        internal ClosingControl(MainWindow window)
         {
+            this.window = window;
+            window.Closing += Closing;
+            window.Closed += DidClose;
+        }
+
+        private void DidClose(object? sender, EventArgs args) => Closed = true;
+
+        private void Closing(object? sender, CancelEventArgs args)
+        {
+            Attempts++;
             if (CancelClose)
             {
                 args.Cancel = true;
                 return;
             }
-            if (DeferNextClose)
-            {
-                DeferNextClose = false;
-                args.Cancel = true;
-                Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
-                {
-                    BeforeDeferredClose?.Invoke();
-                    Close();
-                });
+            if (!DeferNextClose)
                 return;
-            }
-            base.OnClosing(args);
+            DeferNextClose = false;
+            args.Cancel = true;
+            window.Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
+            {
+                BeforeDeferredClose?.Invoke();
+                window.Close();
+            });
+        }
+
+        public void Dispose()
+        {
+            window.Closing -= Closing;
+            window.Closed -= DidClose;
         }
     }
 }
