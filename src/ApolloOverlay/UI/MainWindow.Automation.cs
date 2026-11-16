@@ -118,6 +118,10 @@ public partial class MainWindow
             if (!exiting && generation == operationGeneration)
                 RetainOperation("Unconfirmed", "Request log unavailable; there will be no automatic retry.");
         }
+        finally
+        {
+            automationHost?.CompleteInterruptedUi(id);
+        }
     }
 
     private async Task<AutomationReply> RunSteam(

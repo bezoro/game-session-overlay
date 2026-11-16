@@ -124,6 +124,29 @@ internal sealed class AutomationLedger
         }
     }
 
+    internal void CompleteInterrupted(string id, bool executionStarted)
+    {
+        if (!records.TryGetValue(id, out var record) || record.Terminal)
+            return;
+
+        // A phase receipt may predate the effect. Preserve positive dispatch evidence,
+        // but do not turn an older "not dispatched" phase into a final guarantee.
+        bool? dispatched = null;
+        if (!executionStarted)
+            dispatched = false;
+        else if (record.Reply.Dispatched == true)
+            dispatched = true;
+        Update(id, record.Reply with
+        {
+            Outcome = executionStarted ? "Unknown" : "Cancelled",
+            Reason = executionStarted
+                ? "Execution ended without a final result. Inspect the dispatch evidence before trying again."
+                : "The request ended before execution; no effect was dispatched.",
+            Terminal = true,
+            Dispatched = dispatched
+        });
+    }
+
     private void Save()
     {
         var bytes = JsonSerializer.SerializeToUtf8Bytes(new AutomationRecords(records.Values.ToArray()), AutomationJson.Default.AutomationRecords);
@@ -267,6 +290,8 @@ public sealed class AutomationHost : IDisposable
         var journalOutcome = ResultKind.Unknown;
         var journalReason = "request-interrupted";
         Exception? journalError = null;
+        string? acceptedRequestId = null;
+        var executionStarted = false;
         var connection = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(12));
         string ticket = "";
         var expires = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 10000;
@@ -452,6 +477,7 @@ public sealed class AutomationHost : IDisposable
                     accepted = ledger.Accept(request.RequestId, connection, canonical);
                     if (accepted == "Accepted")
                     {
+                        acceptedRequestId = request.RequestId;
                         active = life;
                         activeRequest = request;
                     }
@@ -514,6 +540,7 @@ public sealed class AutomationHost : IDisposable
                 var commitAttempted = false;
                 try
                 {
+                    executionStarted = true;
                     result = await backend.Update(request, life.Token, () => AutomationPipeSecurity.Alive(pipe));
                     result = result with
                     {
@@ -565,6 +592,7 @@ public sealed class AutomationHost : IDisposable
                     if (!AutomationPipeSecurity.Alive(pipe))
                         return;
                     commitAttempted = true;
+                    executionStarted = true;
                     await backend.Shutdown(life.Token, () => !life.IsCancellationRequested && AutomationPipeSecurity.Alive(pipe));
                     return;
                 }
@@ -580,6 +608,7 @@ public sealed class AutomationHost : IDisposable
 
             try
             {
+                executionStarted = true;
                 result = UpdateCommand(request.Verb) ? await backend.Update(request, life.Token, () => !life.IsCancellationRequested && AutomationPipeSecurity.Alive(pipe)) : await backend.Execute(request, life.Token, phase =>
                 {
                     lock (gate)
@@ -634,6 +663,8 @@ public sealed class AutomationHost : IDisposable
             journal?.Complete(journalOutcome, journalReason, journalError);
             journal?.Dispose();
             life.Cancel();
+            if (acceptedRequestId is not null)
+                CompleteInterrupted(acceptedRequestId, executionStarted, restricted ? "bridge" : "cli");
             lock (gate)
             {
                 ledger.Retire(connection);
@@ -714,6 +745,7 @@ public sealed class AutomationHost : IDisposable
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
+                CompleteInterrupted(id, executionStarted: false, "ui");
                 return null;
             }
             finally
@@ -734,6 +766,24 @@ public sealed class AutomationHost : IDisposable
             ActionId = "steam-overlay",
             Verb = "execute"
         }, result.Terminal ? "UI-Result" : "UI-Phase", result);
+    }
+
+    internal void CompleteInterruptedUi(string id) => CompleteInterrupted(id, executionStarted: true, "ui");
+
+    private void CompleteInterrupted(string id, bool executionStarted, string origin)
+    {
+        try
+        {
+            lock (gate)
+                ledger.CompleteInterrupted(id, executionStarted);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            // Update replaces the in-memory receipt before attempting persistence.
+            // Disk failure must not leave an ownerless request pending in this instance.
+            commands?.Record("automation-request", ResultKind.Unknown, origin,
+                reason: "interrupted-result-persistence-failed", requestId: id, error: error);
+        }
     }
 
     private void Trace(AutomationRequest request, string phase, AutomationReply result)
