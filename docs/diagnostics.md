@@ -56,3 +56,9 @@ Normal shutdown terminalizes unfinished tracked operations as `Unknown`, then at
 ## Report a problem
 
 Keep the version/build, logging session, operation/request identifiers and the records surrounding the failure together. Include `gso status` diagnostics when the process is available. For a focus problem, include the opening result and native focus checkpoints; for updates, include both the preparation/apply records and a fresh version query. Review files before sharing them: metadata can still reveal usage times and application behavior even though typed text and private paths are excluded.
+
+## Gesture and automation completion
+
+Guide diagnostics come from the same per-controller gesture state that authorizes opening and closing. A different controller connecting does not independently cancel another slot's recorded gesture. Held and released samples are interpreted once, so overlapping controllers retain their own outcomes.
+
+An accepted automation request always has an owner until it receives a terminal result. Transport or trace failure terminalizes an abandoned request conservatively: a proven pre-execution interruption records no dispatch; an interrupted execution preserves positive dispatch evidence and otherwise reports an unknown outcome. A failed final disk write retains the terminal in-memory result and never authorizes an automatic replay.

@@ -87,3 +87,9 @@ An additional Windows-runner proof executes official Setup in an isolated folder
 The proof also checks installed version, DLL hash, preserved history packages and settings, then runs the official uninstaller and verifies files and user startup. It does not automate the interface button or establish automatic health-failure recovery. B packages remain in temporary folders and are never published. Proof logs are CI artifacts. Physical Guide, controller, TV and Apollo behavior still require testing on the actual equipment.
 
 The updater license is recorded in [update dependencies](third-party-updates.md).
+
+## Catalog and receipt ownership
+
+Channel discovery reads at most ten GitHub pages and eight MiB of metadata, retaining up to twelve matching releases. Filtering happens across pages so Testing releases do not hide Stable within that budget. Budget exhaustion is reported explicitly instead of claiming no release exists. Settings restoration returns a typed outcome; application state and diagnostics do not infer success from display text.
+
+History reads are cached and run outside the WPF dispatcher. Receipt persistence is serialized on one background owner. Mandatory acceptance and apply records are awaited before their associated effects; intermediate progress records may be coalesced. Cancellation does not release the update reservation while required persistence is pending. Shutdown waits up to three seconds for the final receipt and records uncertain durability if the store cannot finish within that bound.
