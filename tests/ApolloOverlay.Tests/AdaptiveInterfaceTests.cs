@@ -12,7 +12,7 @@ internal static class AdaptiveInterfaceTests
     {
         test("compact uncertain result remains pinned with its concise recovery and full details", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
                 w.Width = 360;
@@ -30,7 +30,7 @@ internal static class AdaptiveInterfaceTests
                 Require(bounds.Bottom <= footer.TranslatePoint(new Point(), root).Y && bounds.Top >= 0, "Result overlaps footer or leaves the viewport");
                 Require(((TextBlock)w.FindName("OperationLabel")).Text == "Select window again.", "Recovery summary is absent or replaced by the full paragraph");
                 Click(w, "operation-details");
-                Require(PremiumInterfaceTests.Descendants<TextBox>((DependencyObject)w.FindName("Rows")).Single().Text == w.Controller.Operation!.Message, "Concise notice lost the complete result");
+                Require(WpfTestElements.Descendants<TextBox>((DependencyObject)w.FindName("Rows")).Single().Text == w.Controller.Operation!.Message, "Concise notice lost the complete result");
             }
             finally
             {
@@ -39,7 +39,7 @@ internal static class AdaptiveInterfaceTests
         });
         test("routine acknowledgements never become navigation stops or move content", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
                 w.ShowDiagnostic();
@@ -71,7 +71,7 @@ internal static class AdaptiveInterfaceTests
         });
         test("uncertain results remain readable and cannot be expired by an old acknowledgement", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
                 w.Controller.SetOperation("Completed", "Old acknowledgement");
@@ -84,7 +84,7 @@ internal static class AdaptiveInterfaceTests
                 Require(ReferenceEquals(result, w.Controller.Operation) && ((Border)w.FindName("OperationPanel")).Visibility == Visibility.Visible, "Expired acknowledgement hid or replaced a newer uncertain result");
                 Require(w.ActionIds.Contains("operation-details") && w.ActionIds.Contains("dismiss-operation"), "Uncertain result lost its recovery controls");
                 Click(w, "operation-details");
-                Require(PremiumInterfaceTests.Descendants<TextBox>((DependencyObject)w.FindName("Rows")).Single().Text == result!.Message, "Full result was truncated or replaced");
+                Require(WpfTestElements.Descendants<TextBox>((DependencyObject)w.FindName("Rows")).Single().Text == result!.Message, "Full result was truncated or replaced");
             }
             finally
             {
@@ -106,7 +106,7 @@ internal static class AdaptiveInterfaceTests
         });
         test("home prioritizes the session and customized quick access before utility controls", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
                 w.Controller.Change(w.Controller.Settings with
@@ -126,7 +126,7 @@ internal static class AdaptiveInterfaceTests
         });
         test("input hints switch controller pointer and keyboard without replacing the selected editor", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
                 w.ShowDiagnostic();
@@ -134,7 +134,7 @@ internal static class AdaptiveInterfaceTests
                 Require(InputPrompt.Read((TextBlock)w.FindName("ModeLabel")).Contains("LB/RB"), "Controller activity did not update navigation prompts");
                 Require(new[] { "A", "B", "LB", "RB", "Dpad" }.All(key => Glyphs((TextBlock)w.FindName("ModeLabel")).Contains(key)), "Controller instructions did not render button vectors");
                 w.Page(2);
-                var shortcut = ReviewFixTests.Button(w, "shortcut");
+                var shortcut = WpfTestElements.Button(w, "shortcut");
                 Require(InputPrompt.Read(((ActionButtonContent)shortcut.Content).Description).StartsWith("A switches"), "Controller hint leaked keyboard-only instructions");
                 var selected = w.SelectedAction;
                 var focused = Keyboard.FocusedElement;
@@ -144,7 +144,7 @@ internal static class AdaptiveInterfaceTests
                 w.ObservePointerPosition(new(120, 100));
                 Require(InputPrompt.Read((TextBlock)w.FindName("ModeLabel")).Contains("Left click") && InputPrompt.Read(((ActionButtonContent)shortcut.Content).Description).StartsWith("Left click"), "Deliberate pointer activity did not update contextual prompts");
                 Require(Glyphs((TextBlock)w.FindName("ModeLabel")).Contains("MouseLeft") && !Glyphs((TextBlock)w.FindName("ModeLabel")).Contains("A"), "Mouse instructions retained controller glyphs");
-                Require(w.SelectedAction == selected && ReferenceEquals(Keyboard.FocusedElement, focused) && ReferenceEquals(shortcut, ReviewFixTests.Button(w, "shortcut")), "Changing input mode moved selection, focus or rebuilt controls");
+                Require(w.SelectedAction == selected && ReferenceEquals(Keyboard.FocusedElement, focused) && ReferenceEquals(shortcut, WpfTestElements.Button(w, "shortcut")), "Changing input mode moved selection, focus or rebuilt controls");
                 var source = PresentationSource.FromVisual(w)!;
                 w.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.LeftShift) { RoutedEvent = Keyboard.PreviewKeyDownEvent });
                 Require(InputPrompt.Read((TextBlock)w.FindName("ModeLabel")).Contains("Enter") && InputPrompt.Read(((ActionButtonContent)shortcut.Content).Description).StartsWith("Enter"), "Keyboard activity did not restore keyboard prompts");
@@ -157,7 +157,7 @@ internal static class AdaptiveInterfaceTests
         });
         test("selection preserves operational feedback and does not duplicate action descriptions", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
                 w.ShowDiagnostic();
@@ -167,7 +167,7 @@ internal static class AdaptiveInterfaceTests
                     w.Sequential(1);
                     Require(w.Feedback == status, "Selecting an action replaced operational feedback with its description");
                 }
-                var playnite = ReviewFixTests.Button(w, "playnite");
+                var playnite = WpfTestElements.Button(w, "playnite");
                 Require(playnite.ToolTip is null && AutomationProperties.GetName(playnite) == "Playnite" && AutomationProperties.GetHelpText(playnite).Length > 0, "Removing duplicate tooltips lost accessible action information");
             }
             finally
@@ -224,7 +224,7 @@ internal static class AdaptiveInterfaceTests
         root.UpdateLayout();
     }
 
-    private static void Click(MainWindow window, string id) => ReviewFixTests.Button(window, id).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+    private static void Click(MainWindow window, string id) => WpfTestElements.Button(window, id).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
     private static string[] Glyphs(TextBlock label) => label.Inlines.OfType<InlineUIContainer>()
         .Select(inline => ((FrameworkElement)inline.Child).Tag as string ?? "").ToArray();
     private static void Require(bool condition, string message)

@@ -9,6 +9,23 @@ internal static class SettingsFocusTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        test("navigation eligibility is pure while an input boundary revokes lost ownership", () =>
+        {
+            using var host = new Host();
+            var window = host.Window;
+            host.Open();
+            var platform = (TestPlatform)window.Controller.Platform;
+            window.Confirm(platform.Window);
+            Require(window.Confirming, "The focus test did not open a close confirmation");
+            var selected = window.SelectedAction;
+            var feedback = window.Feedback;
+            window.InputContextReader = () => new(true, true, false, false);
+            Require(!window.NavigationAllowed && window.Confirming && window.SelectedAction == selected && window.Feedback == feedback,
+                "Reading navigation eligibility mutated confirmation, selection or feedback");
+            window.Move(NavDirection.Down);
+            Require(!window.Confirming && window.Feedback == "Window focus lost." && platform.Calls == 0,
+                "The input boundary did not explicitly revoke lost ownership before acting");
+        });
         foreach (var resultKind in new[] { ResultKind.Cancelled, ResultKind.Requested })
             foreach (var returnToOverlay in new[] { false, true })
                 test($"administrator close returning to overlay {returnToOverlay} retains result {resultKind} without stealing focus", () =>
@@ -16,7 +33,7 @@ internal static class SettingsFocusTests
                     using var host = new Host();
                     var w = host.Window;
                     host.Open();
-                    var platform = (PremiumInterfaceTests.FixturePlatform)w.Controller.Platform;
+                    var platform = (TestPlatform)w.Controller.Platform;
                     var completion = new TaskCompletionSource<ActionResult>();
                     var offers = 0;
                     var acquisitions = 0;
@@ -38,8 +55,8 @@ internal static class SettingsFocusTests
                         Require(w.IsVisible && !w.IsActive && Native.GetForegroundWindow() == host.OtherHandle, "PRECONDITION: consent did not preserve the inactive panel");
                         return completion.Task;
                     };
-                    ReviewFixTests.Button(w, "close").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
-                    PremiumInterfaceTests.ClickFixed(w, "ConfirmCloseButton");
+                    PremiumInterfaceTests.OpenCloseConfirmation(w);
+                    WpfTestElements.ClickNamed(w, "ConfirmCloseButton");
                     Require(offers == 1, "A normal Close activation did not offer consent exactly once");
                     if (returnToOverlay)
                     {
@@ -216,7 +233,7 @@ internal static class SettingsFocusTests
             Frame(w, PadButtons.Down);
             Frame(w, PadButtons.A);
             Require(w.SelectedAction == selected && !w.TransitionPending
-                && ((PremiumInterfaceTests.FixturePlatform)w.Controller.Platform).Calls == 0
+                && ((TestPlatform)w.Controller.Platform).Calls == 0
                 && Native.GetForegroundWindow() == host.OtherHandle, "Pending activation admitted navigation or an external action");
         });
         foreach (var lateResult in new[] { false, true })
@@ -420,7 +437,7 @@ internal static class SettingsFocusTests
                 w.Page(2);
                 var dialog = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
                 w.PlayniteDialogFixture = () => dialog.Task;
-                ReviewFixTests.Button(w, "configure-playnite").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                WpfTestElements.Button(w, "configure-playnite").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
                 Require(!w.DialogTask.IsCompleted && media.Current.Items.Count == 0 && reads == 1, "The owned dialog retained active media observation");
                 // Even an explicit refresh cannot observe playback while ownership
                 // belongs to the dialog; reopening must request a fresh generation.
@@ -572,7 +589,7 @@ internal static class SettingsFocusTests
         window.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, presentation, Environment.TickCount, key) { RoutedEvent = down ? Keyboard.PreviewKeyDownEvent : Keyboard.PreviewKeyUpEvent });
     }
 
-    private static void Complete(Task task) => ReviewFixTests.Complete(task);
+    private static void Complete(Task task) => WpfTestDispatcher.Complete(task);
     private static void Require(bool value, string reason)
     {
         if (!value)
@@ -628,7 +645,7 @@ internal static class SettingsFocusTests
             };
             if (app.TryFindResource(ThemeSupport.Card) is null)
                 ThemeSupport.ForceForValidation(app, false);
-            Window = new MainWindow(renderOnly: true, platform: new PremiumInterfaceTests.FixturePlatform(preview: false), diagnostics: new LocalDiagnostics(Root), media: media);
+            Window = new MainWindow(renderOnly: true, platform: new TestPlatform(preview: false), diagnostics: new LocalDiagnostics(Root), media: media);
             Window.PhysicalKeyReader = _ => 0;
             Window.DpiReader = _ => 96;
             Window.Controller.CaptureReturn();

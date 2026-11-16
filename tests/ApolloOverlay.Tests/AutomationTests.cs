@@ -73,7 +73,7 @@ internal static class AutomationTests
         Prerequisites(test);
         test("session options command survives removal of its redundant visual control", () =>
         {
-            var window = ReviewFixTests.Window();
+            var window = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
                 var snapshot = window.AutomationSnapshot();
@@ -246,7 +246,12 @@ internal static class AutomationTests
                 var ledger = new AutomationLedger(Temp());
                 var id = ledger.Issue("interrupted");
                 Require(ledger.Accept(id, "interrupted", "effect") == "Accepted", "Intent was not accepted");
-                ledger.Update(id, new() { Outcome = "Pending", Terminal = false, Dispatched = dispatched });
+                ledger.Update(id, new()
+                {
+                    Outcome = "Pending",
+                    Terminal = false,
+                    Dispatched = dispatched
+                });
                 ledger.CompleteInterrupted(id, executionStarted: true);
                 var result = ledger.Find(id)?.Reply;
                 Require(result is { Terminal: true, Outcome: "Unknown" }
@@ -574,7 +579,14 @@ internal static class AutomationTests
                     backend.AfterEffect = phase =>
                     {
                         LockTrace();
-                        phase(new() { Outcome = "Pending", Terminal = false, Dispatched = true, Expected = 1, Accepted = 1 });
+                        phase(new()
+                        {
+                            Outcome = "Pending",
+                            Terminal = false,
+                            Dispatched = true,
+                            Expected = 1,
+                            Accepted = 1
+                        });
                     };
                 else
                     LockTrace();
@@ -595,7 +607,11 @@ internal static class AutomationTests
                     Require(await pair.Pipe.ReadAsync(end, deadline.Token) == 0, "The failed trace request did not release its connection");
                 }
 
-                var result = await Exchange(name, new() { Verb = "result", RequestId = request.RequestId });
+                var result = await Exchange(name, new()
+                {
+                    Verb = "result",
+                    RequestId = request.RequestId
+                });
                 Require(result.Terminal && result.Outcome == (afterDispatch ? "Unknown" : "Cancelled"), "An ownerless request remained pending");
                 Require(result.Dispatched == afterDispatch && backend.Effects == (afterDispatch ? 1 : 0), "Finalization lost dispatch evidence or claimed an unexecuted effect");
                 Require(!afterDispatch || result is { Expected: 1, Accepted: 1 }, "Finalization discarded the last observed dispatch counts");
@@ -617,7 +633,11 @@ internal static class AutomationTests
                 traceLock!.Dispose();
                 traceLock = null;
                 backend.AfterEffect = null;
-                var next = await Exchange(name, new() { Verb = "execute", ActionId = "effect" });
+                var next = await Exchange(name, new()
+                {
+                    Verb = "execute",
+                    ActionId = "effect"
+                });
                 Require(next.Outcome == "Completed" && backend.Effects == (afterDispatch ? 2 : 1), "The abandoned owner blocked a new request");
             }
             finally
@@ -647,7 +667,12 @@ internal static class AutomationTests
             var failed = false;
             try
             {
-                host.UiResult(id, "fixed", new() { Outcome = "Pending", Terminal = false, Dispatched = false });
+                host.UiResult(id, "fixed", new()
+                {
+                    Outcome = "Pending",
+                    Terminal = false,
+                    Dispatched = false
+                });
             }
             catch (IOException)
             {
@@ -659,7 +684,11 @@ internal static class AutomationTests
             }
             Require(failed, "The UI phase trace did not encounter the injected failure.");
         }
-        var result = await Exchange(name, new() { Verb = "result", RequestId = id });
+        var result = await Exchange(name, new()
+        {
+            Verb = "result",
+            RequestId = id
+        });
         Require(result is { Terminal: true, Outcome: "Unknown", Dispatched: null },
             "The interrupted UI phase stayed pending or falsely guaranteed that no dispatch occurred.");
     }

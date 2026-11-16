@@ -27,7 +27,7 @@ internal static class MotionAndControllerTests
             Require(window.FadePending && before > 0 && before < .99, "PRECONDITION: close animation did not reach an intermediate frame");
             window.OpenPanel();
             Require(Math.Abs(window.Opacity - before) < .02, "Reopening reset the current fade rather than reversing it");
-            ReviewFixTests.Complete(window.OpeningTask);
+            WpfTestDispatcher.Complete(window.OpeningTask);
             Pump(260);
             Require(window.IsVisible && !window.FadePending && window.Opacity == 1, "An obsolete close continuation hid the reopened panel");
         });
@@ -37,10 +37,10 @@ internal static class MotionAndControllerTests
             foreach (var id in new[] { "session-card", "playnite" })
             {
                 Pick(host.Window, id);
-                var button = id == "session-card" ? (Button)host.Window.FindName("SessionCardButton") : ReviewFixTests.Button(host.Window, id);
+                var button = id == "session-card" ? (Button)host.Window.FindName("SessionCardButton") : WpfTestElements.Button(host.Window, id);
                 button.ApplyTemplate();
                 var strokes = Strokes(button);
-                if (!button.IsEnabled && button.Resources["DescriptionTarget"] is Border reason && HasStroke(reason))
+                if (!button.IsEnabled && host.Window.FindActionHost(button) is { } reason && HasStroke(reason))
                 {
                     strokes++;
                     var buttonBounds = button.TransformToAncestor(host.Window).TransformBounds(new Rect(button.RenderSize));
@@ -57,7 +57,7 @@ internal static class MotionAndControllerTests
             using var host = new Host();
             var window = host.Window;
             Pick(window, "taskview");
-            var button = ReviewFixTests.Button(window, "taskview");
+            var button = WpfTestElements.Button(window, "taskview");
             button.ApplyTemplate();
             var outline = (Border)button.Template.FindName("SelectionBreath", button);
             var sheen = (Border)button.Template.FindName("SelectionSheen", button);
@@ -88,7 +88,7 @@ internal static class MotionAndControllerTests
                 ReducedMotion = true
             });
             window.RefreshRows();
-            var restrained = ReviewFixTests.Button(window, "taskview");
+            var restrained = WpfTestElements.Button(window, "taskview");
             Require(!InteractionMotion.GetIsSelected(restrained), "Reduced motion allowed the selection sweep");
             window.Hide();
             Pump(10);
@@ -257,7 +257,7 @@ internal static class MotionAndControllerTests
                 var left = gear.Padding.Left + gear.BorderThickness.Left;
                 var right = gear.ActualWidth - gear.Padding.Right - gear.BorderThickness.Right;
                 Require(bounds.Left >= left - .5 && bounds.Right <= right + .5 && Math.Abs(bounds.Left - (gear.ActualWidth - bounds.Right)) < 1, "Selected system icon was clipped or off-center");
-                foreach (var vector in PremiumInterfaceTests.Descendants<VectorIcon>(w))
+                foreach (var vector in WpfTestElements.Descendants<VectorIcon>(w))
                 {
                     if (vector.Data is null || vector.Visibility != Visibility.Visible)
                         continue;
@@ -324,7 +324,7 @@ internal static class MotionAndControllerTests
         return count;
     }
 
-    private static void Complete(Task task) => ReviewFixTests.Complete(task);
+    private static void Complete(Task task) => WpfTestDispatcher.Complete(task);
     private static void Pump(int ms)
     {
         var frame = new DispatcherFrame();

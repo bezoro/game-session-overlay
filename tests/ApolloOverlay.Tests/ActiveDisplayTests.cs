@@ -179,7 +179,7 @@ internal static class ActiveDisplayTests
         finally
         {
             window.Close();
-            ReviewFixTests.Complete(window.OpeningTask);
+            WpfTestDispatcher.Complete(window.OpeningTask);
             SynchronizationContext.SetSynchronizationContext(previousContext);
         }
     }

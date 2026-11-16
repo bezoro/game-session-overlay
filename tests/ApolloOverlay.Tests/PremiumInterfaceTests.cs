@@ -16,18 +16,6 @@ internal static class PremiumInterfaceTests
             throw new Exception(message);
     }
 
-    internal static IEnumerable<T> Descendants<T>(DependencyObject root)
-        where T : DependencyObject
-    {
-        foreach (var child in LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>())
-        {
-            if (child is T typed)
-                yield return typed;
-            foreach (var nested in Descendants<T>(child))
-                yield return nested;
-        }
-    }
-
     internal static void Run(Action<string, Action> test)
     {
         _ = Application.Current ?? new Application
@@ -36,7 +24,7 @@ internal static class PremiumInterfaceTests
         };
         test("shared controller notice is visible and accessible", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
                 var notice = (TextBlock)w.FindName("SharedControlNotice");
@@ -51,10 +39,10 @@ internal static class PremiumInterfaceTests
         });
         test("premium neutral anchor wording", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
-                var card = ReviewFixTests.Button(w, "session-card");
+                var card = WpfTestElements.Button(w, "session-card");
                 Require(new ButtonAutomationPeer(card).GetName().Contains("Resume window") && !new ButtonAutomationPeer(card).GetName().Contains("game"), "Ordinary application is called a game");
             }
             finally
@@ -64,10 +52,10 @@ internal static class PremiumInterfaceTests
         });
         test("premium unavailable action has disabled UIA semantics", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
-                var card = new ButtonAutomationPeer(ReviewFixTests.Button(w, "session-card"));
+                var card = new ButtonAutomationPeer(WpfTestElements.Button(w, "session-card"));
                 Require(!w.ActionIds.Contains("steam-overlay") && card.GetHelpText().Contains("Steam Overlay unavailable", StringComparison.Ordinal),
                     "The unavailable Steam gesture has an independent action or missing accessibility status");
             }
@@ -78,11 +66,11 @@ internal static class PremiumInterfaceTests
         });
         test("premium mouse app options affordance", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
                 w.Page(1);
-                Require(Descendants<Button>((DependencyObject)w.Content).Any(b => System.Windows.Automation.AutomationProperties.GetName(b).StartsWith("Options for ")), "Mouse options absent");
+                Require(WpfTestElements.Descendants<Button>((DependencyObject)w.Content).Any(b => System.Windows.Automation.AutomationProperties.GetName(b).StartsWith("Options for ")), "Mouse options absent");
             }
             finally
             {
@@ -91,7 +79,7 @@ internal static class PremiumInterfaceTests
         });
         test("premium audio decrease path", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
                 w.SetRenderState("audio");
@@ -104,7 +92,7 @@ internal static class PremiumInterfaceTests
         });
         test("premium mouse close controls", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
                 w.SetRenderState("confirmation");
@@ -117,7 +105,7 @@ internal static class PremiumInterfaceTests
         });
         test("premium durable dirty affordance after refresh and navigation", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
                 w.Controller.Change(w.Controller.Settings with
@@ -135,7 +123,7 @@ internal static class PremiumInterfaceTests
         });
         test("premium disabled Guide omitted from opening hints", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
                 var mode = (TextBlock)w.FindName("ModeLabel");
@@ -149,7 +137,7 @@ internal static class PremiumInterfaceTests
         test("premium normal disabled Guide hint is honest", () =>
         {
             var folder = Temporary();
-            var w = new MainWindow(renderOnly: true, platform: new FixturePlatform(false), diagnostics: new(folder));
+            var w = new MainWindow(renderOnly: true, platform: new TestPlatform(false), diagnostics: new(folder));
             try
             {
                 Require(!InputPrompt.Read((TextBlock)w.FindName("ModeLabel")).Contains("Guide"), "Disabled Guide advertised on normal path");
@@ -162,7 +150,7 @@ internal static class PremiumInterfaceTests
         test("premium settings persistence discard and exact dirty roundtrip", () =>
         {
             var folder = Temporary();
-            using var c = new OverlayController(new FixturePlatform(false), new(folder));
+            using var c = new OverlayController(new TestPlatform(false), new(folder));
             var original = c.Settings;
             Require(!c.SettingsDirty, "Initial state dirty");
             c.Change(original with
@@ -189,7 +177,7 @@ internal static class PremiumInterfaceTests
         test("premium failed save preserves prior bytes and dirty state", () =>
         {
             var folder = Temporary();
-            using var c = new OverlayController(new FixturePlatform(false), new(folder));
+            using var c = new OverlayController(new TestPlatform(false), new(folder));
             c.Save();
             var before = File.ReadAllBytes(c.Diagnostics.SettingsPath);
             c.Change(c.Settings with
@@ -236,13 +224,13 @@ internal static class PremiumInterfaceTests
         )
             test("premium retained operation outcome " + kind, () =>
             {
-                var p = new FixturePlatform();
+                var p = new TestPlatform();
                 p.Next = Task.FromResult(new ActionResult(kind, "fixture outcome"));
-                var w = FixtureWindow(p);
+                var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
                 try
                 {
                     Dispatch(w, "taskview");
-                    Complete(w.OperationTask);
+                    WpfTestDispatcher.Complete(w.OperationTask);
                     Require(p.Calls == 1 && w.Controller.Operation is { Dispatched: true } op && op.Message == "fixture outcome", "Operation lost or duplicated");
                     var previous = w.Controller.Operation;
                     w.Page(1);
@@ -257,10 +245,10 @@ internal static class PremiumInterfaceTests
             });
         test("premium delayed failure busy cancellation and explicit recovery", () =>
         {
-            var p = new FixturePlatform();
+            var p = new TestPlatform();
             var completion = new TaskCompletionSource<ActionResult>();
             p.Next = completion.Task;
-            var w = FixtureWindow(p);
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
             try
             {
                 Dispatch(w, "taskview");
@@ -271,7 +259,7 @@ internal static class PremiumInterfaceTests
                 w.Back();
                 Require(w.Controller.Operation is { State: "Unconfirmed" }, "Post-dispatch cancellation claims undo");
                 completion.SetResult(new(ResultKind.Failed, "delayed refusal"));
-                Complete(w.OperationTask);
+                WpfTestDispatcher.Complete(w.OperationTask);
                 Require(w.Controller.Operation is { State: "Failed", Message: "delayed refusal", Action: "taskview" }, "Delayed result or original action lost");
                 Require(p.Calls == 1, "Implicit retry occurred");
             }
@@ -282,24 +270,24 @@ internal static class PremiumInterfaceTests
         });
         test("premium cleanup suppresses late outcome callbacks", () =>
         {
-            var p = new FixturePlatform();
+            var p = new TestPlatform();
             var completion = new TaskCompletionSource<ActionResult>();
             p.Next = completion.Task;
-            var w = FixtureWindow(p);
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
             Dispatch(w, "taskview");
             w.Close();
             var before = w.Controller.Operation;
             completion.SetResult(new(ResultKind.Failed, "late"));
-            Complete(w.OperationTask);
+            WpfTestDispatcher.Complete(w.OperationTask);
             Require(w.Controller.Operation == before && p.Calls == 1, "Late callback after disposal");
         });
         test("premium cancellation before dispatch sends no effect", () =>
         {
-            var p = new FixturePlatform();
-            var w = FixtureWindow(p);
+            var p = new TestPlatform();
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
             try
             {
-                ReviewFixTests.Button(w, "taskview").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                WpfTestElements.Button(w, "taskview").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
                 w.Back();
                 Require(p.Calls == 0 && w.Controller.Operation?.State == "Cancelled", "Queued cancellation dispatched");
             }
@@ -310,14 +298,14 @@ internal static class PremiumInterfaceTests
         });
         test("premium Guide slider named focusable stable and dirty", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
                 w.Page(2);
-                var slider = Descendants<Slider>((DependencyObject)w.Content).Single();
+                var slider = WpfTestElements.Descendants<Slider>((DependencyObject)w.Content).Single();
                 Require(slider.Focusable && System.Windows.Automation.AutomationProperties.GetName(slider).Length > 10, "Guide slider inaccessible");
                 slider.Value = 1500;
-                Require(w.Controller.SettingsDirty && ReferenceEquals(slider, Descendants<Slider>((DependencyObject)w.Content).Single()), "Value edit rebuilt focused slider");
+                Require(w.Controller.SettingsDirty && ReferenceEquals(slider, WpfTestElements.Descendants<Slider>((DependencyObject)w.Content).Single()), "Value edit rebuilt focused slider");
                 w.Page(1);
                 Require(((FrameworkElement)w.FindName("DirtyStrip")).Visibility == Visibility.Visible, "Navigation lost dirty strip");
             }
@@ -328,7 +316,7 @@ internal static class PremiumInterfaceTests
         });
         test("premium controller reaches sticky discard from home", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
                 w.Controller.Change(w.Controller.Settings with
@@ -367,7 +355,7 @@ internal static class PremiumInterfaceTests
             {
                 var app = Application.Current!;
                 ThemeSupport.ForceForValidation(app, light);
-                var w = ReviewFixTests.Window();
+                var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
                 try
                 {
                     var root = Detach(w);
@@ -441,8 +429,8 @@ internal static class PremiumInterfaceTests
         });
         ConfirmCase("close confirmation shows the named target, defaults to cancel and restores its origin", () =>
         {
-            var p = new FixturePlatform();
-            var w = FixtureWindow(p);
+            var p = new TestPlatform();
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
             try
             {
                 w.OpenOptions(p.Window);
@@ -451,12 +439,12 @@ internal static class PremiumInterfaceTests
                 Require(target.Text == p.Window.Title && w.CloseTarget!.Same(p.Window), "Confirmation omitted or changed the exact target");
                 Require(w.ActionIds.SequenceEqual(["confirm-cancel", "confirm-close"]) && w.SelectedAction == "confirm-cancel", "Wrong confirmation commands or default");
                 Require(w.AutomationSnapshot().Actions.Any(a => a.Id == "confirm-hold" && a.Capability == "RequiresGesture"), "CLI close capability changed");
-                ClickFixed(w, "CancelCloseButton");
+                WpfTestElements.ClickNamed(w, "CancelCloseButton");
                 Require(!w.Confirming && w.SelectedAction == "close" && p.Closes == 0, "Cancel did not restore its origin");
                 OpenCloseConfirmation(w);
-                ClickFixed(w, "ConfirmCloseButton");
-                ClickFixed(w, "ConfirmCloseButton");
-                Complete(w.OperationTask);
+                WpfTestElements.ClickNamed(w, "ConfirmCloseButton");
+                WpfTestElements.ClickNamed(w, "ConfirmCloseButton");
+                WpfTestDispatcher.Complete(w.OperationTask);
                 Require(!w.Confirming && p.Closes == 1 && w.Controller.Operation is { Action: "close", State: "Simulated" }, "One Close click did not dispatch exactly once");
             }
             finally
@@ -466,7 +454,7 @@ internal static class PremiumInterfaceTests
         });
         ConfirmCase("close confirmation draws the complete decision at compact panel size", () =>
         {
-            var w = FixtureWindow(new());
+            var w = WpfTestHost.CreatePreviewWindow(new TestPlatform(), TestFocusMode.Synthetic);
             try
             {
                 OpenCloseConfirmation(w);
@@ -493,8 +481,8 @@ internal static class PremiumInterfaceTests
         });
         ConfirmCase("keyboard opening press and repeat cannot close; a fresh key dispatches once", () =>
         {
-            var p = new FixturePlatform();
-            var w = FixtureWindow(p);
+            var p = new TestPlatform();
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
             try
             {
                 var source = HwndSource.FromHwnd(new WindowInteropHelper(w).EnsureHandle());
@@ -516,7 +504,7 @@ internal static class PremiumInterfaceTests
                 ConfirmKey(w, source, Key.Space, true);
                 ConfirmKey(w, source, Key.Space, true);
                 ConfirmKey(w, source, Key.Space, false);
-                Complete(w.OperationTask);
+                WpfTestDispatcher.Complete(w.OperationTask);
                 Require(p.Closes == 1 && !w.Confirming, "Fresh normal key activation did not close exactly once");
             }
             finally
@@ -526,8 +514,8 @@ internal static class PremiumInterfaceTests
         });
         ConfirmCase("controller opening press and repeat cannot close; a fresh A dispatches once", () =>
         {
-            var p = new FixturePlatform();
-            var w = FixtureWindow(p);
+            var p = new TestPlatform();
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
             try
             {
                 AdmitFixtureWindow(w);
@@ -545,7 +533,7 @@ internal static class PremiumInterfaceTests
                 Require(p.Closes == 0 && w.Confirming, "Opening A release sent a close");
                 CloseFrame(w, PadButtons.A);
                 CloseFrame(w, PadButtons.A);
-                Complete(w.OperationTask);
+                WpfTestDispatcher.Complete(w.OperationTask);
                 Require(p.Closes == 1 && !w.Confirming, "Fresh A did not close exactly once");
             }
             finally
@@ -556,8 +544,8 @@ internal static class PremiumInterfaceTests
         foreach (var cause in new[] { "focus loss", "stale identity", "disconnection", "read failure" })
             ConfirmCase("close confirmation blocks " + cause, () =>
             {
-                var p = new FixturePlatform();
-                var w = FixtureWindow(p);
+                var p = new TestPlatform();
+                var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
                 try
                 {
                     AdmitFixtureWindow(w);
@@ -578,7 +566,7 @@ internal static class PremiumInterfaceTests
                         w.ReviewTick([new(false, 0, ReadFailed: cause == "read failure"), default, default, default]);
                     else
                         CloseFrame(w, PadButtons.A);
-                    Complete(w.OperationTask);
+                    WpfTestDispatcher.Complete(w.OperationTask);
                     Require(p.Closes == 0 && !w.Confirming, "Unsafe condition allowed confirmation or left it armed");
                 }
                 finally
@@ -588,8 +576,8 @@ internal static class PremiumInterfaceTests
             });
         ConfirmCase("protected close and stale targets are blocked before confirmation", () =>
         {
-            var p = new FixturePlatform();
-            var w = FixtureWindow(p);
+            var p = new TestPlatform();
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
             try
             {
                 w.Confirm(p.Window with
@@ -607,9 +595,6 @@ internal static class PremiumInterfaceTests
             }
         });
     }
-
-    internal static void ClickFixed(MainWindow w, string name) =>
-        ((Button)w.FindName(name)).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
 
     private static void ConfirmKey(MainWindow w, HwndSource source, Key key, bool down) =>
         w.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, key)
@@ -636,7 +621,7 @@ internal static class PremiumInterfaceTests
         ThemeSupport.FollowSystem(Application.Current!);
         test("premium full outcome and dismiss reachable by keyboard and controller", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
                 const string message = "The window identity changed during the request. Open Apps, select the window again, and check for a save dialog before trying again. No additional command was sent.";
@@ -647,7 +632,7 @@ internal static class PremiumInterfaceTests
                     w.Sequential(1);
                 Require(w.SelectedAction == "operation-details", "Keyboard cannot reach full outcome");
                 w.ActivateEntry();
-                var full = Descendants<TextBox>((DependencyObject)w.FindName("Rows")).Single();
+                var full = WpfTestElements.Descendants<TextBox>((DependencyObject)w.FindName("Rows")).Single();
                 var peer = new TextBoxAutomationPeer(full);
                 var value = (System.Windows.Automation.Provider.IValueProvider)peer.GetPattern(PatternInterface.Value);
                 Require(full.Text == message && full.IsReadOnly && full.TextWrapping == TextWrapping.Wrap && full.VerticalScrollBarVisibility == ScrollBarVisibility.Auto && value.Value == message, "Complete recovery text is not accessible and scrollable");
@@ -666,11 +651,11 @@ internal static class PremiumInterfaceTests
         });
         test("premium integration Guide description agrees with disabled preview state", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
                 w.SetRenderState("integrations");
-                var texts = (StackPanel)((Grid)ReviewFixTests.Button(w, "guide").Content).Children[1];
+                var texts = (StackPanel)((Grid)WpfTestElements.Button(w, "guide").Content).Children[1];
                 var description = ((TextBlock)texts.Children[1]).Text;
                 Require(description.Contains("Preview") && !description.Contains("short press to open"), "Disabled preview Guide still advertises opening: " + description);
             }
@@ -682,8 +667,8 @@ internal static class PremiumInterfaceTests
         LocalDismissalRegression(test);
         test("premium deactivation terminalizes undispatched action", () =>
         {
-            var p = new FixturePlatform();
-            var w = FixtureWindow(p);
+            var p = new TestPlatform();
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
             var other = OwnedWindow();
             try
             {
@@ -710,8 +695,8 @@ internal static class PremiumInterfaceTests
         )
             test("premium synchronous foreground transfer hides on " + kind, () =>
             {
-                var p = new FixturePlatform();
-                var w = FixtureWindow(p);
+                var p = new TestPlatform();
+                var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
                 var other = OwnedWindow();
                 var deactivations = 0;
                 try
@@ -727,7 +712,7 @@ internal static class PremiumInterfaceTests
                         return Task.FromResult(new ActionResult(kind, "owned synchronous refusal"));
                     };
                     Dispatch(w, "taskview");
-                    Complete(w.OperationTask);
+                    WpfTestDispatcher.Complete(w.OperationTask);
                     Console.WriteLine($"SYNC-RESULT kind={kind}; visible={w.IsVisible}; active={w.IsActive}; foregroundIsOther={Native.GetForegroundWindow() == new WindowInteropHelper(other).Handle}; operation={w.Controller.Operation}");
                     Require(w.Controller.Operation is { Dispatched: true } op && op.Message == "owned synchronous refusal" && p.Calls == 1, "Outcome was lost or effect repeated");
                     Require(!w.IsVisible, "Inactive topmost overlay remains visible after synchronous foreground transfer");
@@ -740,14 +725,14 @@ internal static class PremiumInterfaceTests
             });
         test("premium immediate refusal without foreground transfer stays visible", () =>
         {
-            var p = new FixturePlatform();
-            var w = FixtureWindow(p);
+            var p = new TestPlatform();
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
             try
             {
                 w.ShowDiagnostic();
                 RequireOwnedFocus(w);
                 Dispatch(w, "taskview");
-                Complete(w.OperationTask);
+                WpfTestDispatcher.Complete(w.OperationTask);
                 Require(w.IsVisible && w.IsActive && p.Calls == 1 && w.Controller.Operation?.State == "Failed", "Visible immediate refusal or feedback lost");
             }
             finally
@@ -770,17 +755,17 @@ internal static class PremiumInterfaceTests
         )
             test("premium hidden notification request policy " + kind, () =>
             {
-                var p = new FixturePlatform
+                var p = new TestPlatform
                 {
                     Next = Task.FromResult(new ActionResult(kind, "notification fixture"))
                 };
-                var w = FixtureWindow(p);
+                var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
                 var requests = 0;
                 w.ResultNotificationRequest = _ => requests++;
                 try
                 {
                     Dispatch(w, "taskview");
-                    Complete(w.OperationTask);
+                    WpfTestDispatcher.Complete(w.OperationTask);
                     var expected = kind is ResultKind.Completed or ResultKind.Requested or ResultKind.Simulated ? 0 : 1;
                     Require(requests == expected && p.Calls == 1, "Wrong notification count " + requests);
                     Require(!w.IsVisible, "Notification stole focus");
@@ -792,8 +777,8 @@ internal static class PremiumInterfaceTests
             });
         test("premium visible immediate refusal does not request notification", () =>
         {
-            var p = new FixturePlatform();
-            var w = FixtureWindow(p);
+            var p = new TestPlatform();
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
             var requests = 0;
             w.ResultNotificationRequest = _ => requests++;
             try
@@ -801,7 +786,7 @@ internal static class PremiumInterfaceTests
                 w.ShowDiagnostic();
                 RequireOwnedFocus(w);
                 Dispatch(w, "taskview");
-                Complete(w.OperationTask);
+                WpfTestDispatcher.Complete(w.OperationTask);
                 Require(w.IsVisible && requests == 0, "Visible refusal requested balloon or hid feedback");
             }
             finally
@@ -812,11 +797,11 @@ internal static class PremiumInterfaceTests
         test("premium delayed hidden failure requests once without refocus", () =>
         {
             var completion = new TaskCompletionSource<ActionResult>();
-            var p = new FixturePlatform
+            var p = new TestPlatform
             {
                 Next = completion.Task
             };
-            var w = FixtureWindow(p);
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
             var other = OwnedWindow();
             var requests = 0;
             w.ResultNotificationRequest = _ => requests++;
@@ -828,7 +813,7 @@ internal static class PremiumInterfaceTests
                 TransferOwnedFocus(other);
                 Require(!w.IsVisible && requests == 0, "Pending operation notified or remained visible after deactivation");
                 completion.SetResult(new(ResultKind.Failed, "delayed owned refusal"));
-                Complete(w.OperationTask);
+                WpfTestDispatcher.Complete(w.OperationTask);
                 Require(requests == 1 && p.Calls == 1 && Native.GetForegroundWindow() == new WindowInteropHelper(other).Handle && !w.IsVisible && w.Controller.Operation?.State == "Failed", "Delayed request retried, refocused or lost result");
             }
             finally
@@ -840,23 +825,23 @@ internal static class PremiumInterfaceTests
         test("premium cleanup prevents late notification request", () =>
         {
             var completion = new TaskCompletionSource<ActionResult>();
-            var p = new FixturePlatform
+            var p = new TestPlatform
             {
                 Next = completion.Task
             };
-            var w = FixtureWindow(p);
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
             var requests = 0;
             w.ResultNotificationRequest = _ => requests++;
             Dispatch(w, "taskview");
             w.Close();
             var before = w.Controller.Operation;
             completion.SetResult(new(ResultKind.Failed, "late failure"));
-            Complete(w.OperationTask);
+            WpfTestDispatcher.Complete(w.OperationTask);
             Require(requests == 0 && w.Controller.Operation == before && p.Calls == 1, "Cleanup allowed late notification or outcome mutation");
         });
         test("premium cancelled app transition immediately enables outcome recovery", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
                 w.Page(1);
@@ -884,7 +869,7 @@ internal static class PremiumInterfaceTests
         ThemeSupport.FollowSystem(Application.Current!);
         test("premium tab destinations remembered selections and subpage return remain stable", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
                 w.Page(2);
@@ -1004,7 +989,7 @@ internal static class PremiumInterfaceTests
 
     private static MainWindow NavigationWindow(string view)
     {
-        var w = ReviewFixTests.Window();
+        var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
         w.SetRenderState(view);
         w.Controller.Change(w.Controller.Settings with
         {
@@ -1031,8 +1016,8 @@ internal static class PremiumInterfaceTests
         ThemeSupport.FollowSystem(Application.Current!);
         test("premium local dismissal terminalizes replaced undispatched action", () =>
         {
-            var p = new FixturePlatform();
-            var w = FixtureWindow(p);
+            var p = new TestPlatform();
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
             try
             {
                 w.ShowDiagnostic();
@@ -1060,7 +1045,7 @@ internal static class PremiumInterfaceTests
         Directory.CreateDirectory(output);
         test("premium actual reader route exposes final recovery sentence and dismissal", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
                 const string ending = "No additional command was sent.";
@@ -1076,12 +1061,12 @@ internal static class PremiumInterfaceTests
                 Choose(w, "operation-details");
                 w.ActivateEntry();
                 Require(w.SelectedAction == "operation-text", "Actual result entry did not open reader route");
-                var activatedReader = Descendants<TextBox>((DependencyObject)w.FindName("Rows")).Single();
+                var activatedReader = WpfTestElements.Descendants<TextBox>((DependencyObject)w.FindName("Rows")).Single();
                 w.ActivateEntry();
                 Console.WriteLine($"READER-ACTIVATED focus={activatedReader.IsKeyboardFocusWithin}; selected={w.SelectedAction}; actualType={System.Windows.Input.Keyboard.FocusedElement?.GetType().Name}");
                 w.UpdateLayout();
-                Console.WriteLine($"READER-AFTER-LAYOUT focus={activatedReader.IsKeyboardFocusWithin}; sameControl={ReferenceEquals(activatedReader, Descendants<TextBox>((DependencyObject)w.FindName("Rows")).Single())}; selected={w.SelectedAction}; actualType={System.Windows.Input.Keyboard.FocusedElement?.GetType().Name}");
-                var reader = Descendants<TextBox>((DependencyObject)w.FindName("Rows")).Single();
+                Console.WriteLine($"READER-AFTER-LAYOUT focus={activatedReader.IsKeyboardFocusWithin}; sameControl={ReferenceEquals(activatedReader, WpfTestElements.Descendants<TextBox>((DependencyObject)w.FindName("Rows")).Single())}; selected={w.SelectedAction}; actualType={System.Windows.Input.Keyboard.FocusedElement?.GetType().Name}");
+                var reader = WpfTestElements.Descendants<TextBox>((DependencyObject)w.FindName("Rows")).Single();
                 Require(reader.IsKeyboardFocusWithin, "Actual reader activation did not focus its text control");
                 var initial = reader.VerticalOffset;
                 var moves = 0;
@@ -1124,7 +1109,7 @@ internal static class PremiumInterfaceTests
         });
         test("premium actual reader keyboard arrows preserve reading and exit to actions", () =>
         {
-            var w = ReviewFixTests.Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
             try
             {
                 w.Controller.SetOperation("Partial", string.Concat(Enumerable.Repeat("A long recovery message for reading. ", 20)));
@@ -1139,7 +1124,7 @@ internal static class PremiumInterfaceTests
                 w.ActivateEntry();
                 w.UpdateLayout();
                 w.ActivateEntry();
-                var reader = Descendants<TextBox>((DependencyObject)w.FindName("Rows")).Single();
+                var reader = WpfTestElements.Descendants<TextBox>((DependencyObject)w.FindName("Rows")).Single();
                 Require(reader.IsKeyboardFocusWithin, "PRECONDITION: reader not focused after settled layout");
                 void Key(System.Windows.Input.Key key)
                 {
@@ -1193,7 +1178,7 @@ internal static class PremiumInterfaceTests
         Dispatcher.PushFrame(frame);
     }
 
-    private static void Queue(MainWindow w, string id) => ReviewFixTests.Button(w, id).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+    private static void Queue(MainWindow w, string id) => WpfTestElements.Button(w, id).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
     private static string Temporary()
     {
         var p = Path.Combine(Path.GetTempPath(), "Bezoro-premium-tests", Guid.NewGuid().ToString("N"));
@@ -1217,66 +1202,17 @@ internal static class PremiumInterfaceTests
         root.UpdateLayout();
     }
 
-    private static void Complete(Task task) => ReviewFixTests.Complete(task);
-    internal static MainWindow FixtureWindow(FixturePlatform p)
-    {
-        var w = new MainWindow(renderOnly: true, platform: p, diagnostics: new(Temporary()));
-        w.InputContextReader = () => new(true, true, true, true);
-        w.PhysicalKeyReader = _ => 0;
-        w.Controller.CaptureReturn();
-        Complete(w.Controller.Refresh());
-        w.RefreshRows();
-        return w;
-    }
-
     private static void Dispatch(MainWindow w, string id)
     {
-        ReviewFixTests.Button(w, id).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+        WpfTestElements.Button(w, id).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
         w.AdvanceHandoff(new(new PadFrame[4], 0, GuideValid: true), 0);
         w.AdvanceHandoff(new(new PadFrame[4], 100, GuideValid: true), 100);
     }
 
-    internal static void OpenCloseConfirmation(MainWindow w) => ReviewFixTests.Button(w, "close").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
-    internal sealed class FixturePlatform(bool preview = true) : IPlatform
+    internal static void OpenCloseConfirmation(MainWindow window)
     {
-        public WindowRef Window = new(101, 42, 100, "Production report — an ordinary window with a complete and deliberately long title", "fixture");
-        public bool ValidIdentity = true, Empty;
-        public int Calls, Closes;
-        public Task<ActionResult> Next = Task.FromResult(new ActionResult(ResultKind.Failed, "fixture refusal"));
-        public Func<Task<ActionResult>>? OnTaskView;
-        public Func<WindowRef, CancellationToken, Func<bool>, Task<ActionResult>>? OnConfirmedClose;
-        public bool IsPreview => preview;
-
-        public WindowRef? Foreground() => Empty ? null : Window;
-        public IReadOnlyList<WindowRef> Windows() => Empty ? [] : [Window];
-        public bool Valid(WindowRef w) => ValidIdentity && Window.Same(w);
-        public IReadOnlyList<DisplayRef> Displays() => [new("fixture", 0, 0, 1280, 720, true)];
-        public ModuleEvidence SteamEvidence(WindowRef? w) => ModuleEvidence.Unknown;
-        public Task<ActionResult> TaskView()
-        {
-            Calls++;
-            return OnTaskView?.Invoke() ?? Next;
-        }
-
-        public Task<ActionResult> Switch(WindowRef w)
-        {
-            Calls++;
-            return Next;
-        }
-
-        public Task<ActionResult> Close(WindowRef w, CancellationToken token)
-        {
-            Closes++;
-            return Task.FromResult(new ActionResult(ResultKind.Simulated, "fixture close"));
-        }
-
-        public Task<ActionResult> CloseConfirmed(WindowRef w, CancellationToken token, Func<bool> prepareForConsent) =>
-            OnConfirmedClose?.Invoke(w, token, prepareForConsent) ?? Close(w, token);
-
-        public Task<ActionResult> Shortcut(WindowRef w, string keys) => throw new Exception("No native keys allowed");
-        public ActionResult Launch(bool playnite, string? path) => throw new Exception("No native launch allowed");
-        public void Dispose()
-        {
-        }
+        if (!window.ActionIds.Contains("close") && window.Controller.Session.Anchor is { } target)
+            window.OpenOptions(target);
+        WpfTestElements.Button(window, "close").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
     }
 }

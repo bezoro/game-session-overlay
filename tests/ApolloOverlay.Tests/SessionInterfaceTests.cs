@@ -101,7 +101,7 @@ internal static class SessionInterfaceTests
                 foreach (var button in buttons)
                 {
                     Pick(window, (string)button.Tag);
-                    var holder = (Border)button.Resources["DescriptionTarget"];
+                    var holder = window.FindActionHost(button) ?? throw new Exception("A reorder action has no focus host.");
                     var bounds = button.TransformToAncestor(holder).TransformBounds(new Rect(button.RenderSize));
                     Require(bounds.Left >= holder.BorderThickness.Left - .1 && bounds.Top >= holder.BorderThickness.Top - .1
                         && bounds.Right <= holder.ActualWidth - holder.BorderThickness.Right + .1
@@ -125,7 +125,7 @@ internal static class SessionInterfaceTests
                 {
                     Pick(window, id);
                     window.UpdateLayout();
-                    var button = ReviewFixTests.Button(window, id);
+                    var button = WpfTestElements.Button(window, id);
                     var bounds = button.TransformToAncestor(viewport).TransformBounds(new Rect(button.RenderSize));
                     Require(bounds.Top >= -1 && bounds.Bottom <= viewport.ViewportHeight + 1,
                         "A result recovery action is clipped: " + id);
@@ -143,11 +143,11 @@ internal static class SessionInterfaceTests
                 Require(viewport.ScrollableHeight <= 1, "Keyboard must scroll its keys without scrolling or fading its pinned commands");
                 foreach (var id in new[] { "keyboard-target", "keyboard-editor", "keyboard-insert", "back" })
                 {
-                    var button = ReviewFixTests.Button(w, id);
+                    var button = WpfTestElements.Button(w, id);
                     var bounds = button.TransformToAncestor(viewport).TransformBounds(new Rect(new Size(button.ActualWidth, button.ActualHeight)));
                     Require(bounds.Top >= -1 && bounds.Bottom <= viewport.ViewportHeight + 1, "Pinned keyboard control is outside the viewport: " + id + " " + bounds);
                 }
-                Require(((PremiumInterfaceTests.FixturePlatform)w.Controller.Platform).Calls == 0, "Rendering the keyboard sent an external command");
+                Require(((TestPlatform)w.Controller.Platform).Calls == 0, "Rendering the keyboard sent an external command");
             });
         foreach (var size in new[]
         {
@@ -170,7 +170,7 @@ internal static class SessionInterfaceTests
                     {
                         w.UpdateLayout();
                         var scroll = (ScrollViewer)w.FindName("ContentScroll");
-                        var selected = ReviewFixTests.Button(w, w.SelectedAction);
+                        var selected = WpfTestElements.Button(w, w.SelectedAction);
                         if (scroll.IsAncestorOf(selected) && scroll.ScrollableHeight - scroll.VerticalOffset > 1)
                         {
                             var bounds = selected.TransformToAncestor(scroll).TransformBounds(new Rect(new Size(selected.ActualWidth, selected.ActualHeight)));
@@ -225,7 +225,7 @@ internal static class SessionInterfaceTests
                     w.Controller.ClearSelection();
                 else
                 {
-                    var platform = (PremiumInterfaceTests.FixturePlatform)w.Controller.Platform;
+                    var platform = (TestPlatform)w.Controller.Platform;
                     platform.Window = new(202, 84, 200, "Other game", "other-game");
                     w.Controller.Select(platform.Window);
                 }
@@ -256,7 +256,7 @@ internal static class SessionInterfaceTests
             var w = host.Window;
             host.Open();
             Pick(w, "session-volume");
-            var button = ReviewFixTests.Button(w, "session-volume");
+            var button = WpfTestElements.Button(w, "session-volume");
             TapKey(w, Key.Tab);
             Require(Keyboard.FocusedElement is Slider, "Tab did not enter the game volume slider");
             var slider = (Slider)Keyboard.FocusedElement;
@@ -311,7 +311,7 @@ internal static class SessionInterfaceTests
             TapKey(editor, Key.Tab);
             Pick(w, "keyboard-delete");
             w.ActivateEntry();
-            var buffer = PremiumInterfaceTests.Descendants<TextBox>((DependencyObject)w.FindName("Rows")).Single();
+            var buffer = WpfTestElements.Descendants<TextBox>((DependencyObject)w.FindName("Rows")).Single();
             Require(buffer.Text == "Hello ", "Virtual backspace split a visible character");
             Pick(w, "keyboard-insert");
             w.ActivateEntry();
@@ -331,7 +331,7 @@ internal static class SessionInterfaceTests
             TapKey(w, Key.Tab);
             Pick(w, "keyboard-insert");
             w.ActivateEntry();
-            Require(w.SelectedAction == "profile-name" && AutomationProperties.GetName(ReviewFixTests.Button(w, "profile-name")).Contains("Game room"), "Profile name or editing origin was lost");
+            Require(w.SelectedAction == "profile-name" && AutomationProperties.GetName(WpfTestElements.Button(w, "profile-name")).Contains("Game room"), "Profile name or editing origin was lost");
             Require(!File.Exists(Path.Combine(host.Root, "session-profiles.json")), "Editing persisted a profile before Save");
         });
         test("session cancelled profile undo preserves layout and its undo record", () =>
@@ -377,16 +377,16 @@ internal static class SessionInterfaceTests
             var w = host.Window;
             host.Open();
             Navigate(w, "media");
-            var initialIcon = (VectorIcon)((ActionButtonContent)ReviewFixTests.Button(w, "media-toggle").Content).Icon;
+            var initialIcon = (VectorIcon)((ActionButtonContent)WpfTestElements.Button(w, "media-toggle").Content).Icon;
             Require(ReferenceEquals(initialIcon.Data, w.FindResource("Icon.pause")), "Playing media has no pause icon");
             Pick(w, "media-toggle");
             w.ActivateEntry();
             Release(w);
             Complete(w.OperationTask);
             Require(host.Media.Commands == 1 && host.Media.LastId == "music" && !host.Media.Current.Items[0].Playing, "Media command missed its explicit source");
-            Require(AutomationProperties.GetName(ReviewFixTests.Button(w, "media-toggle")).Contains("Play"), "Paused state was not reflected visually");
+            Require(AutomationProperties.GetName(WpfTestElements.Button(w, "media-toggle")).Contains("Play"), "Paused state was not reflected visually");
 
-            var pausedIcon = (VectorIcon)((ActionButtonContent)ReviewFixTests.Button(w, "media-toggle").Content).Icon;
+            var pausedIcon = (VectorIcon)((ActionButtonContent)WpfTestElements.Button(w, "media-toggle").Content).Icon;
             Require(ReferenceEquals(pausedIcon.Data, w.FindResource("Icon.play")), "Paused media kept the pause icon");
         });
     }
@@ -657,7 +657,7 @@ internal static class SessionInterfaceTests
         // Keep the native, loaded tree attached. Detaching it loses inherited
         // implicit templates and can render empty buttons with otherwise valid geometry.
         Require(root.IsLoaded && PresentationSource.FromVisual(root) is not null, "Capture tree is detached from its real WPF presentation source");
-        foreach (var button in PremiumInterfaceTests.Descendants<Button>(root))
+        foreach (var button in WpfTestElements.Descendants<Button>(root))
             button.ApplyTemplate();
         window.UpdateLayout();
         root.UpdateLayout();
@@ -1013,7 +1013,7 @@ internal static class SessionInterfaceTests
             throw new Exception(message);
     }
 
-    internal static void Complete(Task task) => ReviewFixTests.Complete(task);
+    internal static void Complete(Task task) => WpfTestDispatcher.Complete(task);
     private sealed class PendingIdentitySource : IControllerIdentitySource
     {
         private readonly TaskCompletionSource<bool> pending = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -1072,7 +1072,7 @@ internal static class SessionInterfaceTests
             }
             if (emptyMedia)
                 Media.Clear();
-            var platform = new PremiumInterfaceTests.FixturePlatform(preview) { Empty = emptyApps };
+            var platform = new TestPlatform(preview) { Empty = emptyApps };
             if (gameTitle is not null)
                 platform.Window = platform.Window with
                 {

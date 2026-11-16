@@ -167,7 +167,7 @@ internal static class InterfaceFeedbackTests
             try
             {
                 w.OpenOptions(w.Controller.Session.Anchor!);
-                Click(ReviewFixTests.Button(w, "minimize"));
+                Click(WpfTestElements.Button(w, "minimize"));
                 Require(w.TransitionPending, "Fixture did not queue handoff");
                 feedback.Cues.Clear();
                 Click((Button)w.FindName("BackButton"));
@@ -190,7 +190,7 @@ internal static class InterfaceFeedbackTests
                 });
                 w.Page(2);
                 feedback.Cues.Clear();
-                Click(ReviewFixTests.Button(w, "test-feedback"));
+                Click(WpfTestElements.Button(w, "test-feedback"));
                 Require(feedback.Cues.SequenceEqual(new[] { FeedbackCue.Test }), "Confirmation interrupted or duplicated the sample");
                 Require(w.Feedback.Contains("Test requested"), "Test has no visible acknowledgement");
             }
@@ -210,7 +210,7 @@ internal static class InterfaceFeedbackTests
                 });
                 w.Page(2);
                 feedback.Response = new(false, false, "Prior status must not be presented as a new pulse");
-                Click(ReviewFixTests.Button(w, "test-feedback"));
+                Click(WpfTestElements.Button(w, "test-feedback"));
                 Require(w.Feedback == "Press A on the active controller to test vibration.", "Test falsely claimed a pulse or kept an unrelated status");
             }
             finally
@@ -338,7 +338,7 @@ internal static class InterfaceFeedbackTests
                 Require(w.SelectedAction == "side", "Setting unreachable");
                 feedback.Cues.Clear();
                 w.ActivateEntry();
-                var button = ReviewFixTests.Button(w, "side");
+                var button = WpfTestElements.Button(w, "side");
                 button.ApplyTemplate();
                 var highlight = (Border)button.Template.FindName("ActivationFeedback", button);
                 Require(highlight.Opacity > 0 && !highlight.HasAnimatedProperties, "Reduced motion suppressed acknowledgement or animated its highlight");
@@ -497,7 +497,7 @@ internal static class InterfaceFeedbackTests
         w.InputContextReader = () => new(true, true, true, true);
         w.PhysicalKeyReader = _ => 0;
         w.Controller.CaptureReturn();
-        ReviewFixTests.Complete(w.Controller.Refresh());
+        WpfTestDispatcher.Complete(w.Controller.Refresh());
         w.RefreshRows();
         return w;
     }

@@ -64,8 +64,8 @@ internal static class ForeignWindowActivationTests
                 var heartbeat = Dispatcher.CurrentDispatcher.InvokeAsync(() => { }, DispatcherPriority.Background).Task;
                 var elapsed = Stopwatch.StartNew();
                 var activation = platform.Focus(target, CancellationToken.None, () => true);
-                ReviewFixTests.Complete(activation);
-                ReviewFixTests.Complete(heartbeat);
+                WpfTestDispatcher.Complete(activation);
+                WpfTestDispatcher.Complete(heartbeat);
                 Require(elapsed.Elapsed < TimeSpan.FromSeconds(2) && !child.HasExited,
                     "The foreign window blocked dispatcher activation before its observation deadline.");
             }
