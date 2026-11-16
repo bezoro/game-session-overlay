@@ -53,6 +53,9 @@ internal static class StartupRegistration
             return false;
         try
         {
+            using var mutation = StartupMutationLease.TryAcquire();
+            if (mutation is null)
+                return false;
             using var settings = Registry.CurrentUser.CreateSubKey(SettingsKey, writable: true);
             using var run = Registry.CurrentUser.CreateSubKey(RunKey, writable: true);
             if (settings is null || run is null)
@@ -112,6 +115,9 @@ internal static class StartupRegistration
             return new(ResultKind.Unavailable, "Install the overlay using Setup to configure Windows startup.");
         try
         {
+            using var mutation = StartupMutationLease.TryAcquire();
+            if (mutation is null)
+                return new(ResultKind.Unavailable, "Another startup change is active. Try again after it finishes.");
             var task = ScheduledStartup.Read(executable);
             if (task.Exists && (!task.Owned || !ScheduledStartup.SetEnabled(executable, enabled)))
                 return new(ResultKind.Unavailable, "The existing startup task could not be changed. Its registration was preserved.");
@@ -157,6 +163,9 @@ internal static class StartupRegistration
             return new(ResultKind.Unavailable, "Restart as administrator before changing startup privileges.");
         try
         {
+            using var mutation = StartupMutationLease.TryAcquire();
+            if (mutation is null)
+                return new(ResultKind.Unavailable, "Another startup change is active. Try again after it finishes.");
             var before = ReadStatus(executable);
             if (!before.Available)
                 return new(ResultKind.Unavailable, "The existing startup registration could not be verified. It was preserved.");
@@ -226,6 +235,19 @@ internal static class StartupRegistration
     internal static bool RegistrationError(Exception error) => error is IOException or UnauthorizedAccessException or SecurityException or COMException or InvalidOperationException or System.ComponentModel.Win32Exception or Microsoft.CSharp.RuntimeBinder.RuntimeBinderException;
 
     internal static void TryRemoveMatching(string executable)
+    {
+        try
+        {
+            using var mutation = StartupMutationLease.TryAcquire();
+            if (mutation is not null)
+                RemoveMatching(executable);
+        }
+        catch (Exception error) when (RegistrationError(error))
+        {
+        }
+    }
+
+    private static void RemoveMatching(string executable)
     {
         try
         {

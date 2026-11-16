@@ -62,6 +62,8 @@ static class Program
             return IsolatedActivationTests.RunForegroundHost(foregroundReady, foregroundIdentity);
         if (args is [IsolatedActivationTests.HangArgument, var ready, var identity])
             return IsolatedActivationTests.Hang(ready, identity);
+        if (args is [InstalledIntegrationTests.StartupLeaseOwnerArgument, var leaseReady, var leaseRelease, var leaseState])
+            return InstalledIntegrationTests.RunStartupLeaseOwner(leaseReady, leaseRelease, leaseState);
         if (args is [IsolatedActivationTests.ParentExitArgument, var parentReady, var parentIdentity])
             return IsolatedActivationTests.ExitParent(parentReady, parentIdentity);
         if (args.Length is not (1 or 2))
