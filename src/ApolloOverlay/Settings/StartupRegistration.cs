@@ -143,7 +143,12 @@ internal static class StartupRegistration
     }
 
     /// <summary>Changes startup privilege without changing whether this user starts the app at sign-in.</summary>
-    internal static ActionResult SetElevated(bool elevated)
+    internal static ActionResult SetElevated(bool elevated) => ConfigureMode(elevated);
+
+    /// <summary>Explicit administrative repair uses the same ownership and rollback boundary as the application.</summary>
+    internal static ActionResult Repair(bool install) => ConfigureMode(elevated: install, enabled: install);
+
+    private static ActionResult ConfigureMode(bool elevated, bool? enabled = null)
     {
         var executable = VelopackInstallation.StartupExecutable;
         if (!VelopackInstallation.IsInstalled || !ValidExecutable(executable) || !File.Exists(executable))
@@ -155,25 +160,30 @@ internal static class StartupRegistration
             var before = ReadStatus(executable);
             if (!before.Available)
                 return new(ResultKind.Unavailable, "The existing startup registration could not be verified. It was preserved.");
+            var requestedEnabled = enabled ?? before.Enabled;
             using var settings = Registry.CurrentUser.CreateSubKey(SettingsKey, writable: true);
             using var run = Registry.CurrentUser.CreateSubKey(RunKey, writable: true);
+            using var approved = enabled == true ? Registry.CurrentUser.OpenSubKey(ApprovedKey, writable: true) : null;
             var savedRun = RegistryValueSnapshot.Read(run, RunValue);
             var savedMarker = RegistryValueSnapshot.Read(settings, MarkerValue);
             var savedPreference = RegistryValueSnapshot.Read(settings, PreferenceValue);
+            var savedApproval = approved is null ? null : RegistryValueSnapshot.Read(approved, RunValue);
             if (savedRun.Value is string command && !MatchesHiddenCommand(command, executable))
                 return new(ResultKind.Unavailable, "The Run entry belongs to another location. It was preserved.");
             try
             {
-                ScheduledStartup.ConfigureElevation(executable, elevated, before.Enabled, () =>
+                ScheduledStartup.ConfigureElevation(executable, elevated, requestedEnabled, () =>
                 {
-                    if (elevated || !before.Enabled)
+                    if (elevated || !requestedEnabled)
                         run.DeleteValue(RunValue, false);
                     else
                         run.SetValue(RunValue, Command(executable), RegistryValueKind.String);
                     settings.SetValue(MarkerValue, 1, RegistryValueKind.DWord);
-                    settings.SetValue(PreferenceValue, before.Enabled ? 1 : 0, RegistryValueKind.DWord);
+                    settings.SetValue(PreferenceValue, requestedEnabled ? 1 : 0, RegistryValueKind.DWord);
+                    if (enabled == true)
+                        approved?.DeleteValue(RunValue, false);
                     var observed = ReadStatus(executable);
-                    if (!observed.Available || observed.Enabled != before.Enabled || observed.Elevated != elevated)
+                    if (!observed.Available || observed.Enabled != requestedEnabled || observed.Elevated != elevated)
                         throw new InvalidOperationException("Windows did not confirm the requested startup mode.");
                 });
             }
@@ -182,11 +192,13 @@ internal static class StartupRegistration
                 savedRun.Restore(run, RunValue);
                 savedMarker.Restore(settings, MarkerValue);
                 savedPreference.Restore(settings, PreferenceValue);
+                if (approved is not null)
+                    savedApproval?.Restore(approved, RunValue);
                 throw;
             }
             return new(ResultKind.Completed, elevated
-                ? before.Enabled ? "Administrator startup is configured. The overlay will remain hidden at sign-in." : "Administrator mode is remembered. Startup remains off."
-                : before.Enabled ? "Standard hidden startup is restored. This session remains elevated until you exit." : "Administrator startup is removed. Startup remains off.");
+                ? requestedEnabled ? "Administrator startup is configured. The overlay will remain hidden at sign-in." : "Administrator mode is remembered. Startup remains off."
+                : requestedEnabled ? "Standard hidden startup is restored. This session remains elevated until you exit." : "Administrator startup is removed. Startup remains off.");
         }
         catch (Exception error) when (RegistrationError(error))
         {

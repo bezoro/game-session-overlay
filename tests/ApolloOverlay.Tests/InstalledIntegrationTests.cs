@@ -7,6 +7,22 @@ internal static class InstalledIntegrationTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        test("startup repair requires exactly one explicit administrative action", () =>
+        {
+            Require(StartupRepairCommand.TryReadAction([StartupRepairCommand.Argument, "Install"], out var install) && install,
+                "Explicit installation was not recognized");
+            Require(StartupRepairCommand.TryReadAction([StartupRepairCommand.Argument, "uninstall"], out install) && !install,
+                "Explicit removal was not recognized");
+            foreach (var args in new string[][]
+            {
+                [StartupRepairCommand.Argument],
+                [StartupRepairCommand.Argument, "Enable"],
+                [StartupRepairCommand.Argument, "Install", "--show"]
+            })
+                Require(StartupRepairCommand.Execute(args) == 2, "Ambiguous repair arguments reached registration");
+            Require(StartupRepairCommand.Execute(["--startup"]) is null,
+                "Repair handling intercepted ordinary hidden startup");
+        });
         test("Task Scheduler missing-task detection handles managed HRESULT mapping without hiding permission errors", () =>
         {
             Require(ScheduledStartup.IsMissingTask(new FileNotFoundException())
