@@ -1,80 +1,6 @@
 namespace ApolloOverlay;
 
-public sealed class OpeningChord(PadButtons mask, int holdMs)
-{
-    private int? slot;
-    private bool armed, fired, holding;
-    private long since;
-    public void Reset()
-    {
-        slot = null;
-        armed = false;
-        fired = false;
-        holding = false;
-    }
-
-    public bool Update(IReadOnlyList<PadFrame> frames, long now)
-    {
-        if (slot is { } current)
-        {
-            var f = frames[current];
-            if (!f.Connected)
-            {
-                Reset();
-                return false;
-            }
-
-            if ((f.Buttons & mask) == 0)
-            {
-                slot = null;
-                armed = true;
-                fired = false;
-                holding = false;
-                return false;
-            }
-
-            if ((f.Buttons & mask) != mask)
-            {
-                holding = false;
-                return false;
-            }
-
-            if (!holding)
-            {
-                holding = true;
-                since = now;
-                return false;
-            }
-
-            if (!fired && now - since >= holdMs)
-            {
-                fired = true;
-                return true;
-            }
-
-            return false;
-        }
-
-        if (!armed)
-        {
-            armed = frames.All(f => !f.Connected || (f.Buttons & mask) == 0);
-            return false;
-        }
-
-        for (var i = 0; i < frames.Count; i++)
-            if (frames[i].Connected && (frames[i].Buttons & mask) == mask)
-            {
-                slot = i;
-                since = now;
-                holding = true;
-                break;
-            }
-
-        return false;
-    }
-}
-
-public readonly record struct OverlayInput(bool Toggle, int? Slot, PadEvents Events, bool Connected);
+public readonly record struct OverlayInput(int? Slot, PadEvents Events, bool Connected);
 internal readonly record struct ReleaseSample(
     IReadOnlyList<PadFrame> Pads,
     long Timestamp,
@@ -188,7 +114,7 @@ public sealed class InputCoordinator
         if (owner is { } old && !frames[old].Connected)
         {
             Cancel();
-            return new(false, old, new(0, 0, false, true), false);
+            return new(old, new(0, 0, false, true), false);
         }
 
         var events = frames.Select((f, i) => pads[i].Update(f, now)).ToArray();
@@ -200,6 +126,6 @@ public sealed class InputCoordinator
                     break;
                 }
 
-        return owner is { } slot ? new(false, slot, events[slot], frames[slot].Connected) : default;
+        return owner is { } slot ? new(slot, events[slot], frames[slot].Connected) : default;
     }
 }

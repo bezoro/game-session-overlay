@@ -10,7 +10,7 @@ internal static class ProductTests
             throw new Exception("Native product assertion failed.");
     }
 
-    private static void Complete(Task task) => ReviewFixTests.Complete(task);
+    private static void Complete(Task task) => WpfTestDispatcher.Complete(task);
     private static MainWindow Window()
     {
         var w = new MainWindow(renderOnly: true, platform: new PreviewPlatform(new(101, 42, 100, "Test window", "fixture")));
@@ -162,33 +162,12 @@ internal static class ProductTests
             input.Update([default, default, default, default], true, 3);
             Require(input.Update([new(true, PadButtons.A), default, default, default], true, 4).Events.Pressed == 0);
         });
-        test("opening chord duration latch partial release and rearm", () =>
-        {
-            var chord = new OpeningChord(PadButtons.LB | PadButtons.RB, 650);
-            chord.Update([new(true, 0)], 0);
-            chord.Update([new(true, PadButtons.LB | PadButtons.RB)], 1);
-            chord.Update([new(true, PadButtons.LB)], 500);
-            Require(!chord.Update([new(true, PadButtons.LB | PadButtons.RB)], 600));
-            Require(!chord.Update([new(true, PadButtons.LB | PadButtons.RB)], 1150));
-            Require(chord.Update([new(true, PadButtons.LB | PadButtons.RB)], 1250));
-            Require(!chord.Update([new(true, PadButtons.LB | PadButtons.RB)], 3000));
-            chord.Update([new(true, 0)], 3001);
-            chord.Update([new(true, PadButtons.LB | PadButtons.RB)], 3002);
-            Require(chord.Update([new(true, PadButtons.LB | PadButtons.RB)], 3652));
-        });
-        test("opening chord never combines slots", () =>
-        {
-            var chord = new OpeningChord(PadButtons.LB | PadButtons.RB, 650);
-            chord.Update([new(true, 0), new(true, 0)], 0);
-            Require(!chord.Update([new(true, PadButtons.LB), new(true, PadButtons.RB)], 1));
-            Require(!chord.Update([new(true, PadButtons.LB), new(true, PadButtons.RB)], 1000));
-        });
         test("removed opening chord stays hidden and Cancel suppresses until release", () =>
         {
             var i = new InputCoordinator(new());
             var mask = PadButtons.LB | PadButtons.RB | PadButtons.Start;
-            Require(!i.Update([new(true, mask), default, default, default], false, 1).Toggle);
-            Require(!i.Update([new(true, mask), default, default, default], false, 1000).Toggle);
+            Require(i.Update([new(true, mask), default, default, default], false, 1) == default);
+            Require(i.Update([new(true, mask), default, default, default], false, 1000) == default);
             i.Cancel();
             Require(i.Update([new(true, PadButtons.A), default, default, default], true, 1001).Events.Pressed == 0);
             i.Update([new(true, 0), default, default, default], true, 1002);
@@ -201,13 +180,11 @@ internal static class ProductTests
             Require(p.Update(new(true, 0, 20000, 0), 1).Direction == 0);
             Require(p.Update(new(true, 0, 25000, 0), 2).Direction == 2);
         });
-        test("invalid version hotkey chord and deadzone settings rejected", () =>
+        test("invalid version and deadzone settings rejected", () =>
         {
             foreach (var text in new[]
             {
                 "{\"Version\":4}",
-                "{\"Hotkey\":\"Space\"}",
-                "{\"Chord\":\"Guide\"}",
                 "{\"Deadzone\":0}"
             }
 

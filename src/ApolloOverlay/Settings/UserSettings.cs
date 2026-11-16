@@ -31,8 +31,8 @@ public sealed record UserSettings(
         if (original.RootElement.ValueKind != JsonValueKind.Object)
             throw new InvalidDataException("Empty settings.");
         using var document = JsonDocument.Parse(SessionHubSettings.NormalizeJson(original.RootElement, out recovered));
-        // Normalize only this optional field before typed deserialization: a wrong JSON type
-        // must not discard unrelated valid settings or the explicit Guide opt-in.
+        // Recover optional input preferences before typed deserialization so a malformed
+        // retired binding cannot discard active settings or the explicit Guide opt-in.
         using var normalized = new MemoryStream();
         using (var writer = new Utf8JsonWriter(normalized))
         {
@@ -40,7 +40,9 @@ public sealed record UserSettings(
             var limit = 2000;
             foreach (var property in document.RootElement.EnumerateObject())
             {
-                if (property.NameEquals(nameof(GuideOpenMaxHoldMs)))
+                if (LegacyOpeningSettings.TryWrite(property, writer, out var legacyRecovered))
+                    recovered |= legacyRecovered;
+                else if (property.NameEquals(nameof(GuideOpenMaxHoldMs)))
                 {
                     if (property.Value.ValueKind == JsonValueKind.Number && property.Value.TryGetInt32(out var value) && ValidGuideLimit(value))
                         limit = value;
@@ -63,15 +65,6 @@ public sealed record UserSettings(
             throw new InvalidDataException("Invalid settings.");
         if (parsed.Version is not (1 or 2 or 3) || parsed.Deadzone < 8000 || parsed.Deadzone > 28000)
             throw new InvalidDataException("Invalid version or deadzone.");
-        try
-        {
-            _ = OpeningConfig.Parse(parsed.Hotkey, parsed.Chord, parsed.ChordHoldMs);
-        }
-        catch (ArgumentException e)
-        {
-            throw new InvalidDataException("Invalid shortcut or button combination.", e);
-        }
-
         return SessionHubSettings.Copy(parsed);
     }
 
@@ -106,7 +99,7 @@ public sealed record UserSettings(
     public static void Save(string path, UserSettings settings)
     {
         settings = SessionHubSettings.Copy(settings);
-        _ = Parse(JsonSerializer.Serialize(settings, SettingsJson.Default.UserSettings));
+        settings = Parse(JsonSerializer.Serialize(settings, SettingsJson.Default.UserSettings));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var pending = path + ".pending";
         File.WriteAllText(pending, JsonSerializer.Serialize(settings, SettingsJson.Default.UserSettings));

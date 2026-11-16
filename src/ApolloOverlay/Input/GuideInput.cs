@@ -258,30 +258,18 @@ public unsafe sealed class XInputGuideBackend : IGuideBackend
 
     private readonly Func<(nint Module, nint Address)> load;
     private readonly Action<nint> unload;
-    private readonly bool[] armed = new bool[4];
-    private readonly bool[] openingPress = new bool[4];
-    private readonly long[] pressedAt = new long[4];
-    private readonly int[] pressLimit = new int[4];
-    private bool overlayContext, overlayVisible;
-    private long overlayGeneration;
+    private readonly GuideGestureTracker gestures = new();
     private nint module, address;
     private Action? pressed;
     private bool active, disposed;
     public bool Active => active && address != 0;
-    internal bool Held
+    internal bool Held => gestures.Held;
+    internal bool SnapshotValid => gestures.SnapshotValid;
+    internal int Connections => gestures.Connections;
+    internal IReadOnlyList<GuideDiagnostic> Diagnostics => gestures.Diagnostics;
+    internal Action<GuideDiagnostic>? DiagnosticObserved
     {
-        get;
-        private set;
-    }
-    internal bool SnapshotValid
-    {
-        get;
-        private set;
-    }
-    internal int Connections
-    {
-        get;
-        private set;
+        private get; set;
     }
     public string Status
     {
@@ -332,116 +320,30 @@ public unsafe sealed class XInputGuideBackend : IGuideBackend
         if (disposed || address == 0 || active)
             return false;
         pressed = callback;
-        Array.Clear(armed);
+        gestures.Reset();
         active = true;
         Status = reason = "Experimental legacy Guide active; waiting for release and press.";
         return true;
-    }
-
-    public void Poll()
-    {
-        if (!Active || disposed)
-            return;
-        var edge = false;
-        var connected = false;
-        Held = false;
-        SnapshotValid = true;
-        Connections = 0;
-        var read = (delegate* unmanaged[Stdcall]<uint, State*, uint>)address;
-        for (uint slot = 0; slot < 4; slot++)
-        {
-            State state = default;
-            var result = read(slot, &state);
-            if (result != 0)
-            {
-                armed[slot] = false;
-                if (result != 1167)
-                    SnapshotValid = false;
-                continue;
-            }
-
-            connected = true;
-            Connections |= 1 << (int)slot;
-            Held |= (state.Buttons & 0x0400) != 0;
-            if ((state.Buttons & 0x0400) == 0)
-                armed[slot] = true;
-            else if (armed[slot])
-            {
-                armed[slot] = false;
-                edge = true;
-            }
-        }
-
-        Status = connected ? "Experimental legacy Guide active · press to open or close." : "No controller was read by legacy Guide. Open the overlay from the tray.";
-        if (edge && active)
-            pressed?.Invoke();
     }
 
     internal void PollForOverlay(bool visible, long generation, long now, int maximumHoldMs)
     {
         if (!Active || disposed)
             return;
-        if (!overlayContext || overlayVisible != visible || overlayGeneration != generation)
-        {
-            Array.Clear(armed);
-            Array.Clear(openingPress);
-            overlayContext = true;
-            overlayVisible = visible;
-            overlayGeneration = generation;
-        }
-
-        var edge = false;
-        Held = false;
-        SnapshotValid = true;
-        Connections = 0;
+        Span<GuideSample> samples = stackalloc GuideSample[4];
         var read = (delegate* unmanaged[Stdcall]<uint, State*, uint>)address;
-        for (uint slot = 0; slot < 4; slot++)
+        for (uint slot = 0; slot < samples.Length; slot++)
         {
             State state = default;
             var result = read(slot, &state);
-            if (result != 0)
-            {
-                armed[slot] = false;
-                openingPress[slot] = false;
-                if (result != 1167)
-                    SnapshotValid = false;
-                continue;
-            }
-
-            Connections |= 1 << (int)slot;
-            var down = (state.Buttons & 0x0400) != 0;
-            Held |= down;
-            if (!down)
-            {
-                if (!visible && openingPress[slot] && now >= pressedAt[slot] && now - pressedAt[slot] <= pressLimit[slot])
-                    edge = true;
-                openingPress[slot] = false;
-                armed[slot] = true;
-            }
-            else if (armed[slot])
-            {
-                armed[slot] = false;
-                if (visible)
-                    edge = true;
-                else
-                {
-                    openingPress[slot] = true;
-                    pressedAt[slot] = now;
-                    pressLimit[slot] = maximumHoldMs;
-                }
-            }
-            else if (openingPress[slot] && (now < pressedAt[slot] || now - pressedAt[slot] > pressLimit[slot]))
-                openingPress[slot] = false;
+            samples[(int)slot] = new(result, (state.Buttons & 0x0400) != 0);
         }
 
-        if (!SnapshotValid)
-        {
-            Array.Clear(openingPress);
-            edge = false;
-        }
-
+        var toggle = gestures.Update(samples, visible, generation, now, maximumHoldMs);
         Status = Connections != 0 ? "Experimental Guide active · release to open; press to close." : "No controller was read by Guide. Open the overlay from the tray.";
-        if (edge && active)
+        foreach (var entry in gestures.Diagnostics)
+            DiagnosticObserved?.Invoke(entry);
+        if (toggle && active)
             pressed?.Invoke();
     }
 
@@ -449,12 +351,7 @@ public unsafe sealed class XInputGuideBackend : IGuideBackend
     {
         active = false;
         pressed = null;
-        Held = false;
-        SnapshotValid = false;
-        Connections = 0;
-        overlayContext = false;
-        Array.Clear(armed);
-        Array.Clear(openingPress);
+        gestures.Reset();
     }
 
     public bool Unregister()
@@ -481,9 +378,9 @@ internal static class GuidePolling
 {
     internal static bool Allowed(bool enabled, bool diagnostic, bool preview) => enabled && !diagnostic && !preview;
     internal static int Interval(bool active, bool visible, bool connected) => active ? 20 : visible ? 30 : connected ? 120 : 500;
-    internal static bool Consume(ref bool guideRequest, bool chordRequest)
+    internal static bool Consume(ref bool guideRequest)
     {
-        var toggle = guideRequest || chordRequest;
+        var toggle = guideRequest;
         guideRequest = false;
         return toggle;
     }
