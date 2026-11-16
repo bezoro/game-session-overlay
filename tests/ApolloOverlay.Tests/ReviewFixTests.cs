@@ -291,20 +291,18 @@ internal static class ReviewFixTests
                     w.Close();
                 }
             });
-        test("RF physical input coverage includes mouse buttons and ignores the low bit", () =>
+        test("RF physical input requires every key and mouse release while ignoring the historical low bit", () =>
         {
             var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
-                var read = new HashSet<int>();
-                w.PhysicalKeyReader = k =>
-                {
-                    read.Add(k);
-                    return 1;
-                };
+                w.PhysicalKeyReader = _ => 1;
                 Require(w.PhysicalKeysNeutral(), "Low bit must not mean held");
-                Require(read.SetEquals(Enumerable.Range(1, 6).Concat(Enumerable.Range(8, 0xFE - 8 + 1))),
-                    "Keyboard or mouse-button VK coverage differs");
+                foreach (var held in Enumerable.Range(1, 6).Concat(Enumerable.Range(8, 0xFE - 8 + 1)))
+                {
+                    w.PhysicalKeyReader = key => key == held ? unchecked((short)0x8000) : (short)1;
+                    Require(!w.PhysicalKeysNeutral(), "Held keyboard or mouse input was ignored: VK 0x" + held.ToString("X2"));
+                }
             }
             finally
             {
