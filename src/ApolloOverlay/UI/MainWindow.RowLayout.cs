@@ -73,9 +73,8 @@ public partial class MainWindow
             FocusVisualStyle = null,
             Tag = "description:" + id
         };
-        AutomationProperties.SetName(reason, title + ". " + description);
-        AutomationProperties.SetHelpText(reason, description);
         SetActionHost(button, reason);
+        UpdateEntryAutomation(button);
         reason.SetBinding(MarginProperty, new Binding(nameof(Margin)) { Source = button });
         Grid.SetRow(reason, index);
         Grid.SetColumn(reason, row is null ? 0 : column);

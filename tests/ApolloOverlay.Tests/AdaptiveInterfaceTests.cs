@@ -4,12 +4,31 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Media;
 using ApolloOverlay;
 
 internal static class AdaptiveInterfaceTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        test("compact header keeps its brand readable without losing application or build identity", () =>
+        {
+            using var host = new SessionInterfaceTests.Host();
+            var window = host.Window;
+            host.Open(360, 480);
+            var brand = (TextBlock)window.FindName("HeaderBrand");
+            var version = (TextBlock)window.FindName("HeaderIdentity");
+            var measured = new FormattedText(brand.Text, System.Globalization.CultureInfo.CurrentUICulture,
+                brand.FlowDirection, new Typeface(brand.FontFamily, brand.FontStyle, brand.FontWeight, brand.FontStretch),
+                brand.FontSize, Brushes.Black, VisualTreeHelper.GetDpi(brand).PixelsPerDip);
+            Require(brand.IsVisible && measured.WidthIncludingTrailingWhitespace <= brand.ActualWidth + 1,
+                "The compact brand still requires ellipsis");
+            Require(window.Title == "Game Session Overlay" && AutomationProperties.GetName(brand) == window.Title
+                && Equals(brand.ToolTip, window.Title), "Compact branding changed or hid the full application identity");
+            Require(version.IsVisible && version.Text == "v" + AppBuild.Current.Version.Split('+')[0]
+                && version.ToolTip is string details && details.Contains(AppBuild.Current.Display, StringComparison.Ordinal),
+                "The compact header lost its complete version or build details");
+        });
         test("compact uncertain result remains pinned with its concise recovery and full details", () =>
         {
             var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);

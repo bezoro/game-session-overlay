@@ -105,6 +105,7 @@ static class Program
     {
         ["--test-infrastructure"] = Suite("Runner evidence and WPF fixture ownership", _ => TestInfrastructureTests.Run(Case)),
         ["--master-audio"] = Suite("Serialized master audio ownership and verification", _ => MasterAudioTests.Run(Case)),
+        ["--audio-clarity"] = Suite("Audio availability, recovery guidance and editor continuity", _ => AudioClarityTests.Run(Case)),
         ["--startup-status"] = Suite("Observed startup registration outcomes", _ => StartupStatusTests.Run(Case)),
         ["--installed-integration"] = Suite("Installed startup and cross-process mutation ownership", _ => InstalledIntegrationTests.Run(Case)),
         ["--input-safety"] = Suite("Controller slot handoff and input safety", _ => InputSafetyTests.Run(Case)),
@@ -890,6 +891,7 @@ static class Program
         CorrectionTests.Run(Case, Path.GetDirectoryName(Path.GetFullPath(output))!);
         StartupStatusTests.Run(Case);
         MasterAudioTests.Run(Case);
+        AudioClarityTests.Run(Case);
         InputSafetyTests.Run(Case);
         TestInfrastructureTests.Run(Case);
         return Finish(output);

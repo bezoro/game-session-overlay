@@ -23,17 +23,23 @@ public partial class MainWindow
     {
         if (view.Current.Route == OverlayRoute.WindowsAudio)
         {
-            var volume = entries.FirstOrDefault(e => e.Id == "volume");
-            if (volume is not null && volume.Available != state.Available)
-            {
-                RefreshRows();
-                return;
-            }
-
-            SetEntryText("volume", "Volume · " + (state.Available ? state.Volume.ToString("P0") : "unavailable"));
-            SetEntryText("mute", state.Muted ? "Unmute" : "Mute");
+            SetFeatureEntry("volume-down", "Lower volume", MasterVolumeLowerDescription(state), state.Available);
+            SetFeatureEntry("volume", MasterVolumeTitle(state), MasterVolumeDescription(state), state.Available);
+            SetFeatureEntry("mute", state.Muted ? "Unmute" : "Mute", MasterMuteDescription(state), state.Available);
+            SyncSessionSlider("volume", state.Available ? state.Volume : null);
+            if (entries.FirstOrDefault(entry => entry.Id == "volume")?.Button.Content is ActionButtonContent { EditorSlider: { } slider })
+                slider.Visibility = state.Available ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+            SetEntryDescription("volume", MasterVolumeDescription(state),
+                helpText: state.Available ? MasterVolumeDescription(state) : state.Status + " " + MasterVolumeDescription(state));
         }
     }
+
+    private static string MasterVolumeTitle(AudioSnapshot state) => "Volume · " + (state.Available ? state.Volume.ToString("P0") : "unavailable");
+    private static string MasterVolumeLowerDescription(AudioSnapshot state) => state.Available ? "− 5% · default Windows output" : "No output available to adjust";
+    private static string MasterMuteDescription(AudioSnapshot state) => state.Available ? "Mutes or unmutes the Windows output" : "No output available to mute";
+    private static string MasterVolumeDescription(AudioSnapshot state) => state.Available
+        ? "+ 5% · ← / → adjusts"
+        : "Choose Audio devices to check your output";
 
     private void AdjustVolume(float delta) => ChangeMasterAudio(audio.Current.Volume + delta);
     private void ChangeMasterAudio(float? volume = null, bool? muted = null)

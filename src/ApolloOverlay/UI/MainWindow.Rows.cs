@@ -15,15 +15,19 @@ public partial class MainWindow
     private bool narrow;
     private void SetEntryText(string id, string title)
     {
-        if (entries.FirstOrDefault(e => e.Id == id)?.Button is not { } button)
+        if (entries.FirstOrDefault(e => e.Id == id) is not { } entry)
             return;
+        var button = entry.Button;
         if (button.Content is ActionButtonContent content)
+        {
             content.Title.Text = title;
+            UpdateDescriptionVisibility(id, content, entry.Available);
+        }
         AutomationProperties.SetName(button, title);
         UpdateEntryAutomation(button);
     }
 
-    private void SetEntryDescription(string id, string description, string? inputPrompt = null)
+    private void SetEntryDescription(string id, string description, string? inputPrompt = null, string? helpText = null)
     {
         var index = entries.FindIndex(e => e.Id == id);
         if (index < 0)
@@ -38,15 +42,23 @@ public partial class MainWindow
                 content.Description.Text = ActionDescription(id, description, entry.Available);
                 AutomationProperties.SetName(content.Description, description);
             }
-            content.Description.Visibility = content.AllowsDescription && description.Length > 0 && (id == "audio" || !(CompactAction(id) || QuickAccessAction(id)) || !entry.Available) ? Visibility.Visible : Visibility.Collapsed;
+            UpdateDescriptionVisibility(id, content, entry.Available);
         }
 
-        AutomationProperties.SetHelpText(entry.Button, description);
+        AutomationProperties.SetHelpText(entry.Button, helpText ?? description);
         UpdateEntryAutomation(entry.Button);
         entries[index] = entry with
         {
-            Reason = description
+            Reason = helpText ?? description
         };
+    }
+
+    private void UpdateDescriptionVisibility(string id, ActionButtonContent content, bool available)
+    {
+        var description = InputPrompt.Read(content.Description).Trim();
+        var repeated = string.Equals(content.Title.Text.Trim(), description, StringComparison.OrdinalIgnoreCase);
+        content.Description.Visibility = content.AllowsDescription && id != "close" && description.Length > 0 && !repeated
+            && (id == "audio" || !CompactAction(id) || !available) ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void UpdateEntryAutomation(Button button)
@@ -54,7 +66,9 @@ public partial class MainWindow
         if (FindActionHost(button) is not { } description)
             return;
         var help = AutomationProperties.GetHelpText(button);
-        AutomationProperties.SetName(description, AutomationProperties.GetName(button) + ". " + help);
+        var title = AutomationProperties.GetName(button);
+        var repeated = string.Equals(title.Trim(), help.Trim(), StringComparison.OrdinalIgnoreCase);
+        AutomationProperties.SetName(description, help.Length == 0 || repeated ? title : title + ". " + help);
         AutomationProperties.SetHelpText(description, help);
     }
 
@@ -292,7 +306,6 @@ public partial class MainWindow
             grid.Description.Margin = new(0, 2, 0, 0);
             grid.Description.TextWrapping = quickAccess && !compactShortcut ? TextWrapping.Wrap : TextWrapping.NoWrap;
             grid.Description.TextTrimming = TextTrimming.CharacterEllipsis;
-            grid.Description.Visibility = description.Length > 0 && (!available || id == "audio") ? Visibility.Visible : Visibility.Collapsed;
             grid.ColumnDefinitions[0].Width = new GridLength(26);
             grid.Icon.Width = grid.Icon.Height = 20;
             badge.Width = badge.Height = 22;
@@ -340,8 +353,7 @@ public partial class MainWindow
             grid.Description.TextTrimming = TextTrimming.CharacterEllipsis;
         }
 
-        if (id == "close")
-            grid.Description.Visibility = Visibility.Collapsed;
+        UpdateDescriptionVisibility(id, grid, available);
         if (quickAccess && (displayTitle != title || displayDescription != description))
         {
             button.ToolTip = displayTitle != title ? title + " · " + description : description;

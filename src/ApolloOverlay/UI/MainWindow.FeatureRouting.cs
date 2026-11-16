@@ -42,11 +42,11 @@ public partial class MainWindow
         var gameVolume = AddRow("session-volume", GameVolumeTitle, GameVolumeDescription, ToggleGameAudio, gameAudio?.CanSetMute == true);
         AddSessionSlider(gameVolume, gameAudio?.VolumeMaximum ?? 0, value => SetGameVolume(value));
         SyncSessionSlider("session-volume", gameAudio?.VolumeMaximum);
-        var outputVolume = AddRow("windows-volume", WindowsVolumeTitle, systemAudio.Current.OutputName, () => ChangeMasterAudio(muted: !audio.Current.Muted), audio.Current.Available);
+        var outputVolume = AddRow("windows-volume", WindowsVolumeTitle, WindowsVolumeDescription, () => ChangeMasterAudio(muted: !audio.Current.Muted), audio.Current.Available);
         AddSessionSlider(outputVolume, audio.Current.Volume, value => ChangeMasterAudio(value));
         SyncSessionSlider("windows-volume", audio.Current.Available ? audio.Current.Volume : null);
         var first = Rows.RowDefinitions.Count;
-        AddRow("microphone", MicrophoneTitle, systemAudio.Current.MicrophoneName, ToggleMicrophone, systemAudio.Current.MicrophoneMuted is not null, row: narrow ? null : first, column: 0);
+        AddRow("microphone", MicrophoneTitle, MicrophoneDescription, ToggleMicrophone, systemAudio.Current.MicrophoneMuted is not null, row: narrow ? null : first, column: 0);
         AddRow("session-mixer", "Audio mixer", "Audio for each app", () => OpenFeature(OverlayRoute.Mixer, "mixer-refresh"), row: narrow ? null : first, column: 1);
         Section("Your session");
         first = Rows.RowDefinitions.Count;

@@ -35,7 +35,8 @@ public partial class MainWindow
 
         if (CurrentMixerTarget is not { } target || mixerStates.GetValueOrDefault(WindowId(target)) is not { } selected)
             return;
-        SetFeatureEntry("mixer-volume", selected.CanSetVolume ? $"Volume · {selected.VolumeMaximum:P0}" : "Volume unavailable", InputHint("← / → adjusts volume", "Arrow keys adjust · Tab leaves the slider", "Drag to adjust volume"), selected.CanSetVolume);
+        SetFeatureEntry("mixer-volume", selected.CanSetVolume ? $"Volume · {selected.VolumeMaximum:P0}" : "Volume unavailable", MixerVolumeRecovery, selected.CanSetVolume);
+        UpdateMixerVolumeHint();
         SetFeatureEntry("mixer-mute", selected.MuteState == ApplicationMuteState.Muted ? "Unmute audio" : "Mute app", target.ProcessName, selected.CanSetMute);
         SyncSessionSlider("mixer-volume", selected.VolumeMaximum);
     }
@@ -56,6 +57,24 @@ public partial class MainWindow
         }
     }
     private string WindowsVolumeTitle => audio.Current.Available ? audio.Current.Muted ? "Output · muted" : $"Output · {audio.Current.Volume:P0}" : "Output unavailable";
+    private string WindowsVolumeDescription => audio.Current.Available
+        ? systemAudio.Current.Outputs.Count > 0 ? systemAudio.Current.OutputName : "Default Windows output"
+        : "Choose Audio devices to check your output";
+    private string MicrophoneDescription => systemAudio.Current.MicrophoneMuted is not null
+        ? systemAudio.Current.MicrophoneName : "Choose Audio devices to check your microphone";
+    private string AudioDevicesDescription => systemAudio.Current.Outputs.Count > 0
+        ? systemAudio.Current.OutputName : "Check connected devices, then refresh the list";
+    private const string MixerVolumeRecovery = "Refresh apps to check available audio sessions";
+
+    private void UpdateMixerVolumeHint()
+    {
+        if (entries.FirstOrDefault(entry => entry.Id == "mixer-volume") is not { } volume)
+            return;
+        if (volume.Available)
+            SetEntryPrompt("mixer-volume", InputHint("{DpadHorizontal} adjusts volume", "{Left}/{Right} adjust · {Tab} leaves the slider", "{MouseLeft} drag to adjust volume"));
+        else
+            SetEntryDescription("mixer-volume", MixerVolumeRecovery);
+    }
     private string MicrophoneTitle => systemAudio.Current.MicrophoneMuted switch
     {
         true => "Microphone · muted",
@@ -67,8 +86,9 @@ public partial class MainWindow
     {
         var gameAudio = HubAudioSnapshot;
         SetFeatureEntry("session-volume", GameVolumeTitle, GameVolumeDescription, gameAudio?.CanSetMute == true);
-        SetFeatureEntry("windows-volume", WindowsVolumeTitle, systemAudio.Current.OutputName, audio.Current.Available);
-        SetFeatureEntry("microphone", MicrophoneTitle, systemAudio.Current.MicrophoneName, systemAudio.Current.MicrophoneMuted is not null);
+        SetFeatureEntry("windows-volume", WindowsVolumeTitle, WindowsVolumeDescription, audio.Current.Available);
+        SetFeatureEntry("microphone", MicrophoneTitle, MicrophoneDescription, systemAudio.Current.MicrophoneMuted is not null);
+        SetEntryDescription("audio-devices", AudioDevicesDescription);
         var media = CurrentMedia;
         SyncSessionSlider("session-volume", gameAudio?.VolumeMaximum);
         SyncSessionSlider("windows-volume", audio.Current.Available ? audio.Current.Volume : null);
@@ -152,11 +172,12 @@ public partial class MainWindow
         {
             Section(target.Title);
             var state = mixerStates.GetValueOrDefault(WindowId(target));
-            var volume = AddRow("mixer-volume", state?.CanSetVolume == true ? $"Volume · {state.VolumeMaximum:P0}" : "Volume unavailable", "← / → adjusts volume", () =>
+            var volume = AddRow("mixer-volume", state?.CanSetVolume == true ? $"Volume · {state.VolumeMaximum:P0}" : "Volume unavailable", MixerVolumeRecovery, () =>
             {
             }, state?.CanSetVolume == true);
             if (state?.CanSetVolume == true)
                 AddSessionSlider(volume, state.VolumeMaximum!.Value, value => ChangeMixerVolume(target, value));
+            UpdateMixerVolumeHint();
             AddRow("mixer-mute", state?.MuteState == ApplicationMuteState.Muted ? "Unmute audio" : "Mute app", target.ProcessName, () =>
             {
                 if (!Controller.Platform.Valid(target) || mixerStates.GetValueOrDefault(WindowId(target)) is not { CanSetMute: true } current)
