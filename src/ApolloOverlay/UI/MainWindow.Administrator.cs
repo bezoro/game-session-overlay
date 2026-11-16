@@ -27,11 +27,8 @@ public partial class MainWindow
             startup.Available
                 ? "Current session: administrator · " + (startup.Enabled ? "applies at the next sign-in" : "Windows startup remains off")
                 : "Current session: administrator · install with Setup to remember this mode",
-            () => StartSessionAction("administrator-startup", token => Task.Run(() =>
-            {
-                token.ThrowIfCancellationRequested();
-                return StartupRegistration.SetElevated(!startup.Elevated);
-            }, token), RefreshRows), startup.Available);
+            () => StartSessionAction("administrator-startup", token => ApplyStartupChange(() => StartupRegistration.SetElevated(!startup.Elevated), token)),
+            startup.Available && startupStatusFresh);
     }
 
     private void RestartAdministratorFromTray() => BeginAdministratorRestart(fromTray: true);

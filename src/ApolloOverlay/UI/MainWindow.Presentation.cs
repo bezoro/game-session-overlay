@@ -281,7 +281,7 @@ public partial class MainWindow
         }
 
         UpdateSessionActionHint();
-        var details = page == 1 || subpage == "details";
+        var details = view.Tab == OverlayTab.Apps || view.Current.Route == OverlayRoute.Details;
         var prompt = inputMethod switch
         {
             "mouse" => "{MouseLeft} Select · {MouseScroll} Scroll" + (details ? " · {MouseRight} Options" : ""),

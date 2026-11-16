@@ -121,7 +121,7 @@ public partial class MainWindow
         if (CloseTarget is not { } target
             || dispatchSource is null
             || dispatchSource == -1 && !CloseKeysReleased()
-            || busy || TransitionPending || !NavigationAllowed)
+            || busy || TransitionPending || !ValidateNavigationOwnership())
             return;
 
         var activatingSlot = dispatchSource > 0 ? dispatchSource - 1 : null;
@@ -162,7 +162,7 @@ public partial class MainWindow
         ActionResult result;
         try
         {
-            result = !target.CanClose || !Controller.Platform.Valid(target) || !NavigationAllowed || closeRequested
+            result = !target.CanClose || !Controller.Platform.Valid(target) || !ValidateNavigationOwnership() || closeRequested
                 ? new(ResultKind.Unavailable, "Window unavailable or focus changed. No close request was sent.")
                 : await Controller.Platform.CloseConfirmed(target, request.Token, PrepareForConsent);
         }

@@ -377,6 +377,9 @@ public partial class MainWindow
                 case "system":
                     Page(2);
                     break;
+                case "audio":
+                    NavigateTab(OverlayTab.Audio);
+                    break;
                 case "options":
                     OpenOptions(target!);
                     break;
@@ -386,7 +389,6 @@ public partial class MainWindow
                 default:
                     OpenView(new(route switch
                     {
-                        "audio" => OverlayRoute.WindowsAudio,
                         "integrations" => OverlayRoute.Integrations,
                         "customize" => OverlayRoute.Customize,
                         "setup" => OverlayRoute.Setup,

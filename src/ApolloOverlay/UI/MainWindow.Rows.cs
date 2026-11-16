@@ -49,9 +49,9 @@ public partial class MainWindow
         };
     }
 
-    private static void UpdateEntryAutomation(Button button)
+    private void UpdateEntryAutomation(Button button)
     {
-        if (button.Resources["DescriptionTarget"] is not Border description)
+        if (FindActionHost(button) is not { } description)
             return;
         var help = AutomationProperties.GetHelpText(button);
         AutomationProperties.SetName(description, AutomationProperties.GetName(button) + ". " + help);
@@ -91,8 +91,8 @@ public partial class MainWindow
         {
             var previous = entries.Select(e => e.Id).ToArray();
             var selectedFooter = IsFooterAction(navigation.Id) && previous.Contains(navigation.Id);
-            entries.RemoveAll(e => e.Id is "save-pending" or "discard-pending" or "operation-details" || (e.Id == "dismiss-operation" && subpage != "operation"));
-            if (operationNotice.AllowsActions && subpage != "operation")
+            entries.RemoveAll(e => e.Id is "save-pending" or "discard-pending" or "operation-details" || (e.Id == "dismiss-operation" && view.Current.Route != OverlayRoute.OperationResult));
+            if (operationNotice.AllowsActions && view.Current.Route != OverlayRoute.OperationResult)
             {
                 entries.Add(new("operation-details", OperationDetailsButton, OpenOperation, !busy && !TransitionPending, "Read the full result"));
                 entries.Add(new("dismiss-operation", DismissOperationButton, DismissOperation, !busy && !TransitionPending, "Dismiss result"));
@@ -178,7 +178,12 @@ public partial class MainWindow
 
         )
         {
-            var selected = pair.Item2 == 2 ? view.Current.Route == OverlayRoute.WindowsAudio : pair.Item2 == page && view.Current.Route != OverlayRoute.WindowsAudio;
+            var selected = pair.Item2 switch
+            {
+                0 => view.Tab == OverlayTab.Hub,
+                1 => view.Tab == OverlayTab.Apps,
+                _ => view.Tab == OverlayTab.Audio
+            };
             pair.Item1.BorderThickness = new(0, 0, 0, 2);
             if (selected)
                 pair.Item1.SetResourceReference(BorderBrushProperty, ThemeSupport.Accent);
@@ -312,7 +317,6 @@ public partial class MainWindow
             count.SetResourceReference(BackgroundProperty, ThemeSupport.Card);
             Grid.SetColumn(count, 2);
             grid.Children.Add(count);
-            grid.Resources["CountBadge"] = count;
         }
 
         var button = new Button
@@ -323,7 +327,7 @@ public partial class MainWindow
             IsEnabled = available,
             Padding = compactShortcut ? new(5, 2, 5, 2) : compactAction ? new(8) : new(12, 8, 12, 8)
         };
-        if (page == 0 && subpage == "" && id == "apps")
+        if (view.Current.Route == OverlayRoute.Hub && id == "apps")
         {
             button.Background = Brushes.Transparent;
             button.BorderThickness = new(0);
@@ -347,7 +351,7 @@ public partial class MainWindow
             button.SetResourceReference(ForegroundProperty, ThemeSupport.Critical);
         AutomationProperties.SetName(button, title);
         AutomationProperties.SetHelpText(button, description);
-        button.Resources["ABadge"] = badge;
+        grid.SelectionBadge = badge;
         button.GotKeyboardFocus += (_, focus) =>
         {
             if (navigation.Id != id)

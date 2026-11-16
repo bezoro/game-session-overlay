@@ -18,7 +18,6 @@ public partial class MainWindow
     private XInputGuideBackend? guideBackend;
     private GuideConnection? guideConnection;
     private bool guideToggleRequested;
-    private GuideDiagnosticTracker guideDiagnostics = new();
     private void UpdatePolling(bool connected = true) => timer.Interval = TimeSpan.FromMilliseconds(steamOwner is not null || effectFocusTransferred ? 16 : GuidePolling.Interval(guideBackend?.Active == true, IsVisible, connected));
     private void ConfigureGuide()
     {
@@ -31,12 +30,14 @@ public partial class MainWindow
         }
         else if (guideBackend is null)
         {
-            guideBackend = new();
+            guideBackend = new()
+            {
+                DiagnosticObserved = RecordGuideDiagnostic
+            };
             guideConnection = new(guideBackend);
             guideConnection.Start(RequestGuideToggle);
         }
 
-        guideDiagnostics = new();
         if (CommandLoggingEnabled)
             Controller.Diagnostics.Commands.Record("guide-monitor", guideBackend?.Active == true ? ResultKind.Completed
                 : Controller.Settings.GuideXInputEnabled ? ResultKind.Unavailable : ResultKind.Completed, CommandSource,
@@ -57,13 +58,15 @@ public partial class MainWindow
     {
         var now = Environment.TickCount64;
         backend.PollForOverlay(IsVisible, focusCycle, now, Controller.Settings.GuideOpenMaxHoldMs);
-        if (CommandLoggingEnabled)
-            foreach (var entry in guideDiagnostics.Observe(backend.SnapshotValid, backend.Connections, backend.Held,
-                IsVisible, focusCycle, now, Controller.Settings.GuideOpenMaxHoldMs))
-                Controller.Diagnostics.Commands.Record(entry.Command, entry.Outcome, "controller", entry.Reason);
-        if (!IsVisible || (subpage != "integrations" && page != 2))
+        if (!IsVisible || (view.Current.Route != OverlayRoute.Integrations && view.Tab != OverlayTab.System))
             return;
         UpdateGuideStatus(backend.Status);
+    }
+
+    private void RecordGuideDiagnostic(GuideDiagnostic entry)
+    {
+        if (CommandLoggingEnabled)
+            Controller.Diagnostics.Commands.Record(entry.Command, entry.Outcome, "controller", entry.Reason);
     }
 
     internal void UpdateGuideStatus(string status) => SetEntryDescription("guide", status);
@@ -141,7 +144,7 @@ public partial class MainWindow
             fadeInterrupted = true;
         if (fadingOut)
         {
-            if (GuidePolling.Consume(ref guideToggleRequested, false))
+            if (GuidePolling.Consume(ref guideToggleRequested))
             {
                 SetInputMethod("controller");
                 OpenPanel();
@@ -162,10 +165,10 @@ public partial class MainWindow
             CancelSteamOwner("New input or context changed while focusing.");
         if (TransitionPending)
         {
-            if (GuidePolling.Consume(ref guideToggleRequested, current.Toggle))
+            if (GuidePolling.Consume(ref guideToggleRequested))
             {
                 SetInputMethod("controller");
-                Toggle(trustedDismiss: current.Toggle || guideBackend?.SnapshotValid == true);
+                Toggle(trustedDismiss: guideBackend?.SnapshotValid == true);
                 return;
             }
 
@@ -176,10 +179,10 @@ public partial class MainWindow
             return;
         }
 
-        if (GuidePolling.Consume(ref guideToggleRequested, current.Toggle))
+        if (GuidePolling.Consume(ref guideToggleRequested))
         {
             SetInputMethod("controller");
-            Toggle(trustedDismiss: current.Toggle || guideBackend?.SnapshotValid == true);
+            Toggle(trustedDismiss: guideBackend?.SnapshotValid == true);
             return;
         }
 
@@ -193,7 +196,7 @@ public partial class MainWindow
             SetInputMethod("controller");
         }
 
-        if (!NavigationAllowed)
+        if (!ValidateNavigationOwnership())
         {
             var refusedButtons = events.Pressed & ~PadButtons.B;
             if (!ownedDialog && (refusedButtons != 0 || events.Direction != 0) && CommandLoggingEnabled)

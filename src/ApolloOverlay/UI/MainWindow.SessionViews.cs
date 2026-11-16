@@ -311,8 +311,8 @@ public partial class MainWindow
         AddRow("volume-down", "Lower volume", "− 5% · default Windows output", () => AdjustVolume(-.05f), state.Available);
         var volume = AddRow("volume", "Volume · " + (state.Available ? state.Volume.ToString("P0") : "unavailable"), "+ 5% · ← / → adjusts", () => AdjustVolume(.05f), state.Available);
         if (state.Available)
-            AddSessionSlider(volume, state.Volume, value => AudioAction(audio.Set(value, expectedEndpoint: audio.Current.EndpointId)));
-        AddRow("mute", state.Muted ? "Unmute" : "Mute", "Mutes or unmutes the Windows output", () => AudioAction(audio.Set(muted: !audio.Current.Muted)), state.Available);
+            AddSessionSlider(volume, state.Volume, value => ChangeMasterAudio(value));
+        AddRow("mute", state.Muted ? "Unmute" : "Mute", "Mutes or unmutes the Windows output", () => ChangeMasterAudio(muted: !audio.Current.Muted), state.Available);
         AddRow("microphone", MicrophoneTitle, systemAudio.Current.MicrophoneName, ToggleMicrophone, systemAudio.Current.MicrophoneMuted is not null);
         AddRow("session-mixer", "App mixer", "Separate game, voice and music audio", () => OpenFeature(OverlayRoute.Mixer, "mixer-refresh"));
         AddRow("audio-devices", "Audio output", systemAudio.Current.OutputName, () => OpenFeature(OverlayRoute.AudioDevices, "device-refresh"));

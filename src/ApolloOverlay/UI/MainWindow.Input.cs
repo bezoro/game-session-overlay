@@ -34,9 +34,9 @@ public partial class MainWindow
     private static bool SteamKeyOwned(int key, int mask) => (mask & 1) != 0 && key is 16 or 0xA0 or 0xA1 || (mask & 2) != 0 && key == 9;
     internal bool PhysicalKeysNeutral(int owned = 0)
     {
-        if ((PhysicalKeyReader(0x03) & 0x8000) != 0)
-            return false;
-        for (var key = 0x08; key <= 0xFE; key++)
+        // GetAsyncKeyState reports mouse buttons at VK 0x01..0x06. They must
+        // participate in mixed-device handoff, fade and shortcut release checks.
+        for (var key = 0x01; key <= 0xFE; key++)
             if (!SteamKeyOwned(key, owned) && (PhysicalKeyReader(key) & 0x8000) != 0)
                 return false;
         return heldKeys.All(k => SteamKeyOwned(KeyInterop.VirtualKeyFromKey(k), owned) || (PhysicalKeyReader(KeyInterop.VirtualKeyFromKey(k)) & 0x8000) == 0);
@@ -45,6 +45,7 @@ public partial class MainWindow
     private void OnLocalPreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
         SetInputMethod("mouse");
+        ValidateNavigationOwnership();
         recoveryMouseRelease = null;
         if (fadingOut)
         {
@@ -94,6 +95,7 @@ public partial class MainWindow
         }
 
         SetInputMethod("keyboard");
+        ValidateNavigationOwnership();
         if (HandleSessionKeyboardKey(e) || HandleSessionSliderKey(e))
             return;
         var recoveryKey = NormalizeKey(e.Key, e.SystemKey, e.ImeProcessedKey, e.DeadCharProcessedKey);

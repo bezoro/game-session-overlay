@@ -9,33 +9,15 @@ public partial class MainWindow
 {
     private readonly OverlayViewState view = new();
     private long nextConfirmationScroll;
-    private sealed record Entry(string Id, Button Button, Action Run, bool Available, string Reason);
+    private sealed record Entry(
+        string Id, Button Button, Action Run, bool Available, string Reason,
+        Border? FocusHost = null, Border? LayoutHost = null);
     private readonly List<Entry> entries = [];
     private NavState navigation = new("session-card");
     private string lastContentSelection = "session-card";
-    private int page;
-    private string subpage = "";
-    private WindowRef? detail;
     private void SaveView() => view.Remember(navigation.Id, ContentScroll.VerticalOffset);
     private void SyncView()
     {
-        page = (int)view.Tab;
-        detail = view.Current.Target;
-        subpage = view.Current.Route switch
-        {
-            OverlayRoute.WindowsAudio => "audio",
-            OverlayRoute.Details => "details",
-            OverlayRoute.TargetOptions => "options",
-            OverlayRoute.Integrations => "integrations",
-            OverlayRoute.Customize => "customize",
-            OverlayRoute.Setup => "setup",
-            OverlayRoute.OperationResult => "operation",
-            OverlayRoute.Confirmation => "confirmation",
-            OverlayRoute.PlayniteBrowser => "playnite-browser",
-            OverlayRoute.Updates => "updates",
-            OverlayRoute.UpdateReview => "update-review",
-            _ => ""
-        };
         navigation = new(view.Current.SelectedId);
         AppearanceNavigationChanged();
     }
@@ -53,35 +35,26 @@ public partial class MainWindow
 
     internal void OpenOptions(WindowRef target) => OpenView(new(OverlayRoute.TargetOptions, target, "application-audio"));
     private void ChooseSession() => OpenView(new(OverlayRoute.Apps, SelectedId: Controller.Apps.FirstOrDefault() is { } w ? WindowId(w) : "refresh-apps", ChooseSession: true));
-    internal void Page(int index) => NavigateTab(index);
-    private void NavigateTab(int index, bool acknowledge = true) => RunSemanticCommand("navigate-tab", () => PageCore(index, acknowledge));
-    private void PageCore(int index, bool acknowledge)
+    internal void Page(int index) => NavigateTab((OverlayTab)((index + 3) % 3));
+    private void NavigateTab(OverlayTab tab, bool acknowledge = true) => RunSemanticCommand("navigate-tab", () => PageCore(tab, acknowledge));
+    private void PageCore(OverlayTab tab, bool acknowledge)
     {
         if (TransitionPending || Confirming || updateCommitting)
             return;
         if (updateBusy)
             CancelUpdateInteraction();
-        if (acknowledge && (index + 3) % 3 != page && interfaceActionDepth == 0)
+        if (acknowledge && tab != view.Tab && interfaceActionDepth == 0)
             RequestCue(FeedbackCue.Navigation);
         if (view.Current.Route == OverlayRoute.PlayniteBrowser)
             CancelPlayniteScan();
         SaveView();
-        view.SwitchTab((OverlayTab)((index + 3) % 3));
+        view.SwitchTab(tab);
         SyncView();
         RefreshRows();
         ContentScroll.ScrollToVerticalOffset(view.Current.ScrollOffset);
     }
 
-    private void Subpage(string name, string first) => OpenView(new(name switch
-    {
-        "audio" => OverlayRoute.WindowsAudio,
-        "details" => OverlayRoute.Details,
-        "options" => OverlayRoute.TargetOptions,
-        "integrations" => OverlayRoute.Integrations,
-        "customize" => OverlayRoute.Customize,
-        "setup" => OverlayRoute.Setup,
-        _ => OverlayRoute.OperationResult
-    }, detail, first));
+    private void OpenSubpage(OverlayRoute route, string first) => OpenView(new(route, view.Current.Target, first));
     private void UpdateSelectionMotion()
     {
         var context = InputContext;
@@ -126,12 +99,12 @@ public partial class MainWindow
 
             entry.Button.BorderThickness = new(2);
             entry.Button.SetResourceReference(BorderBrushProperty, selected ? ThemeSupport.Focus : ThemeSupport.Stroke);
-            if (selected && !entry.Available && entry.Button.Resources["DescriptionTarget"] is Border)
+            if (selected && !entry.Available && entry.FocusHost is not null)
                 entry.Button.BorderBrush = Brushes.Transparent;
             entry.Button.SetResourceReference(BackgroundProperty, selected ? ThemeSupport.FocusBackground : ThemeSupport.Control);
             if (entry.Id == "close")
                 entry.Button.Background = Brushes.Transparent;
-            if (page == 0 && subpage == "" && entry.Id == "apps")
+            if (view.Current.Route == OverlayRoute.Hub && entry.Id == "apps")
             {
                 if (selected)
                     entry.Button.SetResourceReference(BackgroundProperty, ThemeSupport.Card);
@@ -141,16 +114,16 @@ public partial class MainWindow
             }
 
             entry.Button.Effect = null;
-            if (entry.Button.Resources["ABadge"] is Border badge && entry.Button.Content is ActionButtonContent grid)
+            if (entry.Button.Content is ActionButtonContent { SelectionBadge: { } badge } grid)
             {
                 var showBadge = selected && entry.Available && inputMethod == "controller" && !entry.Id.StartsWith("window:", StringComparison.Ordinal) && grid.ColumnDefinitions[0].Width.Value > 0;
                 badge.Visibility = showBadge ? Visibility.Visible : Visibility.Hidden;
                 grid.Icon.Visibility = showBadge ? Visibility.Hidden : grid.ColumnDefinitions[0].Width.Value > 0 ? Visibility.Visible : Visibility.Collapsed;
             }
 
-            if (!selected && (entry.Id == "close" || page == 0 && subpage == "" && entry.Id == "apps"))
+            if (!selected && (entry.Id == "close" || view.Current.Route == OverlayRoute.Hub && entry.Id == "apps"))
                 entry.Button.BorderBrush = Brushes.Transparent;
-            if (entry.Button.Resources["DescriptionTarget"] is Border host)
+            if (entry.FocusHost is { } host)
             {
                 host.BorderThickness = new(2);
                 host.CornerRadius = new(10);
@@ -185,10 +158,10 @@ public partial class MainWindow
     internal string SelectedAction => navigation.Id;
     internal IReadOnlyList<string> ActionIds => entries.Select(e => e.Id).ToArray();
 
-    private bool IsFooterAction(string id) => id is "save-pending" or "discard-pending" || (subpage != "operation" && (id is "operation-details" or "dismiss-operation"));
+    private bool IsFooterAction(string id) => id is "save-pending" or "discard-pending" || (view.Current.Route != OverlayRoute.OperationResult && (id is "operation-details" or "dismiss-operation"));
     internal void Move(NavDirection direction)
     {
-        if (!NavigationAllowed || busy || TransitionPending)
+        if (!ValidateNavigationOwnership() || busy || TransitionPending)
             return;
         if (Confirming)
         {
@@ -196,7 +169,13 @@ public partial class MainWindow
             return;
         }
 
-        var reader = subpage == "operation" ? operationText : subpage == "details" ? detailsText : subpage == "update-review" ? updateNotesText : null;
+        var reader = view.Current.Route switch
+        {
+            OverlayRoute.OperationResult => operationText,
+            OverlayRoute.Details => detailsText,
+            OverlayRoute.UpdateReview => updateNotesText,
+            _ => null
+        };
         if (reader?.IsKeyboardFocusWithin == true)
         {
             if (direction == NavDirection.Up)
@@ -205,7 +184,14 @@ public partial class MainWindow
                 reader.LineDown();
             else
             {
-                navigation = new(subpage == "operation" ? direction == NavDirection.Left ? "operation-text" : "dismiss-operation" : subpage == "update-review" ? direction == NavDirection.Left ? "update-notes" : preparedUpdate is null ? "prepare-update" : "apply-update" : direction == NavDirection.Left ? "window-information" : "switch-detail");
+                var movingLeft = direction == NavDirection.Left;
+                var next = view.Current.Route switch
+                {
+                    OverlayRoute.OperationResult => movingLeft ? "operation-text" : "dismiss-operation",
+                    OverlayRoute.UpdateReview => movingLeft ? "update-notes" : preparedUpdate is null ? "prepare-update" : "apply-update",
+                    _ => movingLeft ? "window-information" : "switch-detail"
+                };
+                navigation = new(next);
                 SetSelection();
             }
 
@@ -237,7 +223,7 @@ public partial class MainWindow
 
         if (AdjustAppearanceColor(direction) || AdjustSessionFeature(direction) || AdjustGuideLimit(direction))
             return;
-        if (subpage == "audio" && navigation.Id == "volume" && direction is NavDirection.Left or NavDirection.Right)
+        if (view.Current.Route == OverlayRoute.WindowsAudio && navigation.Id == "volume" && direction is NavDirection.Left or NavDirection.Right)
         {
             AdjustVolume(direction == NavDirection.Left ? -.05f : .05f);
             return;
@@ -266,7 +252,7 @@ public partial class MainWindow
 
     internal void Sequential(int step)
     {
-        if (!NavigationAllowed || busy || TransitionPending)
+        if (!ValidateNavigationOwnership() || busy || TransitionPending)
             return;
         if (Confirming)
         {
@@ -290,7 +276,7 @@ public partial class MainWindow
 
     internal void ActivateEntry()
     {
-        if (!NavigationAllowed || TransitionPending)
+        if (!ValidateNavigationOwnership() || TransitionPending)
             return;
         var entry = entries.FirstOrDefault(e => e.Id == navigation.Id);
         if (entry is null)
@@ -317,7 +303,7 @@ public partial class MainWindow
     internal void Details() => RunSemanticCommand("window-options", DetailsCore);
     private void DetailsCore()
     {
-        if (!NavigationAllowed || busy || TransitionPending || Confirming || view.Current.Route is not (OverlayRoute.Hub or OverlayRoute.Apps or OverlayRoute.Details))
+        if (!ValidateNavigationOwnership() || busy || TransitionPending || Confirming || view.Current.Route is not (OverlayRoute.Hub or OverlayRoute.Apps or OverlayRoute.Details))
             return;
         if (HubCardSelected)
         {
@@ -395,9 +381,9 @@ public partial class MainWindow
             return;
         }
 
-        if (page != 0)
+        if (view.Tab != OverlayTab.Hub)
         {
-            NavigateTab(0, acknowledge: false);
+            NavigateTab(OverlayTab.Hub, acknowledge: false);
             return;
         }
 
@@ -405,7 +391,7 @@ public partial class MainWindow
     }
 
     internal void RevealSelection() => SetSelection();
-    private FrameworkElement FocusTarget(Entry entry) => !entry.Available && entry.Button.Resources["DescriptionTarget"] is FrameworkElement reason ? reason : entry.Button;
+    private static FrameworkElement FocusTarget(Entry entry) => !entry.Available && entry.FocusHost is { } reason ? reason : entry.Button;
     private void WireFixedActions()
     {
         HomeTab.Click += (_, _) => ClickTab(() => OpenPrimaryTab(0));
@@ -440,7 +426,7 @@ public partial class MainWindow
         {
             if (args.ChangedButton != System.Windows.Input.MouseButton.Right)
                 return;
-            if (!NavigationAllowed || busy || TransitionPending || Confirming || view.Current.Route != OverlayRoute.Hub)
+            if (!ValidateNavigationOwnership() || busy || TransitionPending || Confirming || view.Current.Route != OverlayRoute.Hub)
                 return;
             SetInputMethod("mouse");
             navigation = new("session-card");

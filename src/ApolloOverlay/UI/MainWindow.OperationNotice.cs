@@ -14,7 +14,7 @@ public partial class MainWindow
     {
         var changed = operationNotice.Update(Controller.Operation, now);
         var operation = operationNotice.Operation;
-        var show = operationNotice.Visible && !Confirming && subpage != "operation";
+        var show = operationNotice.Visible && !Confirming && view.Current.Route != OverlayRoute.OperationResult;
         var hub = view.Current.Route == OverlayRoute.Hub;
         var passive = !operationNotice.AllowsActions;
         // Reserve a single line on Session so brief acknowledgements never resize the viewport.
@@ -83,7 +83,7 @@ public partial class MainWindow
         if (!NavigationAllowed || busy || TransitionPending || Confirming)
             return;
         Controller.DismissOperation();
-        if (subpage == "operation")
+        if (view.Current.Route == OverlayRoute.OperationResult)
             Back();
         else
         {

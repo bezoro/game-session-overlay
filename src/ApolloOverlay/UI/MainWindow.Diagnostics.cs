@@ -29,10 +29,10 @@ public partial class MainWindow
                 Page(2);
                 break;
             case "audio":
-                Subpage("audio", "volume");
+                NavigateTab(OverlayTab.Audio);
                 break;
             case "integrations":
-                Subpage("integrations", "guide");
+                OpenSubpage(OverlayRoute.Integrations, "guide");
                 break;
             case "details":
                 if (Controller.Session.Anchor is { } selected)

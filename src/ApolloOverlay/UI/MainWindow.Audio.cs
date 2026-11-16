@@ -22,7 +22,7 @@ public partial class MainWindow
 
     internal void UpdateAudioEntries(AudioSnapshot state)
     {
-        if (subpage == "audio")
+        if (view.Current.Route == OverlayRoute.WindowsAudio)
         {
             var volume = entries.FirstOrDefault(e => e.Id == "volume");
             if (volume is not null && volume.Available != state.Available)
@@ -36,8 +36,15 @@ public partial class MainWindow
         }
     }
 
-    private void AdjustVolume(float delta) => AudioAction(audio.Set(audio.Current.Volume + delta));
-    private void AudioAction(ActionResult result) => RecordResult(result, "audio");
+    private void AdjustVolume(float delta) => ChangeMasterAudio(audio.Current.Volume + delta);
+    private void ChangeMasterAudio(float? volume = null, bool? muted = null)
+    {
+        if (!ValidateNavigationOwnership() || busy || TransitionPending)
+            return;
+        var endpoint = audio.Current.EndpointId;
+        // Volume stays in place: no focus handoff or controller release is required.
+        OperationTask = RunSessionAction("audio", token => audio.SetAsync(volume, muted, endpoint, token), null);
+    }
     private bool AudioFor(WindowRef target) => audioTarget?.Same(target) == true && appAudio.Target?.Same(target) == true && appAudio.Generation == audioGeneration;
     private WindowRef? HubAudioTarget => view.Current.Route == OverlayRoute.Hub && !Controller.Session.CardPending
         && Controller.Session.CardTarget is { Protected: false } target && Controller.CardTargetAvailable(target) ? target : null;
@@ -135,7 +142,7 @@ public partial class MainWindow
             };
             SetEntryText("application-mute", MuteActionTitle());
             SetEntryDescription("application-mute", AppAudioDescription());
-            if (entry.Button.Resources["DescriptionTarget"] is Border reason)
+            if (entry.FocusHost is { } reason)
                 AutomationProperties.SetName(reason, MuteActionTitle() + ". " + AppAudioDescription());
             if (entry.Available != available && navigation.Id == entry.Id)
                 SetSelection();

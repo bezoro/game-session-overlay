@@ -114,7 +114,7 @@ public partial class MainWindow
         var delta = direction == NavDirection.Left ? -.05f : .05f;
         if (navigation.Id == "windows-volume")
         {
-            AudioAction(audio.Set(Math.Clamp(audio.Current.Volume + delta, 0, 1), expectedEndpoint: audio.Current.EndpointId));
+            ChangeMasterAudio(Math.Clamp(audio.Current.Volume + delta, 0, 1));
             return true;
         }
 
@@ -198,7 +198,7 @@ public partial class MainWindow
 
     private void ChangeMixerVolume(WindowRef target, float value)
     {
-        if (!NavigationAllowed || busy || TransitionPending || CurrentMixerTarget?.Same(target) != true || !Controller.Platform.Valid(target))
+        if (!ValidateNavigationOwnership() || busy || TransitionPending || CurrentMixerTarget?.Same(target) != true || !Controller.Platform.Valid(target))
             return;
         OperationTask = RunSessionAction("mixer-volume", async token =>
         {
@@ -210,7 +210,7 @@ public partial class MainWindow
 
     private void SetGameVolume(float value)
     {
-        if (!NavigationAllowed || busy || TransitionPending || HubAudioTarget is not { } target || !AudioFor(target) || !appAudio.CanSetVolume)
+        if (!ValidateNavigationOwnership() || busy || TransitionPending || HubAudioTarget is not { } target || !AudioFor(target) || !appAudio.CanSetVolume)
             return;
         var context = audioGeneration;
         OperationTask = RunInPlaceCore(target, async token =>
@@ -238,7 +238,7 @@ public partial class MainWindow
             MinHeight = 24
         };
         slider.Style = (Style)FindResource("SessionVolumeSlider");
-        button.Resources["SessionSlider"] = slider;
+        ((ActionButtonContent)button.Content).EditorSlider = slider;
         System.Windows.Automation.AutomationProperties.SetName(slider, "Volume as a percentage");
         slider.ValueChanged += (_, _) =>
         {
@@ -255,7 +255,7 @@ public partial class MainWindow
 
     private void SyncSessionSlider(string id, float? value)
     {
-        if (entries.FirstOrDefault(entry => entry.Id == id)?.Button.Resources["SessionSlider"] is not Slider slider)
+        if (entries.FirstOrDefault(entry => entry.Id == id)?.Button.Content is not ActionButtonContent { EditorSlider: { } slider })
             return;
         slider.IsEnabled = value is not null;
         if (value is null || slider.IsMouseCaptureWithin)
@@ -276,7 +276,7 @@ public partial class MainWindow
         if (args.Key != Key.Tab
             || args.OriginalSource is Slider or TextBox
             || KeyboardModifiersReader() != ModifierKeys.None
-            || entries.FirstOrDefault(entry => entry.Id == navigation.Id)?.Button.Resources["SessionSlider"] is not Slider slider)
+            || entries.FirstOrDefault(entry => entry.Id == navigation.Id)?.Button.Content is not ActionButtonContent { EditorSlider: { } slider })
             return false;
         if (NavigationAllowed && navigationKeysArmed && !busy && !TransitionPending)
             slider.Focus();
