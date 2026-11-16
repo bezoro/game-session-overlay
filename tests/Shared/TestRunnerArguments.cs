@@ -1,6 +1,9 @@
 namespace ApolloOverlay.Testing;
 
-internal enum TestRunnerMode { All, Focused, Help, List, Invalid }
+internal enum TestRunnerMode
+{
+    All, Focused, Help, List, Invalid
+}
 
 internal sealed record TestRunnerRequest(TestRunnerMode Mode, string? Output = null, string? Command = null, string? Error = null);
 

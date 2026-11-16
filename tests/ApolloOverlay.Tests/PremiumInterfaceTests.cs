@@ -24,7 +24,7 @@ internal static class PremiumInterfaceTests
         };
         test("shared controller notice is visible and accessible", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 var notice = (TextBlock)w.FindName("SharedControlNotice");
@@ -39,7 +39,7 @@ internal static class PremiumInterfaceTests
         });
         test("premium neutral anchor wording", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 var card = WpfTestElements.Button(w, "session-card");
@@ -52,7 +52,7 @@ internal static class PremiumInterfaceTests
         });
         test("premium unavailable action has disabled UIA semantics", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 var card = new ButtonAutomationPeer(WpfTestElements.Button(w, "session-card"));
@@ -66,7 +66,7 @@ internal static class PremiumInterfaceTests
         });
         test("premium mouse app options affordance", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.Page(1);
@@ -79,7 +79,7 @@ internal static class PremiumInterfaceTests
         });
         test("premium audio decrease path", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.SetRenderState("audio");
@@ -92,7 +92,7 @@ internal static class PremiumInterfaceTests
         });
         test("premium mouse close controls", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.SetRenderState("confirmation");
@@ -105,7 +105,7 @@ internal static class PremiumInterfaceTests
         });
         test("premium durable dirty affordance after refresh and navigation", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.Controller.Change(w.Controller.Settings with
@@ -123,7 +123,7 @@ internal static class PremiumInterfaceTests
         });
         test("premium disabled Guide omitted from opening hints", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 var mode = (TextBlock)w.FindName("ModeLabel");
@@ -226,7 +226,7 @@ internal static class PremiumInterfaceTests
             {
                 var p = new TestPlatform();
                 p.Next = Task.FromResult(new ActionResult(kind, "fixture outcome"));
-                var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
+                var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic, activateOnShow: true);
                 try
                 {
                     Dispatch(w, "taskview");
@@ -248,7 +248,7 @@ internal static class PremiumInterfaceTests
             var p = new TestPlatform();
             var completion = new TaskCompletionSource<ActionResult>();
             p.Next = completion.Task;
-            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 Dispatch(w, "taskview");
@@ -273,7 +273,7 @@ internal static class PremiumInterfaceTests
             var p = new TestPlatform();
             var completion = new TaskCompletionSource<ActionResult>();
             p.Next = completion.Task;
-            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic, activateOnShow: true);
             Dispatch(w, "taskview");
             w.Close();
             var before = w.Controller.Operation;
@@ -284,7 +284,7 @@ internal static class PremiumInterfaceTests
         test("premium cancellation before dispatch sends no effect", () =>
         {
             var p = new TestPlatform();
-            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 WpfTestElements.Button(w, "taskview").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
@@ -298,7 +298,7 @@ internal static class PremiumInterfaceTests
         });
         test("premium Guide slider named focusable stable and dirty", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.Page(2);
@@ -316,7 +316,7 @@ internal static class PremiumInterfaceTests
         });
         test("premium controller reaches sticky discard from home", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.Controller.Change(w.Controller.Settings with
@@ -355,7 +355,7 @@ internal static class PremiumInterfaceTests
             {
                 var app = Application.Current!;
                 ThemeSupport.ForceForValidation(app, light);
-                var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+                var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
                 try
                 {
                     var root = Detach(w);
@@ -430,7 +430,7 @@ internal static class PremiumInterfaceTests
         ConfirmCase("close confirmation shows the named target, defaults to cancel and restores its origin", () =>
         {
             var p = new TestPlatform();
-            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.OpenOptions(p.Window);
@@ -454,7 +454,7 @@ internal static class PremiumInterfaceTests
         });
         ConfirmCase("close confirmation draws the complete decision at compact panel size", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(new TestPlatform(), TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(new TestPlatform(), TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 OpenCloseConfirmation(w);
@@ -482,7 +482,7 @@ internal static class PremiumInterfaceTests
         ConfirmCase("keyboard opening press and repeat cannot close; a fresh key dispatches once", () =>
         {
             var p = new TestPlatform();
-            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 var source = HwndSource.FromHwnd(new WindowInteropHelper(w).EnsureHandle());
@@ -515,7 +515,7 @@ internal static class PremiumInterfaceTests
         ConfirmCase("controller opening press and repeat cannot close; a fresh A dispatches once", () =>
         {
             var p = new TestPlatform();
-            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 AdmitFixtureWindow(w);
@@ -545,7 +545,7 @@ internal static class PremiumInterfaceTests
             ConfirmCase("close confirmation blocks " + cause, () =>
             {
                 var p = new TestPlatform();
-                var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
+                var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic, activateOnShow: true);
                 try
                 {
                     AdmitFixtureWindow(w);
@@ -577,7 +577,7 @@ internal static class PremiumInterfaceTests
         ConfirmCase("protected close and stale targets are blocked before confirmation", () =>
         {
             var p = new TestPlatform();
-            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.Confirm(p.Window with
@@ -621,7 +621,7 @@ internal static class PremiumInterfaceTests
         ThemeSupport.FollowSystem(Application.Current!);
         test("premium full outcome and dismiss reachable by keyboard and controller", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 const string message = "The window identity changed during the request. Open Apps, select the window again, and check for a save dialog before trying again. No additional command was sent.";
@@ -651,7 +651,7 @@ internal static class PremiumInterfaceTests
         });
         test("premium integration Guide description agrees with disabled preview state", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.SetRenderState("integrations");
@@ -668,7 +668,7 @@ internal static class PremiumInterfaceTests
         test("premium deactivation terminalizes undispatched action", () =>
         {
             var p = new TestPlatform();
-            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic, activateOnShow: true);
             var other = OwnedWindow();
             try
             {
@@ -696,7 +696,7 @@ internal static class PremiumInterfaceTests
             test("premium synchronous foreground transfer hides on " + kind, () =>
             {
                 var p = new TestPlatform();
-                var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
+                var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic, activateOnShow: true);
                 var other = OwnedWindow();
                 var deactivations = 0;
                 try
@@ -726,7 +726,7 @@ internal static class PremiumInterfaceTests
         test("premium immediate refusal without foreground transfer stays visible", () =>
         {
             var p = new TestPlatform();
-            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.ShowDiagnostic();
@@ -759,7 +759,7 @@ internal static class PremiumInterfaceTests
                 {
                     Next = Task.FromResult(new ActionResult(kind, "notification fixture"))
                 };
-                var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
+                var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic, activateOnShow: true);
                 var requests = 0;
                 w.ResultNotificationRequest = _ => requests++;
                 try
@@ -778,7 +778,7 @@ internal static class PremiumInterfaceTests
         test("premium visible immediate refusal does not request notification", () =>
         {
             var p = new TestPlatform();
-            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic, activateOnShow: true);
             var requests = 0;
             w.ResultNotificationRequest = _ => requests++;
             try
@@ -801,7 +801,7 @@ internal static class PremiumInterfaceTests
             {
                 Next = completion.Task
             };
-            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic, activateOnShow: true);
             var other = OwnedWindow();
             var requests = 0;
             w.ResultNotificationRequest = _ => requests++;
@@ -829,7 +829,7 @@ internal static class PremiumInterfaceTests
             {
                 Next = completion.Task
             };
-            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic, activateOnShow: true);
             var requests = 0;
             w.ResultNotificationRequest = _ => requests++;
             Dispatch(w, "taskview");
@@ -841,7 +841,7 @@ internal static class PremiumInterfaceTests
         });
         test("premium cancelled app transition immediately enables outcome recovery", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.Page(1);
@@ -869,7 +869,7 @@ internal static class PremiumInterfaceTests
         ThemeSupport.FollowSystem(Application.Current!);
         test("premium tab destinations remembered selections and subpage return remain stable", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.Page(2);
@@ -989,7 +989,7 @@ internal static class PremiumInterfaceTests
 
     private static MainWindow NavigationWindow(string view)
     {
-        var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+        var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
         w.SetRenderState(view);
         w.Controller.Change(w.Controller.Settings with
         {
@@ -1017,7 +1017,7 @@ internal static class PremiumInterfaceTests
         test("premium local dismissal terminalizes replaced undispatched action", () =>
         {
             var p = new TestPlatform();
-            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(p, TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.ShowDiagnostic();
@@ -1045,7 +1045,7 @@ internal static class PremiumInterfaceTests
         Directory.CreateDirectory(output);
         test("premium actual reader route exposes final recovery sentence and dismissal", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 const string ending = "No additional command was sent.";
@@ -1109,7 +1109,7 @@ internal static class PremiumInterfaceTests
         });
         test("premium actual reader keyboard arrows preserve reading and exit to actions", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.Controller.SetOperation("Partial", string.Concat(Enumerable.Repeat("A long recovery message for reading. ", 20)));

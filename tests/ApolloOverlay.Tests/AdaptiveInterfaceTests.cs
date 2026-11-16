@@ -12,7 +12,7 @@ internal static class AdaptiveInterfaceTests
     {
         test("compact uncertain result remains pinned with its concise recovery and full details", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.Width = 360;
@@ -39,7 +39,7 @@ internal static class AdaptiveInterfaceTests
         });
         test("routine acknowledgements never become navigation stops or move content", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.ShowDiagnostic();
@@ -71,7 +71,7 @@ internal static class AdaptiveInterfaceTests
         });
         test("uncertain results remain readable and cannot be expired by an old acknowledgement", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.Controller.SetOperation("Completed", "Old acknowledgement");
@@ -106,7 +106,7 @@ internal static class AdaptiveInterfaceTests
         });
         test("home prioritizes the session and customized quick access before utility controls", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.Controller.Change(w.Controller.Settings with
@@ -126,7 +126,7 @@ internal static class AdaptiveInterfaceTests
         });
         test("input hints switch controller pointer and keyboard without replacing the selected editor", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.ShowDiagnostic();
@@ -157,7 +157,7 @@ internal static class AdaptiveInterfaceTests
         });
         test("selection preserves operational feedback and does not duplicate action descriptions", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.ShowDiagnostic();

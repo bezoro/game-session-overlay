@@ -53,7 +53,7 @@ internal static class PlayniteBrowserTests
                 Directory.CreateDirectory(root);
                 for (var index = 0; index < 25; index++)
                     Directory.CreateDirectory(Path.Combine(root, $"Folder{index:00}"));
-                window = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+                window = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
                 window.Left = -12000;
                 window.Top = -12000;
                 window.ShowDiagnostic();
@@ -94,7 +94,7 @@ internal static class PlayniteBrowserTests
         });
         test("Playnite browser opens from settings and Back leaves the setting unchanged", () =>
         {
-            var window = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var window = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 window.Page(2);

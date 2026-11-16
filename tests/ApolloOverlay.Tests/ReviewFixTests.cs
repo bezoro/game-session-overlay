@@ -140,7 +140,7 @@ internal static class ReviewFixTests
             {
                 Empty = state == "empty"
             };
-            var w = WpfTestHost.CreatePreviewWindow(platform, TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(platform, TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 if (state.StartsWith("system-dirty"))
@@ -249,7 +249,7 @@ internal static class ReviewFixTests
         ThemeSupport.FollowSystem(app);
         test("RF keyboard pre-held W without overlay key event blocks neutrality", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.PhysicalKeyReader = k => k == 0x57 ? unchecked((short)0x8000) : (short)0;
@@ -280,7 +280,7 @@ internal static class ReviewFixTests
         )
             test("RF keyboard high-bit pre-held key " + key, () =>
             {
-                var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+                var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
                 try
                 {
                     w.PhysicalKeyReader = k => k == key ? unchecked((short)0x8000) : (short)0;
@@ -293,7 +293,7 @@ internal static class ReviewFixTests
             });
         test("RF complete keyboard domain excludes physical mouse and ignores low bit", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 var read = new HashSet<int>();
@@ -324,7 +324,7 @@ internal static class ReviewFixTests
         )
             test("RF navigation same predicate " + context, () =>
             {
-                var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+                var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
                 try
                 {
                     w.InputContextReader = () => context;
@@ -346,7 +346,7 @@ internal static class ReviewFixTests
         )
             test("RF pre-held W blocks " + (degraded ? "degraded dismissal" : "normal handoff") + " and renewed input resets 100ms", () =>
             {
-                var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+                var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
                 try
                 {
                     var held = true;
@@ -393,7 +393,7 @@ internal static class ReviewFixTests
         )
             test("RF UIA all page actions " + state, () =>
             {
-                var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+                var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
                 try
                 {
                     w.SetRenderState(state);
@@ -426,7 +426,7 @@ internal static class ReviewFixTests
             });
         test("RF Audio tab exposes current volume and mute state to accessibility", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 var state = new AudioSnapshot("fixture", .35f, true, "fixture");
@@ -451,7 +451,7 @@ internal static class ReviewFixTests
         });
         test("RF Guide status reason and limit title update existing peers", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.SetRenderState("integrations");
@@ -474,7 +474,7 @@ internal static class ReviewFixTests
         });
         test("RF UIA card exposes full target title and resume action without Show", () =>
         {
-            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 var button = WpfTestElements.Button(w, "session-card");

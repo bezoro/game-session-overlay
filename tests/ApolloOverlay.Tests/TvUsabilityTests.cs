@@ -63,7 +63,7 @@ internal static class TvUsabilityTests
             try
             {
                 SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
-                window = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+                window = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
                 Require(window.Controller.Apps.Count == 1, "Dispatcher fixture did not finish refreshing applications");
             }
             finally
@@ -167,7 +167,7 @@ internal static class TvUsabilityTests
         test("TV unavailable session card opens window picker", () =>
         {
             var platform = new TestPlatform();
-            var window = WpfTestHost.CreatePreviewWindow(platform, TestFocusMode.Synthetic);
+            var window = WpfTestHost.CreatePreviewWindow(platform, TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 platform.ValidIdentity = false;

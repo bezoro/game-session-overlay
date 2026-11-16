@@ -1,7 +1,7 @@
-using ApolloOverlay.Testing;
 using System.IO;
 using System.Text.Json;
 using ApolloOverlay;
+using ApolloOverlay.Testing;
 
 static class Program
 {

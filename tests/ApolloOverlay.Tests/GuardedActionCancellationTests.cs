@@ -302,7 +302,7 @@ internal static class GuardedActionCancellationTests
             {
                 Next = completion.Task
             };
-            var window = WpfTestHost.CreatePreviewWindow(platform, TestFocusMode.Synthetic);
+            var window = WpfTestHost.CreatePreviewWindow(platform, TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 window.Left = -12000;

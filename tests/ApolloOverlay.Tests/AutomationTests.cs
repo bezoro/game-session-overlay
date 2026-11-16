@@ -73,7 +73,7 @@ internal static class AutomationTests
         Prerequisites(test);
         test("session options command survives removal of its redundant visual control", () =>
         {
-            var window = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic);
+            var window = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 var snapshot = window.AutomationSnapshot();

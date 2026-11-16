@@ -76,16 +76,16 @@ internal sealed class WpfTestHost : IDisposable
         }
     }
 
-    internal static MainWindow CreatePreviewWindow(TestFocusMode focusMode) =>
-        CreatePreviewWindow(new PreviewPlatform(new(101, 42, 100, "Test window", "fixture")), focusMode);
+    internal static MainWindow CreatePreviewWindow(TestFocusMode focusMode, bool activateOnShow) =>
+        CreatePreviewWindow(new PreviewPlatform(new(101, 42, 100, "Test window", "fixture")), focusMode, activateOnShow);
 
-    /// <summary>Window-only layout fixtures inherit the caller's theme and explicitly retain native activation on Show.</summary>
-    internal static MainWindow CreatePreviewWindow(IPlatform platform, TestFocusMode focusMode)
+    /// <summary>Window-only fixtures inherit the caller's theme; activation on Show is a separate, explicit choice.</summary>
+    internal static MainWindow CreatePreviewWindow(IPlatform platform, TestFocusMode focusMode, bool activateOnShow)
     {
         var host = Create(diagnostics => new MainWindow(renderOnly: true, platform: platform, diagnostics: diagnostics), focusMode, light: null);
         try
         {
-            host.Window.ShowActivated = true;
+            host.Window.ShowActivated = activateOnShow;
             host.Refresh();
             host.context.Dispose();
             host.Window.Closed += (_, _) => host.Dispose();

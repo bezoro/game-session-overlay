@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.IO;
 
 namespace ApolloOverlay.Testing;
 
@@ -42,8 +41,8 @@ internal static class TestInfrastructureContracts
         });
         test("test failure retains every aggregate branch", () =>
         {
-            var failure = TestFailure.Capture(new AggregateException(new IOException("read failure"), new TimeoutException("deadline")));
-            Require(failure.Inner.Length == 2 && failure.Inner[0].Type == typeof(IOException).FullName
+            var failure = TestFailure.Capture(new AggregateException(new System.IO.IOException("read failure"), new TimeoutException("deadline")));
+            Require(failure.Inner.Length == 2 && failure.Inner[0].Type == typeof(System.IO.IOException).FullName
                 && failure.Inner[1].Type == typeof(TimeoutException).FullName, "Only the first parallel failure was reported");
         });
     }

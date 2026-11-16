@@ -1,5 +1,4 @@
 using System.Windows.Automation;
-using System.Windows.Controls;
 using System.Windows.Threading;
 
 namespace ApolloOverlay;
