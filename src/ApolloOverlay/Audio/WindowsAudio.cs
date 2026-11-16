@@ -247,7 +247,8 @@ public sealed class WindowsAudio : IDisposable
                     {
                         var snapshot = Empty("Windows audio is unavailable. Refresh before trying again.");
                         Finish(work, new(new(work.Dispatched ? ResultKind.Unknown : ResultKind.Unavailable, snapshot.Status), snapshot), true);
-                        ReleaseBackend();
+                        // Endpoint failures must not drop device-change observation:
+                        // the retained owner can recover on notification or explicit refresh.
                     }
                     continue;
                 }

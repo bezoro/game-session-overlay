@@ -308,11 +308,7 @@ public partial class MainWindow
     private void BuildAudioDevices()
     {
         FeatureHeading("Windows audio devices", "Choose the output for games and media. The TV's physical volume is separate.", "audio-devices");
-        AddRow("device-refresh", "Refresh devices", systemAudio.Current.Status, () =>
-        {
-            nextFeatureRead = 0;
-            StartFeatureRead();
-        });
+        AddRow("device-refresh", "Refresh devices", systemAudio.Current.Status, RefreshSessionFeatures);
         Section("Audio output");
         if (systemAudio.Current.Outputs.Count == 0)
             FeatureEmpty("No audio output available", "Connect an audio device, then refresh this list.", "audio-devices");

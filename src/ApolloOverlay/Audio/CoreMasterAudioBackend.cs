@@ -8,13 +8,21 @@ internal sealed class CoreMasterAudioBackend : IMasterAudioBackend
     private IMMDevice? device;
     private IAudioEndpointVolume? endpoint;
     private readonly AudioNotifications notifications;
+    private readonly Func<IMMDeviceEnumerator> createEnumerator;
+    private readonly Action<object> release;
     private bool volumeRegistered, deviceRegistered, initialized;
 
-    internal CoreMasterAudioBackend(Action<bool> changed)
+    internal CoreMasterAudioBackend(Action<bool> changed) : this(changed, CreateEnumerator, MarshalRelease)
+    {
+    }
+
+    internal CoreMasterAudioBackend(Action<bool> changed, Func<IMMDeviceEnumerator> createEnumerator, Action<object> release)
     {
         Check(CoInitializeEx(0, 0));
         initialized = true;
         notifications = new(changed);
+        this.createEnumerator = createEnumerator;
+        this.release = release;
     }
 
     private static void Check(int hr)
@@ -23,22 +31,40 @@ internal sealed class CoreMasterAudioBackend : IMasterAudioBackend
             Marshal.ThrowExceptionForHR(hr);
     }
 
-    public AudioSnapshot Bind()
+    private static IMMDeviceEnumerator CreateEnumerator()
     {
-        Release();
         var clsid = new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E");
         var iid = typeof(IMMDeviceEnumerator).GUID;
         Check(CoCreateInstance(ref clsid, 0, 1, ref iid, out var created));
-        enumerator = (IMMDeviceEnumerator)created;
-        Check(enumerator.RegisterEndpointNotificationCallback(notifications));
-        deviceRegistered = true;
-        Check(enumerator.GetDefaultAudioEndpoint(0, 0, out device));
-        var volumeIid = typeof(IAudioEndpointVolume).GUID;
-        Check(device.Activate(ref volumeIid, 23, 0, out var activated));
-        endpoint = (IAudioEndpointVolume)activated;
-        Check(endpoint.RegisterControlChangeNotify(notifications));
-        volumeRegistered = true;
-        return ReadBound();
+        return (IMMDeviceEnumerator)created;
+    }
+
+    private static void MarshalRelease(object value) => Marshal.ReleaseComObject(value);
+
+    public AudioSnapshot Bind()
+    {
+        ReleaseEndpoint();
+        try
+        {
+            enumerator ??= createEnumerator();
+            if (!deviceRegistered)
+            {
+                Check(enumerator.RegisterEndpointNotificationCallback(notifications));
+                deviceRegistered = true;
+            }
+            Check(enumerator.GetDefaultAudioEndpoint(0, 0, out device));
+            var volumeIid = typeof(IAudioEndpointVolume).GUID;
+            Check(device.Activate(ref volumeIid, 23, 0, out var activated));
+            endpoint = (IAudioEndpointVolume)activated;
+            Check(endpoint.RegisterControlChangeNotify(notifications));
+            volumeRegistered = true;
+            return ReadBound();
+        }
+        catch (Exception error) when (error is COMException or InvalidCastException)
+        {
+            InvalidateBinding(error);
+            throw;
+        }
     }
 
     private string DefaultId()
@@ -53,16 +79,24 @@ internal sealed class CoreMasterAudioBackend : IMasterAudioBackend
         finally
         {
             if (current is not null)
-                Marshal.ReleaseComObject(current);
+                release(current);
         }
     }
 
     public AudioSnapshot Read()
     {
-        if (endpoint is null || device is null)
-            return Bind();
-        Check(device.GetId(out var id));
-        return id == DefaultId() ? ReadBound() : Bind();
+        try
+        {
+            if (endpoint is null || device is null)
+                return Bind();
+            Check(device.GetId(out var id));
+            return id == DefaultId() ? ReadBound() : Bind();
+        }
+        catch (Exception error) when (error is COMException or InvalidCastException)
+        {
+            InvalidateBinding(error);
+            throw;
+        }
     }
 
     private AudioSnapshot ReadBound()
@@ -104,8 +138,9 @@ internal sealed class CoreMasterAudioBackend : IMasterAudioBackend
             var after = Read();
             return new(Verify(volume, muted, expectedEndpoint, after, continuing()), after);
         }
-        catch (COMException)
+        catch (COMException error)
         {
+            InvalidateBinding(error);
             var after = new AudioSnapshot(null, 0, false, "The audio change could not be confirmed.");
             return new(new(succeeded > 0 ? ResultKind.Partial : attempted > 0 ? ResultKind.Unknown : ResultKind.Unavailable,
                 "Windows did not confirm the audio change. Refresh before trying again."), after);
@@ -121,7 +156,16 @@ internal sealed class CoreMasterAudioBackend : IMasterAudioBackend
         return new(ResultKind.Completed, $"Windows output · {after.Volume:P0}" + (after.Muted ? " · muted" : ""));
     }
 
-    private void Release()
+    private void InvalidateBinding(Exception error)
+    {
+        ReleaseEndpoint();
+        // No default output and endpoint activation failures leave the device observer
+        // useful. A disconnected enumerator itself needs a new connection on refresh.
+        if (error.HResult is unchecked((int)0x80010108) or unchecked((int)0x800706BA) or unchecked((int)0x88890010))
+            ReleaseObserver();
+    }
+
+    private void ReleaseEndpoint()
     {
         if (endpoint is not null && volumeRegistered)
             try
@@ -130,6 +174,16 @@ internal sealed class CoreMasterAudioBackend : IMasterAudioBackend
             }
             catch (COMException) { }
         volumeRegistered = false;
+        if (endpoint is not null)
+            release(endpoint);
+        if (device is not null)
+            release(device);
+        endpoint = null;
+        device = null;
+    }
+
+    private void ReleaseObserver()
+    {
         if (enumerator is not null && deviceRegistered)
             try
             {
@@ -137,20 +191,15 @@ internal sealed class CoreMasterAudioBackend : IMasterAudioBackend
             }
             catch (COMException) { }
         deviceRegistered = false;
-        if (endpoint is not null)
-            Marshal.ReleaseComObject(endpoint);
-        if (device is not null)
-            Marshal.ReleaseComObject(device);
         if (enumerator is not null)
-            Marshal.ReleaseComObject(enumerator);
-        endpoint = null;
-        device = null;
+            release(enumerator);
         enumerator = null;
     }
 
     public void Dispose()
     {
-        Release();
+        ReleaseEndpoint();
+        ReleaseObserver();
         if (initialized)
         {
             CoUninitialize();
