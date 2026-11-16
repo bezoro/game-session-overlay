@@ -101,16 +101,26 @@ public partial class MainWindow
         if (index < 0)
             return;
         var entry = entries[index];
-        entry.Button.IsEnabled = available;
+        var selection = navigation;
+        var wasSelected = selection.Id == id;
+        var revision = automationRevision;
         entries[index] = entry with
         {
             Available = available,
             Reason = description
         };
+        // Disabling a focused WPF control can synchronously focus another row.
+        // Publish admission first and retain this selection only in the same view.
+        entry.Button.IsEnabled = available;
+        if (revision != automationRevision || !entries.Any(current => current.Id == id && ReferenceEquals(current.Button, entry.Button)))
+            return;
         SetEntryText(id, title);
         SetEntryDescription(id, description);
-        if (entry.Available != available && navigation.Id == id)
+        if (entry.Available != available && wasSelected)
+        {
+            navigation = selection;
             SetSelection();
+        }
     }
 
     private void ToggleGameAudio()

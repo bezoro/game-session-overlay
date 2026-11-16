@@ -3,6 +3,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using ApolloOverlay;
 
 internal static class AudioClarityTests
@@ -49,7 +50,7 @@ internal static class AudioClarityTests
         });
         test("master-audio availability changes preserve selection and editor identity while updating action admission", () =>
         {
-            using var host = CreateHost(new Devices());
+            using var host = CreateHost(new Devices(), TestFocusMode.Native);
             var window = host.Window;
             window.SetRenderState("audio");
             var button = WpfTestElements.Button(window, "volume");
@@ -65,9 +66,16 @@ internal static class AudioClarityTests
             // The render-only audio owner remains stopped; this test verifies UI admission,
             // selection and retained controls, not a physical endpoint mutation.
             var previousOperation = window.Controller.Operation;
+            Require(window.SelectedAction == "volume", "PRECONDITION: admitted audio action moved selection before the availability update");
+            Require(button.IsKeyboardFocusWithin, "PRECONDITION: the available volume action does not own actual keyboard focus");
             window.UpdateAudioEntries(new(null, 0, false, "Owned output was disconnected."));
-            Require(!button.IsEnabled && !slider.IsEnabled && slider.Visibility == Visibility.Collapsed
-                && window.SelectedAction == "volume" && ReferenceEquals(window.FindActionHost(button), focusHost), "Loss of availability rebuilt controls or lost the selected recovery target");
+            Require(!button.IsEnabled, "Unavailable volume retained enabled action state");
+            Require(!slider.IsEnabled, "Unavailable volume retained enabled slider state");
+            Require(slider.Visibility == Visibility.Collapsed, "Unavailable volume retained its adjustment slider");
+            Require(window.SelectedAction == "volume", "Loss of availability moved selection to " + window.SelectedAction);
+            Require(ReferenceEquals(WpfTestElements.Button(window, "volume"), button)
+                && ReferenceEquals(window.FindActionHost(button), focusHost), "Loss of availability replaced the action or recovery host");
+            Require(focusHost?.IsKeyboardFocusWithin == true, "Disabled selection did not transfer owned keyboard focus to its recovery host");
             Click(button);
             Require(ReferenceEquals(previousOperation, window.Controller.Operation) && window.Feedback.Contains("disconnected"), "An unavailable row admitted its old action or lost its actual reason");
             window.UpdateAudioEntries(available with
@@ -80,6 +88,27 @@ internal static class AudioClarityTests
             Click(button);
             WpfTestDispatcher.Complete(window.OperationTask);
             Require(window.Controller.Operation is { Action: "audio" } && !ReferenceEquals(previousOperation, window.Controller.Operation), "A recovered row retained stale unavailable action routing");
+        });
+        test("audio availability cannot restore an obsolete selection after a synchronous view replacement", () =>
+        {
+            using var host = CreateHost(new Devices());
+            var window = host.Window;
+            window.SetRenderState("audio");
+            window.UpdateAudioEntries(new("owned-fixture", .45f, false, "Observed output"));
+            var button = WpfTestElements.Button(window, "volume");
+            Pick(window, "volume");
+            var replaced = false;
+            button.IsEnabledChanged += (_, args) =>
+            {
+                if (args.NewValue is false)
+                {
+                    replaced = true;
+                    window.Page(1);
+                }
+            };
+            window.UpdateAudioEntries(new(null, 0, false, "Owned output was disconnected."));
+            Require(replaced && window.ActionIds.Contains("refresh-apps") && !window.ActionIds.Contains("volume")
+                && window.SelectedAction != "volume", "Availability recovery overwrote a newer view with its old audio selection");
         });
         test("duplicate device subtitles collapse initially and after live updates without discarding accessibility help", () =>
         {
@@ -118,14 +147,32 @@ internal static class AudioClarityTests
         });
     }
 
-    private static WpfTestHost CreateHost(Devices devices)
+    private static WpfTestHost CreateHost(Devices devices, TestFocusMode focusMode = TestFocusMode.Synthetic)
     {
         var host = WpfTestHost.Create(diagnostics => new MainWindow(renderOnly: true,
             platform: new PreviewPlatform(new(101, 42, 100, "Owned audio window", "fixture")),
-            diagnostics: diagnostics, systemAudioBackend: devices), TestFocusMode.Synthetic);
-        host.Refresh();
-        host.Window.Show();
-        return host;
+            diagnostics: diagnostics, systemAudioBackend: devices), focusMode,
+            initialize: window => window.PhysicalKeyReader = _ => 0);
+        try
+        {
+            host.Refresh();
+            if (focusMode == TestFocusMode.Native)
+            {
+                host.Window.OpenPanel();
+                WpfTestDispatcher.Complete(host.Window.OpeningTask);
+                Require(host.Window.IsVisible && host.Window.IsActive
+                    && Native.GetForegroundWindow() == new WindowInteropHelper(host.Window).Handle,
+                    "PRECONDITION: the owned audio fixture does not have actual native foreground");
+            }
+            else
+                host.Window.Show();
+            return host;
+        }
+        catch
+        {
+            host.Dispose();
+            throw;
+        }
     }
 
     private static void UseInput(MainWindow window, string mode)
