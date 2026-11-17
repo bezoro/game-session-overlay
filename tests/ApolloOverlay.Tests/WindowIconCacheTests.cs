@@ -71,20 +71,20 @@ internal static class WindowIconCacheTests
             try
             {
                 window.Controller.CaptureReturn();
-                ReviewFixTests.Complete(window.Controller.Refresh());
+                WpfTestDispatcher.Complete(window.Controller.Refresh());
                 window.ShowDiagnostic();
                 window.Page(1);
                 var id = window.ActionIds.Single(item => item.StartsWith("window:", StringComparison.Ordinal));
                 for (var i = 0; i < window.ActionIds.Count && window.SelectedAction != id; i++)
                     window.Sequential(1);
                 Require(window.SelectedAction == id, "Fixture did not select the application row");
-                var button = ReviewFixTests.Button(window, id);
+                var button = WpfTestElements.Button(window, id);
                 var grid = (Grid)button.Content;
                 var selected = window.SelectedAction;
                 platform.Publish();
                 DrainDispatcher();
                 Require(window.SelectedAction == selected, "Icon completion moved the selected action");
-                Require(ReferenceEquals(button, ReviewFixTests.Button(window, id)), "Icon completion rebuilt the row");
+                Require(ReferenceEquals(button, WpfTestElements.Button(window, id)), "Icon completion rebuilt the row");
                 Require(grid.Children[0] is Image { Source: not null }, "Icon was not applied to the existing row");
             }
             finally

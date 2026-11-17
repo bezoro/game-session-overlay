@@ -1,5 +1,6 @@
 using System.IO;
 using System.Net.Http;
+using System.Text.Json;
 using ApolloOverlay;
 using Velopack;
 using Velopack.Logging;
@@ -12,6 +13,36 @@ internal static class UpdateSourceTests
     private const string BuildId = "ci-42-a1-1111111";
     internal static void Run(Action<string, Action> test)
     {
+        test("updates channel catalog finds stable releases after a full page of testing releases", () =>
+        {
+            var pages = new List<int>();
+            var releases = Done(() => GitHubReleaseCatalog.ReadAsync("stable", page =>
+            {
+                pages.Add(page);
+                return Task.FromResult(ReleasePage(page == 1 ? 100 : 1, page == 1));
+            }));
+            Require(releases.Length == 1 && pages.SequenceEqual(new[] { 1, 2 }), "Mixed-channel pagination hid Stable or fetched unnecessary pages");
+        });
+        test("updates channel catalog bounds page requests without reporting a false empty channel", () =>
+        {
+            var pages = 0;
+            Throws<InvalidDataException>(() => Done(() => GitHubReleaseCatalog.ReadAsync("stable", _ =>
+            {
+                pages++;
+                return Task.FromResult(ReleasePage(100, true));
+            })));
+            Require(pages == GitHubReleaseCatalog.MaximumPages, "Release pagination exceeded its request budget");
+        });
+        test("updates channel catalog stops after enough matching releases", () =>
+        {
+            var pages = 0;
+            var releases = Done(() => GitHubReleaseCatalog.ReadAsync("testing", _ =>
+            {
+                pages++;
+                return Task.FromResult(ReleasePage(100, true));
+            }));
+            Require(releases.Length == 12 && pages == 1, "Bounded channel history fetched redundant pages");
+        });
         test("updates official SDK adapter preserves identity and its wrapped download asset", () =>
         {
             var asset = Asset();
@@ -432,6 +463,15 @@ internal static class UpdateSourceTests
 
         throw new Exception("Expected " + typeof(T).Name);
     }
+
+    private static string ReleasePage(int count, bool testing) => JsonSerializer.Serialize(Enumerable.Range(1, count).Select(id => new
+    {
+        id,
+        draft = false,
+        prerelease = testing,
+        published_at = DateTimeOffset.UnixEpoch.AddDays(id),
+        assets = new[] { new { name = testing ? "releases.testing.json" : "releases.stable.json" } }
+    }));
 
     private sealed class SourceFake(params VelopackAsset[] assets) : SdkUpdateSource
     {

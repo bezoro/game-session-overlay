@@ -261,16 +261,14 @@ public partial class MainWindow
         AutomationProperties.SetHelpText(button, description);
         var host = new Border { Child = button, Focusable = !available, Tag = "description:" + id };
         AutomationProperties.SetName(host, title + ". " + description);
-        button.Resources["KeyboardHost"] = host;
-        if (!available)
-            button.Resources["DescriptionTarget"] = host;
-        RegisterFixed(id, button, action, available, description);
+        RegisterFixed(id, button, action, available, description, available ? null : host, host);
         return button;
     }
 
-    private static void AddKeyboardButton(Grid grid, Button button, int row, int column = 0)
+    private void AddKeyboardButton(Grid grid, Button button, int row, int column = 0)
     {
-        var host = (Border)button.Resources["KeyboardHost"];
+        var host = entries.FirstOrDefault(entry => ReferenceEquals(entry.Button, button))?.LayoutHost
+            ?? throw new InvalidOperationException("A keyboard action must have a layout host.");
         Grid.SetRow(host, row);
         Grid.SetColumn(host, column);
         grid.Children.Add(host);

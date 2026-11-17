@@ -1,3 +1,6 @@
 namespace ApolloOverlay;
 
-internal readonly record struct OverlayInputContext(bool Confirmed, bool Visible, bool Active, bool OwnForeground, bool OwnedDialog = false, bool Exiting = false);
+internal readonly record struct OverlayInputContext(bool Confirmed, bool Visible, bool Active, bool OwnForeground, bool OwnedDialog = false, bool Exiting = false)
+{
+    internal bool AllowsNavigation => Confirmed && Visible && Active && OwnForeground && !OwnedDialog && !Exiting;
+}

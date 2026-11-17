@@ -15,50 +15,6 @@ internal static class ReviewFixTests
             throw new Exception(message);
     }
 
-    internal static Button Button(MainWindow w, string id)
-    {
-        if (id == "return")
-            id = "session-card";
-        if (id == "close" && !w.ActionIds.Contains(id) && w.Controller.Session.Anchor is { } target)
-            w.OpenOptions(target);
-        return PremiumInterfaceTests.Descendants<Button>((DependencyObject)w.Content).First(b => Equals(b.Tag, id));
-    }
-
-    internal static void Complete(Task task, int timeoutMs = 5000)
-    {
-        var deadline = System.Diagnostics.Stopwatch.StartNew();
-        while (!task.IsCompleted && deadline.ElapsedMilliseconds < timeoutMs)
-        {
-            var frame = new System.Windows.Threading.DispatcherFrame();
-            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, () => frame.Continue = false);
-            System.Windows.Threading.Dispatcher.PushFrame(frame);
-            Thread.Sleep(1);
-        }
-
-        if (!task.IsCompleted)
-            throw new TimeoutException($"Dispatcher operation exceeded {timeoutMs} ms.");
-        task.GetAwaiter().GetResult();
-    }
-
-    internal static MainWindow Window()
-    {
-        var w = new MainWindow(renderOnly: true, platform: new PreviewPlatform(new(101, 42, 100, "Test window", "fixture")));
-        try
-        {
-            w.InputContextReader = () => new(true, true, true, true);
-            w.PhysicalKeyReader = _ => 0;
-            w.Controller.CaptureReturn();
-            Complete(w.Controller.Refresh());
-            w.RefreshRows();
-            return w;
-        }
-        catch
-        {
-            w.Close();
-            throw;
-        }
-    }
-
     internal static void Capture(string output, bool focused = false, bool closeConfirmation = false)
     {
         Directory.CreateDirectory(output);
@@ -180,11 +136,11 @@ internal static class ReviewFixTests
                 app.Resources.MergedDictionaries.Add(palette);
             }
 
-            var platform = new PremiumInterfaceTests.FixturePlatform
+            var platform = new TestPlatform
             {
                 Empty = state == "empty"
             };
-            var w = PremiumInterfaceTests.FixtureWindow(platform);
+            var w = WpfTestHost.CreatePreviewWindow(platform, TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 if (state.StartsWith("system-dirty"))
@@ -198,7 +154,7 @@ internal static class ReviewFixTests
                 }
                 else if (state is "confirmation" or "cancelled")
                 {
-                    Button(w, "close").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                    PremiumInterfaceTests.OpenCloseConfirmation(w);
                     if (state == "cancelled")
                         w.Back();
                 }
@@ -257,7 +213,7 @@ internal static class ReviewFixTests
 
                 if (state.EndsWith("template-simulation"))
                 {
-                    var button = PremiumInterfaceTests.Descendants<Button>(root).First(b => Equals(b.Tag, "session-card"));
+                    var button = WpfTestElements.Descendants<Button>(root).First(b => Equals(b.Tag, "session-card"));
                     button.ApplyTemplate();
                     if (state == "focus-template-simulation")
                         InteractionMotion.SetIsSelected(button, true);
@@ -293,7 +249,7 @@ internal static class ReviewFixTests
         ThemeSupport.FollowSystem(app);
         test("RF keyboard pre-held W without overlay key event blocks neutrality", () =>
         {
-            var w = Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.PhysicalKeyReader = k => k == 0x57 ? unchecked((short)0x8000) : (short)0;
@@ -324,7 +280,7 @@ internal static class ReviewFixTests
         )
             test("RF keyboard high-bit pre-held key " + key, () =>
             {
-                var w = Window();
+                var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
                 try
                 {
                     w.PhysicalKeyReader = k => k == key ? unchecked((short)0x8000) : (short)0;
@@ -335,19 +291,18 @@ internal static class ReviewFixTests
                     w.Close();
                 }
             });
-        test("RF complete keyboard domain excludes physical mouse and ignores low bit", () =>
+        test("RF physical input requires every key and mouse release while ignoring the historical low bit", () =>
         {
-            var w = Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
-                var read = new HashSet<int>();
-                w.PhysicalKeyReader = k =>
-                {
-                    read.Add(k);
-                    return 1;
-                };
+                w.PhysicalKeyReader = _ => 1;
                 Require(w.PhysicalKeysNeutral(), "Low bit must not mean held");
-                Require(read.SetEquals(new[] { 3 }.Concat(Enumerable.Range(8, 0xFE - 8 + 1))), "Keyboard VK coverage differs");
+                foreach (var held in Enumerable.Range(1, 6).Concat(Enumerable.Range(8, 0xFE - 8 + 1)))
+                {
+                    w.PhysicalKeyReader = key => key == held ? unchecked((short)0x8000) : (short)1;
+                    Require(!w.PhysicalKeysNeutral(), "Held keyboard or mouse input was ignored: VK 0x" + held.ToString("X2"));
+                }
             }
             finally
             {
@@ -368,7 +323,7 @@ internal static class ReviewFixTests
         )
             test("RF navigation same predicate " + context, () =>
             {
-                var w = Window();
+                var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
                 try
                 {
                     w.InputContextReader = () => context;
@@ -390,7 +345,7 @@ internal static class ReviewFixTests
         )
             test("RF pre-held W blocks " + (degraded ? "degraded dismissal" : "normal handoff") + " and renewed input resets 100ms", () =>
             {
-                var w = Window();
+                var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
                 try
                 {
                     var held = true;
@@ -398,7 +353,7 @@ internal static class ReviewFixTests
                     if (degraded)
                         w.Back();
                     else
-                        Button(w, "taskview").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                        WpfTestElements.Button(w, "taskview").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
                     Require(w.TransitionPending, "Handoff not queued");
                     ReleaseSample Sample(long t) => new(new PadFrame[4], t, GuideValid: !degraded);
                     w.AdvanceHandoff(Sample(0), 0);
@@ -437,7 +392,7 @@ internal static class ReviewFixTests
         )
             test("RF UIA all page actions " + state, () =>
             {
-                var w = Window();
+                var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
                 try
                 {
                     w.SetRenderState(state);
@@ -450,12 +405,13 @@ internal static class ReviewFixTests
                     {
                         var peer = new ButtonAutomationPeer(button);
                         Require(peer.GetHelpText().Length > 0, "Action help missing: " + button.Tag);
-                        if (button.Content is Grid grid)
+                        if (button.Content is ActionButtonContent content)
                         {
-                            var texts = (StackPanel)grid.Children[1];
-                            Require(peer.GetName() == ((TextBlock)texts.Children[0]).Text, "Action name differs: " + button.Tag);
-                            if (texts.Children.Count > 1 && texts.Children[1] is TextBlock desc)
-                                Require(peer.GetHelpText() == InputPrompt.Read(desc), "Accessible description differs from rendered prompt: " + button.Tag);
+                            Require(peer.GetName() == content.Title.Text, "Action name differs: " + button.Tag);
+                            var guidance = InputPrompt.Read(content.Description).Trim();
+                            if (content.Description.Visibility == Visibility.Visible && guidance.Length > 0)
+                                Require(peer.GetHelpText().Contains(guidance, StringComparison.Ordinal),
+                                    "Accessible help omits the rendered guidance: " + button.Tag);
                         }
                         else
                             Require(peer.GetName().StartsWith("Options for "), "Sibling options missing full target name");
@@ -470,15 +426,15 @@ internal static class ReviewFixTests
             });
         test("RF Audio tab exposes current volume and mute state to accessibility", () =>
         {
-            var w = Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 var state = new AudioSnapshot("fixture", .35f, true, "fixture");
                 var audio = typeof(MainWindow).GetField("audio", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(w);
                 typeof(WindowsAudio).GetProperty(nameof(WindowsAudio.Current))!.SetValue(audio, state);
                 w.SetRenderState("audio");
-                var mute = new ButtonAutomationPeer(Button(w, "mute"));
-                var volume = new ButtonAutomationPeer(Button(w, "volume"));
+                var mute = new ButtonAutomationPeer(WpfTestElements.Button(w, "mute"));
+                var volume = new ButtonAutomationPeer(WpfTestElements.Button(w, "volume"));
                 Require(mute.GetName() == "Unmute", "Initial mute state stale");
                 w.UpdateAudioEntries(state with
                 {
@@ -495,17 +451,17 @@ internal static class ReviewFixTests
         });
         test("RF Guide status reason and limit title update existing peers", () =>
         {
-            var w = Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 w.SetRenderState("integrations");
-                var button = Button(w, "guide");
+                var button = WpfTestElements.Button(w, "guide");
                 var peer = new ButtonAutomationPeer(button);
                 w.UpdateGuideStatus("Controller unavailable · fixture");
                 Require(peer.GetHelpText() == "Controller unavailable · fixture", "Guide help stale");
-                Require(ReferenceEquals(button, Button(w, "guide")), "Guide rebuilt button");
+                Require(ReferenceEquals(button, WpfTestElements.Button(w, "guide")), "Guide rebuilt button");
                 w.Page(2);
-                var limit = Button(w, "guide-limit");
+                var limit = WpfTestElements.Button(w, "guide-limit");
                 var limitPeer = new ButtonAutomationPeer(limit);
                 var texts = (StackPanel)((Grid)limit.Content).Children[1];
                 texts.Children.OfType<Slider>().Single().Value = 1500;
@@ -518,10 +474,10 @@ internal static class ReviewFixTests
         });
         test("RF UIA card exposes full target title and resume action without Show", () =>
         {
-            var w = Window();
+            var w = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
-                var button = Button(w, "session-card");
+                var button = WpfTestElements.Button(w, "session-card");
                 var peer = new ButtonAutomationPeer(button);
                 Require(peer.GetName().Contains("Test window") && peer.GetName().Contains("Resume window"), "Missing card target/action name: '" + peer.GetName() + "'");
                 Require(peer.GetHelpText().Contains("resumes") && peer.GetHelpText().Contains("options"), "Missing card help: '" + peer.GetHelpText() + "'");

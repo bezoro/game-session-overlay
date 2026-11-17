@@ -42,13 +42,18 @@ flowchart LR
 
 The session action IDs are available across routes. The automation backend resolves opaque target IDs, validates the context revision, and uses shared session operations. Route actions expose existing interface controls for navigation and editing.
 
-A UI action checks focus and availability, waits for continuous input release, validates the target again and then calls the service. `ActionResult` distinguishes a request, observed completion, partial results and unknown outcomes. Cancellation after dispatch stops remaining steps; it does not undo a command Windows already accepted.
+Primary Session, Apps and Audio navigation has top-level semantics: switching tabs removes nested feature history, so a discarded browser scan or color draft cannot be resumed through Back. The route frame is the source of navigation state. Eligibility queries do not cancel operations; input and operation boundaries explicitly validate ownership and revoke a lost focus cycle.
+
+A UI action checks focus and availability, waits for continuous keyboard, mouse-button and controller release, validates the target again and then calls the service. `ActionResult` distinguishes a request, observed completion, partial results and unknown outcomes. Cancellation after dispatch stops remaining steps; it does not undo a command Windows already accepted.
 
 Window identity includes HWND, PID, process start time and observed generation. Titles do not establish identity. Asynchronous reads carry a generation; the interface rejects completion from an earlier session, route or focus cycle. Value updates preserve controls being edited. Changes to page structure may rebuild its rows.
 
 ## Concurrency and resources
 
 - The dispatcher owns the window, selection and visual tree. Worker events move to it before changing the interface.
+- Master audio uses one background MTA with at most 16 queued requests and a three-second request deadline. Cancellation and timeout revoke permission, retain native ownership until the call drains, and reject stale snapshots. Endpoint identity and requested mute/volume must agree with readback before reporting completion.
+- Update history is observed through a shared background cache. A single receipt writer orders mandatory transitions and coalesces superseded progress checkpoints. Update application awaits its durable receipt; shutdown freezes production before a bounded final drain and logs unresolved durability.
+- Startup status has one background native reader and generation-based cache invalidation. Every mutation attempt invalidates earlier observations, including failed or uncertain results. Startup mutations take a bounded same-user lease before reading transaction state, so concurrent repair processes cannot roll back another owner's committed change.
 - Audio and media have bounded owners. A timeout does not release exclusion while a native call can still complete. Uncertain mutations are not retried automatically.
 - `WindowIconCache` bounds capacity and concurrency. `WindowIconReader` copies the borrowed HICON, creates a frozen image and releases only its copy. Completion updates the image without replacing the row or its focus.
 - Foreground recovery runs in an authenticated disposable child with a bounded deadline and a kill-on-close job. It does not attach the WPF queue to another process. Native return values do not replace observation of the exact foreground window and WPF activation.
@@ -59,7 +64,7 @@ Broad `catch` blocks remain at boundaries that must preserve cleanup or stop an 
 
 ## Interface and compatibility
 
-`ActionButtonContent` exposes its title, description, icon and editing area without relying on child order. `VectorIcon` preserves each SVG's original frame; a gear is not scaled to its irregular path bounds. Colors use theme resources, and filled vectors receive no extra stroke.
+`ActionButtonContent` exposes its title, description, icon, selection badge and slider without relying on child order. Navigation entries hold typed layout/focus hosts; runtime control references do not use string-keyed styling resources. `VectorIcon` preserves each SVG's original frame; a gear is not scaled to its irregular path bounds. Colors use theme resources, and filled vectors receive no extra stroke.
 
 Legacy settings fields remain readable for data compatibility; this does not reactivate legacy shortcuts. Assembly and executable names remain stable for installation, startup and CLI compatibility. Proof tools do not maintain separate copies of application code. Their few required native contracts are linked explicitly and built with the solution.
 

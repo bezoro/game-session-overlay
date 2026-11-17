@@ -27,5 +27,11 @@
     <Compile
       Include="../../src/ApolloOverlay/Input/GuideInput.cs"
       Link="Shared/GuideInput.cs" />
+    <Compile
+      Include="../../src/ApolloOverlay/Input/GuideGestureTracker.cs"
+      Link="Shared/GuideGestureTracker.cs" />
+    <Compile
+      Include="../../src/ApolloOverlay/Domain/ActionResult.cs"
+      Link="Shared/ActionResult.cs" />
   </ItemGroup>
 </Project>

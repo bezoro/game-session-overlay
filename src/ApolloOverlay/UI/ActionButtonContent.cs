@@ -8,6 +8,14 @@ internal sealed class ActionButtonContent : Grid
     // Pinned command bars keep concise captions while descriptions remain
     // available to automation, even when dynamic input hints are refreshed.
     internal bool AllowsDescription { get; set; } = true;
+    internal Border? SelectionBadge
+    {
+        get; set;
+    }
+    internal Slider? EditorSlider
+    {
+        get; set;
+    }
 
     internal FrameworkElement Icon
     {

@@ -343,7 +343,9 @@ public sealed class WindowsPlatform : IPlatform, IWindowEffects, IWindowIconNoti
         if (disposed)
             return false;
         if (Native.IsIconic(window.Handle))
-            Native.ShowWindow(window.Handle, 9);
+            // A foreign window may have stopped pumping messages. Queue restoration
+            // so its UI thread cannot block our dispatcher before observation begins.
+            Native.ShowWindowAsync(window.Handle, 9);
         return !disposed && Native.SetForegroundWindow(window.Handle);
     }
 

@@ -98,13 +98,14 @@ internal static class ScheduledStartup
         return new ScheduledStartupStatus(true, owned, (bool)task.Enabled, (int)principal.RunLevel == 1);
     });
 
-    internal static bool SetEnabled(string executable, bool enabled) => WithScheduler((_, folder, objects, sid) =>
+    internal static bool SetEnabled(string executable, bool enabled, CancellationToken cancellation = default) => WithScheduler((_, folder, objects, sid) =>
     {
         dynamic? task = FindTask(folder, objects, sid);
         if (task is null)
             return false;
         if (!Owned(objects.Keep(task.Definition), executable, objects, sid))
             return false;
+        cancellation.ThrowIfCancellationRequested();
         task.Enabled = enabled;
         return (bool)task.Enabled == enabled;
     });
@@ -143,7 +144,7 @@ internal static class ScheduledStartup
         && File.Exists(executable);
 
     /// <summary>Changes task registration transactionally; registry changes run inside the rollback boundary.</summary>
-    internal static void ConfigureElevation(string executable, bool elevated, bool enabled, Action commit)
+    internal static void ConfigureElevation(string executable, bool elevated, bool enabled, Action commit, CancellationToken cancellation = default)
     {
         if (!OwnInstalledLauncher(executable) || !AutomationPipeSecurity.Elevated())
             throw new UnauthorizedAccessException("Administrator consent is required for this installed application's task.");
@@ -186,6 +187,7 @@ internal static class ScheduledStartup
                     action.WorkingDirectory = Path.GetDirectoryName(executable)!;
                     // The same user may read/run the configured task. Updating it requires elevation.
                     var permissions = $"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGX;;;{sid})";
+                    cancellation.ThrowIfCancellationRequested();
                     dynamic registered = objects.Keep(folder.RegisterTaskDefinition(Name(sid), definition, previous is null ? 2 : 4, sid, null, 3, permissions));
                     changed = true;
                     if ((bool)registered.Enabled != enabled || !Owned(objects.Keep(registered.Definition), executable, objects, sid))
@@ -193,9 +195,12 @@ internal static class ScheduledStartup
                 }
                 else if (previous is not null)
                 {
+                    cancellation.ThrowIfCancellationRequested();
                     folder.DeleteTask(Name(sid), 0);
                     changed = true;
                 }
+                if (!changed)
+                    cancellation.ThrowIfCancellationRequested();
                 commit();
                 return true;
             }

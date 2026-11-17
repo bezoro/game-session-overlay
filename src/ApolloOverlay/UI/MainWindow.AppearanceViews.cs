@@ -131,7 +131,7 @@ public partial class MainWindow
             body.ColumnDefinitions[0].Width = new GridLength(24);
             body.Icon.Width = body.Icon.Height = 18;
         }
-        if (button.Resources["ABadge"] is Border badge)
+        if (button.Content is ActionButtonContent { SelectionBadge: { } badge })
         {
             badge.Width = badge.Height = 22;
             badge.Child = InputPrompt.CreateGlyph(this, "A", 20);
@@ -141,7 +141,7 @@ public partial class MainWindow
         commands.Children.Add(host);
     }
 
-    private static Border AppearanceHost(Button button, bool available)
+    private Border AppearanceHost(Button button, bool available)
     {
         var margin = button.Margin;
         button.Margin = new(0);
@@ -155,7 +155,7 @@ public partial class MainWindow
         };
         AutomationProperties.SetName(host, AutomationProperties.GetName(button) + ". " + AutomationProperties.GetHelpText(button));
         AutomationProperties.SetHelpText(host, AutomationProperties.GetHelpText(button));
-        button.Resources["DescriptionTarget"] = host;
+        SetActionHost(button, host);
         return host;
     }
 

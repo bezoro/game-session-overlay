@@ -6,6 +6,9 @@
     <StartupObject>ShutdownTests</StartupObject>
   </PropertyGroup>
   <ItemGroup>
+    <Compile
+      Include="../Shared/*.cs"
+      Link="Infrastructure/%(Filename)%(Extension)" />
     <ProjectReference
       Include="../../tools/ApolloOverlay.Cli/ApolloOverlay.Cli.csproj" />
   </ItemGroup>

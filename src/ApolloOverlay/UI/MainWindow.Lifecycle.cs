@@ -85,9 +85,19 @@ public partial class MainWindow
             return;
         }
 
+        // Freeze the receipt producer before observing its final ordered disk write.
+        // Diagnostics remain live until that write succeeds or is explicitly unresolved.
+        DisposeAgentUpdates();
         if (steamOwner is not { } owner)
         {
-            Cleanup();
+            if (AgentReceiptTask.IsCompletedSuccessfully)
+            {
+                Cleanup();
+                return;
+            }
+            args.Cancel = true;
+            closeRequested = true;
+            closeDrain = DrainReceiptsAndClose();
             return;
         }
 
@@ -108,6 +118,20 @@ public partial class MainWindow
         {
         }
 
+        await DrainReceiptsAndClose();
+    }
+
+    private async Task DrainReceiptsAndClose()
+    {
+        try
+        {
+            await AgentReceiptTask.WaitAsync(TimeSpan.FromSeconds(3));
+        }
+        catch (Exception error) when (UpdateFailure(error))
+        {
+            LogUpdateFault("agent-update-receipt-shutdown", error, error is TimeoutException
+                ? "receipt-durability-unconfirmed-before-exit" : "receipt-write-failed-before-exit");
+        }
         await Dispatcher.InvokeAsync(() =>
         {
             closeFinalizing = true;

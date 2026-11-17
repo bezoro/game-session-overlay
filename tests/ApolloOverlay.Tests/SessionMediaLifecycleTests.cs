@@ -5,6 +5,30 @@ internal static class SessionMediaLifecycleTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        test("SMTC worker disposal completes cleanup on the dispatcher owner", () =>
+        {
+            var previous = SynchronizationContext.Current;
+            SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+            try
+            {
+                using var media = new SessionMedia(_ => Task.FromResult(Snapshot("active")));
+                media.SetVisible(true);
+                WpfTestDispatcher.Complete(media.RefreshAsync());
+                if (media.Current.Items.Count != 1)
+                    throw new Exception("Fixture did not publish its initial media");
+                WpfTestDispatcher.Complete(Task.Run(media.Dispose));
+                if (media.Current.Items.Count != 0)
+                    throw new Exception("Off-owner disposal skipped the visible-session cleanup");
+                media.SetVisible(true);
+                WpfTestDispatcher.Complete(media.RefreshAsync());
+                if (media.Current.Items.Count != 0)
+                    throw new Exception("Disposed media restarted observation");
+            }
+            finally
+            {
+                SynchronizationContext.SetSynchronizationContext(previous);
+            }
+        });
         test("SMTC reopening retains a refresh until the previous generation drains", () =>
         {
             var previous = SynchronizationContext.Current;
@@ -26,11 +50,11 @@ internal static class SessionMediaLifecycleTests
                 media.SetVisible(false);
                 media.SetVisible(true);
                 for (var i = 0; i < 8; i++)
-                    ReviewFixTests.Complete(media.RefreshAsync());
+                    WpfTestDispatcher.Complete(media.RefreshAsync());
                 if (reads != 1)
                     throw new Exception("Concurrent refresh escaped the owner gate");
                 old.SetResult(Snapshot("stale"));
-                ReviewFixTests.Complete(published.Task);
+                WpfTestDispatcher.Complete(published.Task);
                 if (reads != 2 || changes != 1 || media.Current.Items.Single().Title != "current")
                     throw new Exception("Reopening lost or duplicated its pending refresh");
             }
@@ -63,13 +87,13 @@ internal static class SessionMediaLifecycleTests
                     });
                     media.Changed += _ => changes++;
                     media.SetVisible(true);
-                    ReviewFixTests.Complete(media.RefreshAsync());
+                    WpfTestDispatcher.Complete(media.RefreshAsync());
                     if (dispose)
                         media.Dispose();
                     else
                         media.SetVisible(false);
                     old.SetResult(Snapshot("late"));
-                    ReviewFixTests.Complete(Dispatcher.CurrentDispatcher.InvokeAsync(() =>
+                    WpfTestDispatcher.Complete(Dispatcher.CurrentDispatcher.InvokeAsync(() =>
                     {
                     }, DispatcherPriority.Background).Task);
                     if (reads != 1 || changes != 0 || media.Current.Items.Count != 0)

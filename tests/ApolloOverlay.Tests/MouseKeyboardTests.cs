@@ -21,7 +21,7 @@ internal static class MouseKeyboardTests
             host.RevokeAdmission();
             host.RestoreNativeFocus();
             var before = w.Controller.Settings.SoundFeedbackEnabled;
-            var press = SendMouse(ReviewFixTests.Button(w, "sound-feedback"), true);
+            var press = SendMouse(WpfTestElements.Button(w, "sound-feedback"), true);
             Require(press.Handled, "The activation click was not consumed");
             Complete(w.OpeningTask);
             Require(SendMouse(w, false).Handled, "Release of the activation click reached the button");
@@ -77,7 +77,7 @@ internal static class MouseKeyboardTests
                 Require(!w.TransitionPending, gesture + " queued an outgoing action without admitted focus");
             }
 
-            Require(SendMouse(ReviewFixTests.Button(w, "sound-feedback"), true).Handled, "Unadmitted pointer down was allowed to focus its button");
+            Require(SendMouse(WpfTestElements.Button(w, "sound-feedback"), true).Handled, "Unadmitted pointer down was allowed to focus its button");
             Refused("Pointer down");
             Require(SendMouse(w, false).Handled, "Unadmitted pointer release reached its button");
             Refused("Pointer up");
@@ -154,7 +154,7 @@ internal static class MouseKeyboardTests
             Pick(w, "side");
             Tap(w, Key.Enter);
             Require(w.Controller.Settings.PanelSide == "Right", "Keyboard could not change placement");
-            var button = ReviewFixTests.Button(w, "side");
+            var button = WpfTestElements.Button(w, "side");
             button.ApplyTemplate();
             var flash = (Border)button.Template.FindName("ActivationFeedback", button);
             Require(flash.Opacity > 0 && flash.HasAnimatedProperties == InteractionMotion.Allowed, "Keyboard acknowledgement did not follow the motion policy");
@@ -279,7 +279,7 @@ internal static class MouseKeyboardTests
     private static string FocusState(MainWindow window) => $"selected={window.SelectedAction}; focused={Keyboard.FocusedElement?.GetType().Name}/{(Keyboard.FocusedElement as FrameworkElement)?.Tag}; active={window.IsActive}; nativeOwn={Native.GetForegroundWindow() == new WindowInteropHelper(window).Handle}";
     private static string SliderState(MainWindow window)
     {
-        var slider = PremiumInterfaceTests.Descendants<Slider>(ReviewFixTests.Button(window, "guide-limit")).Single();
+        var slider = WpfTestElements.Descendants<Slider>(WpfTestElements.Button(window, "guide-limit")).Single();
         return FocusState(window) + $"; sliderFocusable={slider.Focusable}; sliderVisible={slider.IsVisible}; sliderEnabled={slider.IsEnabled}; sliderLoaded={slider.IsLoaded}; sliderSize={slider.ActualWidth}x{slider.ActualHeight}";
     }
 
@@ -293,7 +293,7 @@ internal static class MouseKeyboardTests
         window.UpdateLayout();
     }
 
-    private static void Click(MainWindow window, string id) => ReviewFixTests.Button(window, id).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+    private static void Click(MainWindow window, string id) => WpfTestElements.Button(window, id).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
     private static void Tap(UIElement target, Key key)
     {
         SendKey(target, key, true);
@@ -321,7 +321,7 @@ internal static class MouseKeyboardTests
         return args;
     }
 
-    private static void Complete(Task task) => ReviewFixTests.Complete(task);
+    private static void Complete(Task task) => WpfTestDispatcher.Complete(task);
     private static void Require(bool value, string reason)
     {
         if (!value)
@@ -332,7 +332,7 @@ internal static class MouseKeyboardTests
     {
         private readonly SynchronizationContext? previous = SynchronizationContext.Current;
         internal readonly string Root = Path.Combine(Path.GetTempPath(), "OverlayMouseKeyboard", Guid.NewGuid().ToString("N"));
-        internal readonly PremiumInterfaceTests.FixturePlatform Platform = new(preview: false);
+        internal readonly TestPlatform Platform = new(preview: false);
         internal readonly Source Source = new();
         internal MainWindow Window
         {

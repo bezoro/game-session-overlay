@@ -35,7 +35,8 @@ public partial class MainWindow
 
         if (CurrentMixerTarget is not { } target || mixerStates.GetValueOrDefault(WindowId(target)) is not { } selected)
             return;
-        SetFeatureEntry("mixer-volume", selected.CanSetVolume ? $"Volume · {selected.VolumeMaximum:P0}" : "Volume unavailable", InputHint("← / → adjusts volume", "Arrow keys adjust · Tab leaves the slider", "Drag to adjust volume"), selected.CanSetVolume);
+        SetFeatureEntry("mixer-volume", selected.CanSetVolume ? $"Volume · {selected.VolumeMaximum:P0}" : "Volume unavailable", MixerVolumeRecovery, selected.CanSetVolume);
+        UpdateMixerVolumeHint();
         SetFeatureEntry("mixer-mute", selected.MuteState == ApplicationMuteState.Muted ? "Unmute audio" : "Mute app", target.ProcessName, selected.CanSetMute);
         SyncSessionSlider("mixer-volume", selected.VolumeMaximum);
     }
@@ -56,6 +57,24 @@ public partial class MainWindow
         }
     }
     private string WindowsVolumeTitle => audio.Current.Available ? audio.Current.Muted ? "Output · muted" : $"Output · {audio.Current.Volume:P0}" : "Output unavailable";
+    private string WindowsVolumeDescription => audio.Current.Available
+        ? systemAudio.Current.Outputs.Count > 0 ? systemAudio.Current.OutputName : "Default Windows output"
+        : "Choose Audio devices to check your output";
+    private string MicrophoneDescription => systemAudio.Current.MicrophoneMuted is not null
+        ? systemAudio.Current.MicrophoneName : "Choose Audio devices to check your microphone";
+    private string AudioDevicesDescription => systemAudio.Current.Outputs.Count > 0
+        ? systemAudio.Current.OutputName : "Check connected devices, then refresh the list";
+    private const string MixerVolumeRecovery = "Refresh apps to check available audio sessions";
+
+    private void UpdateMixerVolumeHint()
+    {
+        if (entries.FirstOrDefault(entry => entry.Id == "mixer-volume") is not { } volume)
+            return;
+        if (volume.Available)
+            SetEntryPrompt("mixer-volume", InputHint("{DpadHorizontal} adjusts volume", "{Left}/{Right} adjust · {Tab} leaves the slider", "{MouseLeft} drag to adjust volume"));
+        else
+            SetEntryDescription("mixer-volume", MixerVolumeRecovery);
+    }
     private string MicrophoneTitle => systemAudio.Current.MicrophoneMuted switch
     {
         true => "Microphone · muted",
@@ -67,8 +86,9 @@ public partial class MainWindow
     {
         var gameAudio = HubAudioSnapshot;
         SetFeatureEntry("session-volume", GameVolumeTitle, GameVolumeDescription, gameAudio?.CanSetMute == true);
-        SetFeatureEntry("windows-volume", WindowsVolumeTitle, systemAudio.Current.OutputName, audio.Current.Available);
-        SetFeatureEntry("microphone", MicrophoneTitle, systemAudio.Current.MicrophoneName, systemAudio.Current.MicrophoneMuted is not null);
+        SetFeatureEntry("windows-volume", WindowsVolumeTitle, WindowsVolumeDescription, audio.Current.Available);
+        SetFeatureEntry("microphone", MicrophoneTitle, MicrophoneDescription, systemAudio.Current.MicrophoneMuted is not null);
+        SetEntryDescription("audio-devices", AudioDevicesDescription);
         var media = CurrentMedia;
         SyncSessionSlider("session-volume", gameAudio?.VolumeMaximum);
         SyncSessionSlider("windows-volume", audio.Current.Available ? audio.Current.Volume : null);
@@ -81,16 +101,26 @@ public partial class MainWindow
         if (index < 0)
             return;
         var entry = entries[index];
-        entry.Button.IsEnabled = available;
+        var selection = navigation;
+        var wasSelected = selection.Id == id;
+        var revision = automationRevision;
         entries[index] = entry with
         {
             Available = available,
             Reason = description
         };
+        // Disabling a focused WPF control can synchronously focus another row.
+        // Publish admission first and retain this selection only in the same view.
+        entry.Button.IsEnabled = available;
+        if (revision != automationRevision || !entries.Any(current => current.Id == id && ReferenceEquals(current.Button, entry.Button)))
+            return;
         SetEntryText(id, title);
         SetEntryDescription(id, description);
-        if (entry.Available != available && navigation.Id == id)
+        if (entry.Available != available && wasSelected)
+        {
+            navigation = selection;
             SetSelection();
+        }
     }
 
     private void ToggleGameAudio()
@@ -114,7 +144,7 @@ public partial class MainWindow
         var delta = direction == NavDirection.Left ? -.05f : .05f;
         if (navigation.Id == "windows-volume")
         {
-            AudioAction(audio.Set(Math.Clamp(audio.Current.Volume + delta, 0, 1), expectedEndpoint: audio.Current.EndpointId));
+            ChangeMasterAudio(Math.Clamp(audio.Current.Volume + delta, 0, 1));
             return true;
         }
 
@@ -152,11 +182,12 @@ public partial class MainWindow
         {
             Section(target.Title);
             var state = mixerStates.GetValueOrDefault(WindowId(target));
-            var volume = AddRow("mixer-volume", state?.CanSetVolume == true ? $"Volume · {state.VolumeMaximum:P0}" : "Volume unavailable", "← / → adjusts volume", () =>
+            var volume = AddRow("mixer-volume", state?.CanSetVolume == true ? $"Volume · {state.VolumeMaximum:P0}" : "Volume unavailable", MixerVolumeRecovery, () =>
             {
             }, state?.CanSetVolume == true);
             if (state?.CanSetVolume == true)
                 AddSessionSlider(volume, state.VolumeMaximum!.Value, value => ChangeMixerVolume(target, value));
+            UpdateMixerVolumeHint();
             AddRow("mixer-mute", state?.MuteState == ApplicationMuteState.Muted ? "Unmute audio" : "Mute app", target.ProcessName, () =>
             {
                 if (!Controller.Platform.Valid(target) || mixerStates.GetValueOrDefault(WindowId(target)) is not { CanSetMute: true } current)
@@ -198,7 +229,7 @@ public partial class MainWindow
 
     private void ChangeMixerVolume(WindowRef target, float value)
     {
-        if (!NavigationAllowed || busy || TransitionPending || CurrentMixerTarget?.Same(target) != true || !Controller.Platform.Valid(target))
+        if (!ValidateNavigationOwnership() || busy || TransitionPending || CurrentMixerTarget?.Same(target) != true || !Controller.Platform.Valid(target))
             return;
         OperationTask = RunSessionAction("mixer-volume", async token =>
         {
@@ -210,7 +241,7 @@ public partial class MainWindow
 
     private void SetGameVolume(float value)
     {
-        if (!NavigationAllowed || busy || TransitionPending || HubAudioTarget is not { } target || !AudioFor(target) || !appAudio.CanSetVolume)
+        if (!ValidateNavigationOwnership() || busy || TransitionPending || HubAudioTarget is not { } target || !AudioFor(target) || !appAudio.CanSetVolume)
             return;
         var context = audioGeneration;
         OperationTask = RunInPlaceCore(target, async token =>
@@ -238,7 +269,7 @@ public partial class MainWindow
             MinHeight = 24
         };
         slider.Style = (Style)FindResource("SessionVolumeSlider");
-        button.Resources["SessionSlider"] = slider;
+        ((ActionButtonContent)button.Content).EditorSlider = slider;
         System.Windows.Automation.AutomationProperties.SetName(slider, "Volume as a percentage");
         slider.ValueChanged += (_, _) =>
         {
@@ -255,7 +286,7 @@ public partial class MainWindow
 
     private void SyncSessionSlider(string id, float? value)
     {
-        if (entries.FirstOrDefault(entry => entry.Id == id)?.Button.Resources["SessionSlider"] is not Slider slider)
+        if (entries.FirstOrDefault(entry => entry.Id == id)?.Button.Content is not ActionButtonContent { EditorSlider: { } slider })
             return;
         slider.IsEnabled = value is not null;
         if (value is null || slider.IsMouseCaptureWithin)
@@ -276,7 +307,7 @@ public partial class MainWindow
         if (args.Key != Key.Tab
             || args.OriginalSource is Slider or TextBox
             || KeyboardModifiersReader() != ModifierKeys.None
-            || entries.FirstOrDefault(entry => entry.Id == navigation.Id)?.Button.Resources["SessionSlider"] is not Slider slider)
+            || entries.FirstOrDefault(entry => entry.Id == navigation.Id)?.Button.Content is not ActionButtonContent { EditorSlider: { } slider })
             return false;
         if (NavigationAllowed && navigationKeysArmed && !busy && !TransitionPending)
             slider.Focus();
@@ -287,11 +318,7 @@ public partial class MainWindow
     private void BuildAudioDevices()
     {
         FeatureHeading("Windows audio devices", "Choose the output for games and media. The TV's physical volume is separate.", "audio-devices");
-        AddRow("device-refresh", "Refresh devices", systemAudio.Current.Status, () =>
-        {
-            nextFeatureRead = 0;
-            StartFeatureRead();
-        });
+        AddRow("device-refresh", "Refresh devices", systemAudio.Current.Status, RefreshSessionFeatures);
         Section("Audio output");
         if (systemAudio.Current.Outputs.Count == 0)
             FeatureEmpty("No audio output available", "Connect an audio device, then refresh this list.", "audio-devices");

@@ -13,6 +13,11 @@ public partial class MainWindow
     private long playniteScanCycle, playniteScanRevision;
     private bool playniteScanStarted;
     private PlayniteListing? playniteListing;
+    internal Func<string?, CancellationToken, Task<PlayniteListing>>? PlayniteFolderReaderFixture
+    {
+        private get; set;
+    }
+    internal Task PlayniteFolderTask { get; private set; } = Task.CompletedTask;
     private void CancelPlayniteScan()
     {
         playniteScanRevision++;
@@ -35,7 +40,7 @@ public partial class MainWindow
         var cycle = focusCycle;
         playniteScan = new CancellationTokenSource();
         var token = playniteScan.Token;
-        _ = LoadPlayniteFolder(folder, revision, cycle, token);
+        PlayniteFolderTask = LoadPlayniteFolder(folder, revision, cycle, token);
     }
 
     private async Task LoadPlayniteFolder(string? folder, long revision, long cycle, CancellationToken token)
@@ -43,13 +48,15 @@ public partial class MainWindow
         PlayniteListing result;
         try
         {
-            result = await Task.Run(() => ReadPlayniteFolder(folder, token), token);
+            result = await (PlayniteFolderReaderFixture?.Invoke(folder, token) ?? Task.Run(() => ReadPlayniteFolder(folder, token), token));
         }
         catch (OperationCanceledException)
         {
             return;
         }
 
+        // A fast read must not rebuild rows while their browser is still being built.
+        await Task.Yield();
         if (token.IsCancellationRequested
             || revision != playniteScanRevision
             || cycle != focusCycle

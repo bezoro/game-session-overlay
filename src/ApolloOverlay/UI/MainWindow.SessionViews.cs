@@ -308,15 +308,15 @@ public partial class MainWindow
     {
         var state = audio.Current;
         Paragraph("Windows volume and session audio controls.");
-        AddRow("volume-down", "Lower volume", "− 5% · default Windows output", () => AdjustVolume(-.05f), state.Available);
-        var volume = AddRow("volume", "Volume · " + (state.Available ? state.Volume.ToString("P0") : "unavailable"), "+ 5% · ← / → adjusts", () => AdjustVolume(.05f), state.Available);
-        if (state.Available)
-            AddSessionSlider(volume, state.Volume, value => AudioAction(audio.Set(value, expectedEndpoint: audio.Current.EndpointId)));
-        AddRow("mute", state.Muted ? "Unmute" : "Mute", "Mutes or unmutes the Windows output", () => AudioAction(audio.Set(muted: !audio.Current.Muted)), state.Available);
-        AddRow("microphone", MicrophoneTitle, systemAudio.Current.MicrophoneName, ToggleMicrophone, systemAudio.Current.MicrophoneMuted is not null);
+        AddRow("volume-down", "Lower volume", MasterVolumeLowerDescription(state), () => AdjustVolume(-.05f), state.Available);
+        var volume = AddRow("volume", MasterVolumeTitle(state), MasterVolumeDescription(state), () => AdjustVolume(.05f), state.Available);
+        AddSessionSlider(volume, state.Volume, value => ChangeMasterAudio(value));
+        UpdateAudioEntries(state);
+        AddRow("mute", state.Muted ? "Unmute" : "Mute", MasterMuteDescription(state), () => ChangeMasterAudio(muted: !audio.Current.Muted), state.Available);
+        AddRow("microphone", MicrophoneTitle, MicrophoneDescription, ToggleMicrophone, systemAudio.Current.MicrophoneMuted is not null);
         AddRow("session-mixer", "App mixer", "Separate game, voice and music audio", () => OpenFeature(OverlayRoute.Mixer, "mixer-refresh"));
-        AddRow("audio-devices", "Audio output", systemAudio.Current.OutputName, () => OpenFeature(OverlayRoute.AudioDevices, "device-refresh"));
-        AddRow("back", "Back", state.Status, Back);
+        AddRow("audio-devices", "Audio devices", AudioDevicesDescription, () => OpenFeature(OverlayRoute.AudioDevices, "device-refresh"));
+        AddRow("back", "Back", "Return to the session panel", Back);
     }
 
 }

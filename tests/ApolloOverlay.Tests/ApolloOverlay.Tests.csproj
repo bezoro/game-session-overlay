@@ -7,6 +7,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
+    <Compile
+      Include="../Shared/*.cs"
+      Link="Infrastructure/%(Filename)%(Extension)" />
     <ProjectReference
       Include="../../src/ApolloOverlay/ApolloOverlay.csproj" />
   </ItemGroup>

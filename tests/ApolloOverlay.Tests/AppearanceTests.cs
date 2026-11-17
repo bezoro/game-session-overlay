@@ -12,6 +12,29 @@ internal static class AppearanceTests
     internal static void Run(Action<string, Action> test)
     {
         AppearancePaletteTests.Run(test);
+        test("Audio primary navigation leaves color editing without retaining a dead editor frame", () =>
+        {
+            using var host = DarkHost();
+            var window = host.Window;
+            host.Open();
+            var original = ResourceColor(window, ThemeSupport.Focus);
+            window.Page(2);
+            window.OpenAppearance();
+            SessionInterfaceTests.Choose(window, "appearance-preset:Graphite");
+            window.OpenAppearanceColor(PaletteRole.Focus);
+            Require(window.AppearanceDirty, "The color editor did not own an unsaved draft");
+            WpfTestElements.ClickNamed(window, "SettingsTab");
+            Require(window.ActionIds.Contains("volume") && ResourceColor(window, ThemeSupport.Focus) == original,
+                "Leaving the appearance feature retained its unsaved preview");
+            window.Back();
+            Require(window.ActionIds.Contains("session-card") && !window.ActionIds.Contains("color-red"),
+                "Back restored a color editor after its draft was discarded");
+            window.Page(2);
+            window.OpenAppearance();
+            window.OpenAppearanceColor(PaletteRole.Focus);
+            Require(window.ActionIds.Contains("color-red") && window.ActionIds.Contains("color-apply"),
+                "The discarded editor prevented a new color-editing session");
+        });
         foreach (var light in new[] { false, true })
             test("unsafe color explanation stays beside pinned commands light=" + light, () =>
             {
@@ -25,7 +48,7 @@ internal static class AppearanceTests
                 window.OpenAppearanceColor(PaletteRole.Focus);
                 var background = ((SolidColorBrush)window.FindResource(ThemeSupport.FocusBackground)).Color.ToString()[3..];
                 EnterHex(window, background);
-                var status = PremiumInterfaceTests.Descendants<TextBlock>((DependencyObject)window.FindName("Rows"))
+                var status = WpfTestElements.Descendants<TextBlock>((DependencyObject)window.FindName("Rows"))
                     .Single(text => Equals(text.Tag, "color-status"));
                 var viewport = (ScrollViewer)window.FindName("ContentScroll");
                 var bounds = status.TransformToAncestor(viewport).TransformBounds(new Rect(status.RenderSize));
@@ -33,7 +56,7 @@ internal static class AppearanceTests
                     && bounds.Top >= 0 && bounds.Bottom <= viewport.ViewportHeight,
                     "The unsafe-draft explanation scrolled away from Keep/Cancel");
                 SessionInterfaceTests.Choose(window, "color-apply");
-                Require(!ReviewFixTests.Button(window, "appearance-save").IsEnabled && window.AppearanceDirty,
+                Require(!WpfTestElements.Button(window, "appearance-save").IsEnabled && window.AppearanceDirty,
                     "The visible warning allowed an unreadable palette to be saved");
             });
         test("dynamic color hints keep commands concise and the edited role identifiable", () =>
@@ -44,7 +67,7 @@ internal static class AppearanceTests
             window.OpenAppearance();
             window.OpenAppearanceColor(PaletteRole.Focus);
             window.UpdateLayout();
-            var keep = ReviewFixTests.Button(window, "color-apply");
+            var keep = WpfTestElements.Button(window, "color-apply");
             Require(((ActionButtonContent)keep.Content).Description.Visibility == Visibility.Collapsed && keep.ActualHeight < 60,
                 "A dynamic hint expanded the pinned color command");
             Require(((TextBlock)window.FindName("PageTitle")).Text == AppearanceCatalog.Roles.First(role => role.Role == PaletteRole.Focus).Name,
@@ -121,7 +144,7 @@ internal static class AppearanceTests
                 CheckFeedbackGeometry(window);
                 update.Visibility = Visibility.Collapsed;
                 SessionInterfaceTests.Pick(window, "session-card");
-                var selected = ReviewFixTests.Button(window, "session-card");
+                var selected = WpfTestElements.Button(window, "session-card");
                 selected.ApplyTemplate();
                 var outline = (Border)selected.Template.FindName("Surface", selected);
                 Require(outline.BorderBrush is SolidColorBrush focus && focus.Color == ResourceColor(window, ThemeSupport.Focus)
@@ -256,7 +279,7 @@ internal static class AppearanceTests
             Require(window.SelectedAction == "color-hex" && ResourceColor(window, ThemeSupport.Focus) == Color.FromRgb(240, 192, 138),
                 "A valid local hex entry did not return to its color preview");
             Require(SessionHubSettings.Equivalent(before, window.Controller.Settings)
-                && ((PremiumInterfaceTests.FixturePlatform)window.Controller.Platform).Calls == 0, "Editing a local color changed settings or sent an external command");
+                && ((TestPlatform)window.Controller.Platform).Calls == 0, "Editing a local color changed settings or sent an external command");
             SessionInterfaceTests.Choose(window, "color-apply");
             Require(window.AppearanceDirty && SessionHubSettings.Equivalent(before, window.Controller.Settings), "Apply color skipped the unsaved palette draft");
             SessionInterfaceTests.Choose(window, "appearance-discard");
@@ -277,7 +300,7 @@ internal static class AppearanceTests
             EnterHex(window, text.TrimStart('#'));
             Require(ResourceColor(window, ThemeSupport.Surface) == before, "An unreadable proposal replaced the safe editor chrome");
             SessionInterfaceTests.Choose(window, "color-apply");
-            var save = ReviewFixTests.Button(window, "appearance-save");
+            var save = WpfTestElements.Button(window, "appearance-save");
             Require(window.AppearanceDirty && !save.IsEnabled && AutomationProperties.GetHelpText(save).Length > 0,
                 "Unsafe paired-color draft was discarded or remained saveable without an explanation");
             Require(SessionHubSettings.Equivalent(settings, window.Controller.Settings)
@@ -296,12 +319,12 @@ internal static class AppearanceTests
             window.OpenAppearanceColor(PaletteRole.Surface);
             EnterHex(window, AppearanceCatalog.Resolve(window.Controller.Settings.Appearance, false).Text.TrimStart('#'));
             SessionInterfaceTests.Choose(window, "color-apply");
-            Require(!ReviewFixTests.Button(window, "appearance-save").IsEnabled, "PRECONDITION: the staged palette is not invalid");
+            Require(!WpfTestElements.Button(window, "appearance-save").IsEnabled, "PRECONDITION: the staged palette is not invalid");
             window.OpenAppearanceColor(PaletteRole.Surface);
             EnterHex(window, "1C1A19");
             Require(ResourceColor(window, ThemeSupport.Surface) == Color.FromRgb(28, 26, 25), "PRECONDITION: the nested valid preview was not painted");
             SessionInterfaceTests.Choose(window, "color-cancel");
-            Require(window.AppearanceDirty && !ReviewFixTests.Button(window, "appearance-save").IsEnabled
+            Require(window.AppearanceDirty && !WpfTestElements.Button(window, "appearance-save").IsEnabled
                 && ResourceColor(window, ThemeSupport.Surface) == original, "Cancelling a nested edit retained a color that was never kept");
         });
         test("a failed appearance save keeps its draft and the prior saved baseline", () =>
@@ -351,7 +374,7 @@ internal static class AppearanceTests
     {
         window.UpdateLayout();
         var inspected = 0;
-        foreach (var button in PremiumInterfaceTests.Descendants<Button>(window))
+        foreach (var button in WpfTestElements.Descendants<Button>(window))
         {
             if (!button.IsVisible || button.ActualWidth <= 0 || button.ActualHeight <= 0)
                 continue;
@@ -360,7 +383,7 @@ internal static class AppearanceTests
                 .Select(name => button.Template.FindName(name, button) as FrameworkElement).Where(element => element is not null).ToArray();
             if (feedback.Length == 0)
                 continue;
-            var protectedContent = PremiumInterfaceTests.Descendants<FrameworkElement>(button)
+            var protectedContent = WpfTestElements.Descendants<FrameworkElement>(button)
                 .Where(element => element.IsVisible && element.ActualWidth > 0 && element.ActualHeight > 0
                     && element is TextBlock or VectorIcon or Slider)
                 .Select(element => element is TextBlock text ? TextInk(text, button)

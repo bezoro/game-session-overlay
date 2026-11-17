@@ -41,7 +41,7 @@ public partial class MainWindow
         Section("Integrations");
         AddRow("configure-playnite", "Playnite location", Controller.Settings.PlaynitePath is null ? "Choose executable…" : "Installation configured", ConfigurePlaynite);
         AddRow("shortcut", "Steam shortcut · " + Controller.Settings.SteamShortcut, "A switches Shift+Tab / Ctrl+Tab", () => Change(Controller.Settings with { SteamShortcut = Controller.Settings.SteamShortcut == "Shift+Tab" ? "Ctrl+Tab" : "Shift+Tab" }));
-        AddRow("integrations", "Integrations and limits", "Guide and external features", () => Subpage("integrations", "guide"));
+        AddRow("integrations", "Integrations and limits", "Guide and external features", () => OpenSubpage(OverlayRoute.Integrations, "guide"));
         Section("Settings and background services");
         AddRow("save", "Save settings", "Keep your changes on this computer", Save);
         AddRow("exit", "Quit overlay", Controller.SettingsDirty ? "Unsaved changes will be lost" : "Stops background services and removes the tray icon", () => QueueHandoff(Close));
@@ -222,7 +222,6 @@ public partial class MainWindow
             Margin = new(0, 0, delta < 0 ? 56 : 0, 0)
         };
         AutomationProperties.SetName(holder, label + ". No position available in this direction");
-        button.Resources["DescriptionTarget"] = holder;
         void Move()
         {
             navigation = new("favorite:" + id);
@@ -234,7 +233,7 @@ public partial class MainWindow
         Grid.SetRow(holder, row);
         Grid.SetColumn(holder, 1);
         Rows.Children.Add(holder);
-        RegisterFixed(entryId, button, Move, available, AutomationProperties.GetHelpText(button));
+        RegisterFixed(entryId, button, Move, available, AutomationProperties.GetHelpText(button), holder);
     }
 
     private static string FavoriteName(string id) => id switch

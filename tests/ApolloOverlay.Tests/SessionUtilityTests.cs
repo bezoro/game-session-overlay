@@ -12,7 +12,7 @@ internal static class SessionUtilityTests
 
     private static T Complete<T>(Task<T> task)
     {
-        ReviewFixTests.Complete(task);
+        WpfTestDispatcher.Complete(task);
         return task.GetAwaiter().GetResult();
     }
 

@@ -19,7 +19,7 @@ internal static class CorrectionTests
         Dispatcher.PushFrame(frame);
     }
 
-    private static void Complete(Task task) => ReviewFixTests.Complete(task);
+    private static void Complete(Task task) => WpfTestDispatcher.Complete(task);
     internal static void Run(Action<string, Action> test, string output)
     {
         var app = Application.Current ?? new Application
@@ -56,18 +56,18 @@ internal static class CorrectionTests
         }
 
         )
-            test("NI02 null " + name + " recovers previous then defaults", () =>
+            test("NI02 null retired " + name + " recovers locally and preserves current preferences", () =>
             {
                 var folder = Path.Combine(output, "null-" + name);
                 Directory.CreateDirectory(folder);
                 var path = Path.Combine(folder, "settings.json");
-                File.WriteAllText(path, "{\"" + name + "\":null}");
+                File.WriteAllText(path, "{\"" + name + "\":null,\"Deadzone\":24000,\"GuideXInputEnabled\":false}");
                 File.WriteAllText(path + ".previous", "{\"Deadzone\":23000}");
                 var recovered = UserSettings.Load(path, out var message);
-                Require(recovered.Deadzone == 23000 && message.Contains("recovered"), "Previous-good configuration must recover");
+                Require(recovered.Deadzone == 24000 && !recovered.GuideXInputEnabled && message.Contains("recovered"), "A retired field discarded valid current preferences");
                 File.WriteAllText(path + ".previous", "{");
                 var fallback = UserSettings.Load(path, out message);
-                Require(fallback == new UserSettings(), "Invalid previous must recover defaults");
+                Require(fallback.Deadzone == 24000 && !fallback.GuideXInputEnabled && message.Contains("recovered"), "A retired field unnecessarily consulted the damaged backup");
             });
         test("NI06 custom23000 and preset deadzone UI remain valid", () =>
         {

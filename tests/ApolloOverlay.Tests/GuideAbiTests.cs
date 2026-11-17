@@ -822,13 +822,13 @@ internal static unsafe class GuideAbiTests
             }));
             statuses[0] = 0;
             guideButtons[0] = 0x400;
-            b.Poll();
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             Require(b.Held && b.SnapshotValid && b.Connections == 1 && polls == 4);
             guideButtons[0] = 0;
-            b.Poll();
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             Require(!b.Held && b.SnapshotValid && polls == 8);
             statuses[0] = 5;
-            b.Poll();
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             Require(!b.SnapshotValid && b.Connections == 0 && polls == 12);
         });
         test("target shortcut focus continuation sends zero after WPF Cleanup", LateSendAfterCleanup);
@@ -1734,7 +1734,7 @@ internal static unsafe class GuideAbiTests
                     default,
                     default
                 };
-                Require(!input.Update(chord, false, 1).Toggle && !input.Update(chord, false, 1000).Toggle);
+                Require(input.Update(chord, false, 1) == default && input.Update(chord, false, 1000) == default);
                 input.Cancel();
                 input.Update(neutral, true, 1001);
                 var lb = new PadFrame[]
@@ -2558,14 +2558,14 @@ internal static unsafe class GuideAbiTests
             Require(loads == 1 && polls == 0);
             statuses[0] = 0;
             guideButtons[0] = 0x0400;
-            b.Poll();
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             Require(edges == 0 && polls == 4);
             guideButtons[0] = 0;
-            b.Poll();
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             guideButtons[0] = 0x0400;
-            b.Poll();
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             Require(edges == 1 && c.Observed);
-            b.Poll();
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             Require(edges == 1);
         }
 
@@ -2580,25 +2580,25 @@ internal static unsafe class GuideAbiTests
         {
             Require(c.Start(() => edges++));
             statuses[0] = 0;
-            b.Poll();
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             guideButtons[0] = 0x0400;
-            b.Poll();
-            b.Poll();
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             Require(edges == 1);
             guideButtons[0] = 0;
-            b.Poll();
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             guideButtons[0] = 0x0400;
-            b.Poll();
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             Require(edges == 2);
             statuses[0] = 5;
-            b.Poll();
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             statuses[0] = 0;
-            b.Poll();
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             Require(edges == 2, "reconnect held");
             guideButtons[0] = 0;
-            b.Poll();
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             guideButtons[0] = 0x0400;
-            b.Poll();
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             Require(edges == 3);
         }
 
@@ -2613,16 +2613,16 @@ internal static unsafe class GuideAbiTests
         {
             Require(c.Start(() => edges++));
             Array.Fill(statuses, 0u);
-            b.Poll();
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             Array.Fill(guideButtons, (ushort)0x0400);
-            b.Poll();
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             Require(edges == 1, "four edges coalesce");
-            b.Poll();
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             Require(edges == 1);
             guideButtons[2] = 0;
-            b.Poll();
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             guideButtons[2] = 0x0400;
-            b.Poll();
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             Require(edges == 2, "independent slot rearm");
         }
 
@@ -2643,7 +2643,7 @@ internal static unsafe class GuideAbiTests
             using (var c = new GuideConnection(b))
             {
                 Require(!c.Start(() => throw new Exception("failed export invoked")));
-                b.Poll();
+                b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
                 Require(polls == 0 && !b.Active);
             }
 
@@ -2656,12 +2656,12 @@ internal static unsafe class GuideAbiTests
         var connection = new GuideConnection(good);
         Require(connection.Start(() => count++));
         statuses[0] = 0;
-        good.Poll();
+        good.PollForOverlay(true, 0, Environment.TickCount64, 2000);
         connection.Dispose();
         connection.Dispose();
         guideButtons[0] = 0x0400;
         var before = polls;
-        good.Poll();
+        good.PollForOverlay(true, 0, Environment.TickCount64, 2000);
         Require(polls == before && count == 0 && frees == 1 && !good.Active);
     }
 
@@ -2673,12 +2673,12 @@ internal static unsafe class GuideAbiTests
         {
             Require(c.Start(() => request = true));
             statuses[0] = 0;
-            b.Poll();
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             guideButtons[0] = 0x0400;
-            b.Poll();
-            Require(GuidePolling.Consume(ref request, true) && !request);
-            b.Poll();
-            Require(!GuidePolling.Consume(ref request, false), "hold or simultaneous chord retriggered");
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
+            Require(GuidePolling.Consume(ref request) && !request);
+            b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
+            Require(!GuidePolling.Consume(ref request), "held Guide retriggered");
             Require(GuidePolling.Interval(b.Active, false, false) == 20 && GuidePolling.Interval(b.Active, true, true) == 20);
         }
 

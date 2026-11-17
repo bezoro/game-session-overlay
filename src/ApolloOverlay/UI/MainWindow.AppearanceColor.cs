@@ -98,9 +98,9 @@ public partial class MainWindow
             Style = (Style)FindResource("SessionVolumeSlider")
         };
         AutomationProperties.SetName(slider, name + " color channel, zero to 255");
-        row.Resources["SessionSlider"] = slider;
         if (row.Content is ActionButtonContent body)
         {
+            body.EditorSlider = slider;
             body.Description.Visibility = Visibility.Collapsed;
             body.Texts.Children.Add(slider);
         }
@@ -122,7 +122,7 @@ public partial class MainWindow
     {
         if (view.Current.Route != OverlayRoute.ColorEdit || direction is not (NavDirection.Left or NavDirection.Right)
             || navigation.Id is not ("color-red" or "color-green" or "color-blue")
-            || entries.FirstOrDefault(entry => entry.Id == navigation.Id)?.Button.Resources["SessionSlider"] is not Slider slider)
+            || entries.FirstOrDefault(entry => entry.Id == navigation.Id)?.Button.Content is not ActionButtonContent { EditorSlider: { } slider })
             return false;
         slider.Value = Math.Clamp(slider.Value + (direction == NavDirection.Left ? -1 : 1), 0, 255);
         return true;

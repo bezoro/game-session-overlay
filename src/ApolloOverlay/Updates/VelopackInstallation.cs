@@ -12,13 +12,14 @@ public static class VelopackInstallation
     public const string PackageId = "GameSessionOverlay";
     public const string LauncherName = "Game Session Overlay.exe";
     private static LocalUpdateHistory Retained = new();
+    private static readonly UpdateHistorySnapshot HistoryObservation = new(() => Retained.List(AppBuild.Current.BuildId));
     private static string? proofDataRoot;
     public static bool FirstRun
     {
         get;
         private set;
     }
-    public static string? Notice
+    public static SettingsRestoreResult? Notice
     {
         get;
         private set;
@@ -37,6 +38,7 @@ public static class VelopackInstallation
             || !path.StartsWith(Path.GetFullPath(temporary).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The update proof requires isolated data in the runner's temporary directory.");
         Retained = new(path);
+        HistoryObservation.Invalidate();
         proofDataRoot = path;
     }
 
@@ -63,21 +65,34 @@ public static class VelopackInstallation
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidDataException)
             {
-                Notice = "The settings backup could not be recovered. Current settings were preserved; check history before trying another rollback.";
+                Notice = new(SettingsRestoreOutcome.Failed, "The settings backup could not be recovered. Current settings were preserved; check history before trying another rollback.");
             }
         }
     }
 
-    public static string? ReadNotice()
+    public static SettingsRestoreResult? ReadNotice()
     {
         var value = Notice;
         Notice = null;
         return value;
     }
 
-    public static IReadOnlyList<InstalledBuild> History() => Retained.List(AppBuild.Current.BuildId);
-    public static Task RecordCurrentAsync(CancellationToken cancellation = default) => IsInstalled ? Retained.RecordCurrentAsync(AppBuild.Current, cancellation: cancellation) : Task.CompletedTask;
-    public static Task ArchiveVerifiedAsync(string packagePath, VelopackAsset expected, AppBuildInfo build, CancellationToken cancellation = default) => Retained.ArchiveVerifiedAsync(packagePath, expected, build, false, cancellation);
+    internal static IReadOnlyList<InstalledBuild> CachedHistory => HistoryObservation.Current;
+    internal static bool HistoryIsFresh => HistoryObservation.Fresh;
+    internal static Task<IReadOnlyList<InstalledBuild>> ReadHistoryAsync() => HistoryObservation.ReadAsync();
+    public static async Task RecordCurrentAsync(CancellationToken cancellation = default)
+    {
+        if (!IsInstalled)
+            return;
+        await Retained.RecordCurrentAsync(AppBuild.Current, cancellation: cancellation).ConfigureAwait(false);
+        HistoryObservation.Invalidate();
+    }
+
+    public static async Task ArchiveVerifiedAsync(string packagePath, VelopackAsset expected, AppBuildInfo build, CancellationToken cancellation = default)
+    {
+        await Retained.ArchiveVerifiedAsync(packagePath, expected, build, false, cancellation).ConfigureAwait(false);
+        HistoryObservation.Invalidate();
+    }
     public static string LocalPackagePath(VelopackAsset asset)
     {
         if (PackagesDirectory is not { } directory)

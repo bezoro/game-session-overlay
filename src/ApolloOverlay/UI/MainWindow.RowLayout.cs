@@ -73,9 +73,8 @@ public partial class MainWindow
             FocusVisualStyle = null,
             Tag = "description:" + id
         };
-        AutomationProperties.SetName(reason, title + ". " + description);
-        AutomationProperties.SetHelpText(reason, description);
-        button.Resources["DescriptionTarget"] = reason;
+        SetActionHost(button, reason);
+        UpdateEntryAutomation(button);
         reason.SetBinding(MarginProperty, new Binding(nameof(Margin)) { Source = button });
         Grid.SetRow(reason, index);
         Grid.SetColumn(reason, row is null ? 0 : column);
@@ -85,10 +84,23 @@ public partial class MainWindow
         return button;
     }
 
-    private void RegisterFixed(string id, Button button, Action action, bool available, string reason)
+    private void RegisterFixed(string id, Button button, Action action, bool available, string reason, Border? focusHost = null, Border? layoutHost = null)
     {
         button.Tag = id;
         button.IsEnabled = available;
-        entries.Add(new(id, button, action, available, reason));
+        entries.Add(new(id, button, action, available, reason, focusHost, layoutHost));
+    }
+
+    internal Border? FindActionHost(Button button) => entries.FirstOrDefault(entry => ReferenceEquals(entry.Button, button))?.FocusHost;
+
+    private void SetActionHost(Button button, Border host)
+    {
+        var index = entries.FindIndex(entry => ReferenceEquals(entry.Button, button));
+        if (index < 0)
+            throw new InvalidOperationException("An action must be registered before its focus host is assigned.");
+        entries[index] = entries[index] with
+        {
+            FocusHost = host
+        };
     }
 }
