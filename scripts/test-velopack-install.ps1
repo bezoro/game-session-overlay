@@ -335,18 +335,18 @@ function Apply-NativePackage($Selected, [Diagnostics.Process]$Running, [string]$
         $updater.Dispose()
     }
 }
-function Rollback-PackagedCli($Selected, $Running) {
+function Rollback-PackagedMcp($Selected, $Running) {
     $readyPath = Join-Path $dataRoot 'ready.json'
     if (Test-Path -LiteralPath $readyPath) {
         Remove-Item -LiteralPath $readyPath -Force
     }
     $cliPath = Join-Path $installRoot 'current/ApolloOverlay.Cli.exe'
-    $start = [Diagnostics.ProcessStartInfo]::new($cliPath)
+    $proof = Join-Path (Split-Path -Parent $PSScriptRoot) 'tests/ApolloOverlay.Cli.Tests/bin/Release/net10.0-windows/ApolloOverlay.Cli.Tests.exe'
+    $start = [Diagnostics.ProcessStartInfo]::new($proof)
     $start.UseShellExecute = $false
-    $start.WorkingDirectory = Split-Path -Parent $cliPath
     $start.RedirectStandardOutput = $true
     $start.RedirectStandardError = $true
-    foreach ($argument in @('rollback', $Selected.Build.buildId, '--timeout', '90')) {
+    foreach ($argument in @('--mcp-rollback', $cliPath, $Selected.Build.buildId)) {
         $start.ArgumentList.Add($argument)
     }
     $client = [Diagnostics.Process]::Start($start)
@@ -355,21 +355,22 @@ function Rollback-PackagedCli($Selected, $Running) {
         $stderr = $client.StandardError.ReadToEndAsync()
         if (-not $client.WaitForExit(100000)) {
             Stop-Owned $client
-            throw 'Installed CLI rollback timed out; the mutation will not be repeated.'
+            throw 'Installed MCP rollback timed out; the mutation will not be repeated.'
         }
         $output = $stdout.GetAwaiter().GetResult()
         $errorOutput = $stderr.GetAwaiter().GetResult()
-        Require ($output.Length -le 2097152) 'Installed CLI rollback response exceeded the proof bound.'
-        [IO.File]::WriteAllText((Join-Path $evidence 'cli-rollback-B-to-A.json'), $output)
+        Require ($output.Length -le 2097152) 'Installed MCP rollback response exceeded the proof bound.'
+        [IO.File]::WriteAllText((Join-Path $evidence 'mcp-rollback-B-to-A.json'), $output)
         if ($errorOutput) {
-            [IO.File]::WriteAllText((Join-Path $evidence 'cli-rollback-stderr.log'), $errorOutput.Substring(0, [Math]::Min(16384, $errorOutput.Length)))
+            [IO.File]::WriteAllText((Join-Path $evidence 'mcp-rollback-stderr.log'), $errorOutput.Substring(0, [Math]::Min(16384, $errorOutput.Length)))
         }
+        Require ($client.ExitCode -eq 0) "Installed MCP rollback proof failed: $errorOutput"
         $reply = $output | ConvertFrom-Json
-        Require ($client.ExitCode -eq 0 -and $reply.Outcome -ceq 'Requested' -and $reply.Terminal -eq $false) "Installed CLI did not confirm a rollback request: $($reply.Outcome) $($reply.Reason)"
+        Require ($reply.Outcome -ceq 'Requested' -and $reply.Terminal -eq $false) "Installed MCP did not confirm a rollback request: $($reply.Outcome) $($reply.Reason)"
         Require ($reply.Pid -eq $Running.Process.Id -and $reply.Started -eq $Running.Ready.started -and $reply.Session -eq $Running.Cli.Session -and
             $reply.Update.TargetBuildId -ceq $Selected.Build.buildId -and $reply.Update.TargetVersion -ceq $Selected.Build.version) 'Rollback receipt does not identify the exact old instance and requested A build.'
         $oldInstance = Get-Process -Id $Running.Process.Id -ErrorAction SilentlyContinue
-        Require (-not $oldInstance -or $oldInstance.StartTime.ToUniversalTime().Ticks -ne $Running.Ready.started) 'CLI returned Requested before the exact old GUI exited.'
+        Require (-not $oldInstance -or $oldInstance.StartTime.ToUniversalTime().Ticks -ne $Running.Ready.started) 'MCP returned Requested before the exact old GUI exited.'
         return $reply
     }
     finally {
@@ -512,13 +513,13 @@ try {
             settingsSha256 = $settingsHash
         })
 
-    $rollback = Rollback-PackagedCli $release $upgraded
+    $rollback = Rollback-PackagedMcp $release $upgraded
     $restored = Start-VerifiedApp $release $hashA 'A-restored' $false
     Require (-not ($restored.Process.Id -eq $upgraded.Process.Id -and $restored.Ready.started -eq $upgraded.Ready.started)) 'Rollback retained the B process identity.'
     Verify-History $variant
-    Require ((Get-FileHash -LiteralPath $settings -Algorithm SHA256).Hash -eq $settingsHash) 'CLI rollback altered user settings.'
+    Require ((Get-FileHash -LiteralPath $settings -Algorithm SHA256).Hash -eq $settingsHash) 'MCP rollback altered user settings.'
     Require ((Get-FileHash -LiteralPath $release.PackagePath -Algorithm SHA256).Hash -ieq $release.Asset.SHA256) 'Proof changed the actual published A package.'
-    $cases.Add(@{ name = 'packaged CLI rollback requests exact A; application SDK flow applies and restarts verified A with history and settings preserved'
+    $cases.Add(@{ name = 'packaged MCP rollback requests exact A and disconnects; Velopack restarts verified A with history and settings preserved'
             passed = $true
             pid = $restored.Process.Id
             started = $restored.Ready.started

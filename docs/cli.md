@@ -2,7 +2,9 @@
 
 `gso.cmd` and `ApolloOverlay.Cli.exe` ship with the installed app and communicate with the running instance, including while it is hidden. They do not start or elevate the GUI, retry requests, or accept arbitrary keys, executable paths or scripts.
 
-For a complete report to paste into chat, use **Copy diagnostics** in the tray menu or System page. `gso logs --tail 200` remains a bounded, offline query of recent records; it is not a complete export of retained logs. Both paths share the same safe file-opening and rotation reader. See [diagnostics](diagnostics.md).
+Run `gso mcp` to start the [local MCP server](mcp.md).
+
+`gso diagnostics` exports all retained on-disk command logs to a temporary Markdown file and returns its path in JSON. The tray and System **Copy diagnostics** action also captures live state and logger health. See [diagnostics](diagnostics.md).
 
 ## Update from a terminal or agent
 
@@ -83,6 +85,8 @@ ApolloOverlay.Cli.exe targets
 ApolloOverlay.Cli.exe actions
 ApolloOverlay.Cli.exe execute route:integrations
 ApolloOverlay.Cli.exe execute focus --target ID --dry-run
+ApolloOverlay.Cli.exe execute session-select --target ID
+ApolloOverlay.Cli.exe execute session-clear
 ApolloOverlay.Cli.exe execute steam-overlay --target ID
 ApolloOverlay.Cli.exe result REQUEST_ID
 ApolloOverlay.Cli.exe cancel REQUEST_ID
@@ -90,7 +94,7 @@ ApolloOverlay.Cli.exe trace
 ApolloOverlay.Cli.exe shutdown
 ```
 
-`targets` refreshes observations when no operation is active and returns opaque identities bound to HWND/PID/creation/generation. `TargetsAtUtc` records the last refresh separately from `AtUtc`. `actions` lists actual route controls, availability, reason, capability and intents. `--intent left|right` exists only for advertised adjustments. Finite routes are `route:home`, `apps`, `system`, `audio`, `integrations`, `options`, `details`, `customize`, `setup` and `result`; options/details require `--target ID`. A stale explicit target is rejected, never silently replaced.
+`targets` refreshes observations when no operation is active and returns opaque identities bound to HWND/PID/creation/generation. `TargetsAtUtc` records the last refresh separately from `AtUtc`. `actions` lists session actions and route controls with availability, capability, reason and intents. `Scope: session` identifies commands that work from any route while the overlay is hidden or visible. `TargetRequired` identifies actions that require an explicit window ID. `session-select` sets the session card reference and `session-clear` clears it. Read `Snapshot.SessionTargetId` to verify the selection. `--intent left|right` exists only for advertised adjustments. Finite routes are `route:home`, `apps`, `system`, `audio`, `integrations`, `options`, `details`, `customize`, `setup` and `result`; options/details require `--target ID`. A stale explicit target is rejected, never silently replaced.
 
 | Capability | Behavior |
 | --- | --- |

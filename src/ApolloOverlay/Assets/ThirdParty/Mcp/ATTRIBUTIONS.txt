@@ -1,0 +1,15 @@
+ModelContextProtocol.Core 2.4.0
+Copyright © Model Context Protocol a Series of LF Projects, LLC.
+https://github.com/modelcontextprotocol/csharp-sdk/tree/4cbf42ef107763f0bc75c358af8cb2dfe47a769a
+See ModelContextProtocol-LICENSE.txt for upstream license terms.
+
+Microsoft.Extensions.AI.Abstractions 10.11.0
+© Microsoft Corporation. All rights reserved.
+https://github.com/dotnet/extensions/tree/25f07afa51034e37b334210642d7dc5f191c142d
+See Microsoft.Extensions.AI-LICENSE.txt.
+
+Microsoft.Extensions.DependencyInjection.Abstractions 10.0.14
+Microsoft.Extensions.Logging.Abstractions 10.0.14
+© Microsoft Corporation. All rights reserved.
+https://github.com/dotnet/runtime/tree/v10.0.14
+See Microsoft.Extensions-LICENSE.txt and Microsoft.Extensions-THIRD-PARTY-NOTICES.txt.

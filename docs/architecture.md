@@ -14,7 +14,7 @@ The process maintains a hidden WPF window and a tray icon. `Program` initializes
 | `Feedback` | Sound, vibration, cue priority and lifecycle. |
 | `Settings` | Settings loading, validation, migration and Windows startup. |
 | `Updates` | Build identity, the Velopack source, channels and rollback history. |
-| `Automation` | Protocol, pipe transport, permissions and request records. The CLI shares only the protocol and transport security. |
+| `Automation` | Protocol, pipe transport, permissions and request records. The CLI and its stdio MCP server share a client and use the same pipe and protocol. |
 | `Integrations` | Evidence and permissions specific to external integrations. |
 | `UI` | WPF navigation, components, pages and coordination. Window partials group responsibilities of the same instance; they are not isolated services. |
 | `Diagnostics` | Local logs, previews and proofs limited to owned windows. |
@@ -24,7 +24,9 @@ Public namespaces remain stable to preserve consumers and fixtures. Directories 
 ```mermaid
 flowchart LR
     Input[Controller / keyboard / mouse / tray] --> UI[WPF coordination]
-    CLI[CLI] --> Pipe[Contract and local pipe]
+    CLI[CLI] --> Client[Automation client]
+    MCP[MCP stdio] --> Client
+    Client --> Pipe[Contract and local pipe]
     Pipe --> UI
     UI --> Policy[Session rules and state]
     UI --> Services[Audio / media / profiles / updates]
@@ -37,6 +39,8 @@ flowchart LR
 ## State and actions
 
 `OverlayController` owns settings, the session, recent windows and results. `OverlayViewState` owns the route, selection and scroll position. `InputCoordinator` interprets the four XInput slots. `ReleaseGate` and `HeldInputTracker` handle release and uncertain samples without knowing WPF. `ControllerBadgeModel` determines what can be displayed without accessing hardware or visual controls.
+
+The session action IDs are available across routes. The automation backend resolves opaque target IDs, validates the context revision, and uses shared session operations. Route actions expose existing interface controls for navigation and editing.
 
 Primary Session, Apps and Audio navigation has top-level semantics: switching tabs removes nested feature history, so a discarded browser scan or color draft cannot be resumed through Back. The route frame is the source of navigation state. Eligibility queries do not cancel operations; input and operation boundaries explicitly validate ownership and revoke a lost focus cycle.
 

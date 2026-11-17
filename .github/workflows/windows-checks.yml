@@ -113,14 +113,14 @@ jobs:
           New-Item -ItemType Directory -Path $checks -Force | Out-Null
           $testDll = 'tests/ApolloOverlay.Tests/bin/Release/net10.0-windows10.0.19041.0/ApolloOverlay.Tests.dll'
           $failed = $false
-          foreach ($suite in @('window-activation', 'guide-settings', 'guide-release-red', 'session-hub-services', 'steam-sequence', 'steam-effects-handshake')) {
+          foreach ($suite in @('window-activation', 'guide-settings', 'guide-release-red', 'session-hub-services', 'session-automation', 'steam-sequence', 'steam-effects-handshake')) {
             Write-Host "Running $suite"
             & dotnet $testDll "$checks/suite-$suite.json" "--$suite" 2>&1 | Tee-Object -FilePath "$checks/$suite.log"
             if ($LASTEXITCODE -ne 0) { Write-Error "$suite failed with exit code $LASTEXITCODE" -ErrorAction Continue; $failed = $true }
           }
           if ($failed) { exit 1 }
 
-      - name: Run CLI tests and shutdown roundtrip
+      - name: Run CLI tests, shutdown roundtrip and MCP smoke test
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
         run: |
@@ -135,6 +135,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { Write-Error "CLI tests failed with exit code $LASTEXITCODE" -ErrorAction Continue; $failed = $true }
           & $cliTests '--roundtrip' $cli 2>&1 | Tee-Object -FilePath "$checks/cli-roundtrip.log"
           if ($LASTEXITCODE -ne 0) { Write-Error "CLI roundtrip failed with exit code $LASTEXITCODE" -ErrorAction Continue; $failed = $true }
+          & $cliTests '--mcp' $cli 2>&1 | Tee-Object -FilePath "$checks/mcp-smoke.log"
+          if ($LASTEXITCODE -ne 0) { Write-Error "MCP smoke test failed with exit code $LASTEXITCODE" -ErrorAction Continue; $failed = $true }
           if ($failed) { exit 1 }
 
       - name: Run diagnostic tool synthetic tests

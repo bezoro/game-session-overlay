@@ -246,6 +246,7 @@ static class Program
         {
             AutomationTests.Prerequisites(Case);
         }),
+        ["--session-automation"] = Suite("Session automation", output => AutomationTests.SessionContract(Case)),
         ["--automation"] = Suite("Automation", output =>
         {
             AutomationTests.Run(Case);

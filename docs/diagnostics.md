@@ -1,6 +1,6 @@
 # Command diagnostics
 
-The overlay records local structured diagnostics for meaningful commands from the controller, mouse, keyboard and CLI. No cloud upload or telemetry service is involved. The journal uses the pinned [Serilog packages](third-party-logging.md), separately from the automation safety ledger and Velopack's own updater log.
+The overlay records local structured diagnostics for meaningful commands from the controller, mouse, keyboard, CLI and MCP. The journal stays on disk and uses the pinned [Serilog packages](third-party-logging.md) independently of the automation ledger and Velopack's updater log.
 
 ## Find and inspect logs
 
@@ -24,6 +24,8 @@ While the overlay is running, `gso status` also reports `Snapshot.Diagnostics`: 
 Choose **Copy diagnostics** from the tray menu or **System → Copy diagnostics**. The tray action works while the overlay is hidden and does not try to activate it. Paste the resulting text into chat. It includes version, build, commit, channel, current Guide/focus state, logger health and every retained structured command-log file, in chronological order. It preserves malformed and torn lines as evidence. It does not use the CLI's recent-record, 200-entry or output-byte limits.
 
 The exporter drains the asynchronous queue, opens and pins retained file identities, and reads their captured lengths on a background worker. Damaged UTF-8 or NUL-containing data is explicitly encoded as base64 so its bytes survive copying. New records appended after that snapshot belong to the next report. Known logging losses and an incomplete drain are visible in the report. Existing retention still applies; records already deleted or never written cannot be recovered.
+
+For an offline export, use `gso diagnostics` or the MCP tool `export_diagnostics`. These return a temporary report path and preserve all retained files using the same reader. The report marks live state and queue health as unknown. [MCP tools](mcp.md)
 
 Export refuses unsafe paths, more than 64 candidate files or more than 64 MiB of retained text. It reports failure rather than copying a silently truncated report. Clipboard contention also fails promptly, with no delayed retry or later clipboard overwrite. Preview fixtures cannot access the real clipboard. No upload occurs automatically.
 

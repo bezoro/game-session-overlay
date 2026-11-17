@@ -23,8 +23,6 @@ public sealed record CommandLogOptions
     public TimeSpan DrainTimeout { get; init; } = TimeSpan.FromSeconds(2);
 }
 
-public sealed record CommandLogStatus(int BufferedEvents, long DroppedEvents, long WriteFailures, long UntrackedOperations, int ActiveOperations, bool Closing, bool Closed, bool DrainTimedOut, string? LastErrorType, int? LastErrorHResult);
-
 /// <summary>Bounded, asynchronous command evidence. User payloads and exception messages are excluded.</summary>
 public sealed class CommandLog : IDisposable
 {

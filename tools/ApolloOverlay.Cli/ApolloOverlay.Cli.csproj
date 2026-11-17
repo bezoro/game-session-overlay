@@ -6,6 +6,20 @@
     <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference
+      Include="ModelContextProtocol.Core"
+      Version="2.4.0" />
+    <InternalsVisibleTo
+      Include="ApolloOverlay.Cli.Tests" />
+    <Compile
+      Include="../../src/ApolloOverlay/Diagnostics/DiagnosticReport.cs"
+      Link="DiagnosticReport.cs" />
+    <Compile
+      Include="../../src/ApolloOverlay/Diagnostics/CommandLogStatus.cs"
+      Link="CommandLogStatus.cs" />
+    <Compile
+      Include="../../src/ApolloOverlay/Updates/AppBuild.cs"
+      Link="AppBuild.cs" />
     <Compile
       Include="../../src/ApolloOverlay/Diagnostics/CommandLogReader.cs"
       Link="CommandLogReader.cs" />

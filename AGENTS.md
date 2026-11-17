@@ -10,6 +10,10 @@ Use English for application copy, accessibility text, code, comments, documentat
 - State ownership, lifecycle, cancellation, side effects and failure behavior in the contract. Keep implementation and storage details internal when callers do not need them.
 - Keep justified optimizations behind readable contracts and document their invariants. Readability must not add unnecessary allocations, processing, background work or mandatory abstractions.
 
+## CLI and MCP automation
+
+Define each operation intended for automation in a shared contract and expose it in the CLI and MCP. Session operations must work while the overlay is hidden and across overlay routes. Document inputs, discovery, result observation, and explicit interactive prerequisites. Exercise both entry points against the shared backend in verification. See [CLI](docs/cli.md) and [MCP](docs/mcp.md).
+
 ## Implementation economy and architecture
 
 Prefer simple, cohesive solutions. Each abstraction, dependency and additional mechanism must justify its integration and maintenance cost. Remove duplication without trading away readability, correctness, performance or explicit ownership. Do not add interfaces for local calculations that need no substitution.

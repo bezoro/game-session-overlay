@@ -71,6 +71,7 @@ internal static class AutomationTests
     internal static void Run(Action<string, Action> test)
     {
         Prerequisites(test);
+        SessionContract(test);
         test("session options command survives removal of its redundant visual control", () =>
         {
             var window = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
@@ -344,6 +345,50 @@ internal static class AutomationTests
         test("automation shutdown cancellation before Close terminalizes and remains evictable", () => Task.Run(ShutdownCancellation).GetAwaiter().GetResult());
         test("automation real console CLI owned preview routes and observed exact shutdown", CliRoundtrip);
     }
+
+    internal static void SessionContract(Action<string, Action> test) =>
+        test("hidden overlay exposes the same route-independent session contract over CLI and MCP", () =>
+        {
+            var root = Temp();
+            using var context = WpfTestDispatcher.UseContext();
+            var pipe = "Bezoro.SessionContract." + Guid.NewGuid().ToString("N");
+            var target = new WindowRef(101, 42, 100, "Owned fixture", "fixture");
+            using var diagnostics = new LocalDiagnostics(root);
+            var window = new MainWindow(renderOnly: true, platform: new PreviewPlatform(target), diagnostics: diagnostics);
+            try
+            {
+                WpfTestDispatcher.Complete(window.StartAutomation(pipe));
+                window.OpenOptions(target);
+                var proof = Path.GetFullPath("tests/ApolloOverlay.Cli.Tests/bin/Release/net10.0-windows/ApolloOverlay.Cli.Tests.exe");
+                var start = new ProcessStartInfo(proof)
+                {
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+                foreach (var argument in new[] { "--mcp-session", Path.GetFullPath(Cli), pipe })
+                    start.ArgumentList.Add(argument);
+                using var client = Process.Start(start) ?? throw new InvalidOperationException("Session proof did not start.");
+                var output = client.StandardOutput.ReadToEndAsync();
+                var error = client.StandardError.ReadToEndAsync();
+                try
+                {
+                    WpfTestDispatcher.Complete(client.WaitForExitAsync(), TimeSpan.FromSeconds(20));
+                    Require(client.ExitCode == 0, error.GetAwaiter().GetResult() + output.GetAwaiter().GetResult());
+                }
+                finally
+                {
+                    if (!client.HasExited)
+                        client.Kill(true);
+                }
+            }
+            finally
+            {
+                window.Close();
+                Directory.Delete(root, recursive: true);
+            }
+        });
 
     private static async Task<(NamedPipeClientStream Pipe, AutomationReply Hello)> Connect(string name)
     {

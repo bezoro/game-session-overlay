@@ -31,6 +31,12 @@ internal static class ShutdownTests
             return await Server(endpoint);
         if (args is ["--roundtrip", var cli])
             return await Roundtrip(cli);
+        if (args is ["--mcp", var mcp])
+            return await McpTests.Offline(mcp);
+        if (args is ["--mcp-session", var sessionCli, var sessionPipe])
+            return await McpTests.Session(sessionCli, sessionPipe);
+        if (args is ["--mcp-rollback", var updateCli, var buildId])
+            return await McpTests.Rollback(updateCli, buildId);
         var failures = 0;
         var total = 0;
         async Task Test(string name, Func<Task> body)
