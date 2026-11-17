@@ -6,7 +6,7 @@ public partial class MainWindow
 {
     private void StartSessionAction(string id, Func<CancellationToken, Task<ActionResult>> action, Action? completed = null)
     {
-        if (!NavigationAllowed || busy || TransitionPending)
+        if (!ValidateNavigationOwnership() || busy || TransitionPending)
             return;
         QueueHandoff(() => OperationTask = RunSessionAction(id, action, completed));
     }

@@ -189,17 +189,19 @@ public partial class MainWindow
                 if (changed.Kind is not (ResultKind.Completed or ResultKind.Simulated))
                     return changed;
                 if (!diagnostic && !Controller.Platform.IsPreview)
-                    audio.SetVisible(true);
+                    await audio.RefreshAsync(rebind: true, cancellation: token);
             }
 
             token.ThrowIfCancellationRequested();
-            if (profile.VolumePercent is { } volume && audio.Current.Available)
+            if (profile.VolumePercent is { } volume)
             {
                 if (!diagnostic && !Controller.Platform.IsPreview)
                 {
-                    profileMasterBefore = audio.Read();
-                    var changed = audio.Set(volume / 100f, expectedEndpoint: profile.OutputId ?? audio.Current.EndpointId);
-                    profileMasterApplied = audio.Read();
+                    profileMasterBefore = await audio.RefreshAsync(cancellation: token);
+                    if (!profileMasterBefore.Available)
+                        return new(ResultKind.Partial, "The profile's volume could not be applied because the Windows output is unavailable.");
+                    var changed = await audio.SetAsync(volume / 100f, expectedEndpoint: profile.OutputId ?? audio.Current.EndpointId, cancellation: token);
+                    profileMasterApplied = await audio.RefreshAsync(cancellation: token);
                     if (changed.Kind != ResultKind.Completed)
                         return new(ResultKind.Partial, "The output was applied, but volume was not confirmed. Check the audio before continuing.");
                 }
@@ -235,11 +237,11 @@ public partial class MainWindow
             var skipped = false;
             if (profileMasterBefore is { } oldVolume && profileMasterApplied is { } expectedVolume)
             {
-                var observed = audio.Read();
+                var observed = await audio.RefreshAsync(cancellation: token);
                 var decision = AudioRestore.Decide(oldVolume, expectedVolume, observed);
                 if (decision.Volume)
                 {
-                    var restored = audio.Set(oldVolume.Volume, expectedEndpoint: oldVolume.EndpointId);
+                    var restored = await audio.SetAsync(oldVolume.Volume, expectedEndpoint: oldVolume.EndpointId, cancellation: token);
                     skipped = restored.Kind != ResultKind.Completed;
                 }
                 else

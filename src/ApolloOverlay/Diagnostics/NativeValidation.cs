@@ -471,7 +471,7 @@ internal static class NativeValidation
                 using (var audio = new WindowsAudio())
                 {
                     audio.SetVisible(true);
-                    var original = audio.Read();
+                    var original = await audio.RefreshAsync();
                     report.Facts["audioOriginalAvailable"] = original.Available.ToString();
                     report.Facts["audioOriginal"] = original.EndpointId + "; volume=" + original.Volume.ToString(System.Globalization.CultureInfo.InvariantCulture) + "; muted=" + original.Muted;
                     if (original.Available)
@@ -480,8 +480,8 @@ internal static class NativeValidation
                         try
                         {
                             var value = original.Volume > .98f ? original.Volume - .01f : original.Volume + .01f;
-                            var result = audio.Set(value, !original.Muted, original.EndpointId);
-                            applied = audio.Read();
+                            var result = await audio.SetAsync(value, !original.Muted, original.EndpointId);
+                            applied = await audio.RefreshAsync();
                             report.Facts["audioApplied"] = applied.EndpointId + "; volume=" + applied.Volume.ToString(System.Globalization.CultureInfo.InvariantCulture) + "; muted=" + applied.Muted;
                             report.Cases.Add(new("real endpoint volume and mute bounded change readback", result.Kind == ResultKind.Completed && Math.Abs(applied.Volume - value) < .005f && applied.Muted != original.Muted, result.Message));
                         }
@@ -489,13 +489,13 @@ internal static class NativeValidation
                         {
                             if (applied is not null)
                             {
-                                var current = audio.Read();
+                                var current = await audio.RefreshAsync();
                                 var decision = AudioRestore.Decide(original, applied, current);
                                 report.Facts["audioRollback"] = decision.Reason;
-                                report.Facts["audioVolumeRestored"] = decision.Volume ? audio.Set(original.Volume, expectedEndpoint: original.EndpointId).Kind.ToString() : "skipped/conflict";
-                                current = audio.Read();
+                                report.Facts["audioVolumeRestored"] = decision.Volume ? (await audio.SetAsync(original.Volume, expectedEndpoint: original.EndpointId)).Kind.ToString() : "skipped/conflict";
+                                current = await audio.RefreshAsync();
                                 decision = AudioRestore.Decide(original, applied, current);
-                                report.Facts["audioMuteRestored"] = decision.Mute ? audio.Set(muted: original.Muted, expectedEndpoint: original.EndpointId).Kind.ToString() : "skipped/conflict";
+                                report.Facts["audioMuteRestored"] = decision.Mute ? (await audio.SetAsync(muted: original.Muted, expectedEndpoint: original.EndpointId)).Kind.ToString() : "skipped/conflict";
                             }
                         }
                     }

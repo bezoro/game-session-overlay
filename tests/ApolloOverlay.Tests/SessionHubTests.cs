@@ -532,16 +532,16 @@ internal static class SessionHubTests
                     w.UpdateControllerTelemetry(new PadFrame[] { new(true, 0), default, default, default }, 0, 0);
                     Navigate(w, route, p);
                     Arrange(w, 572, 940);
-                    var paragraph = PremiumInterfaceTests.Descendants<TextBlock>((DependencyObject)w.FindName("Rows")).Single(t => t.Text.Contains("Controller 1") && t.Text.Contains("Battery medium"));
+                    var paragraph = WpfTestElements.Descendants<TextBlock>((DependencyObject)w.FindName("Rows")).Single(t => t.Text.Contains("Controller 1") && t.Text.Contains("Battery medium"));
                     var selected = w.SelectedAction;
-                    var selectedButton = ReviewFixTests.Button(w, selected);
+                    var selectedButton = WpfTestElements.Button(w, selected);
                     w.UpdateControllerTelemetry(new PadFrame[4], null, 1);
                     Console.WriteLine("TELEMETRY-LIVE route=" + route + "; afterDisconnect=" + paragraph.Text);
                     Check(!paragraph.Text.Contains("Battery medium") && paragraph.Text.Contains("No"), "Visible paragraph retained disconnected controller battery");
                     w.UpdateControllerTelemetry(new PadFrame[] { default, new(true, 0), default, default }, 1, 2);
                     Check(paragraph.Text.Contains("Controller 2") && !paragraph.Text.Contains("Controller 1"), "Visible paragraph retained prior controller owner");
                     Check(System.Windows.Automation.AutomationProperties.GetName(paragraph) == paragraph.Text, "Controller paragraph UIA name stale");
-                    Check(ReferenceEquals(selectedButton, ReviewFixTests.Button(w, selected)) && w.SelectedAction == selected, "Telemetry rebuilt view/selection");
+                    Check(ReferenceEquals(selectedButton, WpfTestElements.Button(w, selected)) && w.SelectedAction == selected, "Telemetry rebuilt view/selection");
                     RequireFocus(w);
                 }
                 finally
@@ -558,7 +558,7 @@ internal static class SessionHubTests
         Check(window.SelectedAction == id, "Cannot reach " + id);
     }
 
-    private static void Click(MainWindow window, string id) => ReviewFixTests.Button(window, id).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+    private static void Click(MainWindow window, string id) => WpfTestElements.Button(window, id).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
     private static void Release(MainWindow window)
     {
         window.AdvanceHandoff(new(new PadFrame[4], 0, GuideValid: true), 0);
@@ -658,7 +658,7 @@ internal static class SessionHubTests
                     var viewport = (ScrollViewer)w.FindName("ContentScroll");
                     foreach (var id in w.ActionIds.Where(SessionHubSettings.Catalog.Contains).Take(4))
                     {
-                        var button = ReviewFixTests.Button(w, id);
+                        var button = WpfTestElements.Button(w, id);
                         var bottom = button.TranslatePoint(new Point(0, button.ActualHeight), viewport).Y;
                         Check(bottom <= viewport.ViewportHeight, $"{id} extends to {bottom:0} past the opening viewport {viewport.ViewportHeight:0} at {width}×{height}");
                     }
@@ -721,7 +721,7 @@ internal static class SessionHubTests
                     w.RefreshRows();
                     w.Details();
                     Check(w.Controller.Session.CardTarget?.Same(target) == true
-                        && (!w.ActionIds.Contains("close") || !ReviewFixTests.Button(w, "close").IsEnabled), "Close enabled for a protected or resume-only card");
+                        && (!w.ActionIds.Contains("close") || !WpfTestElements.Button(w, "close").IsEnabled), "Close enabled for a protected or resume-only card");
                     if (w.ActionIds.Contains("close"))
                         Click(w, "close");
                     Check(!w.Confirming && p.Closes == 0, "Protected close entered confirmation");
@@ -881,7 +881,7 @@ internal static class SessionHubTests
                 }
                 Check(card.RenderSize == bounds, "Highlight moved the card");
                 w.Details();
-                var option = ReviewFixTests.Button(w, "application-audio");
+                var option = WpfTestElements.Button(w, "application-audio");
                 WaitForSheen(() => !InteractionMotion.GetIsSelected(card) && !sheen.HasAnimatedProperties,
                     "Leaving the card kept its motion clock");
                 Check(InteractionMotion.GetIsSelected(option) == InteractionMotion.Allowed, "Options did not follow the system motion setting");
@@ -896,7 +896,7 @@ internal static class SessionHubTests
                     ReducedMotion = true
                 });
                 w.RefreshRows();
-                Check(!InteractionMotion.GetIsSelected(ReviewFixTests.Button(w, "application-audio")), "Reduced motion did not stop the highlight");
+                Check(!InteractionMotion.GetIsSelected(WpfTestElements.Button(w, "application-audio")), "Reduced motion did not stop the highlight");
                 w.Hide();
                 Check(!InteractionMotion.GetIsSelected(option), "Hiding the panel retained a motion clock");
             }
@@ -945,7 +945,7 @@ internal static class SessionHubTests
                 p.Stale = true;
                 w.Controller.Select(p.B);
                 w.RefreshRows();
-                Check(!ReviewFixTests.Button(w, "minimize").IsEnabled && !ReviewFixTests.Button(w, "application-mute").IsEnabled, "Stale options retargeted");
+                Check(!WpfTestElements.Button(w, "minimize").IsEnabled && !WpfTestElements.Button(w, "application-mute").IsEnabled, "Stale options retargeted");
                 Pick(w, "minimize");
                 w.ActivateEntry();
                 Release(w);
@@ -987,7 +987,7 @@ internal static class SessionHubTests
             try
             {
                 w.OpenOptions(p.A);
-                var button = ReviewFixTests.Button(w, "application-mute");
+                var button = WpfTestElements.Button(w, "application-mute");
                 var old = audio.Snapshot();
                 w.Controller.Select(p.B);
                 w.Back();
@@ -1000,9 +1000,9 @@ internal static class SessionHubTests
                 });
                 Check(((TextBlock)w.FindName("SessionAudioLabel")).Text == badge, "Stale target callback changed badge");
                 w.OpenOptions(p.B);
-                button = ReviewFixTests.Button(w, "application-mute");
+                button = WpfTestElements.Button(w, "application-mute");
                 audio.Emit();
-                Check(ReferenceEquals(button, ReviewFixTests.Button(w, "application-mute")), "Status rebuilt focused action");
+                Check(ReferenceEquals(button, WpfTestElements.Button(w, "application-mute")), "Status rebuilt focused action");
             }
             finally
             {
@@ -1644,7 +1644,7 @@ internal static class SessionHubTests
                     w.Width = width;
                     w.Height = height;
                     w.UpdateLayout();
-                    var selected = state == "options-sheen" ? ReviewFixTests.Button(w, "application-audio") : (Button)w.FindName("SessionCardButton");
+                    var selected = state == "options-sheen" ? WpfTestElements.Button(w, "application-audio") : (Button)w.FindName("SessionCardButton");
                     selected.ApplyTemplate();
                     InteractionMotion.SetIsSelected(selected, false);
                     InteractionMotion.SetIsSelected(selected, true);
@@ -1789,7 +1789,7 @@ internal static class SessionHubTests
                         w.ShowDiagnostic();
                         w.OpenOptions(p.A);
                         var root = (FrameworkElement)w.Content;
-                        var button = ReviewFixTests.Button(w, "application-mute");
+                        var button = WpfTestElements.Button(w, "application-mute");
                         var label = ((StackPanel)((Grid)button.Content).Children[1]).Children.OfType<TextBlock>().Last();
                         // Keep a real multiline description close to wrapping boundaries.
                         label.Text = "This app's identified audio sessions can be muted and restored in this window.";
@@ -1799,7 +1799,7 @@ internal static class SessionHubTests
                             root.UpdateLayout();
                         }
 
-                        string Geometry() => string.Join("|", PremiumInterfaceTests.Descendants<TextBlock>(button).Select(t => $"{t.Text}:{t.FontFamily.Source}:{t.FontSize}:{t.FontWeight}:{t.FontStyle}:{t.TextWrapping}:{t.TranslatePoint(new Point(), button)}:{t.ActualWidth}:{t.ActualHeight}"));
+                        string Geometry() => string.Join("|", WpfTestElements.Descendants<TextBlock>(button).Select(t => $"{t.Text}:{t.FontFamily.Source}:{t.FontSize}:{t.FontWeight}:{t.FontStyle}:{t.TextWrapping}:{t.TranslatePoint(new Point(), button)}:{t.ActualWidth}:{t.ActualHeight}"));
                         void Capture(string state)
                         {
                             var output = Environment.GetEnvironmentVariable("BEZORO_POLISH_CAPTURES");
@@ -1825,7 +1825,7 @@ internal static class SessionHubTests
                         Capture("selected");
                         Console.WriteLine($"SELECTION {width} {theme} before={before}; after={after}");
                         Check(before == after, "Selection changed rendered text geometry or typography");
-                        Check(((Border)button.Resources["ABadge"]).Visibility == Visibility.Visible, "Controller feedback disappeared");
+                        Check(((ActionButtonContent)button.Content).SelectionBadge?.Visibility == Visibility.Visible, "Controller feedback disappeared");
                         Check(Equals(button.BorderBrush, app.FindResource(ThemeSupport.Focus)), "Selection outline missing");
                         Pick(w, "minimize");
                         button.Focus();
@@ -1866,7 +1866,7 @@ internal static class SessionHubTests
                     w.OpenOptions(p.A);
                     audio.Availability = partial ? ApplicationAudioAvailability.Partial : ApplicationAudioAvailability.Available;
                     audio.Emit();
-                    var button = ReviewFixTests.Button(w, "application-mute");
+                    var button = WpfTestElements.Button(w, "application-mute");
                     string Title() => System.Windows.Automation.AutomationProperties.GetName(button);
                     Check(Title().Contains("Mute"), "Initial action must clearly offer muting");
                     var pending = new TaskCompletionSource<ApplicationAudioChange>();
@@ -1878,7 +1878,7 @@ internal static class SessionHubTests
                     Complete(w.OperationTask);
                     audio.Next = null;
                     var mutedTitle = Title();
-                    Check(ReferenceEquals(button, ReviewFixTests.Button(w, "application-mute")) && button.IsEnabled, "Confirmed mute rebuilt or disabled action");
+                    Check(ReferenceEquals(button, WpfTestElements.Button(w, "application-mute")) && button.IsEnabled, "Confirmed mute rebuilt or disabled action");
                     Click(w, "application-mute");
                     Release(w);
                     Complete(w.OperationTask);

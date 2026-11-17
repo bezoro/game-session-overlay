@@ -1,5 +1,16 @@
 namespace ApolloOverlay;
 
+internal sealed record MasterAudioChange(ActionResult Result, AudioSnapshot Snapshot);
+
+/// <summary>Created, called and disposed exclusively by the master-audio MTA owner.</summary>
+internal interface IMasterAudioBackend : IDisposable
+{
+    AudioSnapshot Bind();
+    AudioSnapshot Read();
+    /// <summary>Revalidate continuing and invoke dispatch immediately before every external write; false revokes permission.</summary>
+    MasterAudioChange Set(float? volume, bool? muted, string? expectedEndpoint, Func<bool> dispatch, Func<bool> continuing);
+}
+
 public sealed record AudioSnapshot(string? EndpointId, float Volume, bool Muted, string Status)
 {
     public bool Available => EndpointId is not null;

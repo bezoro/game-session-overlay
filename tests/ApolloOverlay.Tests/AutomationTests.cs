@@ -73,7 +73,7 @@ internal static class AutomationTests
         Prerequisites(test);
         test("session options command survives removal of its redundant visual control", () =>
         {
-            var window = ReviewFixTests.Window();
+            var window = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 var snapshot = window.AutomationSnapshot();
@@ -239,6 +239,46 @@ internal static class AutomationTests
 
             Require(failed && ledger.Find(id) is null, "Failed persistence accepted intent");
         });
+        test("automation interrupted execution preserves uncertainty and positive dispatch evidence", () =>
+        {
+            foreach (bool? dispatched in new bool?[] { false, null, true })
+            {
+                var ledger = new AutomationLedger(Temp());
+                var id = ledger.Issue("interrupted");
+                Require(ledger.Accept(id, "interrupted", "effect") == "Accepted", "Intent was not accepted");
+                ledger.Update(id, new()
+                {
+                    Outcome = "Pending",
+                    Terminal = false,
+                    Dispatched = dispatched
+                });
+                ledger.CompleteInterrupted(id, executionStarted: true);
+                var result = ledger.Find(id)?.Reply;
+                Require(result is { Terminal: true, Outcome: "Unknown" }
+                    && result.Dispatched == (dispatched == true ? true : null), "An earlier phase became a false no-dispatch guarantee");
+                ledger.CompleteInterrupted(id, executionStarted: false);
+                Require(ledger.Find(id)?.Reply == result, "Cleanup overwrote an existing terminal result");
+            }
+        });
+        test("automation interrupted receipt stays terminal in memory when persistence fails", () =>
+        {
+            var root = Temp();
+            var ledger = new AutomationLedger(root);
+            var id = ledger.Issue("interrupted");
+            Require(ledger.Accept(id, "interrupted", "effect") == "Accepted", "Intent was not accepted");
+            Directory.CreateDirectory(Path.Combine(root, "automation-ledger.json.tmp"));
+            var failed = false;
+            try
+            {
+                ledger.CompleteInterrupted(id, executionStarted: true);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                failed = true;
+            }
+            Require(failed && ledger.Find(id)?.Reply is { Terminal: true, Outcome: "Unknown", Dispatched: null },
+                "Persistence failure left an ownerless in-memory request pending");
+        });
         test("automation request framing rejects oversized and invalid prefix", () =>
         {
             foreach (var size in new[]
@@ -298,6 +338,8 @@ internal static class AutomationTests
         });
         test("automation journal records query denial success and failure without request secrets", () => Task.Run(JournalChecks).GetAwaiter().GetResult());
         test("automation owned pipe dry-run cancellation disconnect Busy and malformed input", () => Task.Run(PipeChecks).GetAwaiter().GetResult());
+        test("automation trace failure terminalizes accepted requests without losing dispatch uncertainty", () => Task.Run(InterruptedRequests).GetAwaiter().GetResult());
+        test("automation trace failure terminalizes UI intents and interrupted UI phases", () => Task.Run(InterruptedUiRequests).GetAwaiter().GetResult());
         test("automation independent update jobs do not exhaust the request ledger", () => Task.Run(UpdateAcceptanceLedger).GetAwaiter().GetResult());
         test("automation shutdown cancellation before Close terminalizes and remains evictable", () => Task.Run(ShutdownCancellation).GetAwaiter().GetResult());
         test("automation real console CLI owned preview routes and observed exact shutdown", CliRoundtrip);
@@ -520,6 +562,137 @@ internal static class AutomationTests
         }
     }
 
+    private static async Task InterruptedRequests()
+    {
+        foreach (var afterDispatch in new[] { false, true })
+        {
+            var root = Temp();
+            var name = "BezoroInterruptedRequest." + Guid.NewGuid().ToString("N");
+            var backend = new Backend();
+            using var host = new AutomationHost(backend, root, name);
+            FileStream? traceLock = null;
+            try
+            {
+                void LockTrace() => traceLock = new FileStream(Path.Combine(root, "automation-trace.jsonl"),
+                    FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                if (afterDispatch)
+                    backend.AfterEffect = phase =>
+                    {
+                        LockTrace();
+                        phase(new()
+                        {
+                            Outcome = "Pending",
+                            Terminal = false,
+                            Dispatched = true,
+                            Expected = 1,
+                            Accepted = 1
+                        });
+                    };
+                else
+                    LockTrace();
+
+                var pair = await Connect(name);
+                var request = new AutomationRequest
+                {
+                    Verb = "execute",
+                    ActionId = "effect",
+                    RequestId = pair.Hello.Ticket,
+                    DeadlineUtc = pair.Hello.ExpiresUtc
+                };
+                using (pair.Pipe)
+                using (var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
+                {
+                    await AutomationFrames.Write(pair.Pipe, AutomationFrames.Encode(request), AutomationFrames.RequestLimit, deadline.Token);
+                    var end = new byte[1];
+                    Require(await pair.Pipe.ReadAsync(end, deadline.Token) == 0, "The failed trace request did not release its connection");
+                }
+
+                var result = await Exchange(name, new()
+                {
+                    Verb = "result",
+                    RequestId = request.RequestId
+                });
+                Require(result.Terminal && result.Outcome == (afterDispatch ? "Unknown" : "Cancelled"), "An ownerless request remained pending");
+                Require(result.Dispatched == afterDispatch && backend.Effects == (afterDispatch ? 1 : 0), "Finalization lost dispatch evidence or claimed an unexecuted effect");
+                Require(!afterDispatch || result is { Expected: 1, Accepted: 1 }, "Finalization discarded the last observed dispatch counts");
+                var saved = new AutomationLedger(root).Find(request.RequestId)?.Reply;
+                Require(saved is { Terminal: true } && saved.Outcome == result.Outcome
+                    && saved.Dispatched == result.Dispatched && saved.Expected == result.Expected
+                    && saved.Accepted == result.Accepted, "The interrupted terminal receipt was not persisted");
+                var replayPair = await Connect(name);
+                using (replayPair.Pipe)
+                using (var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
+                {
+                    // Exchange intentionally assigns a fresh ticket for execute commands.
+                    // Replay the original bytes so this actually exercises the retired ID.
+                    await AutomationFrames.Write(replayPair.Pipe, AutomationFrames.Encode(request), AutomationFrames.RequestLimit, deadline.Token);
+                    var replay = JsonSerializer.Deserialize(await AutomationFrames.Read(replayPair.Pipe, AutomationFrames.ResponseLimit, deadline.Token), AutomationJson.Default.AutomationReply)!;
+                    Require(replay.Outcome == "Rejected" && backend.Effects == (afterDispatch ? 1 : 0), "The interrupted request became replayable");
+                }
+
+                traceLock!.Dispose();
+                traceLock = null;
+                backend.AfterEffect = null;
+                var next = await Exchange(name, new()
+                {
+                    Verb = "execute",
+                    ActionId = "effect"
+                });
+                Require(next.Outcome == "Completed" && backend.Effects == (afterDispatch ? 2 : 1), "The abandoned owner blocked a new request");
+            }
+            finally
+            {
+                traceLock?.Dispose();
+            }
+        }
+    }
+
+    private static async Task InterruptedUiRequests()
+    {
+        var root = Temp();
+        var name = "BezoroInterruptedUi." + Guid.NewGuid().ToString("N");
+        using var host = new AutomationHost(new Backend(), root, name);
+        var tracePath = Path.Combine(root, "automation-trace.jsonl");
+        using (new FileStream(tracePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+        {
+            Require(host.BeginUi("steam-overlay", "fixed") is null, "A failed UI intent trace permitted execution");
+            var records = JsonSerializer.Deserialize(File.ReadAllBytes(Path.Combine(root, "automation-ledger.json")), AutomationJson.Default.AutomationRecords)!;
+            Require(records.Records.Single().Reply is { Terminal: true, Outcome: "Cancelled", Dispatched: false },
+                "The failed UI intent remained pending");
+        }
+
+        var id = host.BeginUi("steam-overlay", "fixed") ?? throw new InvalidOperationException("The next UI intent was blocked.");
+        using (new FileStream(tracePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            var failed = false;
+            try
+            {
+                host.UiResult(id, "fixed", new()
+                {
+                    Outcome = "Pending",
+                    Terminal = false,
+                    Dispatched = false
+                });
+            }
+            catch (IOException)
+            {
+                failed = true;
+            }
+            finally
+            {
+                host.CompleteInterruptedUi(id);
+            }
+            Require(failed, "The UI phase trace did not encounter the injected failure.");
+        }
+        var result = await Exchange(name, new()
+        {
+            Verb = "result",
+            RequestId = id
+        });
+        Require(result is { Terminal: true, Outcome: "Unknown", Dispatched: null },
+            "The interrupted UI phase stayed pending or falsely guaranteed that no dispatch occurred.");
+    }
+
     private static async Task UpdateAcceptanceLedger()
     {
         var root = Temp();
@@ -562,6 +735,7 @@ internal static class AutomationTests
     {
         internal int Effects, UiCancelled, ShutdownCalls, UpdateJobs;
         internal Exception? ExecuteFailure;
+        internal Action<Action<AutomationReply>>? AfterEffect;
         internal readonly ManualResetEventSlim Entered = new(), Cancelled = new();
         public Task<AutomationReply> Update(AutomationRequest request, CancellationToken token, Func<bool> continuing)
         {
@@ -604,6 +778,7 @@ internal static class AutomationTests
             if (!continuing())
                 return AutomationReply.Error("Cancelled", "");
             Effects++;
+            AfterEffect?.Invoke(phase);
             return AutomationReply.Error("Completed", "");
         }
 

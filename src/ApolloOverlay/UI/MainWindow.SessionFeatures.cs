@@ -10,6 +10,7 @@ public partial class MainWindow
     private long featureEpoch, nextFeatureRead;
     private Task featureTask = Task.CompletedTask;
     private Task audioObservation = Task.CompletedTask;
+    private bool masterAudioRefreshPending;
     internal Task FeatureTask => featureTask;
 
     private string renderedFeatureShape = "";
@@ -28,6 +29,7 @@ public partial class MainWindow
         SuspendCapturePresentation();
         featureEpoch++;
         featureRead?.Cancel();
+        masterAudioRefreshPending = false;
         nextFeatureRead = 0;
         sessionMedia?.SetVisible(false);
         mixerAudio?.Suspend();
@@ -74,6 +76,7 @@ public partial class MainWindow
 
     internal void RefreshSessionFeatures()
     {
+        masterAudioRefreshPending = true;
         nextFeatureRead = 0;
         StartFeatureRead();
     }
@@ -83,7 +86,10 @@ public partial class MainWindow
         try
         {
             var before = renderedFeatureShape;
-            await systemAudio.RefreshAsync(request.Token);
+            var refreshMaster = masterAudioRefreshPending;
+            masterAudioRefreshPending = false;
+            Task master = refreshMaster ? audio.RefreshAsync(rebind: true, cancellation: request.Token) : Task.CompletedTask;
+            await Task.WhenAll(systemAudio.RefreshAsync(request.Token), master);
             if (exiting || request.IsCancellationRequested || epoch != featureEpoch || !IsVisible)
                 return;
             if (view.Current.Route == OverlayRoute.Mixer)

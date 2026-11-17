@@ -8,6 +8,11 @@ using Velopack.Locators;
 
 namespace ApolloOverlay;
 
+public enum SettingsRestoreOutcome
+{
+    Restored, NotApplied, BackupUnavailable, Failed
+}
+public sealed record SettingsRestoreResult(SettingsRestoreOutcome Outcome, string Message);
 public sealed record InstalledBuild(string BuildId, string Version, string Commit, DateTimeOffset InstalledAt, bool Current = false, bool LastStartFailed = false);
 internal sealed record CachedAsset(string PackageId, string Version, string FileName, string Sha1, string Sha256, long Size)
 {
@@ -318,7 +323,7 @@ public sealed class LocalUpdateHistory
             File.Delete(PendingPath);
     }
 
-    public string? CompleteSettingsRestore(AppBuildInfo running)
+    public SettingsRestoreResult? CompleteSettingsRestore(AppBuildInfo running)
     {
         if (!File.Exists(PendingPath))
             return null;
@@ -326,10 +331,10 @@ public sealed class LocalUpdateHistory
         try
         {
             if (pending.BuildId != running.BuildId || pending.Version != running.Version || pending.Commit != running.Commit)
-                return "Rollback was not applied. Your current settings were preserved.";
+                return new(SettingsRestoreOutcome.NotApplied, "Rollback was not applied. Your current settings were preserved.");
             var metadata = Path.Combine(Folder(pending.BuildId), "settings.json");
             if (!File.Exists(metadata))
-                return "The previous version started. No settings backup was available for it; current settings were kept.";
+                return new(SettingsRestoreOutcome.BackupUnavailable, "The previous version started. No settings backup was available for it; current settings were kept.");
             var snapshot = Read<SettingsCopy>(metadata);
             if (File.Exists(SettingsPath))
             {
@@ -354,7 +359,7 @@ public sealed class LocalUpdateHistory
                 File.Delete(SettingsPath + ".previous");
             }
 
-            return "The previous version was restored with its retained settings. A separate copy preserves your latest settings.";
+            return new(SettingsRestoreOutcome.Restored, "The previous version was restored with its retained settings. A separate copy preserves your latest settings.");
         }
         finally
         {

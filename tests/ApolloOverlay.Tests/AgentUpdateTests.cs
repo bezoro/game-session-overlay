@@ -32,11 +32,11 @@ internal static class AgentUpdateTests
 
     private static T Complete<T>(Task<T> task)
     {
-        ReviewFixTests.Complete(task);
+        WpfTestDispatcher.Complete(task);
         return task.GetAwaiter().GetResult();
     }
 
-    private static void Flush() => ReviewFixTests.Complete(Dispatcher.CurrentDispatcher.InvokeAsync(() =>
+    private static void Flush() => WpfTestDispatcher.Complete(Dispatcher.CurrentDispatcher.InvokeAsync(() =>
     {
     }, DispatcherPriority.Background).Task);
     private static void WaitFor(Func<bool> condition)
@@ -53,6 +53,90 @@ internal static class AgentUpdateTests
 
     internal static void Run(Action<string, Action> test)
     {
+        test("agent updates reserve the job while its initial receipt is persisted off the dispatcher", () =>
+        {
+            using var host = new Host();
+            host.Status();
+            using var entered = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            var writes = 0;
+            Field("agentReceiptWriter").SetValue(host.Window, new UpdateReceiptWriter(bytes =>
+            {
+                if (Interlocked.Increment(ref writes) == 1)
+                {
+                    entered.Set();
+                    if (!release.Wait(TimeSpan.FromSeconds(3)))
+                        throw new TimeoutException("Fixture receipt was not released");
+                }
+                LocalUpdateHistory.AtomicBytes(host.Receipt, bytes);
+            }));
+            var pending = host.Window.AgentUpdate(Request("update-check"), CancellationToken.None, () => true);
+            WaitFor(() => entered.IsSet);
+            Require(!pending.IsCompleted && host.Source.Checks == 0, "Preparation began before its durable receipt completed");
+            var responsive = false;
+            WpfTestDispatcher.Complete(host.Window.Dispatcher.InvokeAsync(() => responsive = true).Task);
+            Require(responsive && host.Send(Request("update-check")).Outcome == "Busy", "Slow persistence blocked the UI or released job ownership");
+            release.Set();
+            Require(Complete(pending).Outcome == "Requested", "Durable initial receipt did not release the prepared job");
+            host.Finish();
+            Require(host.Source.Checks == 1, "A concurrent command started a second query");
+        });
+        test("agent updates can cancel while the initial durable receipt is still pending", () =>
+        {
+            using var host = new Host();
+            host.Status();
+            using var entered = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            var writes = 0;
+            Field("agentReceiptWriter").SetValue(host.Window, new UpdateReceiptWriter(bytes =>
+            {
+                if (Interlocked.Increment(ref writes) == 1)
+                {
+                    entered.Set();
+                    if (!release.Wait(TimeSpan.FromSeconds(3)))
+                        throw new TimeoutException("Fixture receipt was not released");
+                }
+                LocalUpdateHistory.AtomicBytes(host.Receipt, bytes);
+            }));
+            var request = Request("update-check");
+            var pending = host.Window.AgentUpdate(request, CancellationToken.None, () => true);
+            WaitFor(() => entered.IsSet);
+            Require(host.Send(Request("update-cancel", jobId: request.RequestId)).Outcome == "Cancelled", "Initial receipt wait could not be cancelled");
+            Require(host.Send(Request("update-check")).Outcome == "Busy", "Cancellation released exclusion before its pending durable write settled");
+            release.Set();
+            Require(Complete(pending).Outcome == "Cancelled", "Cancelled initial receipt started source work");
+            host.Finish();
+            Require(host.Source.Checks == 0 && host.Status().Phase == "Cancelled", "Late receipt completion changed the cancelled job");
+        });
+        test("agent update shutdown drains its terminal receipt before disposing diagnostics and sources", () =>
+        {
+            using var host = new Host();
+            host.Status();
+            using var entered = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            var writes = 0;
+            Field("agentReceiptWriter").SetValue(host.Window, new UpdateReceiptWriter(bytes =>
+            {
+                if (Interlocked.Increment(ref writes) == 1)
+                {
+                    entered.Set();
+                    if (!release.Wait(TimeSpan.FromSeconds(3)))
+                        throw new TimeoutException("Fixture receipt was not released");
+                }
+                LocalUpdateHistory.AtomicBytes(host.Receipt, bytes);
+            }));
+            var pending = host.Window.AgentUpdate(Request("update-check"), CancellationToken.None, () => true);
+            WaitFor(() => entered.IsSet);
+            host.Window.Close();
+            Require(!host.Window.ClosingTask.IsCompleted && !host.Source.Disposed,
+                "Shutdown disposed the source before its terminal receipt drained");
+            release.Set();
+            Require(Complete(pending).Outcome == "Cancelled", "Closing instance started preparation after the receipt completed");
+            host.Finish();
+            var receipt = JsonNode.Parse(File.ReadAllText(host.Receipt))!;
+            Require(host.Source.Disposed && host.Source.Checks == 0 && receipt["state"]!["phase"]!.GetValue<string>() == "Interrupted",
+                "Shutdown lost its durable terminal receipt or started late work");
+        });
         test("agent updates status and dry-run never query, write, show or change focus", () =>
         {
             using var host = new Host();
@@ -317,7 +401,7 @@ internal static class AgentUpdateTests
             var pin = Activator.CreateInstance(pinType, request.RequestId, request.JobId, 0L, prepared, "not-used-before-client-check", DateTimeOffset.UtcNow.AddMinutes(1).ToUnixTimeMilliseconds());
             Field("agentUpdateApplyPin").SetValue(host.Window, pin);
             var receipt = File.ReadAllBytes(host.Receipt);
-            ReviewFixTests.Complete(host.Window.CommitAgentUpdate(request, CancellationToken.None, () => false));
+            WpfTestDispatcher.Complete(host.Window.CommitAgentUpdate(request, CancellationToken.None, () => false));
             Require(host.Status().Phase == "Ready" && receipt.SequenceEqual(File.ReadAllBytes(host.Receipt)) && !host.Window.TransitionPending, "Disconnected apply crossed its acknowledgement boundary or changed Ready");
         });
         test("agent updates completion receipt requires actual installed process and all four target identity fields", () =>
@@ -406,8 +490,10 @@ internal static class AgentUpdateTests
         test("agent updates dispose before dispatch prevents even a first source request", () =>
         {
             using var host = new Host();
-            host.Send(Request("update-check"));
+            host.Status();
+            var pending = host.Window.AgentUpdate(Request("update-check"), CancellationToken.None, () => true);
             host.Window.Close();
+            Complete(pending);
             host.Finish();
             Require(host.Source.Checks == 0 && host.Source.Disposed, "Queued job ran after window cleanup");
             var receipt = JsonNode.Parse(File.ReadAllText(host.Receipt))!;
@@ -465,7 +551,7 @@ internal static class AgentUpdateTests
             Window = new MainWindow(renderOnly: true, platform: new PreviewPlatform(new(101, 42, 100, "Fixture game", "fixture")), diagnostics: new(Root), updates: defaultSource ? null : Source);
             Window.PhysicalKeyReader = _ => 0;
             Window.Controller.CaptureReturn();
-            ReviewFixTests.Complete(Window.Controller.Refresh());
+            WpfTestDispatcher.Complete(Window.Controller.Refresh());
             Window.RefreshRows();
         }
 
@@ -479,7 +565,9 @@ internal static class AgentUpdateTests
 
         internal void Finish()
         {
-            ReviewFixTests.Complete(Window.UpdateTask);
+            WpfTestDispatcher.Complete(Window.UpdateTask);
+            WpfTestDispatcher.Complete(Window.AgentReceiptTask);
+            WpfTestDispatcher.Complete(Window.ClosingTask);
             Flush();
         }
 

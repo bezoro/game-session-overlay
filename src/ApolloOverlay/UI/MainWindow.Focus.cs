@@ -151,7 +151,7 @@ public partial class MainWindow
         UpdatePolling();
         TraceFocus("audio-start", ResultKind.Requested);
         audio.SetVisible(!Controller.Platform.IsPreview);
-        TraceFocus("audio-ready", ResultKind.Completed);
+        TraceFocus("audio-observation-scheduled", ResultKind.Requested);
         TraceFocus("rows-start", ResultKind.Requested);
         RefreshRows();
         TraceFocus("rows-ready", ResultKind.Completed);
@@ -168,7 +168,7 @@ public partial class MainWindow
             if (!CurrentCycle(cycle))
                 return;
             TraceFocus("refresh", ResultKind.Completed);
-            if (!NavigationAllowed)
+            if (!ValidateNavigationOwnership())
                 return;
             Place();
             RefreshRows();
@@ -261,19 +261,21 @@ public partial class MainWindow
         TraceFocus(reason, ResultKind.Cancelled);
     }
 
-    private bool NavigationAllowed
+    internal bool NavigationAllowed => InputContext.AllowsNavigation;
+
+    // Input and operation boundaries explicitly revoke an obsolete admission.
+    // Rendering can inspect NavigationAllowed without cancelling work or rebuilding rows.
+    private bool ValidateNavigationOwnership()
     {
-        get
+        var context = InputContext;
+        if (context.Confirmed && context.Visible && !context.OwnedDialog && !context.Exiting
+            && (!context.Active || !context.OwnForeground))
         {
-            var context = InputContext;
-            if (!context.Confirmed || !context.Visible || context.OwnedDialog || context.Exiting)
-                return false;
-            if (context.Active && context.OwnForeground)
-                return true;
             RevokeFocus("lost");
             FeedbackFocusUnavailable("Window focus lost.");
             return false;
         }
+        return context.AllowsNavigation;
     }
 
     private async Task<bool> AcquireFocus(long cycle, nint foreground, CommandLogOperation? command = null)

@@ -372,10 +372,10 @@ internal static class IsolatedActivationTests
 
     private static bool Complete(Task<bool> task)
     {
-        ReviewFixTests.Complete(task);
+        WpfTestDispatcher.Complete(task);
         return task.Result;
     }
-    private static void Complete(Task task) => ReviewFixTests.Complete(task);
+    private static void Complete(Task task) => WpfTestDispatcher.Complete(task);
 
     private static void PumpUntil(Func<bool> condition, string failure, int timeoutMs = 3000)
     {

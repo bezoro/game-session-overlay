@@ -44,7 +44,7 @@ internal static class CapturePresentationTests
             Require(second.Length == 6 && !second.Intersect(first).Any(), "Next reused or omitted a page of captures");
             Choose(host.Window, "capture-next");
             Complete(host.Window.CapturePresentationTask);
-            Require(CaptureActions(host.Window).Length == 1 && !ReviewFixTests.Button(host.Window, "capture-next").IsEnabled, "The final partial page was not bounded");
+            Require(CaptureActions(host.Window).Length == 1 && !WpfTestElements.Button(host.Window, "capture-next").IsEnabled, "The final partial page was not bounded");
             Choose(host.Window, "capture-previous");
             Complete(host.Window.CapturePresentationTask);
             Require(CaptureActions(host.Window).SequenceEqual(second), "Previous did not restore the same capture page");
@@ -121,8 +121,8 @@ internal static class CapturePresentationTests
             File.Delete(Path.Combine(host.Captures.DirectoryPath, action["capture:".Length..] + ".png"));
             Choose(host.Window, action);
             Complete(host.Window.CapturePresentationTask);
-            var preview = PremiumInterfaceTests.Descendants<CapturePreview>((DependencyObject)host.Window.Content).Single();
-            Require(preview.Unavailable && preview.Source is null && ReviewFixTests.Button(host.Window, "capture-folder").IsEnabled,
+            var preview = WpfTestElements.Descendants<CapturePreview>((DependencyObject)host.Window.Content).Single();
+            Require(preview.Unavailable && preview.Source is null && WpfTestElements.Button(host.Window, "capture-folder").IsEnabled,
                 "A missing image left a blank detail or removed its folder recovery");
             Require(host.Window.Feedback.Contains("removed") && host.Platform.Calls == 0, "Missing-image recovery dispatched an action or lost its explanation");
         });
@@ -138,7 +138,7 @@ internal static class CapturePresentationTests
             Complete(host.Window.CapturePresentationTask);
             Select(host.Window, "capture-folder");
             host.Window.UpdateLayout();
-            var button = ReviewFixTests.Button(host.Window, "capture-folder");
+            var button = WpfTestElements.Button(host.Window, "capture-folder");
             var description = ((ActionButtonContent)button.Content).Description;
             var viewport = (ScrollViewer)host.Window.FindName("ContentScroll");
             var bounds = description.TransformToAncestor(viewport).TransformBounds(new Rect(description.RenderSize));
@@ -158,7 +158,7 @@ internal static class CapturePresentationTests
             var id = CaptureActions(host.Window).Single();
             Select(host.Window, id);
             host.Window.UpdateLayout();
-            var button = ReviewFixTests.Button(host.Window, id);
+            var button = WpfTestElements.Button(host.Window, id);
             var viewport = (ScrollViewer)host.Window.FindName("ContentScroll");
             var bounds = button.TransformToAncestor(viewport).TransformBounds(new Rect(new Size(button.ActualWidth, button.ActualHeight)));
             Require(new ButtonAutomationPeer(button).GetName() == title, "Thumbnail layout shortened the accessible capture title");
@@ -167,7 +167,7 @@ internal static class CapturePresentationTests
         });
     }
 
-    private static CapturePreview Preview(MainWindow window, string id) => ((CaptureThumbnail)ReviewFixTests.Button(window, id).Content).Preview;
+    private static CapturePreview Preview(MainWindow window, string id) => ((CaptureThumbnail)WpfTestElements.Button(window, id).Content).Preview;
     private static string[] CaptureActions(MainWindow window) => window.ActionIds.Where(id => id.StartsWith("capture:", StringComparison.Ordinal)).ToArray();
     private static BitmapSource TestImage()
     {
@@ -191,7 +191,7 @@ internal static class CapturePresentationTests
         window.UpdateLayout();
     }
 
-    private static void Complete(Task task) => ReviewFixTests.Complete(task);
+    private static void Complete(Task task) => WpfTestDispatcher.Complete(task);
     private static void Require(bool value, string message)
     {
         if (!value)
@@ -219,7 +219,7 @@ internal static class CapturePresentationTests
     {
         private readonly SynchronizationContext? previous = SynchronizationContext.Current;
         private readonly string root = Path.Combine(Path.GetTempPath(), "CapturePresentation", Guid.NewGuid().ToString("N"));
-        internal PremiumInterfaceTests.FixturePlatform Platform { get; } = new();
+        internal TestPlatform Platform { get; } = new();
         internal MainWindow Window
         {
             get;

@@ -15,15 +15,19 @@ public partial class MainWindow
     private bool narrow;
     private void SetEntryText(string id, string title)
     {
-        if (entries.FirstOrDefault(e => e.Id == id)?.Button is not { } button)
+        if (entries.FirstOrDefault(e => e.Id == id) is not { } entry)
             return;
+        var button = entry.Button;
         if (button.Content is ActionButtonContent content)
+        {
             content.Title.Text = title;
+            UpdateDescriptionVisibility(id, content, entry.Available);
+        }
         AutomationProperties.SetName(button, title);
         UpdateEntryAutomation(button);
     }
 
-    private void SetEntryDescription(string id, string description, string? inputPrompt = null)
+    private void SetEntryDescription(string id, string description, string? inputPrompt = null, string? helpText = null)
     {
         var index = entries.FindIndex(e => e.Id == id);
         if (index < 0)
@@ -38,23 +42,33 @@ public partial class MainWindow
                 content.Description.Text = ActionDescription(id, description, entry.Available);
                 AutomationProperties.SetName(content.Description, description);
             }
-            content.Description.Visibility = content.AllowsDescription && description.Length > 0 && (id == "audio" || !(CompactAction(id) || QuickAccessAction(id)) || !entry.Available) ? Visibility.Visible : Visibility.Collapsed;
+            UpdateDescriptionVisibility(id, content, entry.Available);
         }
 
-        AutomationProperties.SetHelpText(entry.Button, description);
+        AutomationProperties.SetHelpText(entry.Button, helpText ?? description);
         UpdateEntryAutomation(entry.Button);
         entries[index] = entry with
         {
-            Reason = description
+            Reason = helpText ?? description
         };
     }
 
-    private static void UpdateEntryAutomation(Button button)
+    private void UpdateDescriptionVisibility(string id, ActionButtonContent content, bool available)
     {
-        if (button.Resources["DescriptionTarget"] is not Border description)
+        var description = InputPrompt.Read(content.Description).Trim();
+        var repeated = string.Equals(content.Title.Text.Trim(), description, StringComparison.OrdinalIgnoreCase);
+        content.Description.Visibility = content.AllowsDescription && id != "close" && description.Length > 0 && !repeated
+            && (id == "audio" || !CompactAction(id) || !available) ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void UpdateEntryAutomation(Button button)
+    {
+        if (FindActionHost(button) is not { } description)
             return;
         var help = AutomationProperties.GetHelpText(button);
-        AutomationProperties.SetName(description, AutomationProperties.GetName(button) + ". " + help);
+        var title = AutomationProperties.GetName(button);
+        var repeated = string.Equals(title.Trim(), help.Trim(), StringComparison.OrdinalIgnoreCase);
+        AutomationProperties.SetName(description, help.Length == 0 || repeated ? title : title + ". " + help);
         AutomationProperties.SetHelpText(description, help);
     }
 
@@ -91,8 +105,8 @@ public partial class MainWindow
         {
             var previous = entries.Select(e => e.Id).ToArray();
             var selectedFooter = IsFooterAction(navigation.Id) && previous.Contains(navigation.Id);
-            entries.RemoveAll(e => e.Id is "save-pending" or "discard-pending" or "operation-details" || (e.Id == "dismiss-operation" && subpage != "operation"));
-            if (operationNotice.AllowsActions && subpage != "operation")
+            entries.RemoveAll(e => e.Id is "save-pending" or "discard-pending" or "operation-details" || (e.Id == "dismiss-operation" && view.Current.Route != OverlayRoute.OperationResult));
+            if (operationNotice.AllowsActions && view.Current.Route != OverlayRoute.OperationResult)
             {
                 entries.Add(new("operation-details", OperationDetailsButton, OpenOperation, !busy && !TransitionPending, "Read the full result"));
                 entries.Add(new("dismiss-operation", DismissOperationButton, DismissOperation, !busy && !TransitionPending, "Dismiss result"));
@@ -178,7 +192,12 @@ public partial class MainWindow
 
         )
         {
-            var selected = pair.Item2 == 2 ? view.Current.Route == OverlayRoute.WindowsAudio : pair.Item2 == page && view.Current.Route != OverlayRoute.WindowsAudio;
+            var selected = pair.Item2 switch
+            {
+                0 => view.Tab == OverlayTab.Hub,
+                1 => view.Tab == OverlayTab.Apps,
+                _ => view.Tab == OverlayTab.Audio
+            };
             pair.Item1.BorderThickness = new(0, 0, 0, 2);
             if (selected)
                 pair.Item1.SetResourceReference(BorderBrushProperty, ThemeSupport.Accent);
@@ -287,7 +306,6 @@ public partial class MainWindow
             grid.Description.Margin = new(0, 2, 0, 0);
             grid.Description.TextWrapping = quickAccess && !compactShortcut ? TextWrapping.Wrap : TextWrapping.NoWrap;
             grid.Description.TextTrimming = TextTrimming.CharacterEllipsis;
-            grid.Description.Visibility = description.Length > 0 && (!available || id == "audio") ? Visibility.Visible : Visibility.Collapsed;
             grid.ColumnDefinitions[0].Width = new GridLength(26);
             grid.Icon.Width = grid.Icon.Height = 20;
             badge.Width = badge.Height = 22;
@@ -312,7 +330,6 @@ public partial class MainWindow
             count.SetResourceReference(BackgroundProperty, ThemeSupport.Card);
             Grid.SetColumn(count, 2);
             grid.Children.Add(count);
-            grid.Resources["CountBadge"] = count;
         }
 
         var button = new Button
@@ -323,7 +340,7 @@ public partial class MainWindow
             IsEnabled = available,
             Padding = compactShortcut ? new(5, 2, 5, 2) : compactAction ? new(8) : new(12, 8, 12, 8)
         };
-        if (page == 0 && subpage == "" && id == "apps")
+        if (view.Current.Route == OverlayRoute.Hub && id == "apps")
         {
             button.Background = Brushes.Transparent;
             button.BorderThickness = new(0);
@@ -336,8 +353,7 @@ public partial class MainWindow
             grid.Description.TextTrimming = TextTrimming.CharacterEllipsis;
         }
 
-        if (id == "close")
-            grid.Description.Visibility = Visibility.Collapsed;
+        UpdateDescriptionVisibility(id, grid, available);
         if (quickAccess && (displayTitle != title || displayDescription != description))
         {
             button.ToolTip = displayTitle != title ? title + " · " + description : description;
@@ -347,7 +363,7 @@ public partial class MainWindow
             button.SetResourceReference(ForegroundProperty, ThemeSupport.Critical);
         AutomationProperties.SetName(button, title);
         AutomationProperties.SetHelpText(button, description);
-        button.Resources["ABadge"] = badge;
+        grid.SelectionBadge = badge;
         button.GotKeyboardFocus += (_, focus) =>
         {
             if (navigation.Id != id)

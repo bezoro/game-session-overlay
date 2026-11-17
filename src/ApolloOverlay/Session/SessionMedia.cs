@@ -285,6 +285,13 @@ public sealed class SessionMedia : ISessionMedia
 
     public void Dispose()
     {
+        // Complete cleanup on the same owner as SetVisible and native subscriptions.
+        // Setting disposed before this dispatch would make SetVisible skip teardown.
+        if (!dispatcher.CheckAccess())
+        {
+            dispatcher.Invoke(Dispose);
+            return;
+        }
         if (disposed)
             return;
         SetVisible(false);

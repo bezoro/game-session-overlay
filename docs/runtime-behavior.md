@@ -12,7 +12,7 @@ Double-click the tray icon or choose **Open overlay**. `ApolloOverlay.exe` start
 
 **Restart as administrator**, available in System and the tray, requests Windows consent for the current session. The existing instance exits only after verifying the elevated handoff. This does not itself persist elevated startup. In an elevated instance, **Administrator startup** separately manages the current user's highest-privilege interactive logon task. Startup Off and Windows opt-outs remain respected.
 
-The installed `startup-task.ps1 -Action Install` also supports explicit administrative task setup. Run it in the permanent installation folder from an administrator session of the intended user. The task uses no stored password. `-Action Uninstall` removes it and disables startup. The actual sign-in and scheduled-task behavior still need target-machine observation.
+The installed `startup-task.ps1 -Action Install` also supports explicit administrative task setup. The script delegates to the installed application's `--configure-startup Install|Uninstall` entry point, which uses the same executable/user ownership checks and transactional task/registry recovery as the interface. It waits for the actual application process and reports failure when Windows does not confirm the change; it does not replace task definitions or edit registry values itself. Run it in the permanent installation folder from an administrator session of the intended user. The task uses no stored password. `-Action Uninstall` removes it and disables startup. The actual sign-in and scheduled-task behavior still need target-machine observation.
 
 ## Input and handoff
 

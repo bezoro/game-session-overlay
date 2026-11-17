@@ -154,8 +154,8 @@ internal static class AutomaticUpdateTests
             Click(host.Badge);
             Require(host.Window.AutomationSnapshot().Route == "UpdateReview" && host.Window.ActionIds.Contains("prepare-update")
                 && host.Source.Stages == 0, "The real indicator button did not open a read-only download review");
-            Click(ReviewFixTests.Button(host.Window, "prepare-update"));
-            ReviewFixTests.Complete(host.Window.UpdateTask);
+            Click(WpfTestElements.Button(host.Window, "prepare-update"));
+            WpfTestDispatcher.Complete(host.Window.UpdateTask);
             Require(host.Source.Stages == 1 && host.Window.ActionIds.Contains("apply-update") && !host.Window.TransitionPending,
                 "Explicit download did not remain staged without restarting");
         });
@@ -168,10 +168,10 @@ internal static class AutomaticUpdateTests
             var token = host.Source.LastToken;
             var channel = host.Status().SelectedChannel == "testing" ? "stable" : "testing";
             Invoke(host.Window, "OpenUpdates");
-            Click(ReviewFixTests.Button(host.Window, "update-channel"));
+            Click(WpfTestElements.Button(host.Window, "update-channel"));
             Require(token.IsCancellationRequested && host.Status().SelectedChannel == channel, "The old channel query was not cancelled");
             pending.SetResult([Release()]);
-            ReviewFixTests.Complete(old);
+            WpfTestDispatcher.Complete(old);
             Require(host.Status().Available.Length == 0 && host.Badge.Visibility == Visibility.Collapsed, "An obsolete channel result restored its catalog or indicator");
             host.Window.PollAutomaticUpdates();
             host.FinishAutomatic();
@@ -203,10 +203,10 @@ internal static class AutomaticUpdateTests
             host.Source.StageCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
             var request = Request("update-download", release.BuildId);
             Require(host.Send(request).Outcome == "Requested", "The identified CLI transfer did not start");
-            ReviewFixTests.Complete(host.Window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background).Task);
+            WpfTestDispatcher.Complete(host.Window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background).Task);
             Require(host.Source.Stages == 1 && !host.Window.UpdateTask.IsCompleted,
                 "The CLI transfer did not reach its pending source");
-            var primary = ReviewFixTests.Button(host.Window, "prepare-update");
+            var primary = WpfTestElements.Button(host.Window, "prepare-update");
             Require(System.Windows.Automation.AutomationProperties.GetName(primary) == "Cancel download",
                 "The current CLI-owned download was not represented by the cancel action");
             Click(primary);
@@ -215,7 +215,7 @@ internal static class AutomaticUpdateTests
                 && state.JobId == request.RequestId, "Local cancellation lost or falsely completed the exact CLI job receipt");
             host.Source.StageCompletion.SetResult(new("fixture-never-installed.nupkg",
                 new(release.Version, release.BuildId, release.Commit, release.Channel)));
-            ReviewFixTests.Complete(host.Window.UpdateTask);
+            WpfTestDispatcher.Complete(host.Window.UpdateTask);
             Require(host.Status() is { Phase: "Cancelled", Terminal: true } && host.Source.Discards == 1
                 && !host.Window.TransitionPending && ReadField(host.Window, "preparedUpdate") is null,
                 "Late CLI staging retained a payload or replaced terminal cancellation");
@@ -233,14 +233,14 @@ internal static class AutomaticUpdateTests
                 if (cli)
                 {
                     Require(host.Send(Request("update-check")).Outcome == "Requested", "The explicit CLI check was rejected");
-                    ReviewFixTests.Complete(host.Window.UpdateTask);
+                    WpfTestDispatcher.Complete(host.Window.UpdateTask);
                 }
                 else
-                    ReviewFixTests.Complete((Task)Invoke(host.Window, "CheckUpdatesAsync")!);
+                    WpfTestDispatcher.Complete((Task)Invoke(host.Window, "CheckUpdatesAsync")!);
                 Require(automaticToken.IsCancellationRequested && host.Status().Available.Single().BuildId == fresh.BuildId,
                     "The explicit check did not cancel automatic discovery or publish its own catalog");
                 Require(host.Send(Request("update-download", fresh.BuildId)).Outcome == "Requested", "The freshly checked exact build could not be staged");
-                ReviewFixTests.Complete(host.Window.UpdateTask);
+                WpfTestDispatcher.Complete(host.Window.UpdateTask);
                 var state = host.Status();
                 var prepared = ReadField(host.Window, "preparedUpdate");
                 var generation = ReadField(host.Window, "updateGeneration");
@@ -249,7 +249,7 @@ internal static class AutomaticUpdateTests
                     "fixture-preservation-marker", DateTimeOffset.UtcNow.AddMinutes(1).ToUnixTimeMilliseconds());
                 GetField("agentUpdateApplyPin").SetValue(host.Window, pin);
                 pending.SetResult([Release("obsolete-automatic", "10.0.0")]);
-                ReviewFixTests.Complete(automatic);
+                WpfTestDispatcher.Complete(automatic);
                 var after = host.Status();
                 Require(after.Available.Single().BuildId == fresh.BuildId && after.JobId == state.JobId && after.Phase == "Ready"
                     && ReferenceEquals(prepared, ReadField(host.Window, "preparedUpdate"))
@@ -264,22 +264,22 @@ internal static class AutomaticUpdateTests
             var newRelease = Release(channel: "testing");
             Invoke(window, "OpenUpdates");
             if (host.Status().SelectedChannel != earlier.Channel)
-                Click(ReviewFixTests.Button(window, "update-channel"));
+                Click(WpfTestElements.Button(window, "update-channel"));
             host.FinishAutomatic();
             host.Source.Releases = [earlier];
-            Click(ReviewFixTests.Button(window, "check-updates"));
-            ReviewFixTests.Complete(window.UpdateTask);
+            Click(WpfTestElements.Button(window, "check-updates"));
+            WpfTestDispatcher.Complete(window.UpdateTask);
             var catalog = (TextBlock)ReadField(window, "updateProgressLabel")!;
             Require(catalog.Text == "No newer version is available in this channel." && host.Badge.Visibility == Visibility.Collapsed,
                 $"An earlier preview was presented as an available update: {catalog.Text}");
-            var row = ReviewFixTests.Button(window, "release:" + earlier.BuildId);
+            var row = WpfTestElements.Button(window, "release:" + earlier.BuildId);
             Require(row.IsEnabled && AutomationProperties.GetName(row).EndsWith(" · earlier version", StringComparison.Ordinal),
                 "The earlier version was not clearly labeled and selectable");
             Click(row);
             Require(((TextBlock)window.FindName("PageTitle")).Text == "Review version"
                 && ViewHasText(window, "Earlier version") && host.Source.Stages == 0,
                 "Review did not identify the earlier version or downloaded without an explicit action");
-            var download = ReviewFixTests.Button(window, "prepare-update");
+            var download = WpfTestElements.Button(window, "prepare-update");
             Require(AutomationProperties.GetName(download) == "Download earlier version", "The action did not identify the earlier download");
             host.Source.StageCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
             Click(download);
@@ -287,29 +287,29 @@ internal static class AutomaticUpdateTests
             Click(download);
             host.Source.StageCompletion.SetResult(new("fixture-never-installed.nupkg",
                 new(earlier.Version, earlier.BuildId, earlier.Commit, earlier.Channel)));
-            ReviewFixTests.Complete(window.UpdateTask);
+            WpfTestDispatcher.Complete(window.UpdateTask);
             Require(host.Source.StageToken.IsCancellationRequested && host.Source.Discards == 1
                 && !window.ActionIds.Contains("apply-update")
-                && AutomationProperties.GetName(ReviewFixTests.Button(window, "prepare-update")) == "Download earlier version",
+                && AutomationProperties.GetName(WpfTestElements.Button(window, "prepare-update")) == "Download earlier version",
                 "Cancelling an earlier download retained its payload or lost the earlier download label");
             host.Source.StageCompletion = null;
-            Click(ReviewFixTests.Button(window, "prepare-update"));
-            ReviewFixTests.Complete(window.UpdateTask);
+            Click(WpfTestElements.Button(window, "prepare-update"));
+            WpfTestDispatcher.Complete(window.UpdateTask);
             Require(ViewHasText(window, "Earlier version downloaded") && host.Source.Stages == 2
                 && window.ActionIds.Contains("apply-update") && !window.TransitionPending,
                 "A verified earlier download was mislabeled or crossed the restart boundary");
-            Click(ReviewFixTests.Button(window, "back"));
+            Click(WpfTestElements.Button(window, "back"));
             Require(((TextBlock)ReadField(window, "updateProgressLabel")!).Text == catalog.Text,
                 "Returning from the review lost the catalog result");
 
             host.Source.Releases = [earlier, newRelease];
-            Click(ReviewFixTests.Button(window, "check-updates"));
-            ReviewFixTests.Complete(window.UpdateTask);
+            Click(WpfTestElements.Button(window, "check-updates"));
+            WpfTestDispatcher.Complete(window.UpdateTask);
             Require(((TextBlock)ReadField(window, "updateProgressLabel")!).Text.StartsWith("Versions are available.", StringComparison.Ordinal)
                 && host.Badge.Visibility == Visibility.Visible, "The check missed a genuinely newer version listed after the earlier preview");
-            Click(ReviewFixTests.Button(window, "release:" + newRelease.BuildId));
+            Click(WpfTestElements.Button(window, "release:" + newRelease.BuildId));
             Require(ViewHasText(window, "Update available")
-                && AutomationProperties.GetName(ReviewFixTests.Button(window, "prepare-update")) == "Download update",
+                && AutomationProperties.GetName(WpfTestElements.Button(window, "prepare-update")) == "Download update",
                 "A genuine update lost its usual review and download labels");
         });
         test("passive update discovery preserves the existing catalog controls and scroll position", () =>
@@ -319,7 +319,7 @@ internal static class AutomaticUpdateTests
             var earlier = EarlierPreview();
             Invoke(window, "OpenUpdates");
             if (host.Status().SelectedChannel != earlier.Channel)
-                Click(ReviewFixTests.Button(window, "update-channel"));
+                Click(WpfTestElements.Button(window, "update-channel"));
             host.FinishAutomatic();
             var installed = earlier with
             {
@@ -328,8 +328,8 @@ internal static class AutomaticUpdateTests
             };
             var initialCatalog = Enumerable.Range(1, 8).Select(i => earlier with { BuildId = $"earlier-{i}" }).Prepend(installed).ToArray();
             host.Source.Releases = initialCatalog;
-            Click(ReviewFixTests.Button(window, "check-updates"));
-            ReviewFixTests.Complete(window.UpdateTask);
+            Click(WpfTestElements.Button(window, "check-updates"));
+            WpfTestDispatcher.Complete(window.UpdateTask);
 
             var (surface, root, scroll) = RenderUpdateSurface(window, 360, 480);
             scroll.ScrollToVerticalOffset(500);
@@ -362,11 +362,11 @@ internal static class AutomaticUpdateTests
                 var window = host.Window;
                 Invoke(window, "OpenUpdates");
                 if (host.Status().SelectedChannel != earlier.Channel)
-                    Click(ReviewFixTests.Button(window, "update-channel"));
+                    Click(WpfTestElements.Button(window, "update-channel"));
                 host.FinishAutomatic();
                 host.Source.Releases = [earlier];
-                Click(ReviewFixTests.Button(window, "check-updates"));
-                ReviewFixTests.Complete(window.UpdateTask);
+                Click(WpfTestElements.Button(window, "check-updates"));
+                WpfTestDispatcher.Complete(window.UpdateTask);
 
                 var (surface, root, scroll) = RenderUpdateSurface(window, width, height);
                 var row = UpdateButton(root, "release:" + earlier.BuildId);
@@ -374,7 +374,7 @@ internal static class AutomaticUpdateTests
                 Capture(surface, $"earlier-version-dark-{width}x{height}-catalog", "offscreen=True");
                 if (height == 480)
                 {
-                    var heading = PremiumInterfaceTests.Descendants<TextBlock>(root).Single(block => block.Text == "Published versions");
+                    var heading = WpfTestElements.Descendants<TextBlock>(root).Single(block => block.Text == "Published versions");
                     ScrollToCapture(surface, scroll, heading);
                     Capture(surface, $"earlier-version-dark-{width}x{height}-catalog-release", "offscreen=True");
                 }
@@ -414,20 +414,20 @@ internal static class AutomaticUpdateTests
                 if (width != 572)
                     continue;
                 Click(host.Badge);
-                ReviewFixTests.Complete(Task.Delay(200));
+                WpfTestDispatcher.Complete(Task.Delay(200));
                 RequireNoRepeatedUpdateStatus(host.Window);
                 Capture(host.Window, "automatic-update-dark-572x940-download");
                 Require(host.Source.Stages == 0, "Review capture downloaded or installed a package");
                 host.Source.StageCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
-                Click(ReviewFixTests.Button(host.Window, "prepare-update"));
+                Click(WpfTestElements.Button(host.Window, "prepare-update"));
                 Require(host.Source.Stages == 1 && !host.Window.UpdateTask.IsCompleted && host.Source.StageProgress is not null,
                     "The active-download capture did not reach a real pending staging operation");
                 host.Source.StageProgress!.Report(new("Downloading update", 57, 100));
-                ReviewFixTests.Complete(Task.Delay(200));
+                WpfTestDispatcher.Complete(Task.Delay(200));
                 Require(((TextBlock)ReadField(host.Window, "updateProgressLabel")!).Text.Contains("57%", StringComparison.Ordinal)
                     && host.Window.AutomationSnapshot().Busy && !host.Window.TransitionPending,
                     "Download progress was not published or crossed the restart boundary");
-                Require(System.Windows.Automation.AutomationProperties.GetName(ReviewFixTests.Button(host.Window, "prepare-update")) == "Cancel download",
+                Require(System.Windows.Automation.AutomationProperties.GetName(WpfTestElements.Button(host.Window, "prepare-update")) == "Cancel download",
                     "The progress capture still presented a download action while cancellation was the real action");
                 RequireNoRepeatedUpdateStatus(host.Window);
                 Capture(host.Window, "automatic-update-dark-572x940-progress");
@@ -435,16 +435,16 @@ internal static class AutomaticUpdateTests
             using var audio = new Host();
             audio.Open(572, 940);
             Click((Button)audio.Window.FindName("SettingsTab"));
-            ReviewFixTests.Complete(Task.Delay(200));
+            WpfTestDispatcher.Complete(Task.Delay(200));
             Capture(audio.Window, "automatic-update-dark-572x940-audio");
         });
     }
 
     private static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
     private static bool ViewHasText(MainWindow window, string text) =>
-        PremiumInterfaceTests.Descendants<TextBlock>((DependencyObject)window.Content).Any(block => block.Text == text);
+        WpfTestElements.Descendants<TextBlock>((DependencyObject)window.Content).Any(block => block.Text == text);
     private static Button UpdateButton(FrameworkElement root, string id) =>
-        PremiumInterfaceTests.Descendants<Button>(root).Single(button => Equals(button.Tag, id));
+        WpfTestElements.Descendants<Button>(root).Single(button => Equals(button.Tag, id));
 
     private static void ScrollToCapture(FrameworkElement surface, ScrollViewer scroll, FrameworkElement target)
     {
@@ -545,7 +545,7 @@ internal static class AutomaticUpdateTests
             Window.InputContextReader = () => new(true, true, true, true);
             Window.Closed += (_, _) => closed = true;
             Window.Controller.CaptureReturn();
-            ReviewFixTests.Complete(Window.Controller.Refresh());
+            WpfTestDispatcher.Complete(Window.Controller.Refresh());
             Window.RefreshRows();
             Window.StartAutomaticUpdateDiscovery();
         }
@@ -554,18 +554,18 @@ internal static class AutomaticUpdateTests
             Now = now;
             Window.PollAutomaticUpdates();
         }
-        internal void FinishAutomatic() => ReviewFixTests.Complete(Window.AutomaticUpdateTask);
+        internal void FinishAutomatic() => WpfTestDispatcher.Complete(Window.AutomaticUpdateTask);
         internal AutomationReply Send(AutomationRequest request)
         {
             var task = Window.AgentUpdate(request, CancellationToken.None, () => true);
-            ReviewFixTests.Complete(task);
+            WpfTestDispatcher.Complete(task);
             return task.Result;
         }
         internal AutomationUpdateState Status() => Send(Request("update-status")).Update!;
         internal void Open(int width, int height)
         {
             Window.OpenPanel();
-            ReviewFixTests.Complete(Window.OpeningTask);
+            WpfTestDispatcher.Complete(Window.OpeningTask);
             // Fixed capture viewports must override WPF's native tracking limit
             // with a matching minimum as well as a maximum.
             Window.MinWidth = width;
@@ -576,7 +576,7 @@ internal static class AutomaticUpdateTests
             Window.Height = height;
             ((FrameworkElement)Window.Content).LayoutTransform = Transform.Identity;
             Window.UpdateLayout();
-            ReviewFixTests.Complete(Task.Delay(350));
+            WpfTestDispatcher.Complete(Task.Delay(350));
             ((ScrollViewer)Window.FindName("ContentScroll")).ScrollToTop();
             Window.UpdateLayout();
             Require(Math.Abs(Window.ActualWidth - width) < .1 && Math.Abs(Window.ActualHeight - height) < .1,
@@ -599,7 +599,9 @@ internal static class AutomaticUpdateTests
                     Window.Close();
                 Source.CancelPending();
                 FinishAutomatic();
-                ReviewFixTests.Complete(Window.UpdateTask);
+                WpfTestDispatcher.Complete(Window.UpdateTask);
+                WpfTestDispatcher.Complete(Window.AgentReceiptTask);
+                WpfTestDispatcher.Complete(Window.ClosingTask);
                 diagnostics.Dispose();
                 if (Directory.Exists(diagnostics.Root))
                     Directory.Delete(diagnostics.Root, true);

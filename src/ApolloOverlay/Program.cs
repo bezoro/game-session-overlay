@@ -31,6 +31,8 @@ public static class Program
         VelopackInstallation.Initialize(args, RemoveInstalledIntegration, EnsureInstalledIntegration, EnsureInstalledIntegration);
         if (AdministratorRestart.Bootstrap(ref args) is { } restartCode)
             return restartCode;
+        if (StartupRepairCommand.Execute(args) is { } repairCode)
+            return repairCode;
         if (args.Length == 2 && args[0] is "--capture-native" or "--native-check" or "--capture-alpha")
         {
             var app = new Application

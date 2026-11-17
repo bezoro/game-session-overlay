@@ -20,6 +20,9 @@ public partial class MainWindow
     private CancellationTokenSource? updateCancellation;
     private bool updateBusy, updateDownloading, updateCommitting, updateCloseAuthorized;
     private int updateHistoryPage;
+    private bool updateHistoryPending;
+    private Exception? updateHistoryError;
+    internal Task UpdateHistoryTask { get; private set; } = Task.CompletedTask;
     private long updateGeneration, nextUpdateProgress;
     private string updateChannel = AppBuild.Current.Channel == "stable" ? "stable" : "testing";
     private string updateStatus = "Updates are checked automatically every 15 minutes.";
@@ -32,7 +35,41 @@ public partial class MainWindow
         private set;
     } = Task.CompletedTask;
 
-    private void OpenUpdates() => OpenView(new(OverlayRoute.Updates, SelectedId: "check-updates"));
+    private void OpenUpdates()
+    {
+        updateHistoryError = null;
+        OpenView(new(OverlayRoute.Updates, SelectedId: "check-updates"));
+    }
+
+    private void EnsureUpdateHistory()
+    {
+        if (diagnostic || Controller.Platform.IsPreview || updateHistoryPending || updateHistoryError is not null
+            || VelopackInstallation.HistoryIsFresh)
+            return;
+        updateHistoryPending = true;
+        UpdateHistoryTask = RefreshUpdateHistoryAsync();
+    }
+
+    private async Task RefreshUpdateHistoryAsync()
+    {
+        await Task.Yield();
+        try
+        {
+            await VelopackInstallation.ReadHistoryAsync();
+        }
+        catch (Exception error) when (UpdateFailure(error))
+        {
+            updateHistoryError = error;
+            if (!exiting)
+                LogUpdateFault("update-history-read", error, "history-unavailable");
+        }
+        finally
+        {
+            updateHistoryPending = false;
+            if (!exiting && view.Current.Route == OverlayRoute.Updates)
+                RefreshRows();
+        }
+    }
     private void BuildUpdates()
     {
         FeatureHeading(AppBuild.Current.Display, "Installed version · " + (AppBuild.Current.Channel == "stable" ? "Stable" : "Testing"), "updates");
@@ -89,9 +126,12 @@ public partial class MainWindow
         Section("Restore an earlier version");
         try
         {
-            var history = (diagnostic || Controller.Platform.IsPreview ? Array.Empty<InstalledBuild>() : VelopackInstallation.History()).Where(h => !h.Current && !h.LastStartFailed).OrderByDescending(h => h.InstalledAt).ToArray();
-            if (history.Length == 0)
-                Paragraph("Previously installed versions will appear here. Local rollback works offline.");
+            EnsureUpdateHistory();
+            var history = (diagnostic || Controller.Platform.IsPreview ? Array.Empty<InstalledBuild>() : VelopackInstallation.CachedHistory).Where(h => !h.Current && !h.LastStartFailed).OrderByDescending(h => h.InstalledAt).ToArray();
+            if (updateHistoryError is not null)
+                Paragraph("The local version history could not be refreshed. The current version was preserved.");
+            else if (history.Length == 0)
+                Paragraph(updateHistoryPending ? "Loading local version history…" : "Previously installed versions will appear here. Local rollback works offline.");
             const int pageSize = 8;
             var pages = Math.Max(1, (history.Length + pageSize - 1) / pageSize);
             updateHistoryPage = Math.Clamp(updateHistoryPage, 0, pages - 1);
@@ -592,15 +632,19 @@ public partial class MainWindow
         if (!VelopackInstallation.IsInstalled)
             return;
         if (VelopackInstallation.ReadNotice() is { } notice)
+            PresentUpdateRecoveryNotice(notice);
+    }
+
+    internal void PresentUpdateRecoveryNotice(SettingsRestoreResult notice)
+    {
+        var restored = notice.Outcome == SettingsRestoreOutcome.Restored;
+        using var command = BeginCommand("update-settings-recovery", origin: "system");
+        command?.Complete(restored ? ResultKind.Completed : ResultKind.Unknown, "settings-recovery-notice");
+        updateStatus = notice.Message;
+        if (Controller.Operation is null or { Action: "update" })
         {
-            using var command = BeginCommand("update-settings-recovery", origin: "system");
-            command?.Complete(notice.StartsWith("Earlier version restored", StringComparison.Ordinal) ? ResultKind.Completed : ResultKind.Unknown, "settings-recovery-notice");
-            updateStatus = notice;
-            if (Controller.Operation is null or { Action: "update" })
-            {
-                RetainOperation(notice.StartsWith("Earlier version restored", StringComparison.Ordinal) ? "Completed" : "Unconfirmed", notice, "update");
-                FeedbackText(notice);
-            }
+            RetainOperation(restored ? "Completed" : "Unconfirmed", notice.Message, "update");
+            FeedbackText(notice.Message);
         }
     }
 

@@ -8,8 +8,10 @@ namespace ApolloOverlay;
 
 public partial class MainWindow
 {
+    private sealed record AgentReceiptObservation(AutomationUpdateState State, string TargetCommit = "", string TargetChannel = "", Exception? Error = null);
     private sealed record AgentUpdateReceipt(int SchemaVersion, int OriginPid, long OriginStarted, AutomationUpdateState State, string TargetCommit, string TargetChannel);
     private sealed record AgentUpdateApplyPin(string RequestId, string JobId, long Generation, PreparedUpdate Prepared, string Signature, long ExpiresUtc);
+    private static readonly long AgentOriginStarted = ReadAgentOriginStarted();
     private static readonly JsonSerializerOptions AgentReceiptJson = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -21,14 +23,20 @@ public partial class MainWindow
     private bool agentUpdateDisposed;
     private CancellationTokenSource? agentUpdateCancellationOwner;
     private long agentReceiptAt;
+    private AgentReceiptObservation? agentReceiptObservation;
+    private Task<AgentReceiptObservation>? agentReceiptReadTask;
+    private UpdateReceiptWriter? agentReceiptWriter;
+    private Task? observedAgentReceipt;
+    internal Task AgentReceiptTask => agentReceiptWriter?.Drained ?? Task.CompletedTask;
     private string AgentReceiptPath => Path.Combine(Controller.Diagnostics.Root, "agent-update-receipt.json");
     private bool AgentSourceAvailable => updateSource is not PreviewUpdateSource;
     private bool AgentRealInstall => !diagnostic && !Controller.Platform.IsPreview && VelopackInstallation.IsInstalled;
 
-    internal Task<AutomationReply> AgentUpdate(AutomationRequest request, CancellationToken token, Func<bool> continuing)
+    internal async Task<AutomationReply> AgentUpdate(AutomationRequest request, CancellationToken token, Func<bool> continuing)
     {
         if (!Dispatcher.CheckAccess())
-            return Dispatcher.InvokeAsync(() => AgentUpdate(request, token, continuing)).Task.Unwrap();
+            return await Dispatcher.InvokeAsync(() => AgentUpdate(request, token, continuing)).Task.Unwrap();
+        await EnsureAgentObservationsAsync();
         var snapshot = AgentSnapshot(readOnly: request.DryRun);
         AutomationReply Reply(string outcome, string reason, bool terminal = true) => new()
         {
@@ -39,55 +47,55 @@ public partial class MainWindow
             Update = AgentSnapshot(request.DryRun)
         };
         if (request.RequestId is null || request.Channel is null || request.BuildId is null || request.JobId is null)
-            return Task.FromResult(Reply("Invalid", "Invalid identity fields."));
+            return Reply("Invalid", "Invalid identity fields.");
         if (request.Verb == "update-status")
-            return Task.FromResult(Reply(request.DryRun ? "DryRun" : "Completed", "Update status."));
+            return Reply(request.DryRun ? "DryRun" : "Completed", "Update status.");
         if (request.Verb is not ("update-check" or "update-download" or "update-rollback" or "update-cancel" or "update-apply"))
-            return Task.FromResult(Reply("Unsupported", "Unknown update command."));
+            return Reply("Unsupported", "Unknown update command.");
         if (exiting || agentUpdateDisposed)
-            return Task.FromResult(Reply("Unavailable", "The overlay is closing."));
+            return Reply("Unavailable", "The overlay is closing.");
         if (request.Channel.Length > 0 && request.Channel is not ("stable" or "testing"))
-            return Task.FromResult(Reply("Invalid", "Invalid channel. Use stable or testing."));
+            return Reply("Invalid", "Invalid channel. Use stable or testing.");
         if (request.RequestId.Length is 0 or > 128 || request.BuildId.Length > 160 || request.JobId.Length > 128)
-            return Task.FromResult(Reply("Invalid", "Invalid request identity."));
+            return Reply("Invalid", "Invalid request identity.");
         if (request.Verb == "update-cancel")
         {
             if (snapshot.JobId.Length == 0 || request.JobId != snapshot.JobId)
-                return Task.FromResult(Reply("Conflict", "Provide the exact JobId of the operation to cancel."));
+                return Reply("Conflict", "Provide the exact JobId of the operation to cancel.");
             if (updateCommitting || snapshot.Phase == "Restarting")
-                return Task.FromResult(Reply("Busy", "The version change has started; cancellation is not guaranteed after commit."));
+                return Reply("Busy", "The version change has started; cancellation is not guaranteed after commit.");
             if (!updateBusy || updateCancellation is null || snapshot.Terminal)
-                return Task.FromResult(Reply("Unavailable", "This operation is not in progress."));
+                return Reply("Unavailable", "This operation is not in progress.");
             if (request.DryRun)
-                return Task.FromResult(Reply("DryRun", "The job can be cancelled; no input was changed."));
+                return Reply("DryRun", "The job can be cancelled; no input was changed.");
             if (!AgentClientAlive(token, continuing))
-                return Task.FromResult(Reply("Cancelled", "The client is no longer connected."));
+                return Reply("Cancelled", "The client is no longer connected.");
             updateGeneration++;
             agentUpdateApplyPin = null;
             SetAgentState("Cancelled", "Operation cancelled. The installed version was preserved.", true, persist: true);
             SetUpdateStatus(agentUpdateState!.Message);
             updateCancellation.Cancel();
             RefreshDownloadAction();
-            return Task.FromResult(Reply("Cancelled", agentUpdateState.Message));
+            return Reply("Cancelled", agentUpdateState.Message);
         }
 
         if (busy || updateBusy || updateCommitting || ownedDialog || TransitionPending || Confirming)
-            return Task.FromResult(Reply("Busy", "Another operation, confirmation or dialog is in progress."));
+            return Reply("Busy", "Another operation, confirmation or dialog is in progress.");
         if (request.Verb == "update-apply")
         {
             var error = ValidateAgentApply(request);
             if (error is not null)
-                return Task.FromResult(Reply(error.Value.Outcome, error.Value.Reason));
+                return Reply(error.Value.Outcome, error.Value.Reason);
             if (request.DryRun)
-                return Task.FromResult(Reply("DryRun", "Package ready and identified; no installation has started."));
+                return Reply("DryRun", "Package ready and identified; no installation has started.");
             if (!AgentClientAlive(token, continuing))
-                return Task.FromResult(Reply("Cancelled", "The client is no longer connected."));
+                return Reply("Cancelled", "The client is no longer connected.");
             agentUpdateApplyPin = new(request.RequestId, agentUpdateState!.JobId, updateGeneration, preparedUpdate!, AgentPreparedSignature(preparedUpdate!), DateTimeOffset.UtcNow.AddSeconds(15).ToUnixTimeMilliseconds());
-            return Task.FromResult(Reply("UpdateApplyRequested", "Package verified. The version change is waiting for confirmation from the connected client.", false));
+            return Reply("UpdateApplyRequested", "Package verified. The version change is waiting for confirmation from the connected client.", false);
         }
 
         if (!AgentSourceAvailable)
-            return Task.FromResult(Reply("Unavailable", "The default preview does not check for or install updates."));
+            return Reply("Unavailable", "The default preview does not check for or install updates.");
         var channel = request.Channel.Length == 0 ? updateChannel : request.Channel;
         UpdateCandidate? candidate = null;
         InstalledBuild? previous = null;
@@ -96,40 +104,40 @@ public partial class MainWindow
             var matches = updateCandidates.Where(c => c.BuildId == request.BuildId && c.Channel == channel).Take(2).ToArray();
             candidate = matches.Length == 1 ? matches[0] : null;
             if (candidate is null || request.BuildId.Length == 0)
-                return Task.FromResult(Reply("Unavailable", "This build is not in the current channel catalog. Run update-check again."));
+                return Reply("Unavailable", "This build is not in the current channel catalog. Run update-check again.");
             if (candidate.BuildId == AppBuild.Current.BuildId)
-                return Task.FromResult(Reply("Unavailable", "This version is already running."));
+                return Reply("Unavailable", "This version is already running.");
             var targetVersion = candidate.Asset?.Version;
             if (targetVersion is null && !Velopack.SemanticVersion.TryParse(candidate.Version, out targetVersion))
-                return Task.FromResult(Reply("Invalid", "The selected build does not have a valid semantic version."));
+                return Reply("Invalid", "The selected build does not have a valid semantic version.");
             if (!request.AllowDowngrade
                 && Velopack.SemanticVersion.TryParse(VelopackInstallation.CurrentVersion ?? AppBuild.Current.Version, out var currentVersion)
                 && targetVersion < currentVersion)
-                return Task.FromResult(Reply("Conflict", "The selected version is older than the installed one. Explicitly choose its BuildId with AllowDowngrade or use update-rollback."));
+                return Reply("Conflict", "The selected version is older than the installed one. Explicitly choose its BuildId with AllowDowngrade or use update-rollback.");
         }
 
         if (request.Verb == "update-rollback")
         {
             if (!AgentRealInstall)
-                return Task.FromResult(Reply("Unavailable", "Rollback requires an installation created by Setup."));
+                return Reply("Unavailable", "Rollback requires an installation created by Setup.");
             try
             {
-                previous = VelopackInstallation.History().SingleOrDefault(h => h.BuildId == request.BuildId && !h.Current && !h.LastStartFailed);
+                previous = VelopackInstallation.CachedHistory.SingleOrDefault(h => h.BuildId == request.BuildId && !h.Current && !h.LastStartFailed);
             }
             catch (Exception error) when (UpdateFailure(error))
             {
                 LogUpdateFault("agent-update-history-read", error, "history-unavailable", request.RequestId);
-                return Task.FromResult(Reply("Unavailable", "The local version history could not be read."));
+                return Reply("Unavailable", "The local version history could not be read.");
             }
 
             if (previous is null)
-                return Task.FromResult(Reply("Unavailable", "The exact build is not in the local installation history."));
+                return Reply("Unavailable", "The exact build is not in the local installation history.");
         }
 
         if (request.DryRun)
-            return Task.FromResult(Reply("DryRun", "Operation available; no query, download or write has started."));
+            return Reply("DryRun", "Operation available; no query, download or write has started.");
         if (!AgentClientAlive(token, continuing))
-            return Task.FromResult(Reply("Cancelled", "The client is no longer connected."));
+            return Reply("Cancelled", "The client is no longer connected.");
         var priorState = agentUpdateState;
         var priorCommit = agentTargetCommit;
         var priorChannel = agentTargetChannel;
@@ -146,19 +154,56 @@ public partial class MainWindow
             TargetVersion = candidate?.Version ?? previous?.Version ?? "",
             Message = request.Verb == "update-check" ? "Checking published versions…" : request.Verb == "update-rollback" ? "Verifying the retained version for rollback…" : "Preparing to download the selected version…"
         };
+        // Reserving the operation before awaiting disk durability prevents another command
+        // from replacing its receipt or prepared context while the dispatcher remains free.
+        busy = updateBusy = true;
+        var cancellation = new CancellationTokenSource();
+        updateCancellation = cancellation;
+        agentUpdateCancellationOwner = cancellation;
+        var generation = ++updateGeneration;
+        void ReleasePreparation()
+        {
+            if (ReferenceEquals(updateCancellation, cancellation))
+                updateCancellation = null;
+            if (ReferenceEquals(agentUpdateCancellationOwner, cancellation))
+                agentUpdateCancellationOwner = null;
+            cancellation.Dispose();
+            busy = updateBusy = false;
+        }
         try
         {
-            PersistAgentReceipt();
+            await PersistAgentReceiptAsync();
         }
         catch (Exception error) when (UpdateFailure(error))
         {
-            LogUpdateFault("agent-update-receipt", error, "receipt-write-failed", request.RequestId);
-            agentUpdateState = priorState;
-            agentTargetCommit = priorCommit;
-            agentTargetChannel = priorChannel;
-            return Task.FromResult(Reply("Unavailable", "Could not retain the operation receipt. Check permissions and available disk space."));
+            if (!exiting)
+                LogUpdateFault("agent-update-receipt", error, "receipt-write-failed", request.RequestId);
+            if (!agentUpdateDisposed && generation == updateGeneration)
+            {
+                agentUpdateState = priorState;
+                agentTargetCommit = priorCommit;
+                agentTargetChannel = priorChannel;
+            }
+            ReleasePreparation();
+            return Reply("Unavailable", "Could not retain the operation receipt. Check permissions and available disk space.");
         }
 
+        if (exiting || agentUpdateDisposed)
+        {
+            ReleasePreparation();
+            return Reply("Cancelled", "The overlay is closing.");
+        }
+        if (cancellation.IsCancellationRequested || generation != updateGeneration)
+        {
+            ReleasePreparation();
+            return Reply("Cancelled", "Preparation was cancelled before any source request began.");
+        }
+        if (!AgentClientAlive(token, continuing))
+        {
+            SetAgentState("Cancelled", "The client disconnected before preparation began. The installed version was preserved.", true, persist: true);
+            ReleasePreparation();
+            return Reply("Cancelled", "The client is no longer connected.");
+        }
         CancelAutomaticUpdateCheck();
         if (updateChannel != channel)
         {
@@ -173,17 +218,12 @@ public partial class MainWindow
             preparedUpdate = null;
         }
 
-        var cancellation = new CancellationTokenSource();
-        updateCancellation = cancellation;
-        agentUpdateCancellationOwner = cancellation;
-        var generation = ++updateGeneration;
-        busy = updateBusy = true;
         updateDownloading = request.Verb == "update-download";
         ClearPreviousUpdateResult();
         SetUpdateStatus(agentUpdateState.Message);
         UpdatePersistentState();
         UpdateTask = RunAgentUpdateJob(request.Verb, candidate, previous, channel, generation, cancellation, request.RequestId);
-        return Task.FromResult(Reply("Requested", "Operation started. Query update-status with the returned JobId.", false));
+        return Reply("Requested", "Operation started. Query update-status with the returned JobId.", false);
     }
 
     internal async Task CommitAgentUpdate(AutomationRequest request, CancellationToken token, Func<bool> continuing)
@@ -216,16 +256,25 @@ public partial class MainWindow
             return;
         }
 
+        busy = updateBusy = updateCommitting = true;
         SetAgentState("Restarting", "Version change started by Velopack. Completion will be confirmed by the identity of the next process.", false);
         try
         {
-            PersistAgentReceipt();
+            await PersistAgentReceiptAsync();
         }
         catch (Exception failure) when (UpdateFailure(failure))
         {
             command?.Fail(failure, "receipt-write-failed");
             SetAgentState("Failed", "Could not retain the version-change receipt. Installation did not start.", true);
             SetUpdateStatus(agentUpdateState!.Message);
+            busy = updateBusy = updateCommitting = false;
+            return;
+        }
+        if (exiting || agentUpdateDisposed || !AgentClientAlive(token, continuing))
+        {
+            SetAgentState("Cancelled", "The client disconnected before installation began. The installed version was preserved.", true, persist: true);
+            busy = updateBusy = updateCommitting = false;
+            command?.Complete(ResultKind.Cancelled, "client-disconnected-before-scheduling");
             return;
         }
 
@@ -438,30 +487,83 @@ public partial class MainWindow
             Progress = Math.Clamp(progress ?? agentUpdateState?.Progress ?? 0, 0, 100)
         };
         if (persist)
+            QueueAgentReceiptCheckpoint();
+    }
+
+    private void QueueAgentReceiptCheckpoint()
+    {
+        try
+        {
+            var write = PersistAgentReceiptAsync(checkpoint: true);
+            if (ReferenceEquals(observedAgentReceipt, write))
+                return;
+            observedAgentReceipt = write;
+            _ = ObserveAgentReceiptAsync(write);
+        }
+        catch (Exception error) when (UpdateFailure(error))
+        {
+            if (!exiting)
+                LogUpdateFault("agent-update-receipt", error, "receipt-write-failed", agentUpdateState?.JobId);
+        }
+    }
+
+    private async Task ObserveAgentReceiptAsync(Task write)
+    {
+        try
+        {
+            await write;
+        }
+        catch (Exception error) when (UpdateFailure(error))
+        {
+            if (!exiting)
+                LogUpdateFault("agent-update-receipt", error, "receipt-write-failed", agentUpdateState?.JobId);
+        }
+        finally
+        {
+            if (ReferenceEquals(observedAgentReceipt, write))
+                observedAgentReceipt = null;
+        }
+    }
+
+    private async Task EnsureAgentObservationsAsync()
+    {
+        if (agentReceiptObservation is null && agentUpdateState is null)
+        {
+            agentReceiptReadTask ??= Task.Run(ReadAgentReceipt);
+            var observation = await agentReceiptReadTask;
+            if (agentReceiptObservation is null)
+            {
+                agentReceiptObservation = observation;
+                if (!exiting && observation.Error is { } error)
+                    LogUpdateFault("agent-update-receipt", error, "receipt-read-failed");
+            }
+        }
+        if (AgentRealInstall)
             try
             {
-                PersistAgentReceipt();
+                await VelopackInstallation.ReadHistoryAsync();
             }
             catch (Exception error) when (UpdateFailure(error))
             {
-                LogUpdateFault("agent-update-receipt", error, "receipt-write-failed", agentUpdateState?.JobId);
+                if (!exiting)
+                    LogUpdateFault("agent-update-history-read", error, "history-unavailable");
             }
     }
 
     private AutomationUpdateState AgentSnapshot(bool readOnly = false)
     {
-        var state = agentUpdateState ?? ReadAgentReceipt(captureTarget: !readOnly);
+        var state = agentUpdateState ?? agentReceiptObservation?.State ?? new();
+        if (!readOnly && agentUpdateState is null && agentReceiptObservation is { } observation)
+        {
+            agentTargetCommit = observation.TargetCommit;
+            agentTargetChannel = observation.TargetChannel;
+        }
         if (!readOnly && agentUpdateState is null)
             agentUpdateState = state;
-        AutomationUpdateRelease[] history = [];
-        if (AgentRealInstall)
-            try
-            {
-                history = VelopackInstallation.History().Where(h => !h.Current && !h.LastStartFailed).Take(32).Select(h => new AutomationUpdateRelease(h.BuildId, h.Version, h.Commit, "")).ToArray();
-            }
-            catch (Exception error) when (UpdateFailure(error))
-            {
-            }
+        var history = AgentRealInstall
+            ? VelopackInstallation.CachedHistory.Where(h => !h.Current && !h.LastStartFailed).Take(32)
+                .Select(h => new AutomationUpdateRelease(h.BuildId, h.Version, h.Commit, "")).ToArray()
+            : Array.Empty<AutomationUpdateRelease>();
 
         var current = AppBuild.Current;
         return state with
@@ -478,13 +580,13 @@ public partial class MainWindow
         };
     }
 
-    private AutomationUpdateState ReadAgentReceipt(bool captureTarget)
+    private AgentReceiptObservation ReadAgentReceipt()
     {
         if ((diagnostic || Controller.Platform.IsPreview) && updateSource is PreviewUpdateSource || !File.Exists(AgentReceiptPath))
-            return new()
+            return new(new()
             {
                 Message = "No update operation has been started by an agent."
-            };
+            });
         try
         {
             LocalUpdateHistory.RejectLink(AgentReceiptPath);
@@ -502,25 +604,18 @@ public partial class MainWindow
                 || valid.Phase is not ("Idle" or "Checking" or "Catalog" or "Downloading" or "Ready" or "Failed" or "Cancelled" or "Restarting" or "Completed" or "Interrupted")
                 || valid.Progress is < 0 or > 100)
                 throw new InvalidDataException("Invalid receipt.");
-            if (captureTarget)
-            {
-                agentTargetCommit = receipt.TargetCommit;
-                agentTargetChannel = receipt.TargetChannel;
-            }
-
             var state = receipt.State;
-            var anotherProcess = receipt.OriginPid != Environment.ProcessId || receipt.OriginStarted != Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks;
-            return ResolveAgentUpdateReceipt(state, new(state.TargetVersion, state.TargetBuildId, receipt.TargetCommit, receipt.TargetChannel), AppBuild.Current, AgentRealInstall, anotherProcess);
+            var anotherProcess = receipt.OriginPid != Environment.ProcessId || receipt.OriginStarted != AgentOriginStarted;
+            return new(ResolveAgentUpdateReceipt(state, new(state.TargetVersion, state.TargetBuildId, receipt.TargetCommit, receipt.TargetChannel), AppBuild.Current, AgentRealInstall, anotherProcess), receipt.TargetCommit, receipt.TargetChannel);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or InvalidDataException or ArgumentException)
         {
-            LogUpdateFault("agent-update-receipt", error, "receipt-read-failed");
-            return new()
+            return new(new()
             {
                 Phase = "Interrupted",
                 Terminal = true,
                 Message = "The previous receipt could not be read. The running version was not changed."
-            };
+            }, Error: error);
         }
     }
 
@@ -545,15 +640,23 @@ public partial class MainWindow
         return state;
     }
 
-    private void PersistAgentReceipt()
+    private static long ReadAgentOriginStarted()
+    {
+        using var process = Process.GetCurrentProcess();
+        return process.StartTime.ToUniversalTime().Ticks;
+    }
+
+    private Task PersistAgentReceiptAsync(bool checkpoint = false)
     {
         var state = AgentSnapshot(readOnly: true);
-        var receipt = new AgentUpdateReceipt(1, Environment.ProcessId, Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks, state, agentTargetCommit, agentTargetChannel);
+        var receipt = new AgentUpdateReceipt(1, Environment.ProcessId, AgentOriginStarted, state, agentTargetCommit, agentTargetChannel);
         var bytes = JsonSerializer.SerializeToUtf8Bytes(receipt, AgentReceiptJson);
         if (bytes.Length > 49152)
             throw new InvalidDataException("The update receipt exceeded the allowed size.");
-        LocalUpdateHistory.AtomicBytes(AgentReceiptPath, bytes);
+        var path = AgentReceiptPath;
+        agentReceiptWriter ??= new(bytes => LocalUpdateHistory.AtomicBytes(path, bytes));
         agentReceiptAt = Environment.TickCount64;
+        return agentReceiptWriter.WriteAsync(bytes, checkpoint);
     }
 
     private void DisposeAgentUpdates()

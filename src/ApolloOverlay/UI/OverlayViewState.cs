@@ -4,7 +4,8 @@ public enum OverlayTab
 {
     Hub,
     Apps,
-    System
+    System,
+    Audio
 }
 
 public enum OverlayRoute
@@ -104,11 +105,13 @@ public sealed class OverlayViewState
     {
         OverlayTab.Apps => OverlayRoute.Apps,
         OverlayTab.System => OverlayRoute.System,
+        OverlayTab.Audio => OverlayRoute.WindowsAudio,
         _ => OverlayRoute.Hub
     }, SelectedId: tab switch
     {
         OverlayTab.Apps => "refresh-apps",
         OverlayTab.System => "display",
+        OverlayTab.Audio => "volume",
         _ => "session-card"
     });
 }

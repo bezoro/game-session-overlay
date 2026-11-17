@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using ApolloOverlay;
+using ApolloOverlay.Testing;
 
 static class Program
 {
@@ -28,8 +29,9 @@ static class Program
         }
         catch (Exception e)
         {
-            results.Add(new(name, false, e.Message));
-            Console.Error.WriteLine("FAIL " + name + ": " + e.Message);
+            var failure = TestFailure.Capture(e);
+            results.Add(new(name, false, failure.Details, failure));
+            Console.Error.WriteLine("FAIL " + name + Environment.NewLine + failure.Details);
             failed++;
         }
     }
@@ -62,392 +64,323 @@ static class Program
             return IsolatedActivationTests.RunForegroundHost(foregroundReady, foregroundIdentity);
         if (args is [IsolatedActivationTests.HangArgument, var ready, var identity])
             return IsolatedActivationTests.Hang(ready, identity);
+        if (args is [InstalledIntegrationTests.StartupLeaseOwnerArgument, var leaseReady, var leaseRelease, var leaseState])
+            return InstalledIntegrationTests.RunStartupLeaseOwner(leaseReady, leaseRelease, leaseState);
+        if (args is [ForeignWindowActivationTests.HungWindowArgument, var hungWindowReady, var hungWindowIdentity])
+            return ForeignWindowActivationTests.RunHungWindowHost(hungWindowReady, hungWindowIdentity);
         if (args is [IsolatedActivationTests.ParentExitArgument, var parentReady, var parentIdentity])
             return IsolatedActivationTests.ExitParent(parentReady, parentIdentity);
-        if (args.Length is not (1 or 2))
+        var request = TestRunnerArguments.Parse(args, Commands.ContainsKey);
+        if (request.Mode is TestRunnerMode.Help or TestRunnerMode.List)
         {
-            Console.Error.WriteLine("Expected report path");
+            if (request.Mode == TestRunnerMode.Help)
+            {
+                Console.WriteLine("Usage: ApolloOverlay.Tests <report.json> [suite] | --list | --help");
+                Console.WriteLine("Without a suite, all behavior tests run. Capture commands use an output directory instead of a report file.");
+            }
+            foreach (var command in Commands.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+                Console.WriteLine($"{command.Key}  {command.Value.Description}");
+            return 0;
+        }
+        if (request.Mode == TestRunnerMode.Invalid)
+        {
+            Console.Error.WriteLine(request.Error);
+            Console.Error.WriteLine("Use --list to discover suites or --help for usage.");
             return 2;
         }
+        return request.Command is { } selected
+            ? Commands[selected].Execute(request.Output!)
+            : RunAll(request.Output!);
+    }
 
-        if (args.Length == 2 && args[1] == "--active-display")
+    private sealed record TestCommand(string Description, Func<string, int> Execute);
+
+    private static TestCommand Suite(string description, Action<string> run) => new(description, output =>
+    {
+        run(output);
+        return Finish(output);
+    });
+
+    private static readonly Dictionary<string, TestCommand> Commands = new(StringComparer.Ordinal)
+    {
+        ["--test-infrastructure"] = Suite("Runner evidence and WPF fixture ownership", _ => TestInfrastructureTests.Run(Case)),
+        ["--master-audio"] = Suite("Serialized master audio ownership and verification", _ => MasterAudioTests.Run(Case)),
+        ["--audio-clarity"] = Suite("Audio availability, recovery guidance and editor continuity", _ => AudioClarityTests.Run(Case)),
+        ["--startup-status"] = Suite("Observed startup registration outcomes", _ => StartupStatusTests.Run(Case)),
+        ["--installed-integration"] = Suite("Installed startup and cross-process mutation ownership", _ => InstalledIntegrationTests.Run(Case)),
+        ["--input-safety"] = Suite("Controller slot handoff and input safety", _ => InputSafetyTests.Run(Case)),
+        ["--active-display"] = Suite("Active display", output =>
         {
             ActiveDisplayTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--active-display-related")
+        }),
+        ["--active-display-related"] = Suite("Active display related", output =>
         {
             AdaptiveInterfaceTests.Run(Case);
             SessionUtilityTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--battery-notifications")
+        }),
+        ["--battery-notifications"] = Suite("Battery notifications", output =>
         {
             ControllerBatteryNotificationTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--updates")
+        }),
+        ["--updates"] = Suite("Updates", output =>
         {
             UpdateSourceTests.Run(Case);
             UpdateDiscoveryTests.Run(Case);
             LocalUpdateHistoryTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--automatic-updates")
+        }),
+        ["--automatic-updates"] = Suite("Automatic updates", output =>
         {
             UpdateDiscoveryTests.Run(Case);
             AutomaticUpdateTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--command-log")
+        }),
+        ["--command-log"] = Suite("Command log", output =>
         {
             CommandLogTests.Run(Case);
             DiagnosticReportTests.Run(Case);
             GuideDiagnosticTrackerTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--settings-focus")
+        }),
+        ["--settings-focus"] = Suite("Settings focus", output =>
         {
             SettingsFocusTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--window-activation")
+        }),
+        ["--window-activation"] = Suite("Window activation", output =>
         {
             WindowActivationTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--isolated-activation")
+            ForeignWindowActivationTests.Run(Case);
+        }),
+        ["--isolated-activation"] = Suite("Isolated activation", output =>
         {
             IsolatedActivationTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--administrator-compatibility")
+        }),
+        ["--administrator-compatibility"] = Suite("Administrator compatibility", output =>
         {
             AdministratorCompatibilityTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--elevated-close")
+        }),
+        ["--elevated-close"] = Suite("Elevated close", output =>
         {
             Case("confirmed access-denied close offers one elevated request for the verified target", ConfirmedAccessDeniedClose);
             ElevatedWindowCloseTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--interface-feedback")
+        }),
+        ["--interface-feedback"] = Suite("Interface feedback", output =>
         {
             InterfaceFeedbackTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--mouse-keyboard")
+        }),
+        ["--mouse-keyboard"] = Suite("Mouse keyboard", output =>
         {
             MouseKeyboardTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--agent-updates")
+        }),
+        ["--agent-updates"] = Suite("Agent updates", output =>
         {
             AgentUpdateTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--session-interface")
+        }),
+        ["--session-interface"] = Suite("Session interface", output =>
         {
             SessionInterfaceTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--appearance")
+        }),
+        ["--appearance"] = Suite("Appearance", output =>
         {
             AppearanceTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--capture-presentation")
+        }),
+        ["--capture-presentation"] = Suite("Capture presentation", output =>
         {
             CapturePresentationTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--session-interface-captures")
+        }),
+        ["--session-interface-captures"] = new("Session interface captures", output =>
         {
-            SessionInterfaceTests.Capture(args[0]);
+            SessionInterfaceTests.Capture(output);
             return 0;
-        }
-
-        if (args.Length == 2 && args[1] == "--session-utilities")
+        }),
+        ["--session-utilities"] = Suite("Session utilities", output =>
         {
             SessionUtilityTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--update-captures")
+        }),
+        ["--update-captures"] = new("Update captures", output =>
         {
-            UpdateInterfaceTests.Capture(args[0]);
+            UpdateInterfaceTests.Capture(output);
             return 0;
-        }
-
-        if (args.Length == 2 && args[1] == "--review-captures")
+        }),
+        ["--review-captures"] = new("Review captures", output =>
         {
-            ReviewFixTests.Capture(args[0]);
+            ReviewFixTests.Capture(output);
             return 0;
-        }
-
-        if (args.Length == 2 && args[1] == "--busy-pad")
+        }),
+        ["--busy-pad"] = Suite("Busy pad", output =>
         {
             SessionHubTests.BusyControllerChecks(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--guide-settings")
+        }),
+        ["--guide-settings"] = Suite("Guide settings", output =>
         {
-            GuideAbiTests.GuideSettingsChecks(Case, Path.GetDirectoryName(Path.GetFullPath(args[0]))!);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--session-hub-services")
+            GuideAbiTests.GuideSettingsChecks(Case, Path.GetDirectoryName(Path.GetFullPath(output))!);
+        }),
+        ["--session-hub-services"] = Suite("Session hub services", output =>
         {
             SessionHubServiceTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--session-hub-captures")
+        }),
+        ["--session-hub-captures"] = new("Session hub captures", output =>
         {
-            SessionHubTests.Capture(args[0]);
+            SessionHubTests.Capture(output);
             return 0;
-        }
-
-        if (args.Length == 2 && args[1] == "--session-hub-focus-captures")
+        }),
+        ["--session-hub-focus-captures"] = new("Session hub focus captures", output =>
         {
-            SessionHubTests.Capture(args[0], true);
+            SessionHubTests.Capture(output, true);
             return 0;
-        }
-
-        if (args.Length == 2 && args[1] == "--session-target")
+        }),
+        ["--session-target"] = Suite("Session target", output =>
         {
             SessionHubTests.SessionTargetRegression(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--session-hub")
+        }),
+        ["--session-hub"] = Suite("Session hub", output =>
         {
             SessionHubTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--session-hub-telemetry")
+        }),
+        ["--session-hub-telemetry"] = Suite("Session hub telemetry", output =>
         {
             SessionHubTests.TelemetryFailures(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--automation-host")
-            return AutomationTests.Host(args[0]);
-        if (args.Length == 2 && args[1] == "--automation-smoke")
+        }),
+        ["--automation-host"] = new("Automation host", output =>
+        {
+            return AutomationTests.Host(output);
+        }),
+        ["--automation-smoke"] = Suite("Automation smoke", output =>
         {
             AutomationTests.Prerequisites(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--automation")
+        }),
+        ["--automation"] = Suite("Automation", output =>
         {
             AutomationTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--steam-sequence")
+        }),
+        ["--steam-sequence"] = Suite("Steam sequence", output =>
         {
             SteamShortcutFocusTests.SequenceChecks(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--steam-effects-handshake")
+        }),
+        ["--steam-effects-handshake"] = Suite("Steam effects handshake", output =>
         {
             SteamShortcutFocusTests.EffectsHandshakeChecks(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--steam-closing")
+        }),
+        ["--steam-closing"] = Suite("Steam closing", output =>
         {
             SteamShortcutFocusTests.ClosingChecks(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--steam-owner")
+        }),
+        ["--steam-owner"] = Suite("Steam owner", output =>
         {
             SteamShortcutFocusTests.SequenceOwnerChecks(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--steam-focus")
+        }),
+        ["--steam-focus"] = Suite("Steam focus", output =>
         {
             Case("target change during focus prevents dispatch", TargetChangedDuringFocus);
             SteamShortcutFocusTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--steam-detection")
+        }),
+        ["--steam-detection"] = Suite("Steam detection", output =>
         {
             SteamOverlayDetectionTests.Run(Case);
             GuideAbiTests.SteamLaunchRegression(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--steam-launch-smoke")
+        }),
+        ["--steam-launch-smoke"] = Suite("Steam launch smoke", output =>
         {
             SteamOverlayDetectionTests.NativeSmoke(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--premium")
+        }),
+        ["--premium"] = Suite("Premium", output =>
         {
             PremiumInterfaceTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--close-confirmation")
+        }),
+        ["--close-confirmation"] = Suite("Close confirmation", output =>
         {
             PremiumInterfaceTests.RunCloseConfirmation(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--close-confirmation-captures")
+        }),
+        ["--close-confirmation-captures"] = new("Close confirmation captures", output =>
         {
-            ReviewFixTests.Capture(args[0], closeConfirmation: true);
+            ReviewFixTests.Capture(output, closeConfirmation: true);
             return 0;
-        }
-
-        if (args.Length == 2 && args[1] == "--premium-safety")
+        }),
+        ["--premium-safety"] = Suite("Premium safety", output =>
         {
             PremiumInterfaceTests.RunSafety(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--premium-local-dismiss")
+        }),
+        ["--premium-local-dismiss"] = Suite("Premium local dismiss", output =>
         {
             PremiumInterfaceTests.LocalDismissalRegression(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--premium-navigation")
+        }),
+        ["--premium-navigation"] = Suite("Premium navigation", output =>
         {
             PremiumInterfaceTests.RunNavigation(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--reader-evidence")
+        }),
+        ["--reader-evidence"] = Suite("Reader evidence", output =>
         {
-            PremiumInterfaceTests.ReaderEvidence(Case, Path.GetDirectoryName(Path.GetFullPath(args[0]))!);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--premium-safety-captures")
+            PremiumInterfaceTests.ReaderEvidence(Case, Path.GetDirectoryName(Path.GetFullPath(output))!);
+        }),
+        ["--premium-safety-captures"] = new("Premium safety captures", output =>
         {
-            ReviewFixTests.Capture(args[0], true);
+            ReviewFixTests.Capture(output, true);
             return 0;
-        }
-
-        if (args.Length == 2 && args[1] == "--review-fixes")
+        }),
+        ["--review-fixes"] = Suite("Review fixes", output =>
         {
             ReviewFixTests.Run(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--guide-release-red")
+        }),
+        ["--guide-release-red"] = Suite("Guide release red", output =>
         {
             GuideAbiTests.GuideReleaseRed(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--focus-open-red")
+        }),
+        ["--focus-open-red"] = Suite("Focus open red", output =>
         {
             GuideAbiTests.FocusOpenRed(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--focus-suite")
+        }),
+        ["--focus-suite"] = Suite("Focus suite", output =>
         {
             GuideAbiTests.HandoffTests(Case);
             GuideAbiTests.FocusDismiss(Case);
             GuideAbiTests.FocusChecks(Case);
-            GuideAbiTests.GuideOpeningChecks(Case, Path.GetDirectoryName(Path.GetFullPath(args[0]))!);
+            GuideAbiTests.GuideOpeningChecks(Case, Path.GetDirectoryName(Path.GetFullPath(output))!);
             Case("Guide status actual row", GuideAbiTests.LegacyStatusView);
             Case("legacy Guide ABI lifetime", GuideAbiTests.LegacyAbi);
             Case("legacy Guide failures", GuideAbiTests.LegacyFailures);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--dismiss-known-held")
+        }),
+        ["--dismiss-known-held"] = Suite("Dismiss known held", output =>
         {
             GuideAbiTests.KnownHeldDismiss(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--dismiss-cancel")
+        }),
+        ["--dismiss-cancel"] = Suite("Dismiss cancel", output =>
         {
             GuideAbiTests.DismissCancellation(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--dismiss-cancel-suite")
+        }),
+        ["--dismiss-cancel-suite"] = Suite("Dismiss cancel suite", output =>
         {
             GuideAbiTests.HandoffTests(Case);
             GuideAbiTests.FocusDismiss(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--system-key-baseline")
+        }),
+        ["--system-key-baseline"] = Suite("System key baseline", output =>
         {
             Case("System AltY holds handoff after AltUp until YUp plus100ms", GuideAbiTests.SystemKeyBaseline);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--disposed-platform-baseline")
+        }),
+        ["--disposed-platform-baseline"] = Suite("Disposed platform baseline", output =>
         {
             Case("Disposed platform refuses owned target validation and activation", GuideAbiTests.DisposedPlatformBaseline);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--late-launch-baseline")
+        }),
+        ["--late-launch-baseline"] = Suite("Late launch baseline", output =>
         {
             Case("Cleanup prevents late Steam launch after pending focus completes", GuideAbiTests.LateLaunchBaseline);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--release-baseline")
+        }),
+        ["--release-baseline"] = Suite("Release baseline", output =>
         {
             GuideAbiTests.ReleaseBaseline(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--focus-dismiss")
+        }),
+        ["--focus-dismiss"] = Suite("Focus dismiss", output =>
         {
             GuideAbiTests.FocusDismiss(Case);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--guide-status")
+        }),
+        ["--guide-status"] = Suite("Guide status", output =>
         {
             Case("G3-01 Guide subtitle follows actual poll without rebuilding or hidden UI work", GuideAbiTests.LegacyStatusView);
-            return Finish(args[0]);
-        }
-
-        if (args.Length == 2 && args[1] == "--corrections")
+        }),
+        ["--corrections"] = Suite("Corrections", output =>
         {
-            CorrectionTests.Run(Case, Path.GetDirectoryName(Path.GetFullPath(args[0]))!);
-            return Finish(args[0]);
-        }
+            CorrectionTests.Run(Case, Path.GetDirectoryName(Path.GetFullPath(output))!);
+        }),
+    };
 
+    private static int RunAll(string output)
+    {
         Case("session survives our focus and launcher chain", () =>
         {
             var s = new SessionTracker();
@@ -804,7 +737,7 @@ static class Program
         });
         Case("saving recovered settings preserves previous-good backup", () =>
         {
-            var folder = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[0]))!, "settings-fixtures");
+            var folder = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(output))!, "settings-fixtures");
             Directory.CreateDirectory(folder);
             var path = Path.Combine(folder, "recovery.json");
             UserSettings.Save(path, new(DisplayId: "first"));
@@ -892,7 +825,7 @@ static class Program
         Case("legacy Guide repress error disconnect reconnect latch", GuideAbiTests.LegacyCycles);
         Case("legacy Guide four independent slots coalesce one toggle", GuideAbiTests.LegacySlots);
         Case("legacy Guide DLL export failure and disposed late poll unload once", GuideAbiTests.LegacyFailures);
-        Case("legacy Guide timer hidden active and simultaneous chord consumed once", GuideAbiTests.LegacyTick);
+        Case("legacy Guide polling interval and single-consumption latch", GuideAbiTests.LegacyTick);
         Case("G3-01 Guide subtitle follows actual poll without rebuilding or hidden UI work", GuideAbiTests.LegacyStatusView);
         GuideAbiTests.FocusDismiss(Case);
         GuideAbiTests.ReleaseBaseline(Case);
@@ -909,13 +842,13 @@ static class Program
             True(UserSettings.Parse("{}").GuideXInputEnabled);
             True(!UserSettings.Parse("{\"GuideXInputEnabled\":false}").GuideXInputEnabled);
             True(UserSettings.Parse("{\"GuideXInputEnabled\":true}").GuideXInputEnabled);
-            var path = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(args[0]))!, "guide-settings.json");
+            var path = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(output))!, "guide-settings.json");
             UserSettings.Save(path, new(GuideXInputEnabled: false));
             UserSettings.Save(path, new(GuideXInputEnabled: true));
             True(UserSettings.Load(path, out _).GuideXInputEnabled);
             True(!UserSettings.Parse(File.ReadAllText(path + ".previous")).GuideXInputEnabled);
         });
-        GuideAbiTests.GuideSettingsChecks(Case, Path.GetDirectoryName(Path.GetFullPath(args[0]))!);
+        GuideAbiTests.GuideSettingsChecks(Case, Path.GetDirectoryName(Path.GetFullPath(output))!);
         UpdateInterfaceTests.Run(Case);
         UpdateSourceTests.Run(Case);
         UpdateDiscoveryTests.Run(Case);
@@ -928,6 +861,7 @@ static class Program
         ActiveDisplayTests.Run(Case);
         SettingsFocusTests.Run(Case);
         WindowActivationTests.Run(Case);
+        ForeignWindowActivationTests.Run(Case);
         IsolatedActivationTests.Run(Case);
         DiagnosticReportTests.Run(Case);
         GuideDiagnosticTrackerTests.Run(Case);
@@ -954,13 +888,19 @@ static class Program
         PlayniteBrowserTests.Run(Case);
         StartupRegistrationTests.Run(Case);
         InstalledIntegrationTests.Run(Case);
-        CorrectionTests.Run(Case, Path.GetDirectoryName(Path.GetFullPath(args[0]))!);
-        return Finish(args[0]);
+        CorrectionTests.Run(Case, Path.GetDirectoryName(Path.GetFullPath(output))!);
+        StartupStatusTests.Run(Case);
+        MasterAudioTests.Run(Case);
+        AudioClarityTests.Run(Case);
+        InputSafetyTests.Run(Case);
+        TestInfrastructureTests.Run(Case);
+        return Finish(output);
     }
 
     private static int Finish(string path)
     {
         var report = new TestReport(results.Count, results.Count - failed, failed, results.ToArray());
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         File.WriteAllText(path, JsonSerializer.Serialize(report, TestJson.Default.TestReport));
         Console.WriteLine($"RESULT {results.Count - failed}/{results.Count} passed; failed={failed}");
         return failed == 0 ? 0 : 1;
@@ -1062,7 +1002,7 @@ static class Program
     }
 }
 
-internal sealed record TestCaseResult(string Name, bool Passed, string? Error);
+internal sealed record TestCaseResult(string Name, bool Passed, string? Error, TestFailure? Failure = null);
 internal sealed record TestReport(int Total, int Passed, int Failed, TestCaseResult[] Cases);
 [System.Text.Json.Serialization.JsonSerializable(typeof(TestReport))]
 internal partial class TestJson : System.Text.Json.Serialization.JsonSerializerContext;

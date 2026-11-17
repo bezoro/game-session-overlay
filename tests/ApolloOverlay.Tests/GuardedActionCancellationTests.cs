@@ -272,7 +272,7 @@ internal static class GuardedActionCancellationTests
                     window.Controller.CaptureReturn();
                     Complete(window.Controller.Refresh());
                     window.RefreshRows();
-                    ReviewFixTests.Button(window, "gamebar").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                    WpfTestElements.Button(window, "gamebar").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
                     window.AdvanceHandoff(new(new PadFrame[4], 0), 0);
                     window.AdvanceHandoff(new(new PadFrame[4], 100), 100);
                     Require(!window.OperationTask.IsCompleted, "Fixture did not wait before the shortcut");
@@ -298,17 +298,17 @@ internal static class GuardedActionCancellationTests
         Case("Back cancels a pending operation without dismissing the visible panel after a late result", () =>
         {
             var completion = new TaskCompletionSource<ActionResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var platform = new PremiumInterfaceTests.FixturePlatform
+            var platform = new TestPlatform
             {
                 Next = completion.Task
             };
-            var window = PremiumInterfaceTests.FixtureWindow(platform);
+            var window = WpfTestHost.CreatePreviewWindow(platform, TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 window.Left = -12000;
                 window.Top = -12000;
                 window.ShowDiagnostic();
-                ReviewFixTests.Button(window, "taskview").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                WpfTestElements.Button(window, "taskview").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
                 window.AdvanceHandoff(new(new PadFrame[4], 0), 0);
                 window.AdvanceHandoff(new(new PadFrame[4], 100), 100);
                 Require(!window.OperationTask.IsCompleted && platform.Calls == 1, "Fixture did not dispatch a pending request");

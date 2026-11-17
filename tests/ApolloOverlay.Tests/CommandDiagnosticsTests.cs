@@ -61,17 +61,17 @@ internal static class CommandDiagnosticsTests
             window.DiagnosticsClipboardWriter = value => copied = value;
             window.Page(2);
             window.OpenPanel();
-            ReviewFixTests.Complete(window.OpeningTask);
+            WpfTestDispatcher.Complete(window.OpeningTask);
             Invoke(window, "SetInputMethod", "mouse");
-            var copy = ReviewFixTests.Button(window, "copy-diagnostics");
+            var copy = WpfTestElements.Button(window, "copy-diagnostics");
             copy.Focus();
-            ReviewFixTests.Complete(Task.Delay(350));
+            WpfTestDispatcher.Complete(Task.Delay(350));
             var scroll = (System.Windows.Controls.ScrollViewer)window.FindName("ContentScroll");
             scroll.ScrollToTop();
             Capture(window, "diagnostics-system");
             copy.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-            ReviewFixTests.Complete(window.DiagnosticsCopyTask);
-            ReviewFixTests.Complete(Task.Delay(200));
+            WpfTestDispatcher.Complete(window.DiagnosticsCopyTask);
+            WpfTestDispatcher.Complete(Task.Delay(200));
             scroll.ScrollToTop();
             Capture(window, "diagnostics-copied");
             Require(copied is not null && copied.Contains("Game Session Overlay diagnostics"), "Capture action did not produce a complete report");
@@ -88,7 +88,7 @@ internal static class CommandDiagnosticsTests
             var foreground = Native.GetForegroundWindow();
             window.DiagnosticsClipboardWriter = value => copied = value;
             window.RequestDiagnosticsCopy(fromTray: true);
-            ReviewFixTests.Complete(window.DiagnosticsCopyTask);
+            WpfTestDispatcher.Complete(window.DiagnosticsCopyTask);
             Require(copied is not null && copied.Contains("export-first") && copied.Contains("export-last")
                 && copied.Contains("guide-enabled=") && copied.Contains(AppBuild.Current.BuildId), "Clipboard lost older retained evidence or current state");
             Require(!window.IsVisible && Native.GetForegroundWindow() == foreground, "Copying from the tray opened or activated the overlay");
@@ -99,7 +99,7 @@ internal static class CommandDiagnosticsTests
             using var host = new Host();
             host.Window.DiagnosticsClipboardWriter = _ => throw new System.Runtime.InteropServices.ExternalException("private-clipboard-payload");
             host.Window.RequestDiagnosticsCopy();
-            ReviewFixTests.Complete(host.Window.DiagnosticsCopyTask);
+            WpfTestDispatcher.Complete(host.Window.DiagnosticsCopyTask);
             var rows = host.Read();
             Require(rows.Any(entry => Field(entry, "Command") == "copy-diagnostics" && Field(entry, "Outcome") == "Failed")
                 && !string.Join("", rows.Select(entry => entry.GetRawText())).Contains("private-clipboard-payload"), "Clipboard failure was lost or leaked private error text");
@@ -110,7 +110,7 @@ internal static class CommandDiagnosticsTests
             host.Window.CommandLoggingFixture = false;
             host.Window.DiagnosticsClipboardWriter = _ => throw new Exception("Preview touched the real clipboard");
             host.Window.Page(2);
-            Require(!ReviewFixTests.Button(host.Window, "copy-diagnostics").IsEnabled, "Preview enabled real diagnostic export");
+            Require(!WpfTestElements.Button(host.Window, "copy-diagnostics").IsEnabled, "Preview enabled real diagnostic export");
             host.Window.RequestDiagnosticsCopy();
             Require(host.Window.DiagnosticsCopyTask.IsCompletedSuccessfully, "Preview launched a diagnostic export");
         });
@@ -122,7 +122,7 @@ internal static class CommandDiagnosticsTests
             using var tray = new TrayHost(host.Window.Dispatcher, () => opened++, () => { }, visible: false,
                 copyDiagnostics: () => copied++);
             tray.Menu.Items.Cast<System.Windows.Forms.ToolStripItem>().Single(item => item.Text == "Copy diagnostics").PerformClick();
-            ReviewFixTests.Complete(Task.Delay(30));
+            WpfTestDispatcher.Complete(Task.Delay(30));
             Require(copied == 1 && opened == 0 && !host.Window.IsVisible, "Tray copy invoked the overlay open command");
         });
         test("CLI setting execution retains its source and request correlation in semantic results", () =>
@@ -139,7 +139,7 @@ internal static class CommandDiagnosticsTests
             };
             var task = (Task<AutomationReply>)Invoke(host.Window, "ExecuteLoggedAutomation", request,
                 CancellationToken.None, (Action<AutomationReply>)(_ => { }), (Func<bool>)(() => true))!;
-            ReviewFixTests.Complete(task);
+            WpfTestDispatcher.Complete(task);
             Require(task.Result.Outcome == "Completed", "CLI handler did not complete");
             var changed = host.Read().Single(e => Field(e, "Command") == "setting-sound-feedback");
             Require(Field(changed, "Source") == "cli"
@@ -152,7 +152,7 @@ internal static class CommandDiagnosticsTests
                 Revision = host.Window.AutomationSnapshot().Revision
             }, CancellationToken.None,
                 (Action<AutomationReply>)(_ => { }), (Func<bool>)(() => true))!;
-            ReviewFixTests.Complete(dryRun);
+            WpfTestDispatcher.Complete(dryRun);
             Require(dryRun.Result.Outcome == "DryRun" && host.Window.Controller.Settings.SoundFeedbackEnabled == before,
                 "Dry run changed the setting");
             Require(Field(host.Read().Last(e => Field(e, "Command") == "sound-feedback" && Field(e, "Event") == "finished"), "Outcome") == "Simulated",
@@ -167,7 +167,7 @@ internal static class CommandDiagnosticsTests
                 host.Window.FocusRequest = _ => nativeAccepted;
                 host.Window.FocusFallbackRequest = (_, _, _) => Task.FromResult(nativeAccepted);
                 host.Window.OpenPanel();
-                ReviewFixTests.Complete(host.Window.OpeningTask);
+                WpfTestDispatcher.Complete(host.Window.OpeningTask);
                 var refused = host.Read().Single(e => Field(e, "Command") == "overlay-open" && Field(e, "Event") == "finished");
                 Require(Field(refused, "Outcome") == (nativeAccepted ? "Unknown" : "Failed"),
                     "Focus cleanup incorrectly turned a refusal into user cancellation");
@@ -178,9 +178,9 @@ internal static class CommandDiagnosticsTests
             using var host = new Host();
             var window = host.Window;
             window.Page(2);
-            ReviewFixTests.Button(window, "sound-feedback").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-            ReviewFixTests.Button(window, "haptic-feedback").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-            var key = ReviewFixTests.Button(window, "sound-feedback");
+            WpfTestElements.Button(window, "sound-feedback").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            WpfTestElements.Button(window, "haptic-feedback").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            var key = WpfTestElements.Button(window, "sound-feedback");
             var previousTag = key.Tag;
             key.Tag = "key:private-typed-value";
             try
@@ -206,7 +206,7 @@ internal static class CommandDiagnosticsTests
                 (Func<CancellationToken, Task<ActionResult>>)(_ => late.Task), null)!;
             host.Window.Close();
             late.SetResult(new(ResultKind.Completed, "A late service confirmed the effect."));
-            ReviewFixTests.Complete(operation);
+            WpfTestDispatcher.Complete(operation);
             var finished = host.Read().Single(e => Field(e, "Command") == "late-fixture-action" && Field(e, "Event") == "finished");
             Require(Field(finished, "Outcome") == "Completed", "A UI cleanup guard discarded the real service result");
         });
@@ -216,7 +216,7 @@ internal static class CommandDiagnosticsTests
             using var host = new Host();
             var operation = (Task)Invoke(host.Window, "RunSessionAction", "failed-fixture-action",
                 (Func<CancellationToken, Task<ActionResult>>)(_ => Task.FromException<ActionResult>(new IOException("private-user-path-and-message"))), null)!;
-            ReviewFixTests.Complete(operation);
+            WpfTestDispatcher.Complete(operation);
             var entries = host.Read();
             var failed = entries.Single(e => Field(e, "Command") == "failed-fixture-action" && Field(e, "Event") == "finished");
             Require(Field(failed, "Outcome") == "Failed" && failed.GetProperty("Error").GetProperty("Type").GetString() == typeof(IOException).FullName,

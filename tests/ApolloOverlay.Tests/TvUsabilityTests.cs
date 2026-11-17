@@ -63,7 +63,7 @@ internal static class TvUsabilityTests
             try
             {
                 SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
-                window = ReviewFixTests.Window();
+                window = WpfTestHost.CreatePreviewWindow(TestFocusMode.Synthetic, activateOnShow: true);
                 Require(window.Controller.Apps.Count == 1, "Dispatcher fixture did not finish refreshing applications");
             }
             finally
@@ -166,8 +166,8 @@ internal static class TvUsabilityTests
             });
         test("TV unavailable session card opens window picker", () =>
         {
-            var platform = new PremiumInterfaceTests.FixturePlatform();
-            var window = PremiumInterfaceTests.FixtureWindow(platform);
+            var platform = new TestPlatform();
+            var window = WpfTestHost.CreatePreviewWindow(platform, TestFocusMode.Synthetic, activateOnShow: true);
             try
             {
                 platform.ValidIdentity = false;
@@ -191,7 +191,7 @@ internal static class TvUsabilityTests
                 window.Page(2);
                 PressX(window);
                 Require(((TextBlock)window.FindName("PageTitle")).Text == "System", "X changed system page to unrelated options");
-                ReviewFixTests.Button(window, "configure-playnite").RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                WpfTestElements.Button(window, "configure-playnite").RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
                 PressX(window);
                 Require(((TextBlock)window.FindName("PageTitle")).Text == "Find Playnite", "X interrupted Playnite folder selection");
                 window.Back();

@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO.Pipes;
 using System.Text.Json;
 using ApolloOverlay.Automation;
+using ApolloOverlay.Testing;
 
 internal static class ShutdownTests
 {
@@ -43,20 +44,43 @@ internal static class ShutdownTests
             catch (Exception e)
             {
                 failures++;
-                Console.Error.WriteLine("FAIL " + name + ": " + e.GetType().Name + " " + e.Message);
+                Console.Error.WriteLine("FAIL " + name + Environment.NewLine + TestFailure.Capture(e).Details);
             }
         }
 
-        if (args is ["--update-tests"])
+        async Task Infrastructure()
         {
-            await UpdateCommandTests.Run(Test);
-            Console.WriteLine($"TOTAL {total - failures}/{total}");
-            return failures == 0 ? 0 : 1;
+            var cases = new List<(string Name, Action Body)>();
+            TestInfrastructureContracts.Run((name, body) => cases.Add((name, body)));
+            foreach (var entry in cases)
+                await Test(entry.Name, () =>
+                {
+                    entry.Body();
+                    return Task.CompletedTask;
+                });
         }
-
-        if (args is ["--log-tests"])
+        var focused = new Dictionary<string, Func<Task>>(StringComparer.Ordinal)
         {
-            await CommandLogCommandTests.Run(Test);
+            ["--update-tests"] = () => UpdateCommandTests.Run(Test),
+            ["--log-tests"] = () => CommandLogCommandTests.Run(Test),
+            ["--infrastructure-tests"] = Infrastructure
+        };
+        if (args is ["--help"] or ["--list"])
+        {
+            Console.WriteLine("Usage: ApolloOverlay.Cli.Tests [suite] | --list | --help");
+            Console.WriteLine("Without a suite, all CLI tests run. Native shutdown cases require Windows.");
+            foreach (var name in focused.Keys.Order(StringComparer.Ordinal))
+                Console.WriteLine(name);
+            return 0;
+        }
+        if (args.Length > 0)
+        {
+            if (args.Length != 1 || !focused.TryGetValue(args[0], out var selected))
+            {
+                Console.Error.WriteLine("Unknown suite. Use --list to discover CLI tests.");
+                return 2;
+            }
+            await selected();
             Console.WriteLine($"TOTAL {total - failures}/{total}");
             return failures == 0 ? 0 : 1;
         }
@@ -181,6 +205,7 @@ internal static class ShutdownTests
                 }
             }
         });
+        await Infrastructure();
         await UpdateCommandTests.Run(Test);
         await CommandLogCommandTests.Run(Test);
         Console.WriteLine($"TOTAL {total - failures}/{total}");

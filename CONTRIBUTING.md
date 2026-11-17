@@ -19,6 +19,16 @@ dotnet tests/ApolloOverlay.Tests/bin/Release/net10.0-windows10.0.19041.0/ApolloO
 dotnet tests/ApolloOverlay.Cli.Tests/bin/Release/net10.0-windows/ApolloOverlay.Cli.Tests.dll
 ```
 
+Both test executables expose `--list` and `--help`. The GUI runner takes a report path before its focused suite; the CLI runner takes the suite alone. Unknown switches fail before running tests. For example:
+
+```powershell
+dotnet tests/ApolloOverlay.Tests/bin/Release/net10.0-windows10.0.19041.0/ApolloOverlay.Tests.dll --list
+dotnet tests/ApolloOverlay.Tests/bin/Release/net10.0-windows10.0.19041.0/ApolloOverlay.Tests.dll artifacts/local/audio.json --master-audio
+dotnet tests/ApolloOverlay.Cli.Tests/bin/Release/net10.0-windows/ApolloOverlay.Cli.Tests.dll --infrastructure-tests
+```
+
+The CLI infrastructure suite is portable; WPF, Task Scheduler, native focus, COM and hardware checks need Windows. Test failure reports retain the exception type, stack and complete inner/aggregate causes. Shared WPF fixtures live in `tests/ApolloOverlay.Tests/Infrastructure`; select synthetic or native focus explicitly, keep lookup helpers free of actions, and dispose the host after its operations have drained.
+
 The solution also builds GuideProbe and NativeProof, diagnostic tools separate from the product. CI runs their synthetic tests. Run hardware queries and window-operation modes explicitly, following their READMEs.
 
 To explore the interface without activating other applications:

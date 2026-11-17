@@ -25,6 +25,8 @@ public partial class MainWindow
     private void ActivatePointerEntry(Button button)
     {
         SetInputMethod("mouse");
+        if (!ValidateNavigationOwnership())
+            return;
         if (button.Tag is not string id)
             return;
         var previousSource = dispatchSource;

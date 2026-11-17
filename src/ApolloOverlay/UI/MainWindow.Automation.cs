@@ -118,6 +118,10 @@ public partial class MainWindow
             if (!exiting && generation == operationGeneration)
                 RetainOperation("Unconfirmed", "Request log unavailable; there will be no automatic retry.");
         }
+        finally
+        {
+            automationHost?.CompleteInterruptedUi(id);
+        }
     }
 
     private async Task<AutomationReply> RunSteam(
@@ -373,6 +377,9 @@ public partial class MainWindow
                 case "system":
                     Page(2);
                     break;
+                case "audio":
+                    NavigateTab(OverlayTab.Audio);
+                    break;
                 case "options":
                     OpenOptions(target!);
                     break;
@@ -382,7 +389,6 @@ public partial class MainWindow
                 default:
                     OpenView(new(route switch
                     {
-                        "audio" => OverlayRoute.WindowsAudio,
                         "integrations" => OverlayRoute.Integrations,
                         "customize" => OverlayRoute.Customize,
                         "setup" => OverlayRoute.Setup,
