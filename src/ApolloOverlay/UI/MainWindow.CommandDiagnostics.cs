@@ -87,7 +87,8 @@ public partial class MainWindow
         try
         {
             var id = entries.Any(entry => entry.Id == request.ActionId)
-                || request.ActionId is "focus" or "steam-overlay" or "test-steam" or "session-options"
+                || SessionAutomationActions.Any(action => action.Id == request.ActionId)
+                || request.ActionId is "test-steam" or "session-options"
                 ? request.ActionId : request.ActionId.StartsWith("route:", StringComparison.Ordinal) ? "route" : "unsupported-command";
             command = BeginCommand(id);
             return FinishAutomationCommand(command, AutomationExecute(request, token, phase, continuing));

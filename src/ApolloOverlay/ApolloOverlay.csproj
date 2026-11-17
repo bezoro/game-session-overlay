@@ -54,7 +54,7 @@
       Update="Assets/Icons/*.svg;Assets/Icons/*.txt;Assets/Icons/*.json"
       CopyToPublishDirectory="PreserveNewest" />
     <None
-      Update="Assets/ThirdParty/Logging/*.txt;Assets/ThirdParty/Logging/*.json"
+      Update="Assets/ThirdParty/Logging/*.txt;Assets/ThirdParty/Logging/*.json;Assets/ThirdParty/Mcp/*.txt"
       CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

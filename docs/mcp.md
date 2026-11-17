@@ -37,3 +37,5 @@ Use the actual installation directory from the [CLI setup instructions](cli.md#u
 Disconnect other MCP sessions before changing versions, including when using the GUI or CLI updater. An MCP server that requests application of a version sends the receipt with `game-session-overlay/reconnect` in `_meta`, then exits to release the installed binaries. Reconnect after the restart and use `get_update_status` to confirm the expected build and a new process identity. A receipt with `Outcome: Requested` confirms the restart request and observed exit of the previous overlay instance.
 
 `export_diagnostics` returns a local Markdown file path containing all retained log files at the time of the export. Use `read_logs` for a bounded inline tail. An export reports the CLI build identity. Live state, logger health, and pending writes are unknown in a disk export. The report stays in the local temporary directory until removed.
+
+The installation includes the MCP SDK and its dependencies with their [third-party notices](../src/ApolloOverlay/Assets/ThirdParty/Mcp/ATTRIBUTIONS.txt).
