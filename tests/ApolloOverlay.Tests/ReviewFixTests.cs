@@ -24,10 +24,10 @@ internal static class ReviewFixTests
         return PremiumInterfaceTests.Descendants<Button>((DependencyObject)w.Content).First(b => Equals(b.Tag, id));
     }
 
-    internal static void Complete(Task task)
+    internal static void Complete(Task task, int timeoutMs = 5000)
     {
         var deadline = System.Diagnostics.Stopwatch.StartNew();
-        while (!task.IsCompleted && deadline.ElapsedMilliseconds < 5000)
+        while (!task.IsCompleted && deadline.ElapsedMilliseconds < timeoutMs)
         {
             var frame = new System.Windows.Threading.DispatcherFrame();
             System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, () => frame.Continue = false);
@@ -36,7 +36,7 @@ internal static class ReviewFixTests
         }
 
         if (!task.IsCompleted)
-            throw new TimeoutException("Dispatcher operation exceeded 5 seconds.");
+            throw new TimeoutException($"Dispatcher operation exceeded {timeoutMs} ms.");
         task.GetAwaiter().GetResult();
     }
 

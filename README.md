@@ -35,7 +35,7 @@ Select the game card and press **A** to return to the window. **Y** opens Steam 
 
 The installed version appears in the header. In **System → Version and updates**, choose a channel, read changes, install and restart, or restore a retained version. The installer and updates use Velopack and do not require GitHub sign-in.
 
-The installation includes `gso.cmd`, a JSON CLI for terminals and agents. Structured local command logs cover outcomes and technical failures; `gso logs` reads recent records even with the app closed. See [command diagnostics](docs/diagnostics.md). See [commands, updates and rollback](docs/cli.md), [updater behavior](docs/updates.md) and [runtime behavior](docs/runtime-behavior.md).
+The installation includes the `gso` JSON CLI and a local MCP server. Both can discover session actions and operate the overlay while it is hidden. `gso logs` reads recent records and `gso diagnostics` exports all retained log files, even with the app closed. See [CLI commands](docs/cli.md), [MCP setup](docs/mcp.md) and [command diagnostics](docs/diagnostics.md).
 
 ## Contribute
 

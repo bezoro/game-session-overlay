@@ -4,26 +4,9 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <StartupObject>ShutdownTests</StartupObject>
-    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
   </PropertyGroup>
   <ItemGroup>
-    <Compile
-      Include="../../src/ApolloOverlay/Diagnostics/CommandLogReader.cs"
-      Link="CommandLogReader.cs" />
-    <Compile
-      Include="../../tools/ApolloOverlay.Cli/Program.cs"
-      Link="CliProgram.cs" />
-    <Compile
-      Include="../../tools/ApolloOverlay.Cli/UpdateCommands.cs"
-      Link="UpdateCommands.cs" />
-    <Compile
-      Include="../../tools/ApolloOverlay.Cli/LogCommands.cs"
-      Link="LogCommands.cs" />
-    <Compile
-      Include="../../src/ApolloOverlay/Automation/AutomationProtocol.cs"
-      Link="AutomationProtocol.cs" />
-    <Compile
-      Include="../../src/ApolloOverlay/Automation/AutomationPipeSecurity.cs"
-      Link="AutomationPipeSecurity.cs" />
+    <ProjectReference
+      Include="../../tools/ApolloOverlay.Cli/ApolloOverlay.Cli.csproj" />
   </ItemGroup>
 </Project>

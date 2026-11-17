@@ -289,6 +289,14 @@ public partial class MainWindow
         "volume-down",
         "mute"
     };
+    private static readonly AutomationAction[] SessionAutomationActions =
+    [
+        new("focus", true, "Focus the specified window or the current return target", "Execute", ["activate"], Scope: "session"),
+        new("steam-overlay", true, "Send the configured shortcut to a Steam-eligible window", "Execute", ["activate"], Scope: "session"),
+        new("session-select", true, "Select a window as the session reference", "Execute", ["activate"], Scope: "session", TargetRequired: true),
+        new("session-clear", true, "Clear the session reference", "Execute", ["activate"], Scope: "session")
+    ];
+
     private string Capability(Entry entry) => entry.Id is "close" or "close-detail" or "confirm-close" ? "RequiresGesture" : SynchronousActions.Contains(entry.Id)
         || view.Current.ChooseSession
         && entry.Id.StartsWith("window:", StringComparison.Ordinal)
@@ -297,18 +305,25 @@ public partial class MainWindow
     internal AutomationSnapshot AutomationSnapshot()
     {
         using var process = System.Diagnostics.Process.GetCurrentProcess();
+        var available = !AutomationInteractionActive;
         IEnumerable<AutomationAction> actions = entries.Select(entry => new AutomationAction(entry.Id == "confirm-close" ? "confirm-hold" : entry.Id, entry.Available, entry.Reason, Capability(entry), entry.Id is "volume" or "guide-limit" ? ["activate", "left", "right"] : ["activate"]));
         if (view.Current.Route == OverlayRoute.Hub)
             actions = actions.Append(new("session-options", !busy, "Session window options", "Execute", ["activate"]));
         actions = actions.Concat(new[] { "home", "apps", "system", "audio", "integrations", "options", "details", "customize", "setup", "result" }
-            .Select(route => new AutomationAction("route:" + route, !busy, "Explicit route navigation", "Execute", ["activate"])))
-            .Concat([new("focus", !busy, "Target focus verified", "Execute", ["activate"]), new("steam-overlay", !busy, "Shortcut configured; visible interface is not guaranteed", "Execute", ["activate"])]);
+            .Select(route => new AutomationAction("route:" + route, available, "Explicit route navigation", "Execute", ["activate"], TargetRequired: route is "options" or "details")));
+        actions = SessionAutomationActions.Select(action => available ? action : action with
+        {
+            Available = false,
+            Reason = "An operation or interaction is active."
+        }).Concat(actions);
         return new("", Environment.ProcessId, process.StartTime.ToUniversalTime().Ticks, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), automationRevision,
             view.Current.Route.ToString(), IsVisible, busy,
             AutomationWindows().Select(window => new AutomationTarget(TargetId(window), window.Handle.ToInt64(), window.Pid, window.Started, window.Generation, window.ProcessName)).ToArray(),
             actions.DistinctBy(action => action.Id).ToArray(), "unknown", PendingRequestId: steamOwner?.Id ?? "", Phase: Controller.Operation?.State ?? "", TargetsAtUtc: automationTargetsAt,
-            Diagnostics: LogDiagnosticsSnapshot());
+            Diagnostics: LogDiagnosticsSnapshot(), SessionTargetId: Controller.Session.CardTarget is { } card ? TargetId(card) : "");
     }
+
+    private bool AutomationInteractionActive => busy || TransitionPending || Confirming || exiting || closeRequested || ownedDialog;
 
     internal async Task<AutomationReply> AutomationExecute(AutomationRequest request, CancellationToken token, Action<AutomationReply> phase, Func<bool> continuing)
     {
@@ -318,7 +333,7 @@ public partial class MainWindow
             return AutomationReply.Error("Unsupported", "Preset is not integrated.");
         if (request.Revision != automationRevision)
             return AutomationReply.Error("Rejected", "Context revision changed.");
-        if (busy || TransitionPending || Confirming)
+        if (AutomationInteractionActive)
             return AutomationReply.Error("Busy", "Operation or interaction is active.");
         if (request.Intent != "activate" && request.ActionId is not ("volume" or "guide-limit"))
             return AutomationReply.Error("Unsupported", "Intent is unavailable for this control.");
@@ -336,9 +351,34 @@ public partial class MainWindow
             if (request.DryRun)
                 return AutomationReply.Error("DryRun", "Capability available; no action or write requested.");
             var captured = target;
-            var result = RunSteam(captured, () => continuing() && request.Revision == automationRevision && (Controller.Apps.Any(captured.Same) || captured.Same(Controller.Session.Anchor) || captured.Same(Controller.ReturnTarget)), request.RequestId, "CLI", request.ActionId == "focus", token, phase);
+            var result = RunSteam(captured, () => continuing() && request.Revision == automationRevision && (Controller.Apps.Any(captured.Same) || captured.Same(Controller.Session.CardTarget) || captured.Same(Controller.Session.Anchor) || captured.Same(Controller.ReturnTarget)), request.RequestId, "CLI", request.ActionId == "focus", token, phase);
             OperationTask = result;
             return await result;
+        }
+
+        if (request.ActionId is "session-select" or "session-clear")
+        {
+            var select = request.ActionId == "session-select";
+            if (select && target is null)
+                return AutomationReply.Error("Rejected", "Provide a target ID from the current window list.");
+            if (!select && target is not null)
+                return AutomationReply.Error("Rejected", "Clearing the session takes no target ID.");
+            if (target is not null && (target.Protected || target.Launcher && !target.SessionLauncher))
+                return AutomationReply.Error("Unavailable", "This window cannot be the session reference.");
+            if (request.DryRun)
+                return AutomationReply.Error("DryRun", "Session action available.");
+            if (token.IsCancellationRequested || !continuing())
+                return AutomationReply.Error("Cancelled", "Cancelled before changing the session.");
+            if (select)
+            {
+                Controller.Select(target!);
+                if (!target!.Same(Controller.Session.CardTarget))
+                    return AutomationReply.Error("Unavailable", "The window changed before selection.");
+            }
+            else
+                Controller.ClearSelection();
+            RefreshRows();
+            return AutomationReply.Error("Completed", select ? "Session window selected." : "Session reference cleared.");
         }
 
         if (request.ActionId.StartsWith("route:", StringComparison.Ordinal))

@@ -47,6 +47,25 @@ function Publish-PackagedCli([string]$Destination) {
             throw 'GUI and CLI were not compiled with the same application version.'
         }
         Get-ChildItem -LiteralPath $cliOutput -File | Where-Object Name -Like 'ApolloOverlay.Cli.*' | Copy-Item -Destination $destinationRoot
+        $dependencies = Get-Content -LiteralPath (Join-Path $cliOutput 'ApolloOverlay.Cli.deps.json') -Raw | ConvertFrom-Json -AsHashtable
+        foreach ($dependency in $dependencies.targets[$dependencies.runtimeTarget.name].GetEnumerator()) {
+            if ($dependencies.libraries[$dependency.Key].type -ne 'package') {
+                continue
+            }
+            foreach ($asset in $dependency.Value.runtime.Keys) {
+                $name = [IO.Path]::GetFileName($asset)
+                $source = Join-Path $cliOutput $name
+                $target = Join-Path $destinationRoot $name
+                if (Test-Path -LiteralPath $target -PathType Leaf) {
+                    if ((Get-FileHash -LiteralPath $source).Hash -cne (Get-FileHash -LiteralPath $target).Hash) {
+                        throw "CLI dependency conflicts with a packaged GUI file: $name"
+                    }
+                }
+                else {
+                    Copy-Item -LiteralPath $source -Destination $target
+                }
+            }
+        }
         Copy-Item -LiteralPath (Join-Path $taskRoot 'gso.cmd') -Destination $destinationRoot
         foreach ($name in $protected.Keys) {
             if ((Get-FileHash -LiteralPath (Join-Path $destinationRoot $name) -Algorithm SHA256).Hash -cne $protected[$name]) {
@@ -74,6 +93,10 @@ try {
         & $cliTests '--roundtrip' (Join-Path $taskRoot 'tools/ApolloOverlay.Cli/bin/Release/net10.0-windows/ApolloOverlay.Cli.exe')
         if ($LASTEXITCODE -ne 0) {
             throw "CLI roundtrip exit $LASTEXITCODE"
+        }
+        & $cliTests '--mcp' (Join-Path $taskRoot 'tools/ApolloOverlay.Cli/bin/Release/net10.0-windows/ApolloOverlay.Cli.exe')
+        if ($LASTEXITCODE -ne 0) {
+            throw "MCP smoke test exit $LASTEXITCODE"
         }
     }
     if ($Stage -eq 'CliPackage') {

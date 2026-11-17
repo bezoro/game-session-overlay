@@ -5,7 +5,7 @@ using ApolloOverlay.Automation;
 internal static class UpdateCommands
 {
     private sealed record Options(string Command, string Pipe, string Channel, string BuildId, string JobId, bool DryRun, int TimeoutSeconds);
-    internal static async Task<int> Run(string[] args)
+    internal static async Task<int> Run(string[] args, CancellationToken token)
     {
         if (args.Any(arg => arg is "--help" or "-h"))
         {
@@ -13,7 +13,7 @@ internal static class UpdateCommands
             return 0;
         }
 
-        return Program.Print(await Execute(args, Program.Send, CancellationToken.None));
+        return Program.Print(await Execute(args, Program.Send, token));
     }
 
     internal static async Task<AutomationReply> Execute(
@@ -28,12 +28,6 @@ internal static class UpdateCommands
         string endpoint = "";
         var applying = false;
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
-        ConsoleCancelEventHandler cancel = (_, eventArgs) =>
-        {
-            eventArgs.Cancel = true;
-            deadline.Cancel();
-        };
-        Console.CancelKeyPress += cancel;
         try
         {
             var options = Parse(args, defaultPipe);
@@ -213,10 +207,6 @@ internal static class UpdateCommands
         catch (Exception error) when (error is ArgumentException or FormatException or OverflowException)
         {
             return AutomationReply.Error("Rejected", error.Message);
-        }
-        finally
-        {
-            Console.CancelKeyPress -= cancel;
         }
     }
 

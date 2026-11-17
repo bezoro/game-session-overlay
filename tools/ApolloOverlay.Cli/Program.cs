@@ -10,26 +10,55 @@ internal static class Program
 {
     public static async Task<int> Main(string[] args)
     {
-        if (args.Length > 0 && args[0] == "logs")
-            return LogCommands.Run(args);
-        if (args.Length > 0 && args[0] is "version" or "update" or "history" or "rollback")
-            return await UpdateCommands.Run(args);
-        if (args.Length == 0 || args[0] is "--help" or "help")
-        {
-            Console.WriteLine("gso logs [--tail 1..200] reads local command logs even while the overlay is closed. gso version|history|update [install|check|status|cancel JOB_ID] [--build BUILD_ID] [--channel testing|stable] [--dry-run] [--timeout 5..600]|rollback BUILD_ID. gso status|targets|actions|trace|result ID|execute ACTION [--target ID] [--intent activate|left|right] [--revision N] [--dry-run]|cancel ID|shutdown [--bridge] [--pipe LOCAL_NAME]. JSON output; no implicit launch, elevation or retry. Confirm the version after updating with a fresh gso version invocation.");
-            return 0;
-        }
-
-        using var cancellation = new CancellationTokenSource(10000);
-        Console.CancelKeyPress += (_, e) =>
+        using var cancellation = new CancellationTokenSource();
+        ConsoleCancelEventHandler cancel = (_, e) =>
         {
             e.Cancel = true;
             cancellation.Cancel();
         };
+        Console.CancelKeyPress += cancel;
+        try
+        {
+            return await Run(args, cancellation.Token);
+        }
+        finally
+        {
+            Console.CancelKeyPress -= cancel;
+        }
+    }
+
+    private static async Task<int> Run(string[] args, CancellationToken token)
+    {
+        if (args is ["mcp", ..])
+        {
+            if (args is ["mcp"])
+                return await McpCommands.Run(AutomationPipeSecurity.DefaultName, token);
+            if (args is ["mcp", "--pipe", var endpoint] && ValidPipeName(endpoint))
+                return await McpCommands.Run(endpoint, token);
+            Console.Error.WriteLine("Usage: gso mcp [--pipe LOCAL_NAME]");
+            return 1;
+        }
+        if (args.Length > 0 && args[0] == "logs")
+            return LogCommands.Run(args);
+        if (args is ["diagnostics", ..])
+        {
+            var report = args.Length == 1
+                ? await LogCommands.Export(token)
+                : new DiagnosticsExportReply("Rejected", "Usage: gso diagnostics.");
+            Console.WriteLine(JsonSerializer.Serialize(report, CommandLogJson.Default.DiagnosticsExportReply));
+            return report.Outcome == "Completed" ? 0 : 1;
+        }
+        if (args.Length > 0 && args[0] is "version" or "update" or "history" or "rollback")
+            return await UpdateCommands.Run(args, token);
+        if (args.Length == 0 || args[0] is "--help" or "help")
+        {
+            Console.WriteLine("gso logs [--tail 1..200] and gso diagnostics read retained logs even while the overlay is closed. gso mcp starts the local stdio server. gso version|history|update [install|check|status|cancel JOB_ID] [--build BUILD_ID] [--channel testing|stable] [--dry-run] [--timeout 5..600]|rollback BUILD_ID. gso status|targets|actions|trace|result ID|execute ACTION [--target ID] [--intent activate|left|right] [--revision N] [--dry-run]|cancel ID|shutdown [--bridge] [--pipe LOCAL_NAME]. JSON output; no implicit launch, elevation or retry. Confirm the version after updating with a fresh gso version invocation.");
+            return 0;
+        }
+
         AutomationRequest request = new()
         {
-            Verb = args[0],
-            DeadlineUtc = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 10000
+            Verb = args[0]
         };
         var pipe = AutomationPipeSecurity.DefaultName;
         var bridge = false;
@@ -95,35 +124,11 @@ internal static class Program
                         throw new ArgumentException("Unsupported option.");
                 }
 
-            if (pipe.Length > 128 || pipe.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not ('.' or '-' or '_')))
+            if (!ValidPipeName(pipe))
                 throw new ArgumentException("Only a local endpoint name is accepted.");
             if (bridge)
                 pipe += ".bridge";
-            if (request.Verb == "execute" && request.Revision < 0)
-            {
-                var state = await Send(pipe, new()
-                {
-                    Verb = "status"
-                }, cancellation.Token);
-                if (state.Snapshot is null)
-                    return Print(state);
-                request = request with
-                {
-                    Revision = state.Snapshot.Revision
-                };
-            }
-
-            return Print(await Send(pipe, request, cancellation.Token));
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or TimeoutException or Win32Exception)
-        {
-            if (request.Verb is "status" or "targets" or "actions" or "trace" or "result")
-                return Print(ReadOnly(request));
-            return Print(AutomationReply.Error("Unavailable", "Instance or authority unavailable; no implicit launch or retry."));
-        }
-        catch (OperationCanceledException)
-        {
-            return Print(AutomationReply.Error("Unknown", "Timed out or cancelled; check result/trace before another action."));
+            return Print(await SessionCommand(pipe, request, token));
         }
         catch (Exception e) when (e is ArgumentException or FormatException or IndexOutOfRangeException or OverflowException or JsonException)
         {
@@ -131,13 +136,64 @@ internal static class Program
         }
     }
 
+    internal static bool ValidPipeName(string name) => name.Length is > 0 and <= 128
+        && name.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_');
+
+    internal static async Task<AutomationReply> SessionCommand(string pipe, AutomationRequest request, CancellationToken token)
+    {
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
+        cancellation.CancelAfter(TimeSpan.FromSeconds(10));
+        request = request with
+        {
+            DeadlineUtc = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 10000
+        };
+        try
+        {
+            var instance = "";
+            if (request.Verb == "execute" && request.Revision < 0)
+            {
+                var state = await Send(pipe, new()
+                {
+                    Verb = "status"
+                }, cancellation.Token);
+                if (state.Snapshot is not { } snapshot)
+                    return state;
+                request = request with
+                {
+                    Revision = snapshot.Revision
+                };
+                instance = snapshot.Instance;
+            }
+
+            return await Send(pipe, request, cancellation.Token, instance);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or TimeoutException or Win32Exception)
+        {
+            if (request.Verb is "status" or "targets" or "actions" or "trace" or "result")
+                return ReadOnly(request);
+            return AutomationReply.Error("Unavailable", "Instance or authority unavailable; no implicit launch or retry.");
+        }
+        catch (OperationCanceledException)
+        {
+            return AutomationReply.Error("Unknown", "Timed out or cancelled; check result/trace before another action.");
+        }
+        catch (Exception e) when (e is JsonException or InvalidDataException)
+        {
+            return AutomationReply.Error("Unknown", "Response invalid; check result/trace before another action.");
+        }
+    }
+
     internal static int Print(AutomationReply reply)
     {
         Console.WriteLine(JsonSerializer.Serialize(reply, AutomationJson.Default.AutomationReply));
-        return reply.Outcome is "Completed" or "Requested" or "Simulated" or "DryRun" or "Snapshot" ? 0 : reply.Outcome == "Unknown" ? 3 : 1;
+        return Succeeded(reply) ? 0 : reply.Outcome == "Unknown" ? 3 : 1;
     }
 
-    internal static async Task<AutomationReply> Send(string name, AutomationRequest request, CancellationToken token)
+    internal static bool Succeeded(AutomationReply reply) => reply.Outcome is "Completed" or "Requested" or "Simulated" or "DryRun" or "Snapshot";
+
+    internal static Task<AutomationReply> Send(string name, AutomationRequest request, CancellationToken token) => Send(name, request, token, "");
+
+    private static async Task<AutomationReply> Send(string name, AutomationRequest request, CancellationToken token, string instance)
     {
         using var stream = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
         await stream.ConnectAsync(1000, token);
@@ -145,7 +201,7 @@ internal static class Program
         if (handshake.Outcome != "Handshake" || !AutomationPipeSecurity.ServerAllowed(stream, handshake, name.EndsWith(".bridge", StringComparison.Ordinal)))
             return AutomationReply.Error("Denied", "Server identity or elevation unconfirmed.");
         using var server = Process.GetProcessById(handshake.Pid);
-        if (server.StartTime.ToUniversalTime().Ticks != handshake.Started)
+        if (server.StartTime.ToUniversalTime().Ticks != handshake.Started || instance.Length > 0 && instance != handshake.Instance)
             return AutomationReply.Error("Denied", "The instance changed.");
         if (request.Verb is "execute" or "shutdown" or "update-check" or "update-download" or "update-rollback" or "update-cancel" or "update-apply")
             request = request with
@@ -175,7 +231,7 @@ internal static class Program
         {
             response = JsonSerializer.Deserialize(await AutomationFrames.Read(stream, AutomationFrames.ResponseLimit, token), AutomationJson.Default.AutomationReply) ?? throw new InvalidDataException();
         }
-        catch (Exception e) when (e is IOException or OperationCanceledException)
+        catch (Exception e) when (e is IOException or JsonException or InvalidDataException or OperationCanceledException)
         {
             return AutomationReply.Error("Unknown", "Response unconfirmed; do not retry automatically.", request.RequestId);
         }

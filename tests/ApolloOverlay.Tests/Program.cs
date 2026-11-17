@@ -259,6 +259,12 @@ static class Program
             return Finish(args[0]);
         }
 
+        if (args.Length == 2 && args[1] == "--session-automation")
+        {
+            AutomationTests.SessionContract(Case);
+            return Finish(args[0]);
+        }
+
         if (args.Length == 2 && args[1] == "--automation")
         {
             AutomationTests.Run(Case);
