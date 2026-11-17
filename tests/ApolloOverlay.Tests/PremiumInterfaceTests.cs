@@ -731,7 +731,7 @@ internal static class PremiumInterfaceTests
             {
                 w.ShowDiagnostic();
                 RequireOwnedFocus(w);
-                Dispatch(w, "taskview");
+                Dispatch(w, "session-card");
                 WpfTestDispatcher.Complete(w.OperationTask);
                 Require(w.IsVisible && w.IsActive && p.Calls == 1 && w.Controller.Operation?.State == "Failed", "Visible immediate refusal or feedback lost");
             }
@@ -785,7 +785,7 @@ internal static class PremiumInterfaceTests
             {
                 w.ShowDiagnostic();
                 RequireOwnedFocus(w);
-                Dispatch(w, "taskview");
+                Dispatch(w, "session-card");
                 WpfTestDispatcher.Complete(w.OperationTask);
                 Require(w.IsVisible && requests == 0, "Visible refusal requested balloon or hid feedback");
             }
