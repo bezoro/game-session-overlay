@@ -308,7 +308,7 @@ internal static class GuardedActionCancellationTests
                 window.Left = -12000;
                 window.Top = -12000;
                 window.ShowDiagnostic();
-                WpfTestElements.Button(window, "taskview").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                ((System.Windows.Controls.Button)window.FindName("SessionCardButton")).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
                 window.AdvanceHandoff(new(new PadFrame[4], 0), 0);
                 window.AdvanceHandoff(new(new PadFrame[4], 100), 100);
                 Require(!window.OperationTask.IsCompleted && platform.Calls == 1, "Fixture did not dispatch a pending request");

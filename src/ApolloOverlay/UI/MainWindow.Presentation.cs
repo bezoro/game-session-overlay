@@ -148,12 +148,12 @@ public partial class MainWindow
         QueueHandoff(() => HideNow(restore, target), () => target is null ? Controller.ReturnTarget is null : Controller.ReturnTarget?.Same(target) == true && Controller.Platform.Valid(target), dismiss: true);
     }
 
-    private bool FadeInputsNeutral(IReadOnlyList<PadFrame> frames)
+    private bool FadeInputsNeutral(IReadOnlyList<PadFrame> frames, bool allowDismissButton = false)
     {
         if (frames.Count != 4
             || frames.Any(f => f.ReadFailed
             || f.Connected
-            && (f.Buttons != 0
+            && ((allowDismissButton ? f.Buttons & ~PadButtons.B : f.Buttons) != 0
             || Math.Abs((int)f.X) >= Controller.Settings.Deadzone * 2 / 3
             || Math.Abs((int)f.Y) >= Controller.Settings.Deadzone * 2 / 3
             || Math.Abs((int)f.RX) >= Controller.Settings.Deadzone * 2 / 3
@@ -233,7 +233,27 @@ public partial class MainWindow
             }
             // Recheck at the handoff itself: the timer may have been delayed on the UI thread.
             guideBackend?.PollForOverlay(IsVisible, focusCycle, Environment.TickCount64, Controller.Settings.GuideOpenMaxHoldMs);
-            fadeInterrupted |= !FadeInputsNeutral(FadeFramesFixture?.Invoke() ?? Enumerable.Range(0, 4).Select(i => Native.ReadPad((uint)i)).ToArray());
+            var releaseDeadline = Environment.TickCount64 + 2000;
+            while (true)
+            {
+                var frames = FadeFramesFixture?.Invoke() ?? Enumerable.Range(0, 4).Select(i => Native.ReadPad((uint)i)).ToArray();
+                fadeInterrupted |= !FadeInputsNeutral(frames, allowDismissButton: true);
+                // Another B press continues dismissal. Retain foreground until it is
+                // released so that the game never receives a held cancel button.
+                if (fadeInterrupted || FadeInputsNeutral(frames) || Environment.TickCount64 >= releaseDeadline)
+                {
+                    fadeInterrupted |= !FadeInputsNeutral(frames);
+                    break;
+                }
+                await Task.Delay(25);
+                if (exiting || generation != fadeGeneration)
+                {
+                    command?.Complete(ResultKind.Cancelled, "hide-superseded");
+                    return;
+                }
+                if (Native.GetForegroundWindow() != new WindowInteropHelper(this).Handle)
+                    break;
+            }
             fadingOut = false;
         }
 
@@ -298,8 +318,7 @@ public partial class MainWindow
         var context = InputContext;
         var focusUnavailable = context.Visible && !context.Confirmed && !context.OwnedDialog;
         var canResume = !focusUnavailable && ResumableCardTarget is not null;
-        var showShortcuts = HubCardSelected && !focusUnavailable;
-        SessionSteamHint.Visibility = SessionOptionsHint.Visibility = !canResume ? Visibility.Collapsed : showShortcuts ? Visibility.Visible : Visibility.Hidden;
+        SessionSteamHint.Visibility = SessionOptionsHint.Visibility = canResume ? Visibility.Visible : Visibility.Collapsed;
         var primary = focusUnavailable ? "Focus not confirmed" : canResume ? "Resume" : "Choose window";
         RenderHint(SessionHint, (!focusUnavailable ? InputHint("{A} ", "{Enter} ", "{MouseLeft} ") : "") + primary);
         if (canResume)

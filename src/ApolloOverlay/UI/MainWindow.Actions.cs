@@ -312,13 +312,25 @@ public partial class MainWindow
 
         RetainOperation("Pending", "Request sent; waiting for the result.", action, target, true);
         ActionResult result;
+        var dispatched = false;
         try
         {
+            if (action == "taskview")
+            {
+                if (!Continuing())
+                    throw new OperationCanceledException(cancellation.Token);
+                HideNow(false, preserveEffect: true, immediate: true);
+                if (IsVisible)
+                    throw new InvalidOperationException("The panel could not be hidden before opening Task View.");
+            }
+            dispatched = true;
             result = await effect(cancellation.Token, Continuing);
         }
         catch (OperationCanceledException)
         {
-            result = new(ResultKind.Unknown, "Observation interrupted; check the app before trying again.");
+            result = dispatched
+                ? new(ResultKind.Unknown, "Observation interrupted; check the app before trying again.")
+                : new(ResultKind.Cancelled, "Cancelled before sending; no external command was sent.");
         }
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception)
         {

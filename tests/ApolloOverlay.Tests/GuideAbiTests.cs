@@ -647,6 +647,7 @@ internal static unsafe class GuideAbiTests
             var w = Host(p);
             try
             {
+                p.OnTaskView = () => Require(!w.IsVisible, "Task View observed the overlay as a selectable window");
                 Button(w, "taskview").RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
                 Require(w.TransitionPending && p.Globals == 0 && p.Switches == 0);
                 w.AdvanceHandoff(Neutral(0) with
@@ -1291,6 +1292,9 @@ internal static unsafe class GuideAbiTests
                 "during",
                 "at-end",
                 "neutral",
+                "repeat-b",
+                "held-b",
+                "b-and-a",
                 "read-failed"
             }
 
@@ -1314,9 +1318,15 @@ internal static unsafe class GuideAbiTests
                         Require(Native.GetForegroundWindow() == new System.Windows.Interop.WindowInteropHelper(w).Handle, "Owned fade fixture lacks foreground");
                         w.BeginFadeFixture();
                         Require(w.FadePending && w.IsVisible, "Fade was not started");
-                        if (scenario == "during")
+                        if (scenario is "during" or "repeat-b" or "held-b" or "b-and-a")
                         {
-                            w.ReviewTick(new PadFrame[] { new(true, PadButtons.A), default, default, default });
+                            var buttons = scenario switch
+                            {
+                                "repeat-b" or "held-b" => PadButtons.B,
+                                "b-and-a" => PadButtons.B | PadButtons.A,
+                                _ => PadButtons.A
+                            };
+                            w.ReviewTick(new PadFrame[] { new(true, buttons), default, default, default });
                             frames = new PadFrame[]
                             {
                                 new(true, 0),
@@ -1324,6 +1334,24 @@ internal static unsafe class GuideAbiTests
                                 default,
                                 default
                             };
+                        }
+
+                        System.Windows.Threading.DispatcherTimer? release = null;
+                        var heldBeforeRelease = false;
+                        if (scenario == "held-b")
+                        {
+                            frames = [new(true, PadButtons.B), default, default, default];
+                            release = new()
+                            {
+                                Interval = TimeSpan.FromMilliseconds(350)
+                            };
+                            release.Tick += (_, _) =>
+                            {
+                                heldBeforeRelease = w.IsVisible && w.FadePending;
+                                frames = [new(true, 0), default, default, default];
+                                release.Stop();
+                            };
+                            release.Start();
                         }
 
                         if (scenario == "at-end")
@@ -1348,9 +1376,12 @@ internal static unsafe class GuideAbiTests
                             PumpFocus();
                             Thread.Sleep(1);
                         }
+                        release?.Stop();
 
                         Require(!w.FadePending, "Fade did not finish");
-                        if (scenario == "neutral")
+                        if (scenario == "held-b")
+                            Require(heldBeforeRelease, "Held B ceded focus before release");
+                        if (scenario is "neutral" or "repeat-b" or "held-b")
                             Require(!w.IsVisible, "Neutral fade did not hide");
                         else
                             Require(w.IsVisible, "Fade ceded focus after new or unreadable input");
@@ -2411,6 +2442,7 @@ internal static unsafe class GuideAbiTests
         internal bool Menu, Loaded, LaunchContext, Denied, ValidTarget = true, Disposed;
         internal int Switches, Globals, Menus, Shortcuts, LaunchQueries;
         internal string? LastKeys;
+        internal Action? OnTaskView;
         internal WindowRef? LastTarget;
         public bool HasSteamLaunchContext(WindowRef? target)
         {
@@ -2441,6 +2473,7 @@ internal static unsafe class GuideAbiTests
 
         public Task<ActionResult> TaskView()
         {
+            OnTaskView?.Invoke();
             Globals++;
             LastKeys = "Win+Tab";
             return Task.FromResult(new ActionResult(ResultKind.Requested, "fixture WinTab"));

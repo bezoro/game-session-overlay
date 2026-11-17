@@ -177,6 +177,11 @@ static class Program
         {
             SessionInterfaceTests.Run(Case);
         }),
+        ["--fade-handoff"] = Suite("Closing fade and reopening", _ =>
+        {
+            GuideAbiTests.FadeHandoffChecks(Case);
+            MotionAndControllerTests.Run(Case);
+        }),
         ["--appearance"] = Suite("Appearance", output =>
         {
             AppearanceTests.Run(Case);

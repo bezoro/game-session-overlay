@@ -1436,7 +1436,7 @@ internal static class SessionHubTests
                 cases.Add((theme, 572, 940, state, 100, "Left"));
             cases.Add((theme, 360, 480, "dirty-result", 100, "Left"));
             foreach (var (width, height) in new[] { (572, 940), (360, 480) })
-                foreach (var state in new[] { "controller-steam", "controller-no-steam", "keyboard-steam", "mouse-steam", "controller-sheen", "options-sheen" })
+                foreach (var state in new[] { "controller-steam", "controller-no-steam", "controller-unselected", "keyboard-steam", "mouse-steam", "controller-sheen", "options-sheen" })
                     cases.Add((theme, width, height, state, 100, "Left"));
             foreach (var scale in new[]
             {
@@ -1471,7 +1471,7 @@ internal static class SessionHubTests
             cases.Add(("contrast-palette", 420, 600, state, 100, "Left"));
         if (focused)
             cases = cases.Where(c => c.Theme != "contrast-palette" && c.Scale == 100 && c.Width != 420 && c.State is "home" or "options" or "customize" or "dirty-result"
-                or "controller-steam" or "controller-no-steam" or "keyboard-steam" or "mouse-steam" or "controller-sheen" or "options-sheen").ToList();
+                or "controller-steam" or "controller-no-steam" or "controller-unselected" or "keyboard-steam" or "mouse-steam" or "controller-sheen" or "options-sheen").ToList();
         var metadata = new List<SessionCaptureInfo>();
         foreach (var item in cases)
         {
@@ -1513,7 +1513,7 @@ internal static class SessionHubTests
             TaskCompletionSource<ApplicationAudioChange>? pendingCompletion = null;
             try
             {
-                if (state is "controller-steam" or "controller-no-steam" or "keyboard-steam" or "mouse-steam" or "controller-sheen" or "options-sheen")
+                if (state is "controller-steam" or "controller-no-steam" or "controller-unselected" or "keyboard-steam" or "mouse-steam" or "controller-sheen" or "options-sheen")
                 {
                     p.A = p.A with
                     {
@@ -1528,6 +1528,8 @@ internal static class SessionHubTests
                     w.Show();
                     if (state.StartsWith("controller-", StringComparison.Ordinal) || state == "options-sheen")
                         AdaptiveInterfaceTests.UseController(w);
+                    if (state == "controller-unselected")
+                        Pick(w, "windows-volume");
                     if (state == "options-sheen")
                         w.Details();
                     else if (state == "mouse-steam")
