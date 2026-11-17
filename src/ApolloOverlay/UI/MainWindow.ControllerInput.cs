@@ -140,7 +140,7 @@ public partial class MainWindow
             || !EffectTargetValid(effectFocusTarget)
             || !EffectInputsNeutral(frames)))
             effectCancellation.Cancel();
-        if (fadingOut && !FadeInputsNeutral(frames))
+        if (fadingOut && !FadeInputsNeutral(frames, allowDismissButton: true))
             fadeInterrupted = true;
         if (fadingOut)
         {

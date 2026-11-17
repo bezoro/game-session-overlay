@@ -46,7 +46,7 @@ internal static class SessionInterfaceTests
             }
             finally { source.Release(); }
         });
-        test("secondary controller gestures appear only when the session card is selected", () =>
+        test("session card keeps its controller gestures visible when selection moves away", () =>
         {
             using var host = new Host();
             var window = host.Window;
@@ -55,10 +55,16 @@ internal static class SessionInterfaceTests
             Pick(window, "session-card");
             var hint = (TextBlock)window.FindName("SessionHint");
             var options = (TextBlock)window.FindName("SessionOptionsHint");
+            var steam = (TextBlock)window.FindName("SessionSteamHint");
             Require(InputPrompt.Read(hint).StartsWith("A ", StringComparison.Ordinal), "Selected Resume has no controller prompt");
             Require(options.Visibility == Visibility.Visible, "Selected card has no Options prompt");
             Pick(window, "windows-volume");
-            Require(options.Visibility == Visibility.Hidden, "Unselected card still advertises secondary actions");
+            Require(options.Visibility == Visibility.Visible && steam.Visibility == Visibility.Visible,
+                "Moving selection hid the session card's controller gestures");
+            Require(InputPrompt.Read(hint).StartsWith("A ", StringComparison.Ordinal)
+                && InputPrompt.Read(options).StartsWith("X ", StringComparison.Ordinal)
+                && InputPrompt.Read(steam).StartsWith("Y ", StringComparison.Ordinal),
+                "The unselected card lost a controller button label");
         });
         test("high contrast slider uses the actual system-mapped solid thumb", () =>
         {
