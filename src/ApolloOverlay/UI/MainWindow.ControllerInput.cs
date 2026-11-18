@@ -153,8 +153,8 @@ public partial class MainWindow
         }
 
         lastInputSample = new(frames, now, GuideHeld: guideBackend?.Held == true, GuideValid: guideBackend is null || !guideBackend.Active || guideBackend.SnapshotValid, GuideConnections: guideBackend?.Connections ?? 0);
-        UpdatePolling(frames.Any(f => f.Connected));
-        var current = input.Update(frames, IsVisible, now);
+        UpdatePolling(frames.Any(f => f.Connected || f.ReadFailed) || guideBackend is { Active: true, Connections: > 0 } or { Active: true, SnapshotValid: false });
+        var current = input.Update(frames, IsVisible, now, allowScrollOwnership: Confirming);
         UpdateControllerTelemetry(frames, current.Slot, now);
         if (steamOwner is { } owner
             && ((owner.InputQualified

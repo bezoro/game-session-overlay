@@ -99,7 +99,10 @@ public sealed class InputCoordinator
         pads = Enumerable.Range(0, 4).Select(_ => new PadInterpreter(deadzone)).ToArray();
     }
 
-    public OverlayInput Update(IReadOnlyList<PadFrame> frames, bool visible, long now)
+    public OverlayInput Update(IReadOnlyList<PadFrame> frames, bool visible, long now) =>
+        Update(frames, visible, now, allowScrollOwnership: false);
+
+    internal OverlayInput Update(IReadOnlyList<PadFrame> frames, bool visible, long now, bool allowScrollOwnership)
     {
         if (!visible)
             return default;
@@ -120,7 +123,8 @@ public sealed class InputCoordinator
         var events = frames.Select((f, i) => pads[i].Update(f, now)).ToArray();
         if (owner == null)
             for (var i = 0; i < frames.Count; i++)
-                if (frames[i].Connected && (frames[i].Buttons != 0 || Math.Abs((int)frames[i].X) > deadzone || Math.Abs((int)frames[i].Y) > deadzone))
+                if (frames[i].Connected && (frames[i].Buttons != 0 || Math.Abs((int)frames[i].X) > deadzone || Math.Abs((int)frames[i].Y) > deadzone
+                    || allowScrollOwnership && Math.Abs((int)frames[i].RY) > deadzone))
                 {
                     owner = i;
                     break;

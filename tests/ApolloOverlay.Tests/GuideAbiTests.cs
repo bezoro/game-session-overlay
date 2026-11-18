@@ -2712,7 +2712,8 @@ internal static unsafe class GuideAbiTests
             Require(GuidePolling.Consume(ref request) && !request);
             b.PollForOverlay(true, 0, Environment.TickCount64, 2000);
             Require(!GuidePolling.Consume(ref request), "held Guide retriggered");
-            Require(GuidePolling.Interval(b.Active, false, false) == 20 && GuidePolling.Interval(b.Active, true, true) == 20);
+            Require(GuidePolling.Interval(b.Active, false, false) == 120);
+            Require(GuidePolling.Interval(b.Active, false, true) == 20 && GuidePolling.Interval(b.Active, true, false) == 20);
         }
 
         Require(GuidePolling.Interval(false, true, false) == 30 && GuidePolling.Interval(false, false, true) == 120 && GuidePolling.Interval(false, false, false) == 500);
