@@ -98,7 +98,15 @@ public sealed class SessionMedia : ISessionMedia
     private void Subscribe(GlobalSystemMediaTransportControlsSession session)
     {
         session.PlaybackInfoChanged += PlaybackChanged;
-        session.MediaPropertiesChanged += PropertiesChanged;
+        try
+        {
+            session.MediaPropertiesChanged += PropertiesChanged;
+        }
+        catch
+        {
+            Unsubscribe(session);
+            throw;
+        }
     }
 
     private void Unsubscribe(GlobalSystemMediaTransportControlsSession session)
@@ -106,6 +114,12 @@ public sealed class SessionMedia : ISessionMedia
         try
         {
             session.PlaybackInfoChanged -= PlaybackChanged;
+        }
+        catch (Exception error) when (Failure(error))
+        {
+        }
+        try
+        {
             session.MediaPropertiesChanged -= PropertiesChanged;
         }
         catch (Exception error) when (Failure(error))
@@ -157,8 +171,8 @@ public sealed class SessionMedia : ISessionMedia
                 var requested = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync().AsTask(deadline.Token);
                 if (!visible || disposed || epoch != generation)
                     return;
+                requested.SessionsChanged += SessionsChanged;
                 manager = requested;
-                manager.SessionsChanged += SessionsChanged;
             }
 
             var live = manager.GetSessions().Take(12).ToArray();
@@ -180,8 +194,8 @@ public sealed class SessionMedia : ISessionMedia
                 if (!sessions.TryGetValue(pointer, out var entry))
                 {
                     entry = new(Guid.NewGuid().ToString("N"), session);
-                    sessions.Add(pointer, entry);
                     Subscribe(session);
+                    sessions.Add(pointer, entry);
                 }
 
                 var properties = await session.TryGetMediaPropertiesAsync().AsTask(deadline.Token);
@@ -201,12 +215,17 @@ public sealed class SessionMedia : ISessionMedia
         }
         catch (OperationCanceledException)
         {
+            if (visible && !disposed && epoch == generation && !cancellation.IsCancellationRequested)
+            {
+                Current = new(++revision, [], "", "Media refresh interrupted. Refresh to check playback.", ObservationFailed: true);
+                Changed?.Invoke(Current);
+            }
         }
         catch (Exception error) when (Failure(error))
         {
             if (visible && !disposed && epoch == generation)
             {
-                Current = new(++revision, [], "", "Media unavailable. Open a compatible app and try again.");
+                Current = new(++revision, [], "", "Could not read playback. Refresh to try again.", ObservationFailed: true);
                 Changed?.Invoke(Current);
             }
         }
@@ -233,39 +252,8 @@ public sealed class SessionMedia : ISessionMedia
             var entry = sessions.Values.SingleOrDefault(value => value.Id == id);
             if (entry is null || manager is null || !manager.GetSessions().Any(value => Identity(value) == Identity(entry.Session)))
                 return new(ResultKind.Unavailable, "The media session changed. Select it again.");
-            var info = entry.Session.GetPlaybackInfo();
-            var controls = info.Controls;
-            var allowed = command switch
-            {
-                SessionMediaCommand.Toggle => CanToggle(info),
-                SessionMediaCommand.Previous => controls.IsPreviousEnabled,
-                SessionMediaCommand.Next => controls.IsNextEnabled,
-                _ => false
-            };
-            if (!allowed)
-                return new(ResultKind.Unavailable, "This app does not support that command.");
-            deadline.Token.ThrowIfCancellationRequested();
-            if (!visible || disposed || generation != epoch)
-                return new(ResultKind.Cancelled, "The panel was hidden before dispatch.");
-            dispatched = true;
-            var accepted = await (command switch
-            {
-                SessionMediaCommand.Toggle when info.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing && controls.IsPauseEnabled => entry.Session.TryPauseAsync(),
-                SessionMediaCommand.Toggle when info.PlaybackStatus != GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing && controls.IsPlayEnabled => entry.Session.TryPlayAsync(),
-                SessionMediaCommand.Toggle => entry.Session.TryTogglePlayPauseAsync(),
-                SessionMediaCommand.Previous => entry.Session.TrySkipPreviousAsync(),
-                _ => entry.Session.TrySkipNextAsync()
-            }).AsTask(deadline.Token);
-            if (!accepted)
-                return new(ResultKind.Failed, "The app rejected the media command.");
-            if (command == SessionMediaCommand.Toggle && visible && !disposed && generation == epoch)
-            {
-                var after = entry.Session.GetPlaybackInfo().PlaybackStatus;
-                if (after != info.PlaybackStatus && after is GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing or GlobalSystemMediaTransportControlsSessionPlaybackStatus.Paused)
-                    return new(ResultKind.Completed, after == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing ? "Playback resumed." : "Playback paused.");
-            }
-
-            return new(ResultKind.Requested, "The app accepted the command. Check playback.");
+            return await DispatchAsync(entry.Session, command, false,
+                () => visible && !disposed && generation == epoch, deadline.Token, () => dispatched = true);
         }
         catch (OperationCanceledException)
         {
@@ -281,6 +269,110 @@ public sealed class SessionMedia : ISessionMedia
             if (visible && !disposed)
                 _ = RefreshAsync();
         }
+    }
+
+    public async Task<SessionMediaOperation> OperateCurrentAsync(SessionMediaCommand? command, bool dryRun, CancellationToken cancellation = default)
+    {
+        if (!dispatcher.CheckAccess())
+            return await dispatcher.InvokeAsync(() => OperateCurrentAsync(command, dryRun, cancellation)).Task.Unwrap();
+
+        var snapshot = SessionMediaSnapshot.Empty;
+        if (disposed || !await owner.WaitAsync(0, cancellation))
+            return new(snapshot, new(ResultKind.Unavailable, "Media is unavailable or busy."));
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+        deadline.CancelAfter(TimeSpan.FromSeconds(3));
+        var dispatched = false;
+        try
+        {
+            var source = manager ?? await GlobalSystemMediaTransportControlsSessionManager.RequestAsync().AsTask(deadline.Token);
+            var session = source.GetCurrentSession();
+            if (session is null)
+                return new(snapshot, new(command is null ? ResultKind.Completed : ResultKind.Unavailable, snapshot.Status));
+            var properties = await session.TryGetMediaPropertiesAsync().AsTask(deadline.Token);
+            var info = session.GetPlaybackInfo();
+            var identity = Identity(session);
+            bool StillCurrent() => !disposed && source.GetCurrentSession() is { } current && Identity(current) == identity;
+            deadline.Token.ThrowIfCancellationRequested();
+            if (!StillCurrent())
+                return new(snapshot, new(ResultKind.Unavailable, "The current media session changed."));
+            var item = new SessionMediaItem("current", Text(properties.Title), Text(properties.Artist), Text(session.SourceAppUserModelId, 100),
+                info.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing, CanToggle(info),
+                info.Controls.IsPreviousEnabled, info.Controls.IsNextEnabled);
+            snapshot = new(revision, [item], item.Id, "Windows media controls.");
+            var result = command is null ? new ActionResult(ResultKind.Completed, "Current playback observed.")
+                : await DispatchAsync(session, command.Value, dryRun, StillCurrent, deadline.Token, () => dispatched = true);
+            return new(snapshot, result, dispatched);
+        }
+        catch (OperationCanceledException)
+        {
+            return new(snapshot, new(dispatched ? ResultKind.Unknown : cancellation.IsCancellationRequested ? ResultKind.Cancelled : ResultKind.Unavailable,
+                dispatched ? "Command outcome unconfirmed." : "Media observation interrupted."), dispatched);
+        }
+        catch (Exception error) when (Failure(error))
+        {
+            return new(snapshot, new(dispatched ? ResultKind.Unknown : ResultKind.Unavailable, "Windows could not confirm the media operation."), dispatched);
+        }
+        finally
+        {
+            owner.Release();
+            if (visible && !disposed && (dispatched || refreshPending))
+                QueueRefresh();
+        }
+    }
+
+    private static async Task<ActionResult> DispatchAsync(GlobalSystemMediaTransportControlsSession session, SessionMediaCommand command,
+        bool dryRun, Func<bool> valid, CancellationToken token, Action started)
+    {
+        var info = session.GetPlaybackInfo();
+        bool AtTarget(GlobalSystemMediaTransportControlsSessionPlaybackStatus state) => command switch
+        {
+            SessionMediaCommand.Play => state == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing,
+            SessionMediaCommand.Pause => state == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Paused,
+            _ => false
+        };
+        token.ThrowIfCancellationRequested();
+        if (!valid())
+            return new(ResultKind.Unavailable, "The selected media session changed.");
+        if (AtTarget(info.PlaybackStatus))
+            return new(ResultKind.Completed, "Playback already has the requested state.");
+        var controls = info.Controls;
+        var allowed = command switch
+        {
+            SessionMediaCommand.Play => controls.IsPlayEnabled,
+            SessionMediaCommand.Pause => controls.IsPauseEnabled,
+            SessionMediaCommand.Previous => controls.IsPreviousEnabled,
+            SessionMediaCommand.Next => controls.IsNextEnabled,
+            SessionMediaCommand.Toggle => CanToggle(info),
+            _ => false
+        };
+        if (!allowed)
+            return new(ResultKind.Unavailable, "This app does not support that command.");
+        token.ThrowIfCancellationRequested();
+        if (!valid())
+            return new(ResultKind.Unavailable, "The selected media session changed.");
+        if (dryRun)
+            return new(ResultKind.Completed, "Media command available.");
+        started();
+        var accepted = await (command switch
+        {
+            SessionMediaCommand.Play => session.TryPlayAsync(),
+            SessionMediaCommand.Pause => session.TryPauseAsync(),
+            SessionMediaCommand.Previous => session.TrySkipPreviousAsync(),
+            SessionMediaCommand.Next => session.TrySkipNextAsync(),
+            _ when info.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing && controls.IsPauseEnabled => session.TryPauseAsync(),
+            _ when info.PlaybackStatus != GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing && controls.IsPlayEnabled => session.TryPlayAsync(),
+            _ => session.TryTogglePlayPauseAsync()
+        }).AsTask(token);
+        if (!accepted)
+            return new(ResultKind.Failed, "The app rejected the media command.");
+        if (command is SessionMediaCommand.Play or SessionMediaCommand.Pause or SessionMediaCommand.Toggle && valid())
+        {
+            var after = session.GetPlaybackInfo().PlaybackStatus;
+            if (AtTarget(after) || command == SessionMediaCommand.Toggle && after != info.PlaybackStatus
+                && after is GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing or GlobalSystemMediaTransportControlsSessionPlaybackStatus.Paused)
+                return new(ResultKind.Completed, after == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing ? "Playback resumed." : "Playback paused.");
+        }
+        return new(ResultKind.Requested, "The app accepted the command. Check playback.");
     }
 
     public void Dispose()

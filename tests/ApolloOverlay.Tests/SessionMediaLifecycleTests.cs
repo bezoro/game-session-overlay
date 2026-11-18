@@ -5,6 +5,42 @@ internal static class SessionMediaLifecycleTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        test("Hidden media command cannot bypass a draining visible read", () =>
+        {
+            var old = new TaskCompletionSource<SessionMediaSnapshot>();
+            using var media = new SessionMedia(_ => old.Task);
+            media.SetVisible(true);
+            media.SetVisible(false);
+            var operation = media.OperateCurrentAsync(SessionMediaCommand.Next, true).GetAwaiter().GetResult();
+            if (operation.Result.Kind != ResultKind.Unavailable || media.Current.Items.Count != 0)
+                throw new Exception("A hidden dry run must honor the existing native owner");
+            old.SetResult(Snapshot("stale"));
+        });
+        test("Preview media dry run leaves the selected track and playback unchanged", () =>
+        {
+            using var media = new PreviewSessionMedia();
+            var snapshot = Snapshot("fixture");
+            media.SetFixture(snapshot);
+            var result = media.OperateCurrentAsync(SessionMediaCommand.Play, true).GetAwaiter().GetResult();
+            if (result.Result.Kind != ResultKind.Simulated || !ReferenceEquals(media.Current, snapshot))
+                throw new Exception("Preview media execution changed playback");
+            var unsupported = media.OperateCurrentAsync(SessionMediaCommand.Next, false).GetAwaiter().GetResult();
+            if (unsupported.Result.Kind != ResultKind.Unavailable)
+                throw new Exception("Unavailable preview command was accepted");
+        });
+        test("SMTC interrupted native refresh clears actionable stale media", () =>
+        {
+            var count = 0;
+            using var media = new SessionMedia(_ => ++count == 1
+                ? Task.FromResult(Snapshot("previous"))
+                : Task.FromCanceled<SessionMediaSnapshot>(new CancellationToken(true)));
+            media.SetVisible(true);
+            var previous = media.Current;
+            WpfTestDispatcher.Complete(media.RefreshAsync());
+            if (previous.Items.Count != 1 || media.Current.Items.Count != 0 || media.Current.Revision <= previous.Revision
+                || media.Current.Status == SessionMediaSnapshot.Empty.Status)
+                throw new Exception("A failed observation must retire previous media actions and report uncertainty");
+        });
         test("SMTC worker disposal completes cleanup on the dispatcher owner", () =>
         {
             var previous = SynchronizationContext.Current;

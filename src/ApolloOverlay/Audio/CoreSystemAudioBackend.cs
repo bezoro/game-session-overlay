@@ -150,7 +150,6 @@ internal sealed class CoreSystemAudioBackend : ISystemAudioBackend
         CheckApartment();
         IHubDeviceEnumerator? enumerator = null;
         object? policy = null;
-        var sent = 0;
         try
         {
             enumerator = Create();
@@ -180,28 +179,48 @@ internal sealed class CoreSystemAudioBackend : ISystemAudioBackend
             var iid = typeof(IOverlayAudioPolicy).GUID;
             Check(CoCreateInstance(ref clsid, 0, 1, ref iid, out policy));
             var setter = (IOverlayAudioPolicy)policy;
-            if (!continuing())
-                return new(ResultKind.Cancelled, "No output changes were sent.");
-            sent++;
-            Check(setter.SetDefaultEndpoint(console, 0));
-            if (!continuing())
-                return new(ResultKind.Partial, "The game output was requested. The media output was not changed after cancellation.");
-            sent++;
-            Check(setter.SetDefaultEndpoint(media, 1));
-            if (!continuing())
-                return new(ResultKind.Unknown, "Check the outputs after dispatch. Observation was interrupted.");
-            var confirmed = Default(enumerator, 0, 0) == console && Default(enumerator, 0, 1) == media;
-            return new(confirmed ? ResultKind.Completed : ResultKind.Unknown, confirmed ? "Game and media outputs confirmed." : "Windows did not confirm all requested outputs.");
+            return ApplyOutputs(console, media, continuing, setter.SetDefaultEndpoint, role => Default(enumerator, 0, role));
         }
         catch (COMException)
         {
-            return new(sent > 0 ? ResultKind.Partial : ResultKind.Unavailable, sent > 0 ? "The output change was partial. Refresh to check the state." : "Output switching is unavailable on this version of Windows.");
+            return new(ResultKind.Unavailable, "Output switching is unavailable on this version of Windows.");
         }
         finally
         {
             Release(policy);
             Release(enumerator);
             CoUninitialize();
+        }
+    }
+
+    internal static ActionResult ApplyOutputs(string console, string media, Func<bool> continuing,
+        Func<string, int, int> setOutput, Func<int, string> readOutput)
+    {
+        var attempted = false;
+        var accepted = 0;
+        try
+        {
+            if (!continuing())
+                return new(ResultKind.Cancelled, "No output changes were sent.");
+            attempted = true;
+            Check(setOutput(console, 0));
+            accepted++;
+            if (!continuing())
+                return new(ResultKind.Partial, "The game output was requested. The media output was not changed after cancellation.");
+            Check(setOutput(media, 1));
+            accepted++;
+            if (!continuing())
+                return new(ResultKind.Unknown, "Check the outputs after dispatch. Observation was interrupted.");
+            var confirmed = readOutput(0) == console && readOutput(1) == media;
+            return new(confirmed ? ResultKind.Completed : ResultKind.Unknown, confirmed ? "Game and media outputs confirmed." : "Windows did not confirm all requested outputs.");
+        }
+        catch (COMException)
+        {
+            if (!attempted)
+                return new(ResultKind.Unavailable, "Output switching is unavailable on this version of Windows.");
+            return accepted == 1
+                ? new(ResultKind.Partial, "Windows accepted the game output. Refresh to check the media output.")
+                : new(ResultKind.Unknown, "Windows did not confirm the outputs. Refresh to check their state.");
         }
     }
 

@@ -30,7 +30,10 @@ public partial class MainWindow
     private void BuildSessionMedia()
     {
         var media = CurrentMedia;
-        if (media is null)
+        var observationFailed = sessionMedia.Current.ObservationFailed;
+        if (observationFailed)
+            FeatureEmpty("Playback status unavailable", sessionMedia.Current.Status, "session-media");
+        else if (media is null)
             FeatureEmpty("No active playback", "Play music or video in an app that supports Windows media controls.", "session-media");
         else
         {
@@ -39,7 +42,9 @@ public partial class MainWindow
                 FeatureFact("Source", media.Application);
         }
 
-        AddRow("media-toggle", media?.Playing == true ? "Pause" : "Play", media is null ? "No active media" : "Control playback", () => MediaCommand(SessionMediaCommand.Toggle), media?.CanToggle == true);
+        AddRow("media-toggle", media?.Playing == true ? "Pause" : "Play",
+            observationFailed ? "Check playback first" : media is null ? "No active media" : "Control playback",
+            () => MediaCommand(SessionMediaCommand.Toggle), media?.CanToggle == true);
         var first = Rows.RowDefinitions.Count;
         AddRow("media-previous", "Previous", "Go to the previous track", () => MediaCommand(SessionMediaCommand.Previous), media?.CanPrevious == true, row: first, column: 0, compactGrid: true);
         AddRow("media-next", "Next", "Skip to the next track", () => MediaCommand(SessionMediaCommand.Next), media?.CanNext == true, row: first, column: 1, compactGrid: true);

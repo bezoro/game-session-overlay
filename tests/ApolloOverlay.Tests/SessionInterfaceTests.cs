@@ -1253,6 +1253,9 @@ internal static class SessionInterfaceTests
         }
 
         public Task RefreshAsync(CancellationToken cancellation = default) => Task.CompletedTask;
+        public Task<SessionMediaOperation> OperateCurrentAsync(SessionMediaCommand? command, bool dryRun, CancellationToken cancellation = default)
+            => Task.FromResult(new SessionMediaOperation(Current, new(ResultKind.Simulated, "Fixture media.")));
+
         public Task<ActionResult> CommandAsync(string id, SessionMediaCommand command, CancellationToken cancellation = default)
         {
             Commands++;
