@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Security.Cryptography;
@@ -31,7 +32,7 @@ internal sealed record CachedAsset(string PackageId, string Version, string File
 
 internal sealed record CachedBuild(AppBuildInfo Build, CachedAsset Asset, DateTimeOffset SavedAt, DateTimeOffset? InstalledAt);
 internal sealed record SettingsCopy(bool Missing, string? Sha256);
-internal sealed record PendingSettingsRestore(string BuildId, string Version, string Commit);
+internal sealed record PendingSettingsRestore(string BuildId, string Version, string Commit, int OwnerPid = 0, long OwnerStarted = 0);
 /// <summary>Retains rollback packages outside Velopack's disposable package cache.</summary>
 public sealed class LocalUpdateHistory
 {
@@ -168,24 +169,36 @@ public sealed class LocalUpdateHistory
             return;
         if (locator.CurrentlyInstalledVersion != SemanticVersion.Parse(build.Version))
             throw new InvalidDataException("The installed version differs from the compiled identity.");
+        cancellation.ThrowIfCancellationRequested();
+        var metadata = Path.Combine(Folder(build.BuildId), "release.json");
+        if (File.Exists(metadata))
+        {
+            var retained = Record(build.BuildId);
+            if (retained.Build != build)
+                throw new InvalidDataException("The history identity was changed.");
+            var retainedPath = Path.Combine(Folder(build.BuildId), retained.Asset.FileName);
+            if (File.Exists(retainedPath))
+            {
+                try
+                {
+                    await VerifyPackageAsync(retainedPath, retained.Asset.ToAsset(), build, cancellation).ConfigureAwait(false);
+                    if (retained.InstalledAt is null)
+                        Write(metadata, retained with
+                        {
+                            InstalledAt = DateTimeOffset.UtcNow
+                        });
+                    return;
+                }
+                catch (InvalidDataException)
+                {
+                    // A verified SDK cache copy can repair damaged retained bytes.
+                }
+            }
+        }
+
         var asset = locator.GetLocalPackages().FirstOrDefault(p => p.Type == VelopackAssetType.Full && p.Version == locator.CurrentlyInstalledVersion);
         if (asset is null)
-        {
-            if (File.Exists(Path.Combine(Folder(build.BuildId), "release.json")))
-            {
-                var retained = Record(build.BuildId);
-                if (retained.Build != build)
-                    throw new InvalidDataException("The history identity was changed.");
-                await VerifyPackageAsync(Path.Combine(Folder(build.BuildId), retained.Asset.FileName), retained.Asset.ToAsset(), retained.Build, cancellation).ConfigureAwait(false);
-                Write(Path.Combine(Folder(build.BuildId), "release.json"), retained with
-                {
-                    InstalledAt = retained.InstalledAt ?? DateTimeOffset.UtcNow
-                });
-                return;
-            }
-
             throw new InvalidOperationException("The current version's package could not be retained for rollback. Reinstall this version's Setup before updating; your settings remain in your Windows profile.");
-        }
 
         var path = Path.Combine(locator.PackagesDir, SafeFileName(asset.FileName));
         var verified = await VelopackAsset.FromNupkgGenerateChecksumAsync(path).ConfigureAwait(false);
@@ -314,7 +327,8 @@ public sealed class LocalUpdateHistory
     public void QueueSettingsRestore(AppBuildInfo target)
     {
         Record(target.BuildId);
-        Write(PendingPath, new PendingSettingsRestore(target.BuildId, target.Version, target.Commit));
+        using var owner = Process.GetCurrentProcess();
+        Write(PendingPath, new PendingSettingsRestore(target.BuildId, target.Version, target.Commit, owner.Id, owner.StartTime.ToUniversalTime().Ticks));
     }
 
     public void CancelSettingsRestore()
@@ -328,9 +342,13 @@ public sealed class LocalUpdateHistory
         if (!File.Exists(PendingPath))
             return null;
         var pending = Read<PendingSettingsRestore>(PendingPath);
+        var matches = pending.BuildId == running.BuildId && pending.Version == running.Version && pending.Commit == running.Commit;
+        if (!matches && RestoreOwnerIsRunning(pending))
+            return null;
+
         try
         {
-            if (pending.BuildId != running.BuildId || pending.Version != running.Version || pending.Commit != running.Commit)
+            if (!matches)
                 return new(SettingsRestoreOutcome.NotApplied, "Rollback was not applied. Your current settings were preserved.");
             var metadata = Path.Combine(Folder(pending.BuildId), "settings.json");
             if (!File.Exists(metadata))
@@ -366,4 +384,24 @@ public sealed class LocalUpdateHistory
             File.Delete(PendingPath);
         }
     }
+    private static bool RestoreOwnerIsRunning(PendingSettingsRestore pending)
+    {
+        if (pending.OwnerPid <= 0)
+            return false;
+        try
+        {
+            using var owner = Process.GetProcessById(pending.OwnerPid);
+            return owner.StartTime.ToUniversalTime().Ticks == pending.OwnerStarted && !owner.HasExited;
+        }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException)
+        {
+            return false;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // A lower-integrity observer cannot establish that an elevated owner exited.
+            return true;
+        }
+    }
+
 }

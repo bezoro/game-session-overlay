@@ -203,9 +203,9 @@ internal static class LocalUpdateHistoryTests
             Require(f.History.CompleteSettingsRestore(a.Build with
             {
                 BuildId = "unrelated"
-            }) is { Outcome: SettingsRestoreOutcome.NotApplied }
+            }) is null
                 && File.ReadAllText(f.Settings).Contains("current"), "Unrelated startup restored old settings");
-            Require(f.History.CompleteSettingsRestore(a.Build) is null, "Stale restore remained armed");
+            Require(f.History.CompleteSettingsRestore(a.Build) is { Outcome: SettingsRestoreOutcome.Restored } && File.ReadAllText(f.Settings).Contains("prior"), "An unrelated launch consumed the active rollback");
         });
         test("rollback corrupt settings snapshot preserves current settings", () =>
         {
@@ -255,6 +255,10 @@ internal static class LocalUpdateHistoryTests
             File.Copy(a.Path, Path.Combine(cache, a.Asset.FileName));
             Complete(f.History.RecordCurrentAsync(a.Build, locator));
             var retained = f.History.GetVerifiedAsync("a").GetAwaiter().GetResult();
+            var timestamp = new DateTime(2020, 2, 1, 0, 0, 0, DateTimeKind.Utc);
+            File.SetLastWriteTimeUtc(retained.PackagePath, timestamp);
+            Complete(f.History.RecordCurrentAsync(a.Build, locator));
+            Require(File.GetLastWriteTimeUtc(retained.PackagePath) == timestamp, "Recording a healthy installation replaced retained package bytes");
             File.Delete(Path.Combine(cache, a.Asset.FileName));
             Complete(f.History.RecordCurrentAsync(a.Build, locator));
             Require(f.History.List("a").Single().Current, "SDK cache cleanup hid an archived installed version");
