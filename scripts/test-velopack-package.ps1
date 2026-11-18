@@ -52,6 +52,26 @@ try {
             throw 'Tag, application version and SDK package version differ.'
         }
     }
+    Case 'installed documentation and license are complete' {
+        $archive = [IO.Compression.ZipFile]::OpenRead($original.PackagePath)
+        try {
+            $names = @($archive.Entries.FullName)
+            foreach ($required in @('LICENSE', 'README.md', 'USER_GUIDE.md', 'docs/mcp.md', 'docs/cli.md',
+                    'Assets/ThirdParty/Mcp/ATTRIBUTIONS.txt', 'Assets/ThirdParty/Logging/ATTRIBUTIONS.txt')) {
+                if ("lib/app/$required" -cnotin $names) { throw "Missing installed file $required." }
+            }
+            if ($names -like 'lib/app/docs/design/*') { throw 'Developer concept artwork entered the installed payload.' }
+            foreach ($entry in $archive.Entries | Where-Object FullName -Match '^lib/app/(docs/[^/]+|README|USER_GUIDE)\.md$') {
+                $reader = [IO.StreamReader]::new($entry.Open())
+                try { $markdown = $reader.ReadToEnd() } finally { $reader.Dispose() }
+                foreach ($link in [regex]::Matches($markdown, '\]\((?!https?://|#)([^)#]+)(?:#[^)]*)?\)')) {
+                    $address = [uri]::new([uri]("https://package.invalid/" + $entry.FullName), $link.Groups[1].Value)
+                    if ($address.AbsolutePath.TrimStart('/') -cnotin $names) { throw "Broken installed link in $($entry.FullName): $link" }
+                }
+            }
+        }
+        finally { $archive.Dispose() }
+    }
     Case 'expected source commit binds the package' {
         $other = if ($original.Build.commit -ceq ('0' * 40)) {
             '1' * 40
