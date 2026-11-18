@@ -114,6 +114,7 @@ internal sealed class CoreMasterAudioBackend : IMasterAudioBackend
             return new(new(ResultKind.Unavailable, "The audio output changed; no change was sent."), before);
         var attempted = 0;
         var succeeded = 0;
+        var requested = (volume is null ? 0 : 1) + (muted is null ? 0 : 1);
         try
         {
             var context = Guid.Empty;
@@ -142,7 +143,7 @@ internal sealed class CoreMasterAudioBackend : IMasterAudioBackend
         {
             InvalidateBinding(error);
             var after = new AudioSnapshot(null, 0, false, "The audio change could not be confirmed.");
-            return new(new(succeeded > 0 ? ResultKind.Partial : attempted > 0 ? ResultKind.Unknown : ResultKind.Unavailable,
+            return new(new(succeeded > 0 && succeeded < requested ? ResultKind.Partial : attempted > 0 ? ResultKind.Unknown : ResultKind.Unavailable,
                 "Windows did not confirm the audio change. Refresh before trying again."), after);
         }
     }

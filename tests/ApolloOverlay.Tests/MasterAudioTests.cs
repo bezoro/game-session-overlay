@@ -4,6 +4,22 @@ internal static class MasterAudioTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        test("hidden master audio validates and verifies an explicit change without publishing a panel snapshot", () =>
+        {
+            var native = new NativeFixture();
+            using var audio = NativeOwner(native);
+            var before = audio.OperateAsync(.35f, true, dryRun: true, CancellationToken.None).GetAwaiter().GetResult();
+            Require(before.Result.Kind == ResultKind.Completed && !before.Dispatched
+                && before.Snapshot.Available && !before.Snapshot.Muted, "Dry run changed the observed output");
+            var after = audio.OperateAsync(.35f, true, dryRun: false, CancellationToken.None).GetAwaiter().GetResult();
+            Require(after.Result.Kind == ResultKind.Completed && after.Dispatched && after.Snapshot.Muted
+                && Math.Abs(after.Snapshot.Volume - .35f) < .005f && !audio.Current.Available,
+                "Hidden write did not return verified readback or published a visible snapshot");
+            native.OutputAvailable = false;
+            var missing = audio.OperateAsync(.15f, null, dryRun: false, CancellationToken.None).GetAwaiter().GetResult();
+            Require(missing.Result.Kind == ResultKind.Unavailable && !missing.Dispatched,
+                "Missing output was reported as a successful audio change");
+        });
         test("master audio retains its real device observer across a missing output and recovers while visible", () =>
         {
             var native = new NativeFixture { OutputAvailable = false };
