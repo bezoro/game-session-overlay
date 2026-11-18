@@ -538,19 +538,10 @@ public partial class MainWindow
         var cancelling = downloading && updateCancellation?.IsCancellationRequested == true;
         var title = downloading ? cancelling ? "Cancelling…" : "Cancel download" : DownloadReleaseTitle(candidate);
         if (entry.Button.Content is ActionButtonContent content && content.Title.Text != title)
-        {
-            SetEntryText(entry.Id, title);
             content.ReplaceIcon(ActionIcon(downloading ? "dismiss-operation" : "prepare-update"));
-        }
         var available = !cancelling && updateSource is not PreviewUpdateSource;
-        entry.Button.IsEnabled = available;
-        entries[index] = entry with
-        {
-            Available = available
-        };
-        SetEntryPrompt(entry.Id, DownloadActionDescription(candidate));
-        if (entry.Available != available)
-            SetSelection(restoreFocus: false);
+        var prompt = DownloadActionDescription(candidate);
+        SetFeatureEntry(entry.Id, title, InputPrompt.PlainText(prompt), available, prompt);
     }
 
     private bool CancelUpdateInteraction()
