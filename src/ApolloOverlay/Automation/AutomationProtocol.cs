@@ -76,7 +76,30 @@ public sealed record AutomationRequest
         get;
         init;
     }
+    public AutomationAudioChange? AudioChange
+    {
+        get; init;
+    }
+    public AutomationSettingsChange? SettingsChange
+    {
+        get; init;
+    }
+    public string? MediaCommand
+    {
+        get; init;
+    }
+
+    internal bool IsOperationObservation => Verb == "execute" && ActionId is "audio-get" or "settings-get" or "media-get";
 }
+
+public sealed record AutomationAudioChange(int? VolumePercent = null, bool? Muted = null);
+public sealed record AutomationAudioState(bool Available, int? VolumePercent, bool? Muted, string Status);
+public sealed record AutomationSettingsChange(bool? SoundEnabled = null, bool? HapticsEnabled = null,
+    string? PanelSide = null, int? ScalePercent = null, int? Deadzone = null, int? GuideHoldMs = null);
+public sealed record AutomationSettingsState(bool SoundEnabled, bool HapticsEnabled, string PanelSide,
+    int ScalePercent, int Deadzone, int GuideHoldMs, bool Dirty);
+public sealed record AutomationMediaState(string Title, string Artist, string Application, bool Playing,
+    bool CanPrevious, bool CanNext);
 
 public sealed record AutomationTarget(string Id, long Handle, int Pid, long Started, long Generation, string Process);
 public sealed record AutomationAction(string Id, bool Available, string Reason, string Capability, string[] Intents,
@@ -291,6 +314,22 @@ public sealed record AutomationReply
     {
         get;
         init;
+    }
+    public AutomationAudioState? Audio
+    {
+        get; init;
+    }
+    public AutomationSettingsState? Settings
+    {
+        get; init;
+    }
+    public AutomationMediaState? Media
+    {
+        get; init;
+    }
+    public AutomationMediaState? MediaBefore
+    {
+        get; init;
     }
 
     public static AutomationReply Error(string outcome, string reason, string id = "") => new()

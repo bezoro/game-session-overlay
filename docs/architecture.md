@@ -42,6 +42,8 @@ flowchart LR
 
 The session action IDs are available across routes. The automation backend resolves opaque target IDs, validates the context revision, and uses shared session operations. Route actions expose existing interface controls for navigation and editing.
 
+The audio, settings and media contracts use typed patches or explicit commands. Master audio observes and writes on the same MTA owner, then returns endpoint readback. Media shares the native session owner with the interface and resolves the current session even while hidden. Automation settings reserve the shared writer, persist away from the dispatcher, and reconcile any newer draft with the saved values.
+
 Primary Session, Apps and Audio navigation has top-level semantics: switching tabs removes nested feature history, so a discarded browser scan or color draft cannot be resumed through Back. The route frame is the source of navigation state. Eligibility queries do not cancel operations; input and operation boundaries explicitly validate ownership and revoke a lost focus cycle.
 
 A UI action checks focus and availability, waits for continuous keyboard, mouse-button and controller release, validates the target again and then calls the service. `ActionResult` distinguishes a request, observed completion, partial results and unknown outcomes. Cancellation after dispatch stops remaining steps; it does not undo a command Windows already accepted.
@@ -74,4 +76,4 @@ Focus does not isolate XInput from other processes. A streaming controller may b
 
 `Diagnostics/CommandLog` owns the bounded Serilog pipeline and operation evidence. `LocalDiagnostics` lazily owns that journal alongside settings paths. A controller disposes diagnostics only when it created them; the application entry point owns an explicitly shared instance until WPF exits. Fatal observation records failures without swallowing exceptions or changing termination policy.
 
-`MainWindow.CommandDiagnostics` supplies safe semantic IDs and captures invocation source/correlation across dispatcher callbacks and deferred input release. Actual effect runners record terminal results before UI-generation guards. The automation host mirrors requests without weakening its separate durable safety ledger. The offline CLI reader has independent read/output bounds and no runtime or writer dependency. See [diagnostics](diagnostics.md).
+`MainWindow.CommandDiagnostics` supplies safe semantic IDs and captures invocation source/correlation across dispatcher callbacks and deferred input release. Actual effect runners record terminal results before UI-generation guards. The automation host awaits durable Steam intent before dispatch and queues phase persistence in event order away from the dispatcher. Trace readers share append and rotation access with the writer. The offline CLI reader has independent read/output bounds and no runtime or writer dependency. See [diagnostics](diagnostics.md).

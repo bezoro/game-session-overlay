@@ -7,6 +7,30 @@ using System.Text.Json;
 
 namespace ApolloOverlay.Automation;
 
+internal readonly record struct AutomationTraceTime(long UtcMilliseconds, long Foreground)
+{
+    internal static AutomationTraceTime Capture() => new(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), Native.GetForegroundWindow().ToInt64());
+}
+
+// Each operation produces a bounded sequence of phase receipts from one execution owner.
+internal sealed class AutomationPhaseJournal(Action<AutomationReply, AutomationTraceTime> persist)
+{
+    private Task tail = Task.CompletedTask;
+
+    internal void Record(AutomationReply receipt)
+    {
+        var observed = AutomationTraceTime.Capture();
+        var previous = tail;
+        tail = Task.Run(async () =>
+        {
+            await previous.ConfigureAwait(false);
+            persist(receipt, observed);
+        });
+    }
+
+    internal Task Drain => tail;
+}
+
 public interface IAutomationBackend
 {
     Task<AutomationSnapshot> Snapshot(CancellationToken token, bool refreshTargets = false);
@@ -172,11 +196,15 @@ public sealed class AutomationHost : IDisposable
     private readonly CommandLog? commands;
     private readonly CancellationTokenSource stopping = new();
     private readonly object gate = new();
+    private readonly object serverGate = new();
     private readonly List<NamedPipeServerStream> servers = [];
     private CancellationTokenSource? active;
     private AutomationRequest? activeRequest;
     private bool disposed;
     private int connections;
+    private readonly object snapshotGate = new();
+    private AutomationSnapshot? pendingSnapshot;
+    private bool publishingSnapshot, observedSnapshot;
     public string Instance => ledger.Instance;
     public string PipeName
     {
@@ -194,17 +222,17 @@ public sealed class AutomationHost : IDisposable
         PipeName = name ?? AutomationPipeSecurity.DefaultName;
         source = FileVersionInfo.GetVersionInfo(Path.Combine(AppContext.BaseDirectory, "ApolloOverlay.dll")).ProductVersion ?? "unknown";
         var normal = AutomationPipeSecurity.Create(PipeName, false, true);
-        lock (gate)
+        lock (serverGate)
             servers.Add(normal);
-        _ = AcceptLoop(normal, false);
+        _ = Task.Run(() => AcceptLoop(normal, false));
         if (grant is not null)
         {
             try
             {
                 var bridge = AutomationPipeSecurity.Create(BridgeName!, true, true);
-                lock (gate)
+                lock (serverGate)
                     servers.Add(bridge);
-                _ = AcceptLoop(bridge, true);
+                _ = Task.Run(() => AcceptLoop(bridge, true));
             }
             catch
             {
@@ -220,14 +248,14 @@ public sealed class AutomationHost : IDisposable
     {
         try
         {
-            var process = Process.GetCurrentProcess();
-            Publish((await backend.Snapshot(stopping.Token)) with
+            using var process = Process.GetCurrentProcess();
+            QueueSnapshot((await backend.Snapshot(stopping.Token)) with
             {
                 Instance = Instance,
                 Pid = Environment.ProcessId,
                 Started = process.StartTime.ToUniversalTime().Ticks,
                 SourceRevision = source
-            });
+            }, initial: true);
         }
         catch (Exception e) when (e is IOException or OperationCanceledException or UnauthorizedAccessException)
         {
@@ -243,8 +271,15 @@ public sealed class AutomationHost : IDisposable
                 await pipe.WaitForConnectionAsync(stopping.Token);
                 var connected = pipe;
                 pipe = AutomationPipeSecurity.Create(restricted ? BridgeName! : PipeName, restricted, false);
-                lock (gate)
+                lock (serverGate)
+                {
+                    if (disposed)
+                    {
+                        pipe.Dispose();
+                        return;
+                    }
                     servers.Add(pipe);
+                }
                 _ = Serve(connected, restricted);
             }
         }
@@ -259,6 +294,7 @@ public sealed class AutomationHost : IDisposable
         && request.ActionId is "focus" or "steam-overlay"
         && request.TargetId == grant.TargetId
         && request.Preset.Length == 0
+        && request.AudioChange is null && request.SettingsChange is null && request.MediaCommand is null
         && request.Intent == "activate");
     private static bool Query(string verb) => verb is "status" or "targets" or "actions" or "trace" or "result" or "update-status";
     private static bool UpdateCommand(string verb) => verb is "update-check" or "update-download" or "update-rollback" or "update-cancel" or "update-apply";
@@ -271,6 +307,8 @@ public sealed class AutomationHost : IDisposable
         && r.JobId is { Length: <= 256 }
         && r.Channel is "" or "testing" or "stable"
         && r.Intent is "activate" or "left" or "right"
+        && r.MediaCommand is null or { Length: <= 16 }
+        && (r.Verb == "execute" || r.AudioChange is null && r.SettingsChange is null && r.MediaCommand is null)
         && (Query(r.Verb)
         || UpdateCommand(r.Verb)
         || r.Verb is "execute" or "cancel" or "shutdown");
@@ -279,7 +317,7 @@ public sealed class AutomationHost : IDisposable
         if (Interlocked.Increment(ref connections) > 8)
         {
             Interlocked.Decrement(ref connections);
-            lock (gate)
+            lock (serverGate)
                 servers.Remove(pipe);
             pipe.Dispose();
             commands?.Record("automation-connection", ResultKind.Unavailable, "cli", reason: "connection-limit");
@@ -326,7 +364,7 @@ public sealed class AutomationHost : IDisposable
             }
             lock (gate)
                 ticket = ledger.Issue(connection);
-            var process = Process.GetCurrentProcess();
+            using var process = Process.GetCurrentProcess();
             await Reply(new()
             {
                 Outcome = "Handshake",
@@ -373,7 +411,7 @@ public sealed class AutomationHost : IDisposable
                     await Reply(new()
                     {
                         Outcome = "Completed",
-                        Trace = File.Exists(Path.Combine(root, "automation-trace.jsonl")) ? File.ReadLines(Path.Combine(root, "automation-trace.jsonl")).TakeLast(24).ToArray() : []
+                        Trace = AutomationTraceReader.ReadTail(root)
                     });
                     return;
                 }
@@ -431,7 +469,7 @@ public sealed class AutomationHost : IDisposable
                 return;
             }
 
-            if (request.DryRun)
+            if (request.DryRun || request.IsOperationObservation)
             {
                 await Reply(UpdateCommand(request.Verb) ? await backend.Update(request, life.Token, () => AutomationPipeSecurity.Alive(pipe)) : await backend.Execute(request, life.Token, _ =>
                 {
@@ -609,15 +647,25 @@ public sealed class AutomationHost : IDisposable
             try
             {
                 executionStarted = true;
-                result = UpdateCommand(request.Verb) ? await backend.Update(request, life.Token, () => !life.IsCancellationRequested && AutomationPipeSecurity.Alive(pipe)) : await backend.Execute(request, life.Token, phase =>
+                var phases = new AutomationPhaseJournal((phase, observed) =>
                 {
                     lock (gate)
                         ledger.Update(request.RequestId, phase with
                         {
                             Terminal = false
                         });
-                    Trace(request, "Phase", phase);
-                }, () => !life.IsCancellationRequested && AutomationPipeSecurity.Alive(pipe));
+                    Trace(request, "Phase", phase, observed);
+                });
+                try
+                {
+                    result = UpdateCommand(request.Verb)
+                        ? await backend.Update(request, life.Token, () => !life.IsCancellationRequested && AutomationPipeSecurity.Alive(pipe))
+                        : await backend.Execute(request, life.Token, phases.Record, () => !life.IsCancellationRequested && AutomationPipeSecurity.Alive(pipe));
+                }
+                finally
+                {
+                    await phases.Drain;
+                }
             }
             catch (OperationCanceledException)
             {
@@ -673,9 +721,9 @@ public sealed class AutomationHost : IDisposable
                     active = null;
                     activeRequest = null;
                 }
-
-                servers.Remove(pipe);
             }
+            lock (serverGate)
+                servers.Remove(pipe);
 
             pipe.Dispose();
             Interlocked.Decrement(ref connections);
@@ -692,29 +740,58 @@ public sealed class AutomationHost : IDisposable
 
     private void Publish(AutomationSnapshot snapshot)
     {
-        lock (gate)
-        {
-            var path = Path.Combine(root, "automation-snapshot.json");
-            var bytes = JsonSerializer.SerializeToUtf8Bytes(snapshot, AutomationJson.Default.AutomationSnapshot);
-            if (bytes.Length > AutomationFrames.ResponseLimit)
-                return;
-            File.WriteAllBytes(path + ".tmp", bytes);
-            File.Move(path + ".tmp", path, true);
-        }
+        var path = Path.Combine(root, "automation-snapshot.json");
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(snapshot, AutomationJson.Default.AutomationSnapshot);
+        if (bytes.Length > AutomationFrames.ResponseLimit)
+            return;
+        File.WriteAllBytes(path + ".tmp", bytes);
+        File.Move(path + ".tmp", path, true);
     }
 
-    internal void ObserveSnapshot(AutomationSnapshot snapshot)
+    internal void ObserveSnapshot(AutomationSnapshot snapshot) => QueueSnapshot(snapshot, initial: false);
+
+    private void QueueSnapshot(AutomationSnapshot snapshot, bool initial)
     {
-        try
+        lock (snapshotGate)
         {
-            Publish(snapshot with
+            if (initial && observedSnapshot || stopping.IsCancellationRequested)
+                return;
+            observedSnapshot = true;
+            pendingSnapshot = snapshot with
             {
                 Instance = Instance,
                 SourceRevision = source
-            });
+            };
+            if (publishingSnapshot)
+                return;
+            publishingSnapshot = true;
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        _ = Task.Run(WriteSnapshots);
+    }
+
+    private void WriteSnapshots()
+    {
+        while (true)
         {
+            AutomationSnapshot snapshot;
+            lock (snapshotGate)
+            {
+                if (pendingSnapshot is null)
+                {
+                    publishingSnapshot = false;
+                    return;
+                }
+                snapshot = pendingSnapshot;
+                pendingSnapshot = null;
+            }
+            try
+            {
+                Publish(snapshot);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                commands?.Record("automation-snapshot", ResultKind.Unavailable, "system", reason: "snapshot-write-failed", error: error);
+            }
         }
     }
 
@@ -755,7 +832,7 @@ public sealed class AutomationHost : IDisposable
         }
     }
 
-    internal void UiResult(string id, string target, AutomationReply result)
+    internal void UiResult(string id, string target, AutomationReply result, AutomationTraceTime? observed = null)
     {
         lock (gate)
             ledger.Update(id, result);
@@ -765,7 +842,7 @@ public sealed class AutomationHost : IDisposable
             TargetId = target,
             ActionId = "steam-overlay",
             Verb = "execute"
-        }, result.Terminal ? "UI-Result" : "UI-Phase", result);
+        }, result.Terminal ? "UI-Result" : "UI-Phase", result, observed);
     }
 
     internal void CompleteInterruptedUi(string id) => CompleteInterrupted(id, executionStarted: true, "ui");
@@ -786,14 +863,15 @@ public sealed class AutomationHost : IDisposable
         }
     }
 
-    private void Trace(AutomationRequest request, string phase, AutomationReply result)
+    private void Trace(AutomationRequest request, string phase, AutomationReply result, AutomationTraceTime? observed = null)
     {
         lock (gate)
         {
             var path = Path.Combine(root, "automation-trace.jsonl");
             if (File.Exists(path) && new FileInfo(path).Length >= 1024 * 1024)
                 File.Move(path, path + ".1", true);
-            var entry = new AutomationTrace(Instance, request.RequestId, phase, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), source, request.TargetId, Native.GetForegroundWindow().ToInt64(), result.Dispatched, result.Expected, result.Accepted, result.Outcome, result.Sequence);
+            var timestamp = observed ?? AutomationTraceTime.Capture();
+            var entry = new AutomationTrace(Instance, request.RequestId, phase, timestamp.UtcMilliseconds, source, request.TargetId, timestamp.Foreground, result.Dispatched, result.Expected, result.Accepted, result.Outcome, result.Sequence);
             using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read, 4096, FileOptions.WriteThrough);
             var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(entry, AutomationJson.Default.AutomationTrace) + "\n");
             stream.Write(bytes);
@@ -833,16 +911,17 @@ public sealed class AutomationHost : IDisposable
 
     public void Dispose()
     {
-        lock (gate)
+        NamedPipeServerStream[] closing;
+        lock (serverGate)
         {
             if (disposed)
                 return;
             disposed = true;
-            stopping.Cancel();
-            active?.Cancel();
-            foreach (var pipe in servers.ToArray())
-                pipe.Dispose();
+            closing = servers.ToArray();
             servers.Clear();
         }
+        stopping.Cancel();
+        foreach (var pipe in closing)
+            pipe.Dispose();
     }
 }

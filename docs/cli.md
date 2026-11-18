@@ -92,7 +92,7 @@ Use the session operations below from any route, including while the panel is hi
 
 Audio volume accepts integers from 0 to 100. `Completed` means the requested state was read back from the verified endpoint. Settings also accept `--haptics true|false`, `--deadzone 8000..28000`, and `--guide-hold-ms 500..3000` in steps of 100. Side accepts `Left` or `Right`. Scale accepts 100, 115, 130, or 150. Omitted values are preserved. Save or discard manual settings edits before applying an automation patch.
 
-Media accepts `play`, `pause`, `next`, or `previous`. It targets the current Windows media session and checks its identity at dispatch. The command receipt carries the observation made before dispatch. Query `media-get` again after `Requested` or `Unknown` to observe the resulting state. `--dry-run` checks these mutations without applying them.
+Media accepts `play`, `pause`, `next`, or `previous`. It targets the current Windows media session and checks its identity at dispatch. The command receipt reports the observation made before dispatch in `MediaBefore`. Query `media-get` again after `Requested` or `Unknown` to observe the resulting state. `--dry-run` checks these mutations without applying them.
 
 The following commands also support route navigation and existing window actions.
 

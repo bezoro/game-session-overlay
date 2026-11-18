@@ -90,13 +90,16 @@ public partial class MainWindow
         DisposeAgentUpdates();
         if (steamOwner is not { } owner)
         {
-            if (AgentReceiptTask.IsCompletedSuccessfully)
+            if (AgentReceiptTask.IsCompletedSuccessfully && uiSteamJournal.IsCompletedSuccessfully
+                && (standaloneOperation is null || standaloneOperation.IsCompletedSuccessfully))
             {
                 Cleanup();
                 return;
             }
             args.Cancel = true;
             closeRequested = true;
+            if (standaloneOperation is not null)
+                pending?.Cancel();
             closeDrain = DrainReceiptsAndClose();
             return;
         }
@@ -112,9 +115,9 @@ public partial class MainWindow
         await owner.Drained.Task;
         try
         {
-            await operation;
+            await operation.WaitAsync(TimeSpan.FromSeconds(3));
         }
-        catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException or OperationCanceledException)
+        catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException or OperationCanceledException or TimeoutException)
         {
         }
 
@@ -125,7 +128,12 @@ public partial class MainWindow
     {
         try
         {
-            await AgentReceiptTask.WaitAsync(TimeSpan.FromSeconds(3));
+            await Task.WhenAll(AgentReceiptTask, uiSteamJournal, standaloneOperation ?? Task.CompletedTask)
+                .WaitAsync(TimeSpan.FromSeconds(3));
+        }
+        catch (OperationCanceledException)
+        {
+            // A cancelled standalone operation has already finished draining.
         }
         catch (Exception error) when (UpdateFailure(error))
         {
