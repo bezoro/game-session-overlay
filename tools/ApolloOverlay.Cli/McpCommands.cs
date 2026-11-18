@@ -2,14 +2,24 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using ApolloOverlay;
 using ApolloOverlay.Automation;
+using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
 internal sealed class McpCommands(string pipe)
 {
     private const string Reconnect = "game-session-overlay/reconnect";
+    private static readonly JsonSerializerOptions ToolJson = CreateToolJson();
+
+    private static JsonSerializerOptions CreateToolJson()
+    {
+        var options = new JsonSerializerOptions(McpJsonUtilities.DefaultOptions);
+        options.TypeInfoResolverChain.Insert(0, McpOperationJson.Default);
+        return options;
+    }
 
     internal static async Task<int> Run(string pipe, CancellationToken token)
     {
@@ -56,6 +66,7 @@ internal sealed class McpCommands(string pipe)
             {
                 Name = name,
                 Description = description,
+                SerializerOptions = ToolJson,
                 ReadOnly = readOnly,
                 Destructive = destructive,
                 OpenWorld = openWorld
@@ -211,3 +222,8 @@ internal sealed class McpCommands(string pipe)
         IsError = error
     };
 }
+
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSerializable(typeof(AutomationAudioChange))]
+[JsonSerializable(typeof(AutomationSettingsChange))]
+internal partial class McpOperationJson : JsonSerializerContext;
