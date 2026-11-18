@@ -57,6 +57,10 @@ public static class VelopackInstallation
         if (args is not null)
             app.SetArgs(args);
         app.Run();
+    }
+
+    internal static void RestoreSettingsForPrimaryInstance()
+    {
         if (IsInstalled)
         {
             try
@@ -80,12 +84,22 @@ public static class VelopackInstallation
     internal static IReadOnlyList<InstalledBuild> CachedHistory => HistoryObservation.Current;
     internal static bool HistoryIsFresh => HistoryObservation.Fresh;
     internal static Task<IReadOnlyList<InstalledBuild>> ReadHistoryAsync() => HistoryObservation.ReadAsync();
+    private static readonly SemaphoreSlim Recording = new(1, 1);
+
     public static async Task RecordCurrentAsync(CancellationToken cancellation = default)
     {
         if (!IsInstalled)
             return;
-        await Retained.RecordCurrentAsync(AppBuild.Current, cancellation: cancellation).ConfigureAwait(false);
-        HistoryObservation.Invalidate();
+        await Recording.WaitAsync(cancellation).ConfigureAwait(false);
+        try
+        {
+            await Retained.RecordCurrentAsync(AppBuild.Current, cancellation: cancellation).ConfigureAwait(false);
+            HistoryObservation.Invalidate();
+        }
+        finally
+        {
+            Recording.Release();
+        }
     }
 
     public static async Task ArchiveVerifiedAsync(string packagePath, VelopackAsset expected, AppBuildInfo build, CancellationToken cancellation = default)

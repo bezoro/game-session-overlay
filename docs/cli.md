@@ -67,7 +67,7 @@ if ($requested.Outcome -eq 'Requested') {
 }
 ```
 
-`--timeout 5..600` limits CLI preparation in seconds; the default is 180. `--dry-run` validates a change request without executing it. Track or cancel an active preparation from another terminal with `update status` or `update cancel JOB_ID`. An `Unknown` result requires observing `version` and `update status` before deciding what to do next. The wrapper preserves the CLI exit code; zero can also accompany `Requested` and does not replace version confirmation.
+`--timeout 5..600` limits CLI preparation in seconds; the default is 180. `--dry-run` validates a change request without executing it. With an explicit build, an install dry run validates the exact build in the selected channel’s cached catalog. Refresh that catalog with an ordinary update check first if needed. Without a build ID, a dry run checks whether catalog lookup is permitted. It does not discover or validate a release. Track or cancel an active preparation from another terminal with `update status` or `update cancel JOB_ID`. An `Unknown` result requires observing `version` and `update status` before deciding what to do next. The wrapper preserves the CLI exit code; zero can also accompany `Requested` and does not replace version confirmation.
 
 ## Local command logs
 
@@ -78,6 +78,23 @@ When the overlay is available, `gso status` includes `Snapshot.Diagnostics` with
 See [command diagnostics](diagnostics.md) for paths, correlation, coverage, retention and error handling.
 
 ## Session actions
+
+Use the session operations below from any route, including while the panel is hidden. The JSON receipt carries the corresponding `Audio`, `Settings`, or `Media` observation.
+
+| Operation | Example |
+| --- | --- |
+| Read the default Windows output | `gso execute audio-get` |
+| Set its volume, mute, or both | `gso execute audio-set --volume-percent 35 --muted false` |
+| Read the overlay's supported preferences | `gso execute settings-get` |
+| Set and save preferences | `gso execute settings-set --sound true --panel-side Right --scale-percent 115` |
+| Read the current Windows media session | `gso execute media-get` |
+| Control current playback | `gso execute media-control --media-command pause` |
+
+Audio volume accepts integers from 0 to 100. `Completed` means the requested state was read back from the verified endpoint. Settings also accept `--haptics true|false`, `--deadzone 8000..28000`, and `--guide-hold-ms 500..3000` in steps of 100. Side accepts `Left` or `Right`. Scale accepts 100, 115, 130, or 150. Omitted values are preserved. Save or discard manual settings edits before applying an automation patch.
+
+Media accepts `play`, `pause`, `next`, or `previous`. It targets the current Windows media session and checks its identity at dispatch. The command receipt reports the observation made before dispatch in `MediaBefore`. Query `media-get` again after `Requested` or `Unknown` to observe the resulting state. `--dry-run` checks these mutations without applying them.
+
+The following commands also support route navigation and existing window actions.
 
 ```powershell
 ApolloOverlay.Cli.exe status

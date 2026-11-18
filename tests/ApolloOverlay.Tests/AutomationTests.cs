@@ -70,6 +70,7 @@ internal static class AutomationTests
 
     internal static void Run(Action<string, Action> test)
     {
+        AutomationJournalTests.Run(test);
         Prerequisites(test);
         SessionContract(test);
         test("session options command survives removal of its redundant visual control", () =>

@@ -21,8 +21,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: windows-checks-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A validation dispatch must never cancel an in-flight release on the same ref.
+  group: windows-checks-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'push' && 'stable' || inputs.channel }}
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' && inputs.channel == 'validate' }}
 
 jobs:
   windows:

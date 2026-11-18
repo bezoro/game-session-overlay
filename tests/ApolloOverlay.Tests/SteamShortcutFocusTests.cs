@@ -884,11 +884,14 @@ internal static class SteamShortcutFocusTests
                     PressY(w);
                     Commit(w);
                     var old = w.OperationTask;
+                    // Admission persists the intent on a worker. Pump its continuation while
+                    // keeping the fixture's native effect paused until cancellation is observed.
+                    DriveUntil(() => old.IsCompleted || w.AutomationSnapshot().PendingRequestId.Length > 0);
                     var id = w.AutomationSnapshot().PendingRequestId;
-                    Require(id.Length > 0 && !old.IsCompleted, "UI owner not pending");
+                    Require(id.Length > 0 && !old.IsCompleted, "UI owner not pending after journal admission");
                     var cancel = Task.Run(() => AutomationTests.Exchange(name, new() { Verb = "cancel", RequestId = id }));
                     Complete(cancel, new Effects());
-                    Require(cancel.Result.Outcome == "Cancelled", "CLI could not cancel UI owner");
+                    Require(cancel.Result.Outcome == "Cancelled" && !cancel.Result.Terminal && cancel.Result.RequestId == id, "CLI did not acknowledge cancellation of the pending UI owner");
                     Complete(old, p.Effect);
                     Require(p.Effect.Sends == 0, "UI owner sent after CLI cancel");
                 }
@@ -1101,12 +1104,12 @@ internal static class SteamShortcutFocusTests
         Dispatcher.PushFrame(frame);
     }
 
-    private static void DriveUntil(Func<bool> ready, Effects effects)
+    private static void DriveUntil(Func<bool> ready, Effects? effects = null)
     {
         var limit = DateTime.UtcNow.AddSeconds(3);
         while (!ready() && DateTime.UtcNow < limit)
         {
-            effects.Release();
+            effects?.Release();
             Pump();
         }
 

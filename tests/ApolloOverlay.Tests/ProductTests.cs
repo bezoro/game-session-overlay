@@ -142,6 +142,18 @@ internal static class ProductTests
             var first = input.Update([new(true, PadButtons.Right), default, default, default], true, 1);
             Require(first.Events.Direction == 2 && first.Slot == 0);
         });
+        test("confirmation scrolling can claim an idle controller without navigating or taking over another controller", () =>
+        {
+            var input = new InputCoordinator(new());
+            PadFrame[] frames = [new(true, 0), new(true, 0), default, default];
+            input.Update(frames, true, 0);
+            frames[1] = new(true, 0, RY: -24000);
+            Require(input.Update(frames, true, 1).Slot is null);
+            var scroll = input.Update(frames, true, 2, allowScrollOwnership: true);
+            Require(scroll.Slot == 1 && scroll.Events.Direction == 0 && scroll.Events.Pressed == 0);
+            frames[0] = new(true, PadButtons.A);
+            Require(input.Update(frames, true, 3, allowScrollOwnership: true).Events.Pressed == 0);
+        });
         test("first deliberate pad A retained and cannot combine controllers", () =>
         {
             var input = new InputCoordinator(new());

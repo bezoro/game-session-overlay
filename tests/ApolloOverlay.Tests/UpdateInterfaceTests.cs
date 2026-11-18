@@ -375,6 +375,12 @@ internal static class UpdateInterfaceTests
                     "Rebuilding the download view restored an idle action during an active transfer");
                 var cancellations = 0;
                 using var observation = host.Source.LastStageCancellation.Register(() => cancellations++);
+                bool? availableDuringDisable = null;
+                primary.IsEnabledChanged += (_, args) =>
+                {
+                    if (args.NewValue is false)
+                        availableDuringDisable = w.AutomationSnapshot().Actions.Single(action => action.Id == "prepare-update").Available;
+                };
                 primary.Focus();
                 if (input == "keyboard")
                 {
@@ -385,6 +391,8 @@ internal static class UpdateInterfaceTests
                     Pad(w, PadButtons.A);
                 else
                     Click(w, "prepare-update");
+                Require(availableDuringDisable == false && w.SelectedAction == "prepare-update",
+                    "Cancelling a focused download exposed stale admission or moved the selection");
                 Require(cancellations == 1 && !pending.IsCompleted && !primary.IsEnabled
                     && AutomationProperties.GetName(primary) == "Cancelling…" && host.Source.Stages == 1,
                     "The primary action failed to cancel once or remained actionable while its source was draining");

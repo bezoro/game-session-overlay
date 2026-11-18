@@ -4,11 +4,84 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using ApolloOverlay;
+using ApolloOverlay.Automation;
 
 internal static class SettingsFocusTests
 {
     internal static void Run(Action<string, Action> test)
     {
+        test("typed settings persist on a hidden overlay and protect existing drafts", () =>
+        {
+            using var host = new Host();
+            var window = host.Window;
+            var request = new AutomationRequest { ActionId = "settings-set", SettingsChange = new(PanelSide: "Right", ScalePercent: 115) };
+            AutomationReply Send(AutomationRequest command)
+            {
+                var task = window.ExecuteAutomationSettings(command, CancellationToken.None, () => true);
+                Complete(task);
+                return task.GetAwaiter().GetResult();
+            }
+
+            var file = window.Controller.Diagnostics.SettingsPath;
+            var selected = window.SelectedAction;
+            Require(Send(request with
+            {
+                DryRun = true
+            }).Outcome == "DryRun" && !File.Exists(file), "Dry run wrote settings");
+            Require(Send(request with
+            {
+                SettingsChange = new(ScalePercent: 113)
+            }).Outcome == "Rejected" && !File.Exists(file), "Invalid scale entered storage");
+            window.Controller.Change(window.Controller.Settings with
+            {
+                SetupSeen = true
+            });
+            Require(Send(request).Outcome == "Busy" && !File.Exists(file), "Automation committed a manual draft");
+            window.Controller.Discard();
+            Require(Send(request) is { Outcome: "Completed", Settings: { PanelSide: "Right", ScalePercent: 115, Dirty: false } }, "Typed write did not commit both fields");
+            var disk = UserSettings.Load(file, out _);
+            Require(disk.PanelSide == "Right" && disk.UiScalePercent == 115 && !disk.SetupSeen, "Stored values differ from the reported settings");
+            Require(!window.IsVisible && window.SelectedAction == selected, "Settings command opened or navigated the panel");
+        });
+        test("pending settings persistence preserves concurrent drafts and excludes a second writer", () =>
+        {
+            using var host = new Host();
+            var controller = host.Window.Controller;
+            using var admitted = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            var save = controller.SaveAutomationSettings(controller.Settings with
+            {
+                UiScalePercent = 115
+            }, CancellationToken.None, () =>
+            {
+                admitted.Set();
+                return release.Wait(TimeSpan.FromSeconds(5));
+            });
+            try
+            {
+                Require(admitted.Wait(TimeSpan.FromSeconds(5)), "Settings writer did not acquire its reservation");
+                controller.Change(controller.Settings with
+                {
+                    SetupSeen = true
+                });
+                try
+                {
+                    controller.Save();
+                    throw new Exception("A second settings writer entered the active transaction");
+                }
+                catch (IOException)
+                {
+                    Require(!File.Exists(controller.Diagnostics.SettingsPath), "A competing writer reached storage");
+                }
+            }
+            finally
+            {
+                release.Set();
+                Complete(save);
+            }
+            Require(controller.Settings is { SetupSeen: true, UiScalePercent: 115 } && controller.SettingsDirty, "A concurrent draft was dropped");
+            Require(controller.SavedSettings is { SetupSeen: false, UiScalePercent: 115 }, "A concurrent draft was committed unexpectedly");
+        });
         test("navigation eligibility is pure while an input boundary revokes lost ownership", () =>
         {
             using var host = new Host();

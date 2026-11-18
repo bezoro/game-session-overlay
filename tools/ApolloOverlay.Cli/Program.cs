@@ -53,6 +53,9 @@ internal static class Program
         if (args.Length == 0 || args[0] is "--help" or "help")
         {
             Console.WriteLine("gso logs [--tail 1..200] and gso diagnostics read retained logs even while the overlay is closed. gso mcp starts the local stdio server. gso version|history|update [install|check|status|cancel JOB_ID] [--build BUILD_ID] [--channel testing|stable] [--dry-run] [--timeout 5..600]|rollback BUILD_ID. gso status|targets|actions|trace|result ID|execute ACTION [--target ID] [--intent activate|left|right] [--revision N] [--dry-run]|cancel ID|shutdown [--bridge] [--pipe LOCAL_NAME]. JSON output; no implicit launch, elevation or retry. Confirm the version after updating with a fresh gso version invocation.");
+            Console.WriteLine("Session operations: execute audio-get | audio-set [--volume-percent 0..100] [--muted true|false]");
+            Console.WriteLine("  execute settings-get | settings-set [--sound true|false] [--haptics true|false] [--panel-side Left|Right] [--scale-percent N] [--deadzone N] [--guide-hold-ms N]");
+            Console.WriteLine("  execute media-get | media-control --media-command play|pause|next|previous");
             return 0;
         }
 
@@ -120,6 +123,13 @@ internal static class Program
                     case "--pipe":
                         pipe = args[++index];
                         break;
+                    case "--volume-percent" or "--muted" or "--sound" or "--haptics" or "--panel-side"
+                        or "--scale-percent" or "--deadzone" or "--guide-hold-ms" or "--media-command":
+                        if (request.Verb != "execute")
+                            throw new ArgumentException("Operation parameters require execute.");
+                        var option = args[index++];
+                        request = ParseOperationParameter(request, option, args[index]);
+                        break;
                     default:
                         throw new ArgumentException("Unsupported option.");
                 }
@@ -134,6 +144,47 @@ internal static class Program
         {
             return Print(AutomationReply.Error("Rejected", e.Message));
         }
+    }
+
+    private static AutomationRequest ParseOperationParameter(AutomationRequest request, string option, string value)
+    {
+        static int Integer(string text) => int.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
+        if (option is "--volume-percent" or "--muted")
+        {
+            var change = request.AudioChange ?? new();
+            return request with
+            {
+                AudioChange = option == "--volume-percent"
+                ? change with
+                {
+                    VolumePercent = Integer(value)
+                }
+                : change with
+                {
+                    Muted = bool.Parse(value)
+                }
+            };
+        }
+        if (option == "--media-command")
+            return request with
+            {
+                MediaCommand = value
+            };
+
+        var settings = request.SettingsChange ?? new();
+        return request with
+        {
+            SettingsChange = option switch
+            {
+                "--sound" => settings with { SoundEnabled = bool.Parse(value) },
+                "--haptics" => settings with { HapticsEnabled = bool.Parse(value) },
+                "--panel-side" => settings with { PanelSide = value },
+                "--scale-percent" => settings with { ScalePercent = Integer(value) },
+                "--deadzone" => settings with { Deadzone = Integer(value) },
+                "--guide-hold-ms" => settings with { GuideHoldMs = Integer(value) },
+                _ => throw new ArgumentException("Unsupported operation parameter.")
+            }
+        };
     }
 
     internal static bool ValidPipeName(string name) => name.Length is > 0 and <= 128
@@ -297,7 +348,7 @@ internal static class Program
                 {
                     Outcome = "Snapshot",
                     Reason = "Read-only file; it grants no authority.",
-                    Trace = File.ReadLines(Path.Combine(root, "automation-trace.jsonl")).TakeLast(24).ToArray()
+                    Trace = AutomationTraceReader.ReadTail(root)
                 };
             var file = Path.Combine(root, "automation-snapshot.json");
             if (new FileInfo(file).Length > AutomationFrames.ResponseLimit)

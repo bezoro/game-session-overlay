@@ -1,6 +1,3 @@
-using System.Windows.Automation;
-using System.Windows.Threading;
-
 namespace ApolloOverlay;
 
 public partial class MainWindow
@@ -134,24 +131,7 @@ public partial class MainWindow
         appAudio = snapshot;
         UpdateSessionCardAudioLabel();
         UpdateSessionFeatureLabels();
-        var index = entries.FindIndex(e => e.Id == "application-mute");
-        if (index >= 0)
-        {
-            var entry = entries[index];
-            var available = snapshot.CanSetMute && Controller.Platform.Valid(audioTarget);
-            entry.Button.IsEnabled = available;
-            entries[index] = entry with
-            {
-                Available = available,
-                Reason = AppAudioDescription()
-            };
-            SetEntryText("application-mute", MuteActionTitle());
-            SetEntryDescription("application-mute", AppAudioDescription());
-            if (entry.FocusHost is { } reason)
-                AutomationProperties.SetName(reason, MuteActionTitle() + ". " + AppAudioDescription());
-            if (entry.Available != available && navigation.Id == entry.Id)
-                SetSelection();
-        }
+        SetFeatureEntry("application-mute", MuteActionTitle(), AppAudioDescription(), snapshot.CanSetMute && Controller.Platform.Valid(audioTarget));
     }
 
     private void FeedbackStatusChanged(FeedbackStatus status)

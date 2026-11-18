@@ -3,7 +3,7 @@ using Microsoft.Win32;
 
 namespace ApolloOverlay;
 
-public sealed class OverlayController : IDisposable
+public sealed partial class OverlayController : IDisposable
 {
     public IPlatform Platform
     {
@@ -311,6 +311,7 @@ public sealed class OverlayController : IDisposable
             return;
         }
 
+        RequireSettingsWriterAvailable();
         Diagnostics.Save(Settings);
         SavedSettings = Settings;
         Status = "Settings saved.";
@@ -337,6 +338,7 @@ public sealed class OverlayController : IDisposable
         {
             Appearance = value
         };
+        RequireSettingsWriterAvailable();
         Diagnostics.Save(saved);
         SavedSettings = saved;
         Settings = Settings with

@@ -11,8 +11,11 @@ public sealed class WindowsAudio : IDisposable
     {
         internal required long Epoch;
         internal required bool Mutation, Rebind;
+        internal bool Standalone;
         internal float? Volume;
+        internal float? VolumeDelta;
         internal bool? Muted;
+        internal bool ToggleMute;
         internal string? Endpoint;
         internal readonly object Gate = new();
         internal readonly TaskCompletionSource<MasterAudioChange> Completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -92,23 +95,33 @@ public sealed class WindowsAudio : IDisposable
             expectedEndpoint ?? Current.EndpointId, cancellation).ConfigureAwait(false)).Result;
     }
 
-    private Task<MasterAudioChange> Submit(bool mutation, bool rebind, float? volume, bool? muted, string? endpoint, CancellationToken cancellation)
+    /// <summary>Observes the current output and applies optional settings on the same native owner, even while hidden.</summary>
+    internal Task<MasterAudioChange> OperateAsync(float? volume, bool? muted, bool dryRun,
+        CancellationToken cancellation, float? volumeDelta = null, bool toggleMute = false) =>
+        Submit(!dryRun && (volume is not null || muted is not null || volumeDelta is not null || toggleMute),
+            false, volume, muted, null, cancellation, standalone: true, volumeDelta, toggleMute);
+
+    private Task<MasterAudioChange> Submit(bool mutation, bool rebind, float? volume, bool? muted, string? endpoint,
+        CancellationToken cancellation, bool standalone = false, float? volumeDelta = null, bool toggleMute = false)
     {
         Work work;
         lock (gate)
         {
-            if (disposed || !visible || queued >= 16)
+            if (disposed || !visible && !standalone || queued >= 16)
             {
-                var reason = disposed || !visible ? "Audio observation is stopped." : "The audio owner is busy. Try again manually.";
-                return Task.FromResult(new MasterAudioChange(new(ResultKind.Unavailable, reason), Current));
+                var reason = disposed || !visible && !standalone ? "Audio observation is stopped." : "The audio owner is busy. Try again manually.";
+                return Task.FromResult(new MasterAudioChange(new(ResultKind.Unavailable, reason), standalone ? Empty(reason) : Current));
             }
             work = new()
             {
                 Epoch = epoch,
                 Mutation = mutation,
                 Rebind = rebind,
+                Standalone = standalone,
                 Volume = volume,
+                VolumeDelta = volumeDelta,
                 Muted = muted,
+                ToggleMute = toggleMute,
                 Endpoint = endpoint
             };
             pending.Add(work);
@@ -130,7 +143,7 @@ public sealed class WindowsAudio : IDisposable
     {
         lock (work.Gate)
             lock (gate)
-                return !work.Invalid && !disposed && visible && work.Epoch == epoch;
+                return !work.Invalid && !disposed && (visible || work.Standalone) && work.Epoch == epoch;
     }
 
     private bool Dispatch(Work work)
@@ -173,7 +186,10 @@ public sealed class WindowsAudio : IDisposable
                 if (visible && !disposed && work.Epoch == epoch)
                     Current = change.Snapshot;
             }
-            work.Completion.TrySetResult(change);
+            work.Completion.TrySetResult(change with
+            {
+                Dispatched = work.Dispatched
+            });
         }
         work.Timer?.Dispose();
         work.Cancellation.Unregister();
@@ -234,7 +250,19 @@ public sealed class WindowsAudio : IDisposable
                     {
                         backend ??= factory(NativeChanged);
                         MasterAudioChange result;
-                        if (work.Mutation)
+                        if (work.Standalone)
+                        {
+                            var observed = backend.Read();
+                            if (work.Mutation && observed.Available && Continuing(work))
+                            {
+                                var volume = work.VolumeDelta is { } delta ? Math.Clamp(observed.Volume + delta, 0, 1) : work.Volume;
+                                var muted = work.ToggleMute ? !observed.Muted : work.Muted;
+                                result = backend.Set(volume, muted, observed.EndpointId, () => Dispatch(work), () => Continuing(work));
+                            }
+                            else
+                                result = new(new(observed.Available ? ResultKind.Completed : ResultKind.Unavailable, observed.Status), observed);
+                        }
+                        else if (work.Mutation)
                             result = backend.Set(work.Volume, work.Muted, work.Endpoint, () => Dispatch(work), () => Continuing(work));
                         else
                         {
@@ -249,6 +277,14 @@ public sealed class WindowsAudio : IDisposable
                         Finish(work, new(new(work.Dispatched ? ResultKind.Unknown : ResultKind.Unavailable, snapshot.Status), snapshot), true);
                         // Endpoint failures must not drop device-change observation:
                         // the retained owner can recover on notification or explicit refresh.
+                    }
+                    finally
+                    {
+                        bool release;
+                        lock (gate)
+                            release = work.Standalone && !visible;
+                        if (release)
+                            ReleaseBackend();
                     }
                     continue;
                 }

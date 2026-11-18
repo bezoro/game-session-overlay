@@ -112,11 +112,11 @@ try {
         Invoke-Checked @('tool', 'restore')
         Invoke-Checked @('publish', 'src/ApolloOverlay/ApolloOverlay.csproj', '-c', 'Release', '-r', 'win-x64', '--self-contained', 'true', '-o', $publish)
         Publish-PackagedCli $publish
-        Copy-Item -LiteralPath (Join-Path $taskRoot 'README.md'), (Join-Path $taskRoot 'USER_GUIDE.md'), (Join-Path $taskRoot 'open-overlay.cmd'), (Join-Path $taskRoot 'start-preview.cmd') -Destination $publish
+        Copy-Item -LiteralPath (Join-Path $taskRoot 'open-overlay.cmd'), (Join-Path $taskRoot 'start-preview.cmd') -Destination $publish
         Copy-Item -LiteralPath (Join-Path $taskRoot 'scripts/startup-task.ps1') -Destination $publish
         Copy-Item -LiteralPath (Join-Path $taskRoot 'docs/pilot-checklist.md') -Destination (Join-Path $publish 'compatibility.md')
         Copy-Item -LiteralPath (Join-Path $taskRoot 'docs/third-party-icons.md') -Destination (Join-Path $publish 'third-party-icons.md')
-        Copy-Item -LiteralPath (Join-Path $taskRoot 'docs') -Destination $publish -Recurse
+        & (Join-Path $PSScriptRoot 'copy-release-documentation.ps1') -Destination $publish
     }
     if ($Stage -in @('All', 'PublishedBehavior')) {
         $isolated = Join-Path $checks 'published-test-host'

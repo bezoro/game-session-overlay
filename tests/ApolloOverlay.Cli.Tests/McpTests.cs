@@ -16,6 +16,12 @@ internal static class McpTests
         var schema = execute.GetProperty("inputSchema").GetProperty("properties");
         Require(schema.GetProperty("dryRun").GetProperty("default").GetBoolean(), "Dry run default missing");
         Require(schema.GetProperty("revision").GetProperty("type").GetString() == "integer", "Revision schema missing");
+        foreach (var name in new[] { "set_audio", "set_settings", "control_media" })
+        {
+            var tool = tools.GetProperty("tools").EnumerateArray().Single(item => item.GetProperty("name").GetString() == name);
+            Require(tool.GetProperty("inputSchema").GetProperty("properties").GetProperty("dryRun").GetProperty("default").GetBoolean(),
+                name + " must default to simulation");
+        }
         var logs = await client.Call("read_logs", new
         {
             tail = 0
@@ -61,6 +67,31 @@ internal static class McpTests
         })).Snapshot!;
         Require(listed.Actions.Any(a => a is { Id: "focus", Scope: "session", Available: true })
             && listed.Actions.Any(a => a is { Id: "session-select", Scope: "session", TargetRequired: true }), "Session actions unavailable outside the hub");
+
+        var settings = Reply(await client.Call("get_settings", new
+        {
+        }));
+        Require(settings is { Outcome: "Completed", Settings.Dirty: false, Dispatched: false }, "Hidden settings read unavailable");
+        var proposed = Reply(await client.Call("set_settings", new
+        {
+            panelSide = "Right",
+            scalePercent = 115
+        }));
+        var cliSettings = await ExecuteCli(cli, ["execute", "settings-set", "--panel-side", "Right", "--scale-percent", "115", "--dry-run", "--pipe", pipe], timeout.Token);
+        Require(proposed is { Outcome: "DryRun", Dispatched: false } && proposed.Settings == settings.Settings
+            && cliSettings.Outcome == proposed.Outcome && cliSettings.Settings == proposed.Settings, "Typed settings dry run differs across transports");
+        var invalidAudio = Reply(await client.Call("set_audio", new
+        {
+            volumePercent = 101,
+            dryRun = false
+        }));
+        Require(invalidAudio is { Outcome: "Rejected", Dispatched: false }, "Invalid volume reached the audio owner");
+        var media = Reply(await client.Call("get_media", new
+        {
+        }));
+        var cliMedia = await ExecuteCli(cli, ["execute", "media-get", "--pipe", pipe], timeout.Token);
+        Require(media.Outcome == cliMedia.Outcome && media.Media == cliMedia.Media && media.Dispatched == false,
+            "Hidden media observation differs across transports");
 
         var mcp = Reply(await client.Call("execute_action", new
         {
@@ -136,6 +167,24 @@ internal static class McpTests
 
     private static JsonElement Data(JsonElement reply) => reply.GetProperty("structuredContent");
     private static AutomationReply Reply(JsonElement reply) => Data(reply).Deserialize(AutomationJson.Default.AutomationReply)!;
+
+    private static async Task<AutomationReply> ExecuteCli(string cli, string[] args, CancellationToken token)
+    {
+        using var process = Start(cli, args);
+        var output = process.StandardOutput.ReadToEndAsync(token);
+        var error = process.StandardError.ReadToEndAsync(token);
+        try
+        {
+            await process.WaitForExitAsync(token);
+            Require(process.ExitCode == 0 && (await error).Length == 0, "CLI operation failed: " + await output);
+            return JsonSerializer.Deserialize(await output, AutomationJson.Default.AutomationReply)!;
+        }
+        finally
+        {
+            if (!process.HasExited)
+                process.Kill(true);
+        }
+    }
 
     private static void Require(bool condition, string reason)
     {

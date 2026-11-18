@@ -2,14 +2,24 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using ApolloOverlay;
 using ApolloOverlay.Automation;
+using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
 internal sealed class McpCommands(string pipe)
 {
     private const string Reconnect = "game-session-overlay/reconnect";
+    private static readonly JsonSerializerOptions ToolJson = CreateToolJson();
+
+    private static JsonSerializerOptions CreateToolJson()
+    {
+        var options = new JsonSerializerOptions(McpJsonUtilities.DefaultOptions);
+        options.TypeInfoResolverChain.Insert(0, McpOperationJson.Default);
+        return options;
+    }
 
     internal static async Task<int> Run(string pipe, CancellationToken token)
     {
@@ -56,6 +66,7 @@ internal sealed class McpCommands(string pipe)
             {
                 Name = name,
                 Description = description,
+                SerializerOptions = ToolJson,
                 ReadOnly = readOnly,
                 Destructive = destructive,
                 OpenWorld = openWorld
@@ -66,6 +77,12 @@ internal sealed class McpCommands(string pipe)
         Add(Trace, "get_trace", "Read recent automation trace records.");
         Add(Result, "get_result", "Read the receipt for an automation request ID.");
         Add(Execute, "execute_action", "Execute or simulate an advertised action against the supplied target and revision. Dry runs are the default.", readOnly: false, destructive: true);
+        Add(AudioGet, "get_audio", "Observe the current Windows default output volume and mute state.");
+        Add(AudioSet, "set_audio", "Set the default output volume, mute state, or both. Dry runs are the default.", readOnly: false);
+        Add(SettingsGet, "get_settings", "Read the current feedback, layout, and controller preferences.");
+        Add(SettingsSet, "set_settings", "Save explicit overlay preferences and preserve pending manual edits. Dry runs are the default.", readOnly: false);
+        Add(MediaGet, "get_media", "Observe playback from the current Windows media session.");
+        Add(MediaControl, "control_media", "Play, pause, or skip in the current Windows media session. Dry runs are the default.", readOnly: false, destructive: true);
         Add(Cancel, "cancel_action", "Request cancellation of an active action. Use get_result to observe cleanup.", readOnly: false);
         Add(Shutdown, "shutdown_overlay", "Request normal overlay shutdown and observe the exact process exit.", readOnly: false, destructive: true);
         Add(Logs, "read_logs", "Read a bounded tail of retained command logs from disk.");
@@ -98,7 +115,8 @@ internal sealed class McpCommands(string pipe)
         [Description("Opaque window ID from list_targets.")] string targetId = "",
         [Description("Revision from the latest live snapshot. Omit to read a fresh revision.")] long revision = -1,
         [Description("Validate the action without dispatching it. Set false to execute.")] bool dryRun = true,
-        [Description("An advertised intent: activate, left, or right.")] string intent = "activate") =>
+        [Description("An advertised intent: activate, left, or right.")] string intent = "activate",
+        AutomationAudioChange? audioChange = null, AutomationSettingsChange? settingsChange = null, string? mediaCommand = null) =>
         Session(new()
         {
             Verb = "execute",
@@ -106,7 +124,44 @@ internal sealed class McpCommands(string pipe)
             TargetId = targetId,
             Revision = revision,
             DryRun = dryRun,
-            Intent = intent
+            Intent = intent,
+            AudioChange = audioChange,
+            SettingsChange = settingsChange,
+            MediaCommand = mediaCommand
+        }, token);
+
+    private Task<CallToolResult> AudioGet(CancellationToken token) => Operation("audio-get", token);
+
+    private Task<CallToolResult> AudioSet(CancellationToken token,
+        [Description("Desired volume from 0 to 100. Omit to leave it as is.")] int? volumePercent = null,
+        [Description("Desired mute state. Omit to leave it as is.")] bool? muted = null, bool dryRun = true) =>
+        Operation("audio-set", token, dryRun, audio: new(volumePercent, muted));
+
+    private Task<CallToolResult> SettingsGet(CancellationToken token) => Operation("settings-get", token);
+
+    private Task<CallToolResult> SettingsSet(CancellationToken token, bool? soundEnabled = null, bool? hapticsEnabled = null,
+        [Description("Left or Right.")] string? panelSide = null,
+        [Description("100, 115, 130, or 150 percent.")] int? scalePercent = null,
+        [Description("Stick deadzone from 8000 to 28000.")] int? deadzone = null,
+        [Description("Guide open limit from 500 to 3000 milliseconds in steps of 100.")] int? guideHoldMs = null,
+        bool dryRun = true) =>
+        Operation("settings-set", token, dryRun, settings: new(soundEnabled, hapticsEnabled, panelSide, scalePercent, deadzone, guideHoldMs));
+
+    private Task<CallToolResult> MediaGet(CancellationToken token) => Operation("media-get", token);
+
+    private Task<CallToolResult> MediaControl([Description("play, pause, next, or previous.")] string command,
+        CancellationToken token, bool dryRun = true) => Operation("media-control", token, dryRun, media: command);
+
+    private Task<CallToolResult> Operation(string actionId, CancellationToken token, bool dryRun = false,
+        AutomationAudioChange? audio = null, AutomationSettingsChange? settings = null, string? media = null) =>
+        Session(new()
+        {
+            Verb = "execute",
+            ActionId = actionId,
+            DryRun = dryRun,
+            AudioChange = audio,
+            SettingsChange = settings,
+            MediaCommand = media
         }, token);
 
     private static CallToolResult Logs([Description("Number of recent records, from 1 to 200.")] int tail = 50)
@@ -167,3 +222,8 @@ internal sealed class McpCommands(string pipe)
         IsError = error
     };
 }
+
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSerializable(typeof(AutomationAudioChange))]
+[JsonSerializable(typeof(AutomationSettingsChange))]
+internal partial class McpOperationJson : JsonSerializerContext;

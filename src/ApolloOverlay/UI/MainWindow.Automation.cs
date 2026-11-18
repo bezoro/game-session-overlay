@@ -91,7 +91,12 @@ public partial class MainWindow
         && owner.Context()
         && Controller.Platform.Valid(owner.Target);
     private void QueueSteam(WindowRef target, Func<bool> context) => QueueHandoff(
-        () => OperationTask = RunUiSteam(target, context), context);
+        () =>
+        {
+            if (uiSteamJournal.IsCompleted)
+                OperationTask = uiSteamJournal = RunUiSteam(target, context);
+        }, context);
+    private Task uiSteamJournal = Task.CompletedTask;
     private async Task RunUiSteam(WindowRef target, Func<bool> context)
     {
         if (!context() || !Controller.SteamOverlayEligible(target))
@@ -100,27 +105,47 @@ public partial class MainWindow
             return;
         }
 
-        var id = automationHost is null ? "ui:" + Guid.NewGuid().ToString("N") : automationHost.BeginUi("steam-overlay", TargetId(target));
+        var host = automationHost;
+        var targetId = TargetId(target);
+        var cycle = focusCycle;
+        var admission = operationGeneration;
+        var deadline = Environment.TickCount64 + 10000;
+        var id = host is null ? "ui:" + Guid.NewGuid().ToString("N") : await Task.Run(() => host.BeginUi("steam-overlay", targetId));
         if (id is null)
         {
-            RetainOperation("Failed", "Could not record the request; no action was sent.");
+            if (CurrentCycle(cycle))
+                RetainOperation("Failed", "Could not record the request; no action was sent.");
             return;
         }
 
-        var generation = operationGeneration + 1;
+        var phases = new AutomationPhaseJournal((phase, observed) => host?.UiResult(id, targetId, phase, observed));
         try
         {
-            var result = await RunSteam(target, context, id, "UI", false, CancellationToken.None, phase => automationHost?.UiResult(id, TargetId(target), phase));
-            automationHost?.UiResult(id, TargetId(target), result);
+            var eligible = CurrentCycle(cycle) && admission == operationGeneration && Environment.TickCount64 < deadline && !closeRequested
+                && ValidateNavigationOwnership() && context() && Controller.SteamOverlayEligible(target);
+            AutomationReply result;
+            try
+            {
+                result = eligible
+                    ? await RunSteam(target, context, id, "UI", false, CancellationToken.None, phases.Record)
+                    : AutomationReply.Error("Cancelled", "The input context changed before dispatch.", id);
+            }
+            finally
+            {
+                await phases.Drain;
+            }
+            if (host is not null)
+                await Task.Run(() => host.UiResult(id, targetId, result));
         }
         catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException)
         {
-            if (!exiting && generation == operationGeneration)
+            if (!exiting && admission + 1 == operationGeneration)
                 RetainOperation("Unconfirmed", "Request log unavailable; there will be no automatic retry.");
         }
         finally
         {
-            automationHost?.CompleteInterruptedUi(id);
+            if (host is not null)
+                await Task.Run(() => host.CompleteInterruptedUi(id));
         }
     }
 
@@ -288,20 +313,23 @@ public partial class MainWindow
         "shortcut",
         "guide-limit",
         "sound-feedback",
-        "haptic-feedback",
-        "volume",
-        "volume-down",
-        "mute"
+        "haptic-feedback"
     };
     private static readonly AutomationAction[] SessionAutomationActions =
     [
         new("focus", true, "Focus the specified window or the current return target", "Execute", ["activate"], Scope: "session"),
         new("steam-overlay", true, "Send the configured shortcut to a Steam-eligible window", "Execute", ["activate"], Scope: "session"),
         new("session-select", true, "Select a window as the session reference", "Execute", ["activate"], Scope: "session", TargetRequired: true),
-        new("session-clear", true, "Clear the session reference", "Execute", ["activate"], Scope: "session")
+        new("session-clear", true, "Clear the session reference", "Execute", ["activate"], Scope: "session"),
+        new("audio-get", true, "Observe the default Windows audio output", "Execute", ["activate"], Scope: "session"),
+        new("audio-set", true, "Set volume percent or mute explicitly", "Execute", ["activate"], Scope: "session"),
+        new("settings-get", true, "Read current overlay settings", "Execute", ["activate"], Scope: "session"),
+        new("settings-set", true, "Apply and save explicit overlay settings", "Execute", ["activate"], Scope: "session"),
+        new("media-get", true, "Observe the current Windows media session", "Execute", ["activate"], Scope: "session"),
+        new("media-control", true, "Play, pause, or skip in the current Windows media session", "Execute", ["activate"], Scope: "session")
     ];
 
-    private string Capability(Entry entry) => entry.Id is "close" or "close-detail" or "confirm-close" ? "RequiresGesture" : SynchronousActions.Contains(entry.Id)
+    private string Capability(Entry entry) => entry.Id is "close" or "close-detail" or "confirm-close" ? "RequiresGesture" : SynchronousActions.Contains(entry.Id) || LegacyAudioAction(entry.Id)
         || view.Current.ChooseSession
         && entry.Id.StartsWith("window:", StringComparison.Ordinal)
         || entry.Id.StartsWith("options:", StringComparison.Ordinal)
@@ -335,10 +363,14 @@ public partial class MainWindow
             return AutomationReply.Error("Cancelled", "Cancelled.");
         if (request.Preset.Length > 0)
             return AutomationReply.Error("Unsupported", "Preset is not integrated.");
+        if (!OperationPayloadMatches(request))
+            return AutomationReply.Error("Rejected", "The supplied parameters do not apply to this operation.");
         if (request.Revision != automationRevision)
             return AutomationReply.Error("Rejected", "Context revision changed.");
         if (AutomationInteractionActive)
             return AutomationReply.Error("Busy", "Operation or interaction is active.");
+        if (StandaloneAction(request.ActionId))
+            return await ExecuteStandaloneAutomation(request, token, continuing);
         if (request.Intent != "activate" && request.ActionId is not ("volume" or "guide-limit"))
             return AutomationReply.Error("Unsupported", "Intent is unavailable for this control.");
         var target = AutomationWindows().FirstOrDefault(w => TargetId(w) == request.TargetId);
@@ -466,10 +498,12 @@ public partial class MainWindow
             return AutomationReply.Error("Unavailable", "ID is not registered on this route.");
         if (!entry.Available)
             return AutomationReply.Error("Unavailable", entry.Reason);
+        if (LegacyAudioAction(entry.Id))
+            return await ExecuteStandaloneAutomation(request, token, continuing);
         var capability = Capability(entry);
         if (capability != "Execute")
             return AutomationReply.Error(capability, "Use normal interaction; this action has no cancellable CLI continuation.");
-        if (request.Intent != "activate" && entry.Id is not ("volume" or "guide-limit"))
+        if (request.Intent != "activate" && entry.Id != "guide-limit")
             return AutomationReply.Error("Unsupported", "Intent is unavailable for this control.");
         if (request.DryRun)
             return AutomationReply.Error("DryRun", "Handler available; no action or write requested.");
@@ -482,12 +516,7 @@ public partial class MainWindow
             return AutomationReply.Error("Unavailable", "The selected window changed.");
         navigation = new(entry.Id);
         if (request.Intent is "left" or "right")
-        {
-            if (entry.Id == "volume")
-                AdjustVolume(request.Intent == "left" ? -.05f : .05f);
-            else
-                AdjustGuideLimit(request.Intent == "left" ? NavDirection.Left : NavDirection.Right);
-        }
+            AdjustGuideLimit(request.Intent == "left" ? NavDirection.Left : NavDirection.Right);
         else
             entry.Run();
         if (selected is not null)

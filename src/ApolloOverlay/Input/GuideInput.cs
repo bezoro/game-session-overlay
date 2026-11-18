@@ -377,7 +377,12 @@ public unsafe sealed class XInputGuideBackend : IGuideBackend
 internal static class GuidePolling
 {
     internal static bool Allowed(bool enabled, bool diagnostic, bool preview) => enabled && !diagnostic && !preview;
-    internal static int Interval(bool active, bool visible, bool connected) => active ? 20 : visible ? 30 : connected ? 120 : 500;
+    internal static int Interval(bool active, bool visible, bool connected)
+    {
+        if (active)
+            return visible || connected ? 20 : 120;
+        return visible ? 30 : connected ? 120 : 500;
+    }
     internal static bool Consume(ref bool guideRequest)
     {
         var toggle = guideRequest;

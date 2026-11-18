@@ -86,6 +86,16 @@ internal static unsafe class SessionHubServiceTests
     }, clock ?? (() => 0));
     internal static void Run(Action<string, Action> test)
     {
+        test("System audio distinguishes rejected dispatch, one accepted role and failed readback", () =>
+        {
+            const int failure = unchecked((int)0x80004005);
+            var first = CoreSystemAudioBackend.ApplyOutputs("a", "b", () => true, (_, _) => failure, _ => "");
+            var second = CoreSystemAudioBackend.ApplyOutputs("a", "b", () => true, (_, role) => role == 0 ? 0 : failure, _ => "");
+            var readback = CoreSystemAudioBackend.ApplyOutputs("a", "b", () => true, (_, _) => 0,
+                _ => throw new System.Runtime.InteropServices.COMException());
+            Require(first.Kind == ResultKind.Unknown && second.Kind == ResultKind.Partial && readback.Kind == ResultKind.Unknown,
+                "Accepted writes and readback evidence must be classified separately");
+        });
         test("session partial discovery retains explicit mute and restore capability", () =>
         {
             var first = new Session();

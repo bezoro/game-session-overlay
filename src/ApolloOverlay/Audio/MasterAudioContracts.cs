@@ -1,6 +1,6 @@
 namespace ApolloOverlay;
 
-internal sealed record MasterAudioChange(ActionResult Result, AudioSnapshot Snapshot);
+internal sealed record MasterAudioChange(ActionResult Result, AudioSnapshot Snapshot, bool Dispatched = false);
 
 /// <summary>Created, called and disposed exclusively by the master-audio MTA owner.</summary>
 internal interface IMasterAudioBackend : IDisposable

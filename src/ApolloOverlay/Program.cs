@@ -120,6 +120,9 @@ public static class Program
             return startup ? 0 : 3;
         }
 
+        if (!preview)
+            VelopackInstallation.RestoreSettingsForPrimaryInstance();
+
         if (!preview && bridge is null && proofRoot is null)
         {
             var registered = StartupRegistration.TryEnsure(VelopackInstallation.IsInstalled ? VelopackInstallation.StartupExecutable : Environment.ProcessPath);
@@ -153,22 +156,27 @@ public static class Program
                 }
 
                 await window.StartAutomation(grant: grant);
-                try
-                {
-                    await VelopackInstallation.RecordCurrentAsync();
-                }
-                catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
-                {
-                    diagnostics.Commands.Record("update-history", ResultKind.Failed, "system", "history-record-failed", e);
-                    window.ShowUpdateHistoryWarning();
-                }
-
                 window.ScheduleUpdateNotice();
                 if (proofRoot is null && !preview && bridge is null)
                 {
                     window.StartAutomaticUpdateDiscovery();
                     window.StartBatteryNotifications();
                 }
+                if (show || preview || !startup && bridge is null)
+                    window.OpenPanel();
+                startupCommand?.Complete(ResultKind.Completed, startup ? "hidden-startup-ready" : "instance-ready");
+
+                try
+                {
+                    await Task.Run(() => VelopackInstallation.RecordCurrentAsync());
+                }
+                catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
+                {
+                    diagnostics.Commands.Record("update-history", ResultKind.Failed, "system", "history-record-failed", e);
+                    if (!application.Dispatcher.HasShutdownStarted)
+                        window.ShowUpdateHistoryWarning();
+                }
+
                 if (proofRoot is not null)
                 {
                     Directory.CreateDirectory(proofRoot);
@@ -183,10 +191,6 @@ public static class Program
                         root = Path.GetDirectoryName(VelopackInstallation.StartupExecutable)
                     }));
                 }
-
-                if (show || preview || !startup && bridge is null)
-                    window.OpenPanel();
-                startupCommand?.Complete(ResultKind.Completed, startup ? "hidden-startup-ready" : "instance-ready");
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or FormatException)
             {

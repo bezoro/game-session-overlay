@@ -95,7 +95,7 @@ public partial class MainWindow
         SetEntryDescription("session-media", media is null ? "Playback in supported apps" : (media.Playing ? "Playing · " : "Paused · ") + (media.Title.Length > 0 ? media.Title : "Media playback"));
     }
 
-    private void SetFeatureEntry(string id, string title, string description, bool available)
+    private void SetFeatureEntry(string id, string title, string description, bool available, string? inputPrompt = null)
     {
         var index = entries.FindIndex(entry => entry.Id == id);
         if (index < 0)
@@ -115,7 +115,7 @@ public partial class MainWindow
         if (revision != automationRevision || !entries.Any(current => current.Id == id && ReferenceEquals(current.Button, entry.Button)))
             return;
         SetEntryText(id, title);
-        SetEntryDescription(id, description);
+        SetEntryDescription(id, description, inputPrompt);
         if (entry.Available != available && wasSelected)
         {
             navigation = selection;
