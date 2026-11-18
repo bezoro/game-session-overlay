@@ -834,6 +834,7 @@ static class Program
         Case("legacy Guide polling interval and single-consumption latch", GuideAbiTests.LegacyTick);
         Case("G3-01 Guide subtitle follows actual poll without rebuilding or hidden UI work", GuideAbiTests.LegacyStatusView);
         GuideAbiTests.FocusDismiss(Case);
+        GuideAbiTests.GuideReleaseRed(Case);
         GuideAbiTests.ReleaseBaseline(Case);
         Case("Cleanup prevents late Steam launch after pending focus completes", GuideAbiTests.LateLaunchBaseline);
         Case("Disposed platform refuses owned target validation and activation", GuideAbiTests.DisposedPlatformBaseline);
