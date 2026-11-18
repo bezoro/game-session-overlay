@@ -525,8 +525,12 @@ public partial class MainWindow
     private bool CancelDownloadSelected => navigation.Id == "prepare-update" && view.Current.Route == OverlayRoute.UpdateReview
         && DownloadCancellationAvailable;
 
-    private string DownloadActionDescription(UpdateCandidate candidate) => UpdateActionContext(candidate)
-        + (DownloadCancellationAvailable ? InputHint(" · {B} also cancels", " · {Esc} also cancels", "") : "");
+    private string DownloadActionDescription(UpdateCandidate candidate)
+    {
+        if (!updateDownloading || !updateBusy || updateCommitting)
+            return UpdateActionContext(candidate);
+        return DownloadCancellationAvailable ? InputHint("{B} also cancels", "{Esc} also cancels", "") : "";
+    }
 
     private void RefreshDownloadAction()
     {
