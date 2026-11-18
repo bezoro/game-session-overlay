@@ -109,6 +109,15 @@ internal static class UpdateCommands
                     Reason = current.Update.SettingsDirty ? "Save or discard settings before switching versions." : "Install the initial version using Setup before updating through the CLI."
                 };
             var channel = options.Channel.Length > 0 ? options.Channel : current.Update.SelectedChannel;
+            if (options.DryRun && options.Command == "install" && options.BuildId.Length > 0)
+                return await Send(new()
+                {
+                    Verb = "update-download",
+                    Channel = channel,
+                    BuildId = options.BuildId,
+                    AllowDowngrade = true,
+                    DryRun = true
+                });
             AutomationReply ready;
             if (options.Command == "rollback")
             {
@@ -132,7 +141,10 @@ internal static class UpdateCommands
                     DryRun = options.DryRun
                 });
                 if (options.DryRun)
-                    return ready;
+                    return ready.Outcome == "DryRun" ? ready with
+                    {
+                        Reason = "The catalog check is available. Release availability and installation eligibility have not been checked."
+                    } : ready;
                 ready = await Wait(ready, "Catalog", current.Instance);
                 if (ready.Outcome != "Completed" || ready.Update is null || options.Command == "check")
                     return ready;

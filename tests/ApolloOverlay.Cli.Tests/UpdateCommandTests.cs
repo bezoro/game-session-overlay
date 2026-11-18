@@ -162,6 +162,22 @@ internal static class UpdateCommandTests
             var reply = await server.Run("update", "--dry-run");
             Require(reply.Outcome == "DryRun" && server.Requests.Where(r => r.Verb != "update-status").All(r => r.DryRun) && !server.Requests.Any(r => r.Verb is "update-download" or "update-apply"), "Dry-run downloaded or committed");
         });
+        await test("CLI exact-build dry-run validates the cached release and preserves refusal", async () =>
+        {
+            foreach (var build in new[] { "older", "missing" })
+            {
+                var server = new Server();
+                server.State = server.State with
+                {
+                    Available = server.State.History
+                };
+                var reply = await server.Run("update", "install", "--build", build, "--channel", "testing", "--dry-run");
+                Require(reply.Outcome == (build == "older" ? "DryRun" : "Unavailable"), "Incorrect cached release validation");
+                Require(server.Requests.Select(r => r.Verb).SequenceEqual(["update-status", "update-download"])
+                    && server.Requests[1] is { DryRun: true, AllowDowngrade: true, Channel: "testing" }
+                    && server.Requests[1].BuildId == build, "Exact dry-run did not validate just the selected release");
+            }
+        });
         await test("CLI invalid update arguments are rejected without connecting", async () =>
         {
             foreach (var args in new[]
@@ -225,7 +241,11 @@ internal static class UpdateCommandTests
                     }
                 } : Reply(SnapshotOnly ? "Snapshot" : "Completed"));
             if (request.DryRun)
+            {
+                if (request.Verb == "update-download" && !State.Available.Any(r => r.BuildId == request.BuildId && r.Channel == request.Channel))
+                    return Task.FromResult(Reply("Unavailable"));
                 return Task.FromResult(Reply("DryRun"));
+            }
             if (request.Verb == "update-cancel")
             {
                 State = State with
