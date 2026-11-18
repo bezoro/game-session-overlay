@@ -19,13 +19,13 @@ During a transfer, the primary action becomes **Cancel download**. Click it, pre
 | Stable | Push to `main` | Normal release |
 | Testing | Authorized Windows checks dispatch on a repository branch with `channel: testing` | Prerelease |
 
-Only builds passing Windows validation are published. Windows CI runs automatically on pushes to `main`, normally after merging. Feature-branch pushes and PR updates do not trigger it. Use local checks during development and dispatch Windows validation deliberately when a candidate needs Windows-only evidence or a Testing preview. Avoid duplicate runs: `testing` already includes the full validation, so a separate `validate` run immediately before it is unnecessary. Documentation-only and metadata-only changes do not justify a manual Windows run. The lightweight PR-title check runs only when a PR opens or its title changes, with read permissions and no publication access. The repository is also identified by ID `1430327913`, which remains valid after renaming.
+Only builds passing Windows validation are published. Windows CI runs automatically on pushes to `main`, normally after merging. Feature-branch pushes and PR updates do not trigger it. Use local checks during development and dispatch Windows validation deliberately when a candidate needs Windows-only evidence or a Testing preview. Avoid duplicate runs: `testing` already includes the full validation, so a separate `validate` run immediately before it is unnecessary. Documentation-only and metadata-only changes do not justify a manual Windows run. The repository is also identified by ID `1430327913`, which remains valid after renaming.
 
 `validate` runs checks without publication. `testing` publishes the selected branch commit after all checks pass, including before PR merge. PR events do not run the Windows pipeline; fork branches are not published by this path. A Testing dispatch does not publish to Stable.
 
 For users, choose **Testing** in **System → Version and updates**, check for updates and choose **Install and restart** after download verification. No PR installer download is needed. The catalog identifies version and commit; preserved versions remain available for restoration.
 
-A maintainer or agent with write access can publish an authorized preview from GitHub Actions by selecting the branch and `channel: testing`, or through the CLI. The optional `notes` input supplies updater release notes:
+A maintainer or agent with write access can publish an authorized preview from GitHub Actions by selecting the branch and the `testing` channel, or through the CLI. The optional `notes` input supplies updater release notes. For visual review in either dispatch mode, enable `screenshots` or pass `-f screenshots=true` to include WPF captures in `windows-test-reports`.
 
 ```sh
 gh workflow run windows-checks.yml --repo bezoro/game-session-overlay --ref feat/session-command-center -f channel=testing

@@ -38,11 +38,11 @@ Start every PR description with a concise summary, followed by `## Changes` list
 
 ## CI economy
 
-Conserve the GitHub Actions allowance. Automatic Windows CI runs on pushes to `main`, normally after a merge, and validates the integrated source before any stable publication. Feature-branch pushes and PR updates must not trigger the Windows pipeline. The lightweight PR-title check runs only when a PR is opened or its title changes.
+Conserve the GitHub Actions allowance. Automatic Windows CI runs on pushes to `main`, normally after a merge, and validates the integrated source before any stable publication. Feature-branch pushes and PR updates must not trigger the Windows pipeline. Review Conventional Commit titles as part of PR review.
 
 Keep workflow definitions reusable. Use GitHub's API or CLI for one-off dispatches, cancellations, run cleanup and branch pruning instead of creating per-PR or single-use workflows. Deleting a temporary branch does not remove its workflow history from GitHub Actions.
 
-Batch related changes and use focused local checks during development. Dispatch Windows CI only when a coherent candidate needs Windows-only verification, consolidated pre-merge validation, diagnosis of a platform failure or a Testing preview. Documentation-only and metadata-only changes do not justify a full CI run. A Testing publication already includes full validation; do not dispatch a separate validation run immediately before it. Repeat checks only when new changes, failures or unresolved concerns justify the cost. Preserve checks required for integration and publication.
+Batch related changes and use focused local checks during development. Dispatch Windows CI only when a coherent candidate needs Windows-only verification, consolidated pre-merge validation, diagnosis of a platform failure or a Testing preview. Documentation-only and metadata-only changes do not justify a full CI run. A Testing publication already includes full validation; do not dispatch a separate validation run immediately before it. Enable the `screenshots` input on the same run when visual review is needed. Repeat checks only when new changes, failures or unresolved concerns justify the cost. Preserve checks required for integration and publication.
 
 ## Visual evidence
 
@@ -50,7 +50,7 @@ For frontend iterations, show actual WPF screenshots to at least three independe
 
 ## Testing publication
 
-Publish approved previews through the Testing update channel so users can test before merging. PR metadata checks must remain read-only; use the authorized branch publication workflow described in [updates](docs/updates.md).
+Publish approved previews through the Testing update channel so users can test before merging. Use the authorized branch publication workflow described in [updates](docs/updates.md).
 
 ## Instruction source
 

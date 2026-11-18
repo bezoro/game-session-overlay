@@ -50,9 +50,9 @@ Use the installer and [test checklist](docs/pilot-checklist.md) to exercise real
 - Test affected behavior, including focus, cancellation and late completion where relevant. Avoid tests that merely repeat implementation steps.
 - Use `ActionButtonContent` and `VectorIcon` for actions. Do not access row parts through `Children` indices. Preserve original SVG frames and record the source, license and hash of new vectors.
 
-Run `./scripts/format.ps1` before submitting. CI verifies C# and XML formatting, builds with nullable checks and warnings as errors, tests behavior, renders captures and checks Velopack packaging and installation. Inspect light/dark and compact captures for layout changes.
+Run `./scripts/format.ps1` before submitting. CI verifies C# and XML formatting, builds with nullable checks and warnings as errors, tests behavior and checks Velopack packaging and installation. For layout changes, enable `screenshots` on the Windows dispatch and inspect the light/dark and compact captures in `windows-test-reports`.
 
-To conserve GitHub Actions minutes, the Windows pipeline runs automatically on pushes to `main`, normally after merging. Feature-branch pushes and PR updates do not run it. Use local checks during development and request one deliberate `validate` or `testing` dispatch when Windows evidence is needed before merge. A Testing dispatch includes full validation; do not run both modes for the same candidate. Documentation-only and metadata-only changes do not need the Windows pipeline. Stable publication remains conditional on successful validation and an application version change. The lightweight title check runs when a PR opens or its title changes.
+To conserve GitHub Actions minutes, the Windows pipeline runs automatically on pushes to `main`, normally after merging. Feature-branch pushes and PR updates do not run it. Use local checks during development and request one deliberate `validate` or `testing` dispatch when Windows evidence is needed before merge. A Testing dispatch includes full validation; do not run both modes for the same candidate. Documentation-only and metadata-only changes do not need a manual Windows run. Stable publication remains conditional on successful validation and an application version change.
 
 Keep CI-skip markers out of the final merge commit message, including markers copied from intermediate commit messages, so the automatic main-branch validation can run.
 
@@ -62,7 +62,7 @@ Open a draft PR after the first coherent implementation is pushed so progress is
 
 Commit cohesive, validated increments. Release builds resolve their version through [scripts/get-build-version.ps1](scripts/get-build-version.ps1), the pinned GitVersion tool and [GitVersion.yml](GitVersion.yml). Pass the stamped identity through [Directory.Build.props](Directory.Build.props) so the GUI, CLI, installer and update feed agree. Build-identity overrides are for explicit local builds or the workflow's stamped values; do not invent a separate release version in a project or package.
 
-Use [Conventional Commits](https://www.conventionalcommits.org/) for new commits and PR titles. CI validates the title, which also becomes the merge commit title:
+Use [Conventional Commits](https://www.conventionalcommits.org/) for new commits and PR titles. Review the final commit title when merging because GitVersion uses integrated commit messages to calculate the release version.
 
 ```text
 feat(audio): add output selection
